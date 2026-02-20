@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+
+# Java
+target/
+*.class
+*.jar
+*.iml
+.idea/
+
+# TypeScript/Node
+node_modules/

@@ -1,0 +1,15 @@
+[project]
+name = "fm-mcp"
+version = "0.0.1"
+description = "MCP server for the Flexemarkets API"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp[cli]",
+    "fm-sdk",
+]
+
+[tool.uv.sources]
+fm-sdk = { path = "../sdks/python" }
+
+[project.scripts]
+fm-mcp = "server:main"
