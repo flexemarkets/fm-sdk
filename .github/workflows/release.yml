@@ -132,7 +132,7 @@ jobs:
 
             **TypeScript/JavaScript:**
             ```bash
-            npm install fm-sdk@${{ needs.validate.outputs.version }}
+            npm install @flexemarkets/fm-sdk@${{ needs.validate.outputs.version }}
             ```
 
             **Java (Maven):**
