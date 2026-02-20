@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  python:
+    name: Python SDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e sdks/python
+          pip install build
+
+      - name: Type check
+        run: python -c "import fm; print('python sdk ok')"
+
+      - name: Build distribution
+        run: python -m build sdks/python
+
+      - name: Verify distribution
+        run: |
+          pip install sdks/python/dist/*.whl
+          python -c "import fm; print('wheel install ok')"
+
+  typescript:
+    name: TypeScript SDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install
+        working-directory: sdks/typescript
+
+      - name: Type check
+        run: npm run check
+        working-directory: sdks/typescript
+
+      - name: Build
+        run: npm run build
+        working-directory: sdks/typescript
+
+      - name: Verify dist output
+        run: |
+          test -f dist/index.js
+          test -f dist/index.d.ts
+        working-directory: sdks/typescript
+
+  java:
+    name: Java SDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          java-version: "25-ea"
+          distribution: "temurin"
+
+      - name: Build with Maven
+        run: mvn -B package --file sdks/java/pom.xml

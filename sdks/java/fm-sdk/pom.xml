@@ -5,13 +5,16 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>fm</groupId>
+        <groupId>com.flexemarkets</groupId>
         <artifactId>fm-sdk-parent</artifactId>
         <version>0.0.1</version><!-- fm-version -->
     </parent>
 
     <artifactId>fm-sdk</artifactId>
     <packaging>jar</packaging>
+
+    <name>Flexemarkets SDK</name>
+    <description>Java SDK for the Flexemarkets trading API</description>
 
     <dependencies>
         <dependency>

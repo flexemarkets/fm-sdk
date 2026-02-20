@@ -1,3 +1,13 @@
+# Claude
+.claude/*
+
+# Java
+target/
+*.class
+*.jar
+*.iml
+
+
 # Python
 __pycache__/
 *.pyc
@@ -6,13 +16,10 @@ dist/
 build/
 .eggs/
 .venv/
+.env
+.env.*
 
-# Java
-target/
-*.class
-*.jar
-*.iml
-.idea/
 
-# TypeScript/Node
+# TypeScript
 node_modules/
+

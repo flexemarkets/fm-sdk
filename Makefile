@@ -7,7 +7,8 @@ VERSION := $(shell cat VERSION)
        build-python build-typescript build-java \
        check-python check-typescript check-java check-mcp \
        ticker-python ticker-typescript ticker-java \
-       mcp-server
+       mcp-server \
+       publish publish-python publish-typescript publish-java
 
 # ---------------------------------------------------------------------------
 # Aggregate targets
@@ -26,6 +27,7 @@ test: check
 clean:
 	rm -rf sdks/typescript/dist sdks/typescript/node_modules
 	rm -rf sdks/java/fm-sdk/target sdks/java/examples/ticker/target
+	rm -rf sdks/python/dist sdks/python/*.egg-info
 	rm -rf mcp-server/.venv
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name '*.egg-info' -exec rm -rf {} + 2>/dev/null || true
@@ -35,6 +37,7 @@ clean:
 # ---------------------------------------------------------------------------
 
 install-python:
+	$(PIP) install --upgrade pip
 	$(PIP) install -e sdks/python
 
 build-python:
@@ -47,6 +50,11 @@ check-python:
 
 ticker-python:
 	$(PYTHON) sdks/python/ticker.py $(ARGS)
+
+publish-python:
+	$(PIP) install build twine
+	$(PYTHON) -m build sdks/python
+	$(PYTHON) -m twine upload sdks/python/dist/*
 
 # ---------------------------------------------------------------------------
 # TypeScript SDK
@@ -64,6 +72,9 @@ check-typescript:
 ticker-typescript:
 	cd sdks/typescript && npx tsx src/ticker.ts $(ARGS)
 
+publish-typescript:
+	cd sdks/typescript && npm publish --access public
+
 # ---------------------------------------------------------------------------
 # Java SDK
 # ---------------------------------------------------------------------------
@@ -80,18 +91,27 @@ check-java:
 ticker-java:
 	java --enable-preview -jar sdks/java/examples/ticker/target/fm-ticker-$(VERSION).jar $(ARGS)
 
+publish-java:
+	cd sdks/java && mvn deploy -P release
+
 # ---------------------------------------------------------------------------
 # MCP server
 # ---------------------------------------------------------------------------
 
 install-mcp:
-	cd mcp-server && $(PYTHON) -m venv .venv && .venv/bin/pip install -q -e ../sdks/python "mcp[cli]"
+	cd mcp-server && $(PYTHON) -m venv .venv && .venv/bin/pip install --upgrade pip && .venv/bin/pip install -q -e ../sdks/python "mcp[cli]"
 
 check-mcp:
 	cd mcp-server && .venv/bin/python -c "import server; print('mcp server ok')"
 
 mcp-server:
 	cd mcp-server && .venv/bin/python server.py
+
+# ---------------------------------------------------------------------------
+# Publishing (all SDKs)
+# ---------------------------------------------------------------------------
+
+publish: publish-python publish-typescript publish-java
 
 # ---------------------------------------------------------------------------
 # Version management

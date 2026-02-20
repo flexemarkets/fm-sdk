@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>fm</groupId>
+        <groupId>com.flexemarkets</groupId>
         <artifactId>fm-sdk-parent</artifactId>
         <version>0.0.1</version><!-- fm-version -->
         <relativePath>../../pom.xml</relativePath>
@@ -14,9 +14,12 @@
     <artifactId>fm-ticker</artifactId>
     <packaging>jar</packaging>
 
+    <name>Flexemarkets Ticker Example</name>
+    <description>Example ticker application using the Flexemarkets SDK</description>
+
     <dependencies>
         <dependency>
-            <groupId>fm</groupId>
+            <groupId>com.flexemarkets</groupId>
             <artifactId>fm-sdk</artifactId>
         </dependency>
         <dependency>
