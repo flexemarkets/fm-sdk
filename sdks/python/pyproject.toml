@@ -6,11 +6,32 @@ build-backend = "hatchling.build"
 name = "fm-sdk"
 dynamic = ["version"]
 description = "Python SDK for the Flexemarkets API"
+readme = "README.md"
+license = "MIT"
 requires-python = ">=3.11"
+authors = [
+    { name = "Flexemarkets", email = "support@flexemarkets.com" }
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 dependencies = [
     "httpx>=0.27",
     "websockets>=13",
 ]
+
+[project.urls]
+Homepage = "https://github.com/flexemarkets/fm-sdk"
+Documentation = "https://github.com/flexemarkets/fm-sdk#readme"
+Repository = "https://github.com/flexemarkets/fm-sdk.git"
+Issues = "https://github.com/flexemarkets/fm-sdk/issues"
 
 [tool.hatch.version]
 path = "../../VERSION"

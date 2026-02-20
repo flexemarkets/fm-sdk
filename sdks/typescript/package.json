@@ -3,12 +3,42 @@
   "version": "0.0.1",
   "description": "Flexemarkets TypeScript SDK",
   "type": "module",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "ticker": "tsx src/ticker.ts",
     "build": "tsc",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
   },
+  "keywords": [
+    "flexemarkets",
+    "trading",
+    "api",
+    "sdk",
+    "websocket"
+  ],
+  "author": "Flexemarkets <support@flexemarkets.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/flexemarkets/fm-sdk.git",
+    "directory": "sdks/typescript"
+  },
+  "bugs": {
+    "url": "https://github.com/flexemarkets/fm-sdk/issues"
+  },
+  "homepage": "https://github.com/flexemarkets/fm-sdk#readme",
   "dependencies": {
     "ws": "^8.18.0"
   },
