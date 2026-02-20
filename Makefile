@@ -35,6 +35,7 @@ clean:
 # ---------------------------------------------------------------------------
 
 install-python:
+	$(PIP) install --upgrade pip
 	$(PIP) install -e sdks/python
 
 build-python:
@@ -85,7 +86,7 @@ ticker-java:
 # ---------------------------------------------------------------------------
 
 install-mcp:
-	cd mcp-server && $(PYTHON) -m venv .venv && .venv/bin/pip install -q -e ../sdks/python "mcp[cli]"
+	cd mcp-server && $(PYTHON) -m venv .venv && .venv/bin/pip install --upgrade pip && .venv/bin/pip install -q -e ../sdks/python "mcp[cli]"
 
 check-mcp:
 	cd mcp-server && .venv/bin/python -c "import server; print('mcp server ok')"
