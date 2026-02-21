@@ -1,6 +1,6 @@
 {
   "name": "@flexemarkets/fm-sdk",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "Flexemarkets TypeScript SDK",
   "type": "module",
   "main": "dist/index.js",
