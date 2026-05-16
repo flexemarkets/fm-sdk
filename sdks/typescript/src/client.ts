@@ -33,7 +33,7 @@ function readVersion(): string {
 }
 
 const FM_NETWORK_CLIENT = `fm-sdk-typescript/${readVersion()}`;
-const DEFAULT_ENDPOINT = "https://fm-data.herokuapp.com";
+const DEFAULT_ENDPOINT = "https://api.flexemarkets.com";
 
 const BCRYPT_RE = /^\$2[abxy]?\$\d{2}\$[./A-Za-z0-9]{53}$/;
 const JWT_RE = /^[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+$/;

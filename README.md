@@ -1,6 +1,6 @@
 # fm-sdk
 
-SDK monorepo for the [Flexemarkets](https://fm-data.herokuapp.com) trading API. Provides client libraries in Python, Java, and TypeScript, plus an MCP server for LLM integration.
+SDK monorepo for the [Flexemarkets](https://api.flexemarkets.com) trading API. Provides client libraries in Python, Java, and TypeScript, plus an MCP server for LLM integration.
 
 ## Structure
 
@@ -54,7 +54,7 @@ token=eyJhbGciOiJIUzI1NiJ9...
 ### Endpoint file (`~/.fm/endpoint`)
 
 ```properties
-endpoint=https://fm-data.herokuapp.com/api/marketplaces/123
+endpoint=https://api.flexemarkets.com/api/marketplaces/123
 ```
 
 ## SDKs
@@ -107,7 +107,7 @@ const order = await fm.submitLimit(marketplaceId, marketId, "BUY", 1, 950);
 Each SDK includes a ticker example — a live terminal display of order book state and recent trades.
 
 ```
-fm-ticker  https://fm-data.herokuapp.com/api/marketplaces/123
+fm-ticker  https://api.flexemarkets.com/api/marketplaces/123
                                                           OPEN
 
   Symbol     Bid     Ask  Spread   Last trades

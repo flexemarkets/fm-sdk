@@ -1,6 +1,6 @@
 # fm-sdk-python
 
-Python SDK for the [Flexemarkets](https://fm-data.herokuapp.com) API.
+Python SDK for the [Flexemarkets](https://api.flexemarkets.com) API.
 
 ## Requirements
 
@@ -24,7 +24,7 @@ The SDK loads credentials and endpoint from these sources (highest priority firs
 
 1. Arguments passed to `Flexemarkets.connect()`
 2. Files `~/.fm/credential` and `~/.fm/endpoint` (Java `.properties` format)
-3. Environment variable `FM_API_URL` (defaults to `https://fm-data.herokuapp.com`)
+3. Environment variable `FM_API_URL` (defaults to `https://api.flexemarkets.com`)
 
 ### Credential file
 
@@ -47,7 +47,7 @@ token=eyJhbGciOiJIUzI1NiJ9...
 Create `~/.fm/endpoint`:
 
 ```
-endpoint=https://fm-data.herokuapp.com/api/marketplaces/123
+endpoint=https://api.flexemarkets.com/api/marketplaces/123
 ```
 
 ## SDK usage
@@ -58,7 +58,7 @@ from fm import Flexemarkets, OrderBooks, MarketplaceTrades
 # Connect
 fm = Flexemarkets.connect(
     credential="~/.fm/credential",
-    endpoint="https://fm-data.herokuapp.com/api/marketplaces/123",
+    endpoint="https://api.flexemarkets.com/api/marketplaces/123",
     client_description="my-bot",
 )
 
@@ -109,7 +109,7 @@ with Flexemarkets.connect(credential, endpoint, "my-bot") as fm:
 Live terminal display of order book best bid/ask, spread, and recent trade prices.
 
 ```bash
-python3.11 ticker.py -C ~/.fm/credential -E https://fm-data.herokuapp.com/api/marketplaces/123
+python3.11 ticker.py -C ~/.fm/credential -E https://api.flexemarkets.com/api/marketplaces/123
 ```
 
 Options:

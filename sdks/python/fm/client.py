@@ -43,7 +43,7 @@ def _read_version() -> str:
         return "0.0.0"
 
 _FM_NETWORK_CLIENT = f"fm-sdk-python/{_read_version()}"
-_DEFAULT_ENDPOINT = "https://fm-data.herokuapp.com"
+_DEFAULT_ENDPOINT = "https://api.flexemarkets.com"
 
 _BCRYPT_RE = re.compile(r"^\$2[abxy]?\$\d{2}\$[./A-Za-z0-9]{53}$")
 _JWT_RE = re.compile(r"^[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+$")
