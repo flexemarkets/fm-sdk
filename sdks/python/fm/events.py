@@ -112,11 +112,34 @@ class WsException:
     exception: BaseException
 
 
+# Sentinel for "no seq header" — see OrdersUpdate.seq docstring.
+NO_SEQ = -1
+
+
+@dataclass
+class OrdersUpdate:
+    """One ORDERS-UPDATE delta from the WS stream, carrying the parsed
+    order list plus the per-marketplace ``seq`` header fm-server stamps
+    each frame with (commit c6eea6eca).
+
+    Consumers reconcile this against a REST :class:`Snapshot`: apply
+    deltas whose :attr:`seq` is greater than the snapshot's
+    ``as_of_seq`` and skip those whose seq is less than or equal.
+
+    :attr:`seq` is :data:`NO_SEQ` when the server didn't stamp the
+    header (older fm-server).
+    """
+
+    orders: list[Order]
+    seq: int
+
+
 # ---------------------------------------------------------------------------
 # Event parsing — mirrors Java EventParser.getPayloadType()
 # ---------------------------------------------------------------------------
 
 _MESSAGE_TYPE = "message-type"
+_SEQ_HEADER   = "seq"
 
 
 def _parse_event(frame: StompFrame) -> object | None:
@@ -141,10 +164,25 @@ def _parse_event(frame: StompFrame) -> object | None:
         case "HOLDING-UPDATE":
             return _parse_holding(data)
         case "ORDERS-UPDATE":
-            return _parse_orders(data)
+            return OrdersUpdate(
+                orders=_parse_orders(data),
+                seq=_parse_seq(frame.headers.get(_SEQ_HEADER)),
+            )
         case _:
             log.warning("Unknown message-type: %s", msg_type)
             return None
+
+
+def _parse_seq(value: str | None) -> int:
+    """Parse the per-frame ``seq`` STOMP header; falls back to
+    :data:`NO_SEQ` on absent or malformed values.
+    """
+    if value is None:
+        return NO_SEQ
+    try:
+        return int(value)
+    except ValueError:
+        return NO_SEQ
 
 
 def _parse_version(data: Any) -> Version:

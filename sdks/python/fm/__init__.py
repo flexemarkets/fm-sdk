@@ -1,7 +1,8 @@
 """Flexemarkets Python SDK."""
 
 from .client import Flexemarkets
-from .events import EventListener, WsException, WsTransportError
+from .events import EventListener, NO_SEQ, OrdersUpdate, WsException, WsTransportError
+from .snapshot import Snapshot
 from .exceptions import (
     AccountNameConflictError,
     AuthenticationError,
@@ -62,6 +63,10 @@ __all__ = [
     "EventListener",
     "WsTransportError",
     "WsException",
+    "OrdersUpdate",
+    # snapshot (Phase 2a)
+    "Snapshot",
+    "NO_SEQ",
     # exceptions
     "FlexemarketsError",
     "AuthenticationError",

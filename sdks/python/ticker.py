@@ -7,9 +7,9 @@ import sys
 
 from fm import (
     Flexemarkets,
-    Order,
     OrderBooks,
     MarketplaceTrades,
+    OrdersUpdate,
     Session,
     Holding,
     WsTransportError,
@@ -93,9 +93,9 @@ def main() -> None:
                 redraw = False
 
                 match event:
-                    case list() as items if items and isinstance(items[0], Order):
-                        books.update(items)
-                        market_trades.update(items)
+                    case OrdersUpdate() as update:
+                        books.update(update.orders)
+                        market_trades.update(update.orders)
                         redraw = True
                     case Session() as s:
                         session = s

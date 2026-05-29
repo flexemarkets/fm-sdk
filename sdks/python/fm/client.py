@@ -8,6 +8,8 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from .snapshot import NO_SEQ, Snapshot
+
 if TYPE_CHECKING:
     from .market_view import MarketView
 
@@ -840,6 +842,51 @@ class Flexemarkets:
             "clientDescription": self._client_description,
         })
         return _parse_order(resp.json())
+
+    def active_orders_v1(self, marketplace_id: int) -> "Snapshot[list[Order]]":
+        """V1 active-orders snapshot: every resting limit order on the
+        marketplace's current session, plus the ``x-fm-as-of-seq``
+        sequence the snapshot was read at. Used by
+        :class:`~fm.market_view.MarketView` Phase 2a seeding —
+        clients apply WS deltas whose seq is greater than the
+        returned value and skip those whose seq is less than or
+        equal.
+        """
+        url = f"{_server(self._endpoint)}/v1/marketplaces/{marketplace_id}/orders/active"
+        body, as_of_seq = self._get_snapshot(url)
+        orders_raw = body.get("_embedded", {}).get("orderDtoes", [])
+        return Snapshot(body=[_parse_order(o) for o in orders_raw], as_of_seq=as_of_seq)
+
+    def recent_trades_v1(self, marketplace_id: int, size: int = 1000) -> "Snapshot[list[Order]]":
+        """V1 recent-trades snapshot for seeding the trade-history
+        tape. Same ``x-fm-as-of-seq`` contract as
+        :meth:`active_orders_v1`. Server caps at 5000; default is
+        1000.
+        """
+        url = f"{_server(self._endpoint)}/v1/marketplaces/{marketplace_id}/orders/recent-trades?size={size}"
+        body, as_of_seq = self._get_snapshot(url)
+        orders_raw = body.get("_embedded", {}).get("orderDtoes", [])
+        return Snapshot(body=[_parse_order(o) for o in orders_raw], as_of_seq=as_of_seq)
+
+    def _get_snapshot(self, url: str) -> tuple[dict[str, Any], int]:
+        """GET helper that returns the parsed body alongside the
+        ``x-fm-as-of-seq`` response header value. Returns
+        :data:`NO_SEQ` when the header is absent.
+        """
+        resp = self._http.get(
+            url,
+            headers={
+                **self._auth_headers(),
+                "Accept": "application/json, application/hal+json",
+            },
+        )
+        _check_response(resp)
+        raw = resp.headers.get("x-fm-as-of-seq")
+        try:
+            as_of_seq = int(raw) if raw is not None else NO_SEQ
+        except ValueError:
+            as_of_seq = NO_SEQ
+        return resp.json(), as_of_seq
 
     def orders(
         self,

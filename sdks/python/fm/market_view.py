@@ -16,7 +16,7 @@ import queue
 import threading
 from typing import TYPE_CHECKING, Callable, Optional
 
-from .events import WsException, WsTransportError
+from .events import NO_SEQ, OrdersUpdate, WsException, WsTransportError
 from .orderbook import OrderBook, OrderBooks
 from .trades import MarketplaceTrades
 from .types import Holding, Market, Order, Session
@@ -70,11 +70,49 @@ class MarketView:
         self._queue: queue.Queue[object] = queue.Queue(maxsize=10_000)
         self._closed = False
 
+        # Highest ORDERS-UPDATE seq applied so far. Deltas with
+        # seq <= _last_applied_seq are skipped — they've already
+        # been folded into the local state via the initial snapshot
+        # or a previously-applied delta. NO_SEQ disables filtering
+        # (older fm-server that doesn't stamp the header).
+        self._last_applied_seq = NO_SEQ
+
+        # Subscribe WS first so deltas start landing in the queue,
+        # then fetch + apply the REST snapshot, only THEN start the
+        # dispatcher. Any deltas that arrive between listen() and
+        # snapshot apply sit in the queue and get filtered by seq
+        # when the dispatcher runs.
         flexemarkets.listen(marketplace_id, self._queue)
+        self._seed_from_snapshot()
         self._dispatcher = threading.Thread(
             target=self._drain, name=f"fm-market-view-{marketplace_id}", daemon=True
         )
         self._dispatcher.start()
+
+    def _seed_from_snapshot(self) -> None:
+        """Phase 2a snapshot seeding. Fetches the V1 active-orders and
+        recent-trades snapshots, applies them, and records the
+        ``as_of_seq`` so subsequent WS deltas can be filtered to avoid
+        double-applying anything the snapshot already reflects.
+
+        Known race window: a delta whose order persisted between the
+        server's seq capture and order read can appear both in the
+        snapshot and in a delta with ``seq > as_of_seq``, leading to
+        a double-apply. Same caveat as the existing V0 WS snapshot
+        path; Phase 2b closes the window.
+        """
+        orders = self._flexemarkets.active_orders_v1(self.marketplace_id)
+        trades = self._flexemarkets.recent_trades_v1(self.marketplace_id)
+
+        if orders.body:
+            self._order_books.update(orders.body)
+        if trades.body:
+            self._trades.update(trades.body)
+
+        # Orders and trades flow through the same delta stream so
+        # they share a single seq. Use the orders snapshot's value
+        # as the watermark.
+        self._last_applied_seq = orders.as_of_seq
 
     # -- read-side accessors ----------------------------------------------
 
@@ -182,11 +220,20 @@ class MarketView:
             except queue.Empty:
                 continue
 
-            if isinstance(event, list):
-                # ORDERS-UPDATE delta — list of Order
-                touched = _market_ids_touched(event)
-                self._order_books.update(event)
-                self._trades.update(event)
+            if isinstance(event, OrdersUpdate):
+                # Phase 2a seq filter: drop deltas the snapshot already
+                # reflects. NO_SEQ disables filtering for older
+                # fm-server builds that don't stamp the header.
+                if (
+                    event.seq != NO_SEQ
+                    and self._last_applied_seq != NO_SEQ
+                    and event.seq <= self._last_applied_seq
+                ):
+                    continue
+                orders = event.orders
+                touched = _market_ids_touched(orders)
+                self._order_books.update(orders)
+                self._trades.update(orders)
                 for market_id in touched:
                     book = self._order_books.get(market_id)
                     if book is None:
@@ -194,6 +241,8 @@ class MarketView:
                     for entry_id, handler in self._book_handlers:
                         if entry_id == market_id:
                             handler(book)
+                if event.seq != NO_SEQ:
+                    self._last_applied_seq = event.seq
                 continue
 
             if isinstance(event, Session):
