@@ -13,7 +13,7 @@
 import type { Flexemarkets } from "./client.js";
 import { OrderBook, OrderBooks } from "./orderbook.js";
 import { MarketplaceTrades } from "./trades.js";
-import { NO_SEQ, type FmEvent, type OrdersUpdate, type WsException, type WsTransportError } from "./stomp.js";
+import { NO_SEQ, type EventListener, type FmEvent, type OrdersUpdate, type WsException, type WsTransportError } from "./stomp.js";
 import type { Holding, Market, Order, Session } from "./types.js";
 
 /**
@@ -81,6 +81,7 @@ export class DefaultMarketView implements MarketView {
   private readonly _flexemarkets: Flexemarkets;
   private readonly _orderBooks: OrderBooks;
   private readonly _trades: MarketplaceTrades;
+  private _events: EventListener | null = null;
   private _session: Session | null = null;
   private _holding: Holding | null = null;
 
@@ -106,7 +107,12 @@ export class DefaultMarketView implements MarketView {
     // path), then fetch + apply the snapshot, only THEN allow live
     // dispatch. _seedFromSnapshot flips _seedComplete=true atomically
     // with the buffer drain on its synchronous tail.
-    await flexemarkets.listen(marketplaceId, (event) => view._dispatch(event));
+    //
+    // Phase 2d: own the EventListener directly rather than calling
+    // flexemarkets.listen() — that would clobber the singleton
+    // _eventListener and prevent multiple shared views from
+    // coexisting in one Flexemarkets.
+    view._events = await flexemarkets._connectEvents(marketplaceId, (event) => view._dispatch(event));
     await view._seedFromSnapshot();
     return view;
   }
@@ -219,6 +225,10 @@ export class DefaultMarketView implements MarketView {
   close(): void {
     if (this._closed) return;
     this._closed = true;
+    if (this._events !== null) {
+      try { this._events.close(); } catch { /* best-effort */ }
+      this._events = null;
+    }
     // Flexemarkets is owned by the caller; we don't close it. If
     // observe() was the only consumer, the caller can close
     // Flexemarkets themselves.
@@ -302,7 +312,7 @@ export class DefaultMarketView implements MarketView {
     this._seedComplete = false;
     void (async () => {
       try {
-        await this._flexemarkets.reconnect();
+        if (this._events !== null) await this._events.reconnect();
         await this._seedFromSnapshot();
       } catch (err) {
         console.error(
@@ -372,4 +382,101 @@ function _isTransportError(event: FmEvent): event is WsTransportError {
 
 function _isWsException(event: FmEvent): event is WsException {
   return typeof event === "object" && event !== null && (event as WsException).kind === "ws-exception";
+}
+
+/**
+ * Reader-side handle on a refcounted DefaultMarketView. Returned by
+ * Flexemarkets.observe(); multiple handles for the same marketplaceId
+ * share one underlying view + WS subscription + materialized state.
+ * Each handle's close() decrements the shared refcount and tears down
+ * the shared resources on the last close.
+ *
+ * Subscriptions registered via on*Change on this handle are tracked
+ * locally and closed when the handle closes — so a handler doesn't
+ * keep firing into stale state after the handle is gone.
+ */
+export class MarketViewHandle implements MarketView {
+  private readonly _shared: DefaultMarketView;
+  private readonly _onClose: () => void;
+  private readonly _mySubscriptions: Subscription[] = [];
+  private _closed = false;
+
+  constructor(shared: DefaultMarketView, onClose: () => void) {
+    this._shared = shared;
+    this._onClose = onClose;
+  }
+
+  get marketplaceId(): number {
+    return this._shared.marketplaceId;
+  }
+
+  get markets(): Market[] {
+    this._check();
+    return this._shared.markets;
+  }
+
+  orderBook(marketId: number): OrderBook | null {
+    this._check();
+    return this._shared.orderBook(marketId);
+  }
+
+  session(): Session | null {
+    this._check();
+    return this._shared.session();
+  }
+
+  holding(): Holding | null {
+    this._check();
+    return this._shared.holding();
+  }
+
+  onSessionChange(handler: (s: Session) => void): Subscription {
+    this._check();
+    const sub = this._shared.onSessionChange(handler);
+    this._mySubscriptions.push(sub);
+    return sub;
+  }
+
+  onOrderBookChange(marketId: number, handler: (b: OrderBook) => void): Subscription {
+    this._check();
+    const sub = this._shared.onOrderBookChange(marketId, handler);
+    this._mySubscriptions.push(sub);
+    return sub;
+  }
+
+  onHoldingChange(handler: (h: Holding) => void): Subscription {
+    this._check();
+    const sub = this._shared.onHoldingChange(handler);
+    this._mySubscriptions.push(sub);
+    return sub;
+  }
+
+  submitLimit(marketId: number, side: string, units: number, price: number): Promise<Order> {
+    this._check();
+    return this._shared.submitLimit(marketId, side, units, price);
+  }
+
+  submitCancel(marketId: number, originalId: number): Promise<Order> {
+    this._check();
+    return this._shared.submitCancel(marketId, originalId);
+  }
+
+  close(): void {
+    if (this._closed) return;
+    this._closed = true;
+    // Close subscriptions this handle registered so handlers don't
+    // fire into a closed handle. Subscription is a () => void; calling
+    // twice is idempotent per the existing TS Subscription contract.
+    for (const sub of this._mySubscriptions) {
+      try { sub(); } catch { /* best-effort */ }
+    }
+    this._mySubscriptions.length = 0;
+    this._onClose();
+  }
+
+  private _check(): void {
+    if (this._closed) {
+      throw new Error(`MarketView handle for marketplace ${this._shared.marketplaceId} is closed`);
+    }
+  }
 }

@@ -22,7 +22,7 @@ import type {
   Token,
 } from "./types.js";
 import { EventListener, NO_SEQ, type EventCallback } from "./stomp.js";
-import { DefaultMarketView, type MarketView } from "./market-view.js";
+import { DefaultMarketView, MarketViewHandle, type MarketView } from "./market-view.js";
 import type { Snapshot } from "./snapshot.js";
 
 function readVersion(): string {
@@ -728,30 +728,82 @@ export class Flexemarkets {
 
   // -- events / WebSocket ----------------------------------------------------
 
+  private readonly _sharedViews = new Map<number, { view: DefaultMarketView; refCount: number }>();
+  private readonly _sharedViewPromises = new Map<number, Promise<DefaultMarketView>>();
+
   /**
-   * Open a stateful MarketView on this marketplace. The returned view
-   * drives its own WS subscription, dispatches events into per-market
-   * order books and trade tapes, and exposes always-current accessors
-   * and listener registration.
+   * Open a stateful MarketView on this marketplace. Multiple calls
+   * for the same marketplaceId share a single underlying view + WS
+   * subscription + materialized state within this Flexemarkets
+   * instance — each call returns a fresh handle, the handles
+   * refcount, and the shared resources tear down on the last close.
    *
-   * Phase 1 (DefaultMarketView) skips REST-snapshot seeding,
-   * sequence-gap recovery, per-identity sharing, and automatic
-   * reconnect. See DefaultMarketView for the staged plan. Robots that
-   * don't depend on consistency-guaranteed startup state can use this
-   * today; those that do should wait for Phase 2.
+   * Sharing is intentionally per-Flexemarkets (i.e. per-bearer). Two
+   * callers with different identities each get their own view —
+   * multi-tenant WS multiplexing is a server-side concern, not a
+   * client-side one.
    */
   async observe(marketplaceId: number): Promise<MarketView> {
-    return await DefaultMarketView.open(this, marketplaceId);
+    const existing = this._sharedViews.get(marketplaceId);
+    if (existing !== undefined) {
+      existing.refCount++;
+      return new MarketViewHandle(existing.view, () => this._releaseSharedView(marketplaceId));
+    }
+    // Two concurrent observe() calls for the same marketplaceId need
+    // to dedupe — JS is single-threaded but awaits introduce
+    // interleaving. Cache the in-flight Promise so the second caller
+    // awaits the first's construction instead of racing a duplicate
+    // WS subscription into existence.
+    let p = this._sharedViewPromises.get(marketplaceId);
+    if (p === undefined) {
+      p = DefaultMarketView.open(this, marketplaceId);
+      this._sharedViewPromises.set(marketplaceId, p);
+    }
+    let shared: DefaultMarketView;
+    try {
+      shared = await p;
+    } finally {
+      this._sharedViewPromises.delete(marketplaceId);
+    }
+    // Another observer may have arrived during the await and registered
+    // first. Re-check; if so, throw away our just-built view and use
+    // theirs.
+    const registered = this._sharedViews.get(marketplaceId);
+    if (registered !== undefined) {
+      if (registered.view !== shared) shared.close();
+      registered.refCount++;
+      return new MarketViewHandle(registered.view, () => this._releaseSharedView(marketplaceId));
+    }
+    this._sharedViews.set(marketplaceId, { view: shared, refCount: 1 });
+    return new MarketViewHandle(shared, () => this._releaseSharedView(marketplaceId));
+  }
+
+  _releaseSharedView(marketplaceId: number): void {
+    const entry = this._sharedViews.get(marketplaceId);
+    if (entry === undefined) return;
+    if (--entry.refCount <= 0) {
+      this._sharedViews.delete(marketplaceId);
+      entry.view.close();
+    }
   }
 
   /** Start receiving real-time events via WebSocket STOMP. */
   async listen(marketplaceId: number, callback: EventCallback): Promise<void> {
+    this._eventListener = await this._connectEvents(marketplaceId, callback);
+  }
+
+  /**
+   * Package-private helper used by {@link DefaultMarketView} (Phase 2d)
+   * to own its own EventListener subscription rather than clobbering
+   * the singleton {@link #_eventListener}. Lets multiple
+   * observe(marketplaceId) calls coexist within one Flexemarkets.
+   */
+  async _connectEvents(marketplaceId: number, callback: EventCallback): Promise<EventListener> {
     const wsUrl =
       server(this._endpoint)
         .replace("https://", "wss://")
         .replace("http://", "ws://") + "/events";
-
-    this._eventListener = new EventListener(
+    const events = new EventListener(
       wsUrl,
       this._bearerToken,
       marketplaceId,
@@ -760,7 +812,8 @@ export class Flexemarkets {
       parseHolding,
       parseOrder,
     );
-    await this._eventListener.start();
+    await events.start();
+    return events;
   }
 
   /** Reconnect the WebSocket after a transport error. */
@@ -777,6 +830,12 @@ export class Flexemarkets {
       this._eventListener.close();
       this._eventListener = null;
     }
+    // Force-close any remaining shared MarketViews — safety net for
+    // callers who didn't close their handles first.
+    for (const entry of this._sharedViews.values()) {
+      try { entry.view.close(); } catch { /* best-effort */ }
+    }
+    this._sharedViews.clear();
   }
 }
 
