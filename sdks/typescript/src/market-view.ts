@@ -104,10 +104,10 @@ export class DefaultMarketView implements MarketView {
     const view = new DefaultMarketView(flexemarkets, marketplaceId, markets);
     // Subscribe WS first (so deltas start buffering on the callback
     // path), then fetch + apply the snapshot, only THEN allow live
-    // dispatch.
+    // dispatch. _seedFromSnapshot flips _seedComplete=true atomically
+    // with the buffer drain on its synchronous tail.
     await flexemarkets.listen(marketplaceId, (event) => view._dispatch(event));
     await view._seedFromSnapshot();
-    view._seedComplete = true;
     return view;
   }
 
@@ -141,17 +141,26 @@ export class DefaultMarketView implements MarketView {
     const orders = await this._flexemarkets.activeOrdersV1(this.marketplaceId);
     const trades = await this._flexemarkets.recentTradesV1(this.marketplaceId);
 
+    // Clear before reseeding so a resync (Phase 2b) doesn't double-add
+    // against existing price levels. Initial seed hits empty books so
+    // clear() is a no-op there.
+    this._orderBooks.clear();
+    this._trades.clear();
+
     if (orders.body.length > 0) this._orderBooks.update(orders.body);
     if (trades.body.length > 0) this._trades.update(trades.body);
 
     this._lastAppliedSeq = orders.asOfSeq;
 
-    // Drain anything that arrived between WS subscribe and snapshot
-    // apply, filtered by seq.
-    for (const buffered of this._seedBuffer) {
-      this._applyOrdersUpdate(buffered);
-    }
+    // Flip state and drain in a single synchronous block — no
+    // microtask boundary, so no concurrent dispatch can squeeze in
+    // between "buffer drained" and "_seedComplete=true" and leave its
+    // delta orphaned in the buffer.
+    const buffered = this._seedBuffer;
     this._seedBuffer = [];
+    this._seedComplete = true;
+    this._resyncInFlight = false;
+    for (const update of buffered) this._applyOrdersUpdate(update);
   }
 
   orderBook(marketId: number): OrderBook | null {
@@ -215,14 +224,36 @@ export class DefaultMarketView implements MarketView {
     // Flexemarkets themselves.
   }
 
+  private _resyncInFlight = false;
+
   private _dispatch(event: FmEvent): void {
     if (this._closed) return;
     // FmEvent is a discriminated union.
     if (_isOrdersUpdate(event)) {
-      if (!this._seedComplete) {
+      if (!this._seedComplete || this._resyncInFlight) {
         // Buffer until the REST snapshot has landed so we don't
         // apply deltas before the seq watermark is established.
         this._seedBuffer.push(event);
+        return;
+      }
+      // Phase 2b gap detection: a delta with seq > lastAppliedSeq+1
+      // means one or more frames were dropped. Refetch the snapshot
+      // and let the seq filter skip whatever the new asOfSeq covers.
+      if (
+        event.seq !== NO_SEQ &&
+        this._lastAppliedSeq !== NO_SEQ &&
+        event.seq > this._lastAppliedSeq + 1
+      ) {
+        console.warn(
+          `[MarketView] ORDERS-UPDATE seq gap on marketplace ${this.marketplaceId} ` +
+            `— expected ${this._lastAppliedSeq + 1}, got ${event.seq}; resyncing from snapshot`,
+        );
+        this._resyncInFlight = true;
+        this._seedComplete = false;
+        this._seedBuffer.push(event);
+        // _seedFromSnapshot flips both flags back atomically on its
+        // synchronous tail; nothing more to do in the .then().
+        void this._seedFromSnapshot();
         return;
       }
       this._applyOrdersUpdate(event);

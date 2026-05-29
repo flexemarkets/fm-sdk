@@ -80,6 +80,11 @@ export class Trades {
     this._container.length = 0;
     return trades;
   }
+
+  /** Empty the trade tape — used by MarketView's gap-recovery flow. */
+  clear(): void {
+    this._container.length = 0;
+  }
 }
 
 /**
@@ -112,5 +117,10 @@ export class MarketplaceTrades {
 
   get(marketId: number): Trades {
     return this._trades.get(marketId)!;
+  }
+
+  /** Empty every per-market trade tape — see {@link Trades.clear}. */
+  clear(): void {
+    for (const t of this._trades.values()) t.clear();
   }
 }

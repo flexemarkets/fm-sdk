@@ -142,6 +142,18 @@ export class OrderBook {
   sellLevels(): [number, number][] {
     return [...this._sells.entries()].sort((a, b) => a[0] - b[0]);
   }
+
+  /**
+   * Reset to just-constructed state — empty levels, initialized=false.
+   * Used by MarketView's Phase 2b gap-recovery: refetch the snapshot,
+   * clear(), reapply via update(), so the next delta with
+   * isAvailable=false doesn't underflow against stale levels.
+   */
+  clear(): void {
+    this._buys.clear();
+    this._sells.clear();
+    this._initialized = false;
+  }
 }
 
 /**
@@ -176,5 +188,10 @@ export class OrderBooks {
 
   get(marketId: number): OrderBook {
     return this._books.get(marketId)!;
+  }
+
+  /** Clear every contained book — see {@link OrderBook.clear}. */
+  clear(): void {
+    for (const book of this._books.values()) book.clear();
   }
 }
