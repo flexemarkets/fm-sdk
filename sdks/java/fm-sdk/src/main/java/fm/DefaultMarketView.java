@@ -74,6 +74,16 @@ public class DefaultMarketView implements MarketView {
     private final Thread dispatcher;
     private volatile boolean closed;
 
+    /**
+     * Highest ORDERS-UPDATE seq this view has applied so far. Deltas
+     * with {@code seq <= lastAppliedSeq} are skipped — they've already
+     * been folded into the local state (either via the initial REST
+     * snapshot or via a previously-applied delta). Initial value comes
+     * from the snapshot's {@code asOfSeq}; {@link Snapshot#NO_SEQ}
+     * disables filtering (older fm-server).
+     */
+    private long lastAppliedSeq;
+
     DefaultMarketView(Flexemarkets flexemarkets, long marketplaceId, List<Market> markets) {
         this.flexemarkets = flexemarkets;
         this.marketplaceId = marketplaceId;
@@ -84,8 +94,49 @@ public class DefaultMarketView implements MarketView {
         // caller needs deeper trade scrollback.
         this.trades = new MarketplaceTrades(this.markets, 100);
 
+        // Subscribe WS first so deltas start landing in the queue,
+        // then fetch the REST snapshot, apply it, and only THEN start
+        // the dispatcher. Any deltas that arrive between listen() and
+        // snapshot apply sit in the queue and get filtered by seq
+        // when the dispatcher runs.
         flexemarkets.listen(marketplaceId, queue);
+        _seedFromSnapshot();
         this.dispatcher = Thread.startVirtualThread(this::_drain);
+    }
+
+    /**
+     * Phase 2a snapshot seeding. Fetches the V1 active-orders and
+     * recent-trades snapshots, applies them to the local aggregators,
+     * and records the {@code asOfSeq} so subsequent WS deltas can be
+     * filtered to avoid double-applying anything the snapshot already
+     * reflects.
+     *
+     * <p>Known race window: a delta whose order persisted between the
+     * server's seq capture and its order read can appear both in the
+     * snapshot and in a delta with {@code seq > asOfSeq}, leading to
+     * a double-apply. Same caveat as the existing V0 WS snapshot path
+     * — fix lands in Phase 2b (gap recovery with ID-based dedup) or
+     * via a server-side publish lock.
+     */
+    private void _seedFromSnapshot() {
+        Snapshot<List<Types.Order>> orders = flexemarkets.activeOrdersV1(marketplaceId);
+        Snapshot<List<Types.Order>> trades = flexemarkets.recentTradesV1(marketplaceId);
+
+        // Snapshot orders are all available (consumer == null), so
+        // OrderBook.update treats them as adds — same code path WS
+        // deltas use. Trades snapshot feeds the tape via the same
+        // update() entrypoint.
+        if (!orders.body().isEmpty()) {
+            this.orderBooks.update(orders.body().toArray(new Types.Order[0]));
+        }
+        if (!trades.body().isEmpty()) {
+            this.trades.update(trades.body().toArray(new Types.Order[0]));
+        }
+
+        // Use the orders snapshot's seq as the watermark — orders and
+        // trades flow through the same delta stream, so they share a
+        // single seq. The trades snapshot's seq is informational.
+        this.lastAppliedSeq = orders.asOfSeq();
     }
 
     @Override
@@ -167,7 +218,17 @@ public class DefaultMarketView implements MarketView {
                 Object event = queue.poll(1, TimeUnit.SECONDS);
                 if (event == null) continue;
 
-                if (event instanceof Order[] orders) {
+                if (event instanceof OrdersUpdate update) {
+                    // Phase 2a seq filter: drop deltas the snapshot
+                    // already reflects. NO_SEQ disables filtering for
+                    // older fm-server builds that don't stamp the
+                    // header.
+                    if (update.seq() != Snapshot.NO_SEQ
+                            && lastAppliedSeq != Snapshot.NO_SEQ
+                            && update.seq() <= lastAppliedSeq) {
+                        continue;
+                    }
+                    Order[] orders = update.orders();
                     // Find which markets were touched so we only fire
                     // those books' handlers, not every book's.
                     var touched = _marketIdsTouched(orders);
@@ -179,6 +240,9 @@ public class DefaultMarketView implements MarketView {
                         for (var h : bookHandlers) {
                             if (h.marketId == marketId) h.handler.accept(book);
                         }
+                    }
+                    if (update.seq() != Snapshot.NO_SEQ) {
+                        lastAppliedSeq = update.seq();
                     }
                 } else if (event instanceof Session s) {
                     session.set(s);

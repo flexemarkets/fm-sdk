@@ -47,6 +47,7 @@ public class Events implements AutoCloseable {
     }
 
     private static final String MESSAGE_TYPE = "message-type";
+    private static final String SEQ          = "seq";
 
     private static final String MESSAGE_TYPE_VERSION        = "VERSION";
     private static final String MESSAGE_TYPE_SESSION_LIST   = "SESSION-LIST";
@@ -203,6 +204,7 @@ public class Events implements AutoCloseable {
         }
 
         String messageType = null;
+        long seq = Snapshot.NO_SEQ;
         int bodyStart = -1;
 
         for (int i = 1; i < lines.length; i++) {
@@ -213,6 +215,14 @@ public class Events implements AutoCloseable {
             }
             if (line.startsWith(MESSAGE_TYPE + ":")) {
                 messageType = line.substring(MESSAGE_TYPE.length() + 1).trim();
+            } else if (line.startsWith(SEQ + ":")) {
+                // Per-marketplace ORDERS-UPDATE sequence number stamped
+                // by fm-server (commit c6eea6eca). Used by MarketView /
+                // Phase 2a snapshot reconciliation. Parse defensively —
+                // a malformed value just falls back to NO_SEQ.
+                try {
+                    seq = Long.parseLong(line.substring(SEQ.length() + 1).trim());
+                } catch (NumberFormatException ignored) { /* leave as NO_SEQ */ }
             }
         }
 
@@ -230,12 +240,17 @@ public class Events implements AutoCloseable {
         }
 
         try {
+            // ORDERS-UPDATE gets wrapped so the seq header reaches
+            // consumers; everything else is pushed as the parsed
+            // payload directly. This is a breaking change for callers
+            // that did `case Order[] orders` — they need to switch to
+            // `case OrdersUpdate update` and read update.orders().
             Object event = switch (messageType) {
                 case MESSAGE_TYPE_VERSION        -> mapper.readValue(body, VERSION_TYPE);
                 case MESSAGE_TYPE_SESSION_LIST   -> mapper.readValue(body, SESSIONS_TYPE);
                 case MESSAGE_TYPE_SESSION_UPDATE -> mapper.readValue(body, SESSION_TYPE);
                 case MESSAGE_TYPE_HOLDING_UPDATE -> mapper.readValue(body, HOLDING_TYPE);
-                case MESSAGE_TYPE_ORDERS_UPDATE  -> mapper.readValue(body, ORDERS_TYPE);
+                case MESSAGE_TYPE_ORDERS_UPDATE  -> new OrdersUpdate(mapper.readValue(body, ORDERS_TYPE), seq);
                 default -> null;
             };
             if (event != null) {

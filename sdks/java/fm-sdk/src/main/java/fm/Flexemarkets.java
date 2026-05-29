@@ -124,6 +124,35 @@ public class Flexemarkets implements AutoCloseable {
         return get(uriIdSegment(apiRoot, "marketplaces", marketplaceId, "orders"), ORDERS_TYPE);
     }
 
+    /**
+     * V1 active-orders snapshot: every resting limit order on the
+     * marketplace's current session, plus the {@code x-fm-as-of-seq}
+     * sequence the snapshot was read at. Used by {@link MarketView}
+     * for Phase 2a snapshot seeding — clients apply WS deltas whose
+     * seq is greater than the returned value and skip those whose
+     * seq is less than or equal.
+     */
+    public Snapshot<List<Order>> activeOrdersV1(long marketplaceId) {
+        var url = server(endpointUrl()) + "/v1/marketplaces/" + marketplaceId + "/orders/active";
+        return getSnapshot(url, ORDERS_TYPE);
+    }
+
+    /**
+     * V1 recent-trades snapshot for seeding the trade-history tape.
+     * Same {@code x-fm-as-of-seq} contract as
+     * {@link #activeOrdersV1(long)}.
+     */
+    public Snapshot<List<Order>> recentTradesV1(long marketplaceId, int size) {
+        var url = server(endpointUrl()) + "/v1/marketplaces/" + marketplaceId
+                + "/orders/recent-trades?size=" + size;
+        return getSnapshot(url, ORDERS_TYPE);
+    }
+
+    /** Sensible default — the server caps at 5000 and defaults to 1000. */
+    public Snapshot<List<Order>> recentTradesV1(long marketplaceId) {
+        return recentTradesV1(marketplaceId, 1000);
+    }
+
     public List<Holding> holdings(long marketplaceId) {
         return get(uriIdSegment(apiRoot, "marketplaces", marketplaceId, "holdings"), HOLDINGS_TYPE);
     }
@@ -224,6 +253,45 @@ public class Flexemarkets implements AutoCloseable {
             .GET()
             .build();
         return send(request, type);
+    }
+
+    /**
+     * GET helper that returns the parsed body bundled with the
+     * {@code x-fm-as-of-seq} response header so callers (notably
+     * {@link MarketView}) can correlate the snapshot with the WS
+     * delta stream. Returns {@link Snapshot#NO_SEQ} when the header
+     * is absent.
+     */
+    private <T> Snapshot<T> getSnapshot(String url, TypeReference<T> type) {
+        var request = HttpRequest.newBuilder()
+            .uri(URI.create(url))
+            .header("Authorization", bearerToken)
+            .header("Accept", "application/json")
+            .header("User-Agent", FM_SDK_CLIENT)
+            .GET()
+            .build();
+        try {
+            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            var statusCode = response.statusCode();
+            if (statusCode >= 200 && statusCode < 300) {
+                T body = MAPPER.readValue(response.body(), type);
+                long asOfSeq = response.headers().firstValue("x-fm-as-of-seq")
+                        .map(Long::parseLong)
+                        .orElse(Snapshot.NO_SEQ);
+                return new Snapshot<>(body, asOfSeq);
+            }
+            if (statusCode == 401) {
+                throw new Exceptions.AuthenticationException("Authentication failed: " + response.body());
+            }
+            throw new Exceptions.HttpException(statusCode, response.body());
+        } catch (Exceptions.FlexemarketsException e) {
+            throw e;
+        } catch (IOException e) {
+            throw new Exceptions.ApiException("Snapshot request failed", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new Exceptions.ApiException("Snapshot request interrupted", e);
+        }
     }
 
     private <T> T post(String url, Object body, TypeReference<T> type) {

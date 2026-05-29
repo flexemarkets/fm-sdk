@@ -19,10 +19,10 @@ import fm.Flexemarkets;
 import fm.MarketplaceTrades;
 import fm.OrderBook;
 import fm.OrderBooks;
+import fm.OrdersUpdate;
 import fm.Trades;
 import fm.Types.Holding;
 import fm.Types.Market;
-import fm.Types.Order;
 import fm.Types.Session;
 
 public class Ticker {
@@ -101,9 +101,9 @@ public class Ticker {
                                 for (var s : list) session = s;
                                 redraw = true;
                             }
-                            case Order[] orders -> {
-                                orderBooks.update(orders);
-                                trades.update(orders);
+                            case OrdersUpdate update -> {
+                                orderBooks.update(update.orders());
+                                trades.update(update.orders());
                                 redraw = true;
                             }
                             case Holding h -> { }
