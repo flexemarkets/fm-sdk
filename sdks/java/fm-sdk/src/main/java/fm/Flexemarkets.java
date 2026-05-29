@@ -180,6 +180,23 @@ public class Flexemarkets implements AutoCloseable {
         events.connect();
     }
 
+    /**
+     * Open a stateful {@link MarketView} on this marketplace. The
+     * returned view drives its own WS subscription, dispatches events
+     * into per-market order books and trade tapes, and exposes
+     * always-current accessors and listener registration.
+     *
+     * <p>Phase 1 ({@code DefaultMarketView}) skips REST-snapshot
+     * seeding, sequence-gap recovery, per-identity sharing, and
+     * automatic reconnect. See {@link DefaultMarketView} for the
+     * staged plan. Robots that don't depend on consistency-guaranteed
+     * startup state can use this today; those that do should wait
+     * for Phase 2.
+     */
+    public MarketView observe(long marketplaceId) {
+        return new DefaultMarketView(this, marketplaceId, markets(marketplaceId));
+    }
+
     public void reconnect() throws InterruptedException {
         if (events != null) {
             events.reconnect();
