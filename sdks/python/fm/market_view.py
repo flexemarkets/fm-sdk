@@ -12,9 +12,12 @@ sharing, no reconnect — those land in Phase 2.
 
 from __future__ import annotations
 
+import logging
 import queue
 import threading
 from typing import TYPE_CHECKING, Callable, Optional
+
+log = logging.getLogger(__name__)
 
 from .events import NO_SEQ, OrdersUpdate, WsException, WsTransportError
 from .orderbook import OrderBook, OrderBooks
@@ -90,19 +93,19 @@ class MarketView:
         self._dispatcher.start()
 
     def _seed_from_snapshot(self) -> None:
-        """Phase 2a snapshot seeding. Fetches the V1 active-orders and
-        recent-trades snapshots, applies them, and records the
-        ``as_of_seq`` so subsequent WS deltas can be filtered to avoid
-        double-applying anything the snapshot already reflects.
-
-        Known race window: a delta whose order persisted between the
-        server's seq capture and order read can appear both in the
-        snapshot and in a delta with ``seq > as_of_seq``, leading to
-        a double-apply. Same caveat as the existing V0 WS snapshot
-        path; Phase 2b closes the window.
+        """Fetch the V1 active-orders and recent-trades snapshots,
+        clear local state, apply both, and record the ``as_of_seq``.
+        Used by both initial seeding (Phase 2a) and gap recovery
+        (Phase 2b) — initial seed hits empty aggregators so the
+        clear() is a no-op there.
         """
         orders = self._flexemarkets.active_orders_v1(self.marketplace_id)
         trades = self._flexemarkets.recent_trades_v1(self.marketplace_id)
+
+        # Clear before reseeding so a resync doesn't double-add
+        # against existing price levels.
+        self._order_books.clear()
+        self._trades.clear()
 
         if orders.body:
             self._order_books.update(orders.body)
@@ -221,28 +224,7 @@ class MarketView:
                 continue
 
             if isinstance(event, OrdersUpdate):
-                # Phase 2a seq filter: drop deltas the snapshot already
-                # reflects. NO_SEQ disables filtering for older
-                # fm-server builds that don't stamp the header.
-                if (
-                    event.seq != NO_SEQ
-                    and self._last_applied_seq != NO_SEQ
-                    and event.seq <= self._last_applied_seq
-                ):
-                    continue
-                orders = event.orders
-                touched = _market_ids_touched(orders)
-                self._order_books.update(orders)
-                self._trades.update(orders)
-                for market_id in touched:
-                    book = self._order_books.get(market_id)
-                    if book is None:
-                        continue
-                    for entry_id, handler in self._book_handlers:
-                        if entry_id == market_id:
-                            handler(book)
-                if event.seq != NO_SEQ:
-                    self._last_applied_seq = event.seq
+                self._process_orders_update(event)
                 continue
 
             if isinstance(event, Session):
@@ -265,6 +247,50 @@ class MarketView:
 
             # VERSION, SESSION-LIST aren't reflected in the public
             # surface yet; ignore.
+
+    def _process_orders_update(self, event: OrdersUpdate) -> None:
+        """Phase 2b gap recovery + Phase 2a filter. When a delta
+        arrives with ``seq > _last_applied_seq + 1``, one or more
+        frames were dropped: refetch the V1 snapshot, clear local
+        state, reseed, then fall through to the seq filter — if the
+        gap-triggering delta's seq is now ``<=`` the refreshed
+        ``_last_applied_seq`` it's silently skipped (snapshot covered
+        it), otherwise it applies normally.
+        """
+        if (
+            event.seq != NO_SEQ
+            and self._last_applied_seq != NO_SEQ
+            and event.seq > self._last_applied_seq + 1
+        ):
+            log.warning(
+                "ORDERS-UPDATE seq gap on marketplace %d — expected %d, got %d; "
+                "resyncing from snapshot",
+                self.marketplace_id,
+                self._last_applied_seq + 1,
+                event.seq,
+            )
+            self._seed_from_snapshot()
+
+        if (
+            event.seq != NO_SEQ
+            and self._last_applied_seq != NO_SEQ
+            and event.seq <= self._last_applied_seq
+        ):
+            return
+
+        orders = event.orders
+        touched = _market_ids_touched(orders)
+        self._order_books.update(orders)
+        self._trades.update(orders)
+        for market_id in touched:
+            book = self._order_books.get(market_id)
+            if book is None:
+                continue
+            for entry_id, handler in self._book_handlers:
+                if entry_id == market_id:
+                    handler(book)
+        if event.seq != NO_SEQ:
+            self._last_applied_seq = event.seq
 
     def _ensure_open(self) -> None:
         if self._closed:

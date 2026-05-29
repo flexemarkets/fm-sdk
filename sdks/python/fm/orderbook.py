@@ -142,6 +142,19 @@ class OrderBook:
         with self._lock:
             return sorted(self._sells.items(), key=lambda kv: kv[0])
 
+    def clear(self) -> None:
+        """Reset to just-constructed state — empty levels,
+        ``_initialized = False``. Used by
+        :class:`~fm.market_view.MarketView`'s Phase 2b gap-recovery
+        flow: refetch snapshot, clear, reapply via update so the next
+        delta with ``is_available=False`` doesn't underflow against
+        stale price levels.
+        """
+        with self._lock:
+            self._buys.clear()
+            self._sells.clear()
+            self._initialized = False
+
     def __repr__(self) -> str:
         sell_levels = self.sell_levels()
         buy_levels = self.buy_levels()
@@ -198,6 +211,11 @@ class OrderBooks:
         null-tolerant lookup.
         """
         return self._books.get(market_id)
+
+    def clear(self) -> None:
+        """Clear every contained book — see :meth:`OrderBook.clear`."""
+        for book in self._books.values():
+            book.clear()
 
     def __getitem__(self, market_id: int) -> OrderBook:
         return self._books[market_id]

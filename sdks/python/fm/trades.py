@@ -90,6 +90,14 @@ class Trades:
             self._container.clear()
             return trades
 
+    def clear(self) -> None:
+        """Empty the trade tape — used by
+        :class:`~fm.market_view.MarketView`'s gap-recovery flow before
+        reseeding from the ``/v1/orders/recent-trades`` snapshot.
+        """
+        with self._lock:
+            self._container.clear()
+
 
 class MarketplaceTrades:
     """Container of :class:`Trades` instances, one per market.
@@ -117,3 +125,10 @@ class MarketplaceTrades:
 
     def __getitem__(self, market_id: int) -> Trades:
         return self._trades[market_id]
+
+    def clear(self) -> None:
+        """Empty every per-market trade tape — see
+        :meth:`Trades.clear`.
+        """
+        for t in self._trades.values():
+            t.clear()
