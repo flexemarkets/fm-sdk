@@ -14,7 +14,7 @@ from .exceptions import (
     InvalidArgumentError,
     PersonHasMarketplaceDataError,
 )
-from .market_view import MarketView, MarketViewHandle, Subscription
+from .market_view import GapEvent, MarketView, MarketViewHandle, ReconnectEvent, Subscription
 from .orderbook import OrderBook, OrderBooks
 from .trades import MarketplaceTrades, Trades
 from .types import (
@@ -57,10 +57,13 @@ __all__ = [
     "Trades",
     "MarketplaceTrades",
     # market view (Phase 2d-complete — REST snapshot seeding +
-    # seq-filtered deltas + gap recovery + auto-reconnect + sharing)
+    # seq-filtered deltas + gap recovery + auto-reconnect + sharing
+    # + onGap/onReconnect telemetry hooks)
     "MarketView",
     "MarketViewHandle",
     "Subscription",
+    "GapEvent",
+    "ReconnectEvent",
     # events
     "EventListener",
     "WsTransportError",

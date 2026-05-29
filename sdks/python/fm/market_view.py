@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import queue
 import threading
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, Optional
 
 log = logging.getLogger(__name__)
@@ -31,6 +32,34 @@ if TYPE_CHECKING:
 # Handle returned by MarketView.on_* listener registrations. Call to
 # unregister. Idempotent — multiple calls are no-ops.
 Subscription = Callable[[], None]
+
+
+@dataclass(frozen=True)
+class GapEvent:
+    """Fires when :class:`MarketView` detects a sequence-gap in the
+    ORDERS-UPDATE WS stream — one or more frames were dropped between
+    client and fm-server. After a gap, MarketView re-runs the REST
+    snapshot recovery flow before applying further deltas; the gap
+    event is the signal callers can wire into their own observability
+    stack instead of relying on the SDK's default ``log.warning``.
+    """
+
+    marketplace_id: int
+    expected_seq: int
+    received_seq: int
+
+
+@dataclass(frozen=True)
+class ReconnectEvent:
+    """Fires when :class:`MarketView` reacts to a
+    :class:`~fm.events.WsTransportError` — either after the reconnect
+    + resnapshot completes successfully, or after the attempt has
+    failed and the view is left stale.
+    """
+
+    marketplace_id: int
+    success: bool
+    reason: Optional[str]
 
 
 class MarketView:
@@ -69,6 +98,8 @@ class MarketView:
         self._session_handlers: list[Callable[[Session], None]] = []
         self._holding_handlers: list[Callable[[Holding], None]] = []
         self._book_handlers: list[tuple[int, Callable[[OrderBook], None]]] = []
+        self._gap_handlers: list[Callable[[GapEvent], None]] = []
+        self._reconnect_handlers: list[Callable[[ReconnectEvent], None]] = []
 
         self._queue: queue.Queue[object] = queue.Queue(maxsize=10_000)
         self._closed = False
@@ -186,6 +217,40 @@ class MarketView:
 
         return cancel
 
+    def on_gap(self, handler: Callable[[GapEvent], None]) -> Subscription:
+        """Register a handler that fires when MarketView detects a gap
+        in the ORDERS-UPDATE seq stream. Use this to wire your own
+        telemetry — by default the SDK calls ``log.warning`` but
+        otherwise hides the recovery flow.
+        """
+        self._ensure_open()
+        self._gap_handlers.append(handler)
+
+        def cancel() -> None:
+            try:
+                self._gap_handlers.remove(handler)
+            except ValueError:
+                pass
+
+        return cancel
+
+    def on_reconnect(self, handler: Callable[[ReconnectEvent], None]) -> Subscription:
+        """Register a handler that fires after the SDK reacts to a
+        transport error — either when reconnect + resnapshot have
+        completed, or when the attempt has failed and the view is
+        left stale.
+        """
+        self._ensure_open()
+        self._reconnect_handlers.append(handler)
+
+        def cancel() -> None:
+            try:
+                self._reconnect_handlers.remove(handler)
+            except ValueError:
+                pass
+
+        return cancel
+
     # -- write-side pass-throughs -----------------------------------------
 
     def submit_limit(self, market_id: int, side: str, units: int, price: int) -> Order:
@@ -281,13 +346,24 @@ class MarketView:
             and self._last_applied_seq != NO_SEQ
             and event.seq > self._last_applied_seq + 1
         ):
+            expected_seq = self._last_applied_seq + 1
             log.warning(
                 "ORDERS-UPDATE seq gap on marketplace %d — expected %d, got %d; "
                 "resyncing from snapshot",
                 self.marketplace_id,
-                self._last_applied_seq + 1,
+                expected_seq,
                 event.seq,
             )
+            gap = GapEvent(
+                marketplace_id=self.marketplace_id,
+                expected_seq=expected_seq,
+                received_seq=event.seq,
+            )
+            for h in self._gap_handlers:
+                try:
+                    h(gap)
+                except Exception:
+                    pass  # one bad handler can't stop recovery
             self._seed_from_snapshot()
 
         if (
@@ -329,12 +405,23 @@ class MarketView:
         try:
             self._events.reconnect()
             self._seed_from_snapshot()
+            outcome = ReconnectEvent(
+                marketplace_id=self.marketplace_id, success=True, reason=None
+            )
         except Exception as e:
             log.error(
                 "Reconnect failed on marketplace %d; view is stale: %s",
                 self.marketplace_id,
                 e,
             )
+            outcome = ReconnectEvent(
+                marketplace_id=self.marketplace_id, success=False, reason=str(e)
+            )
+        for h in self._reconnect_handlers:
+            try:
+                h(outcome)
+            except Exception:
+                pass  # don't let one bad handler stop dispatch
 
     def _ensure_open(self) -> None:
         if self._closed:
@@ -408,6 +495,18 @@ class MarketViewHandle:
     def on_holding_change(self, handler: Callable[[Holding], None]) -> Subscription:
         self._check()
         sub = self._shared.on_holding_change(handler)
+        self._my_subscriptions.append(sub)
+        return sub
+
+    def on_gap(self, handler: Callable[[GapEvent], None]) -> Subscription:
+        self._check()
+        sub = self._shared.on_gap(handler)
+        self._my_subscriptions.append(sub)
+        return sub
+
+    def on_reconnect(self, handler: Callable[[ReconnectEvent], None]) -> Subscription:
+        self._check()
+        sub = self._shared.on_reconnect(handler)
         self._my_subscriptions.append(sub)
         return sub
 
