@@ -66,9 +66,11 @@ public class DefaultMarketView implements MarketView {
     // CopyOnWriteArrayList because handler arrays are read once per
     // dispatch (hot path) and mutated rarely (register / unregister
     // happens on robot startup / shutdown).
-    private final List<Consumer<Session>>                  sessionHandlers = new CopyOnWriteArrayList<>();
-    private final List<Consumer<Holding>>                  holdingHandlers = new CopyOnWriteArrayList<>();
-    private final List<OrderBookHandler>                   bookHandlers    = new CopyOnWriteArrayList<>();
+    private final List<Consumer<Session>>                  sessionHandlers   = new CopyOnWriteArrayList<>();
+    private final List<Consumer<Holding>>                  holdingHandlers   = new CopyOnWriteArrayList<>();
+    private final List<OrderBookHandler>                   bookHandlers      = new CopyOnWriteArrayList<>();
+    private final List<Consumer<GapEvent>>                 gapHandlers       = new CopyOnWriteArrayList<>();
+    private final List<Consumer<ReconnectEvent>>           reconnectHandlers = new CopyOnWriteArrayList<>();
 
     private final BlockingQueue<Object> queue = new ArrayBlockingQueue<>(10_000);
     private final Events events;
@@ -204,6 +206,20 @@ public class DefaultMarketView implements MarketView {
     }
 
     @Override
+    public Subscription onGap(Consumer<GapEvent> handler) {
+        _ensureOpen();
+        gapHandlers.add(handler);
+        return () -> gapHandlers.remove(handler);
+    }
+
+    @Override
+    public Subscription onReconnect(Consumer<ReconnectEvent> handler) {
+        _ensureOpen();
+        reconnectHandlers.add(handler);
+        return () -> reconnectHandlers.remove(handler);
+    }
+
+    @Override
     public Order submitLimit(long marketId, String side, long units, long price) {
         _ensureOpen();
         return flexemarkets.submitLimit(marketplaceId, marketId, side, units, price);
@@ -269,12 +285,18 @@ public class DefaultMarketView implements MarketView {
     private void _handleTransportError() {
         System.err.println("[MarketView] WS transport error on marketplace "
                 + marketplaceId + "; reconnecting");
+        ReconnectEvent event;
         try {
             events.reconnect();
             _seedFromSnapshot();
+            event = new ReconnectEvent(marketplaceId, true, null);
         } catch (Throwable t) {
             System.err.println("[MarketView] Reconnect failed on marketplace "
                     + marketplaceId + "; view is stale: " + t.getMessage());
+            event = new ReconnectEvent(marketplaceId, false, t.getMessage());
+        }
+        for (var h : reconnectHandlers) {
+            try { h.accept(event); } catch (Throwable ignored) { /* don't let one bad handler stop dispatch */ }
         }
     }
 
@@ -289,9 +311,14 @@ public class DefaultMarketView implements MarketView {
         if (update.seq() != Snapshot.NO_SEQ
                 && lastAppliedSeq != Snapshot.NO_SEQ
                 && update.seq() > lastAppliedSeq + 1) {
+            long expectedSeq = lastAppliedSeq + 1;
             System.err.println("[MarketView] ORDERS-UPDATE seq gap on marketplace "
-                    + marketplaceId + " — expected " + (lastAppliedSeq + 1)
+                    + marketplaceId + " — expected " + expectedSeq
                     + ", got " + update.seq() + "; resyncing from snapshot");
+            GapEvent event = new GapEvent(marketplaceId, expectedSeq, update.seq());
+            for (var h : gapHandlers) {
+                try { h.accept(event); } catch (Throwable ignored) { /* don't let one bad handler stop recovery */ }
+            }
             _seedFromSnapshot();
         }
 

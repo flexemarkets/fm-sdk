@@ -82,6 +82,22 @@ public interface MarketView extends AutoCloseable {
     Subscription onHoldingChange(Consumer<Holding> handler);
 
     /**
+     * Register a handler that fires when {@link MarketView} detects a
+     * gap in the ORDERS-UPDATE seq stream. Use this to wire your own
+     * telemetry — by default the SDK logs the gap to stderr but
+     * otherwise hides the recovery flow.
+     */
+    Subscription onGap(Consumer<GapEvent> handler);
+
+    /**
+     * Register a handler that fires after the SDK reacts to a
+     * transport error — either when the reconnect + resnapshot has
+     * completed successfully, or when the attempt has failed and the
+     * view is left stale.
+     */
+    Subscription onReconnect(Consumer<ReconnectEvent> handler);
+
+    /**
      * Submit a limit order on this marketplace.
      */
     Order submitLimit(long marketId, String side, long units, long price);

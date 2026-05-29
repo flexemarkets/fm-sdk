@@ -78,6 +78,20 @@ class MarketViewHandle implements MarketView {
         return sub;
     }
 
+    @Override public Subscription onGap(Consumer<GapEvent> handler) {
+        _check();
+        Subscription sub = shared.onGap(handler);
+        mySubscriptions.add(sub);
+        return sub;
+    }
+
+    @Override public Subscription onReconnect(Consumer<ReconnectEvent> handler) {
+        _check();
+        Subscription sub = shared.onReconnect(handler);
+        mySubscriptions.add(sub);
+        return sub;
+    }
+
     @Override public Order submitLimit(long marketId, String side, long units, long price) {
         _check();
         return shared.submitLimit(marketId, side, units, price);
