@@ -21,6 +21,31 @@ import fm.Types.Session;
 import fm.Types.Version;
 
 public class Events implements AutoCloseable {
+
+    /**
+     * Prefix on the {@code /app} SUBSCRIBE destination selecting fm-server's
+     * WS API version. Empty string → V0 ({@code /app/marketplaces/{id}});
+     * {@code "/v1"} → V1 ({@code /app/v1/marketplaces/{id}}). V1 omits the
+     * bulk ORDERS-UPDATE snapshot on subscribe, keeping inbound frames
+     * small. V1 is the default; override with
+     * {@code -Dfm.net.ws.api-version=v0} if talking to an old fm-server
+     * that doesn't speak V1.
+     *
+     * <p>NB: V1 SUBSCRIBE delivers an empty ORDERS-UPDATE; consumers that
+     * need the active book at startup should fetch it via REST
+     * ({@code GET /api/v1/marketplaces/{id}/orders/active}) and reconcile
+     * against incoming deltas using the {@code seq} header.
+     */
+    private static final String API_VERSION_PREFIX = _resolveApiVersionPrefix();
+
+    private static String _resolveApiVersionPrefix() {
+        String version = System.getProperty("fm.net.ws.api-version", "v1").trim();
+        if ("v0".equalsIgnoreCase(version)) return "";
+        if ("v1".equalsIgnoreCase(version)) return "/v1";
+        throw new IllegalArgumentException(
+                "fm.net.ws.api-version must be 'v0' or 'v1', got: " + version);
+    }
+
     private static final String MESSAGE_TYPE = "message-type";
 
     private static final String MESSAGE_TYPE_VERSION        = "VERSION";
@@ -77,9 +102,17 @@ public class Events implements AutoCloseable {
                 throw new Exceptions.ApiException("STOMP CONNECTED frame not received within timeout");
             }
 
+            // fm-server publishes broadcasts on the V0 destination paths
+            // (/topic/marketplaces/{id}, /user/queue/marketplaces/{id})
+            // for both V0 and V1 clients — only the @SubscribeMapping
+            // gating the initial snapshot lives at the /v1 prefix. So
+            // pub/sub subscriptions stay on V0 paths regardless of the
+            // chosen api-version; only the /app destination flips.
+            // Mirrors fm-ui's web-socket.service.ts and fm-robots'
+            // EventParser pattern.
             subscribe("/user/queue/marketplaces/" + marketplaceId);
             subscribe("/topic/marketplaces/" + marketplaceId);
-            subscribe("/app/marketplaces/" + marketplaceId);
+            subscribe("/app" + API_VERSION_PREFIX + "/marketplaces/" + marketplaceId);
         } catch (Exceptions.FlexemarketsException e) {
             throw e;
         } catch (Exception e) {

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import queue
 import threading
 import time
@@ -23,6 +24,30 @@ log = logging.getLogger(__name__)
 _HEARTBEAT_MS = 30_000
 _INBOUND_MESSAGE_SIZE = 128 * 1024 * 1024  # 128 MB
 _NULL = "\x00"
+
+
+def _resolve_api_version_prefix() -> str:
+    """Prefix on the /app SUBSCRIBE destination selecting fm-server's
+    WS API version. Empty string -> V0 (/app/marketplaces/{id});
+    "/v1" -> V1 (/app/v1/marketplaces/{id}). V1 omits the bulk
+    ORDERS-UPDATE snapshot on subscribe, keeping inbound frames small.
+    V1 is the default; override with FM_WS_API_VERSION=v0 if talking
+    to an old fm-server that doesn't speak V1.
+
+    NB: V1 SUBSCRIBE delivers an empty ORDERS-UPDATE; consumers that
+    need the active book at startup should fetch it via REST
+    (GET /api/v1/marketplaces/{id}/orders/active) and reconcile
+    against incoming deltas using the seq header.
+    """
+    v = os.environ.get("FM_WS_API_VERSION", "v1").strip().lower()
+    if v == "v0":
+        return ""
+    if v == "v1":
+        return "/v1"
+    raise ValueError(f"FM_WS_API_VERSION must be 'v0' or 'v1', got: {v}")
+
+
+_API_VERSION_PREFIX = _resolve_api_version_prefix()
 
 
 # ---------------------------------------------------------------------------
@@ -281,11 +306,18 @@ class EventListener:
             log.debug("STOMP CONNECT reply: %s", reply.command)
 
     def _subscribe(self) -> None:
+        # fm-server publishes broadcasts on the V0 destination paths
+        # (/topic/marketplaces/{id}, /user/queue/marketplaces/{id}) for
+        # both V0 and V1 clients — only the @SubscribeMapping gating
+        # the initial snapshot lives at the /v1 prefix. So pub/sub
+        # subscriptions stay on V0 paths regardless of the chosen
+        # api-version; only the /app destination flips. Mirrors
+        # fm-ui's web-socket.service.ts and the Java/TS SDKs.
         resource = f"/marketplaces/{self._marketplace_id}"
         for dest in (
             f"/user/queue{resource}",
             f"/topic{resource}",
-            f"/app{resource}",
+            f"/app{_API_VERSION_PREFIX}{resource}",
         ):
             frame = StompFrame(
                 command="SUBSCRIBE",
