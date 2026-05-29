@@ -13,7 +13,7 @@
 import type { Flexemarkets } from "./client.js";
 import { OrderBook, OrderBooks } from "./orderbook.js";
 import { MarketplaceTrades } from "./trades.js";
-import type { FmEvent } from "./stomp.js";
+import { NO_SEQ, type FmEvent, type OrdersUpdate } from "./stomp.js";
 import type { Holding, Market, Order, Session } from "./types.js";
 
 /**
@@ -90,10 +90,29 @@ export class DefaultMarketView implements MarketView {
 
   private _closed = false;
 
+  /**
+   * Highest ORDERS-UPDATE seq this view has applied so far. Deltas
+   * with `seq <= _lastAppliedSeq` are skipped — they've already been
+   * folded into the local state via the initial REST snapshot or a
+   * previously-applied delta. Initial value comes from the snapshot's
+   * `asOfSeq`; `NO_SEQ` disables filtering (older fm-server).
+   */
+  private _lastAppliedSeq: number = NO_SEQ;
+
   static async open(flexemarkets: Flexemarkets, marketplaceId: number): Promise<DefaultMarketView> {
     const markets = await flexemarkets.markets(marketplaceId);
-    return new DefaultMarketView(flexemarkets, marketplaceId, markets);
+    const view = new DefaultMarketView(flexemarkets, marketplaceId, markets);
+    // Subscribe WS first (so deltas start buffering on the callback
+    // path), then fetch + apply the snapshot, only THEN allow live
+    // dispatch.
+    await flexemarkets.listen(marketplaceId, (event) => view._dispatch(event));
+    await view._seedFromSnapshot();
+    view._seedComplete = true;
+    return view;
   }
+
+  private _seedComplete = false;
+  private _seedBuffer: OrdersUpdate[] = [];
 
   // 100 matches the default per-market Trades capacity. Plumb through to
   // observe() later if a caller needs deeper trade scrollback.
@@ -103,8 +122,36 @@ export class DefaultMarketView implements MarketView {
     this.markets = markets;
     this._orderBooks = new OrderBooks(markets);
     this._trades = new MarketplaceTrades(markets, 100);
+  }
 
-    void flexemarkets.listen(marketplaceId, (event) => this._dispatch(event));
+  /**
+   * Phase 2a snapshot seeding. Fetches the V1 active-orders and
+   * recent-trades snapshots, applies them to the local aggregators,
+   * and records the `asOfSeq` so subsequent WS deltas can be
+   * filtered to avoid double-applying anything the snapshot already
+   * reflects.
+   *
+   * Known race window: a delta whose order persisted between the
+   * server's seq capture and its order read can appear both in the
+   * snapshot and in a delta with `seq > asOfSeq`, leading to a
+   * double-apply. Same caveat as the existing V0 WS snapshot path.
+   * Phase 2b (gap recovery + ID-based dedup) closes the window.
+   */
+  private async _seedFromSnapshot(): Promise<void> {
+    const orders = await this._flexemarkets.activeOrdersV1(this.marketplaceId);
+    const trades = await this._flexemarkets.recentTradesV1(this.marketplaceId);
+
+    if (orders.body.length > 0) this._orderBooks.update(orders.body);
+    if (trades.body.length > 0) this._trades.update(trades.body);
+
+    this._lastAppliedSeq = orders.asOfSeq;
+
+    // Drain anything that arrived between WS subscribe and snapshot
+    // apply, filtered by seq.
+    for (const buffered of this._seedBuffer) {
+      this._applyOrdersUpdate(buffered);
+    }
+    this._seedBuffer = [];
   }
 
   orderBook(marketId: number): OrderBook | null {
@@ -170,20 +217,15 @@ export class DefaultMarketView implements MarketView {
 
   private _dispatch(event: FmEvent): void {
     if (this._closed) return;
-    // FmEvent is a discriminated union — Order[] is the ORDERS-UPDATE
-    // delta, Session is SESSION-UPDATE, Holding is HOLDING-UPDATE.
-    if (Array.isArray(event)) {
-      const orders = event as Order[];
-      const touched = _marketIdsTouched(orders);
-      this._orderBooks.update(orders);
-      this._trades.update(orders);
-      for (const marketId of touched) {
-        const book = this._orderBooks.get(marketId);
-        if (!book) continue;
-        for (const h of this._bookHandlers) {
-          if (h.marketId === marketId) h.handler(book);
-        }
+    // FmEvent is a discriminated union.
+    if (_isOrdersUpdate(event)) {
+      if (!this._seedComplete) {
+        // Buffer until the REST snapshot has landed so we don't
+        // apply deltas before the seq watermark is established.
+        this._seedBuffer.push(event);
+        return;
       }
+      this._applyOrdersUpdate(event);
       return;
     }
     if (_isSession(event)) {
@@ -198,7 +240,32 @@ export class DefaultMarketView implements MarketView {
     }
     // VERSION, SESSION-LIST, WsTransportError, WsException — not
     // reflected in the public surface yet. Reconnect on transport
-    // error lands in Phase 2.
+    // error lands in Phase 2c.
+  }
+
+  private _applyOrdersUpdate(update: OrdersUpdate): void {
+    // Phase 2a seq filter: drop deltas the snapshot already reflects.
+    // NO_SEQ disables filtering for older fm-server builds that don't
+    // stamp the header.
+    if (
+      update.seq !== NO_SEQ &&
+      this._lastAppliedSeq !== NO_SEQ &&
+      update.seq <= this._lastAppliedSeq
+    ) {
+      return;
+    }
+    const orders = update.orders;
+    const touched = _marketIdsTouched(orders);
+    this._orderBooks.update(orders);
+    this._trades.update(orders);
+    for (const marketId of touched) {
+      const book = this._orderBooks.get(marketId);
+      if (!book) continue;
+      for (const h of this._bookHandlers) {
+        if (h.marketId === marketId) h.handler(book);
+      }
+    }
+    if (update.seq !== NO_SEQ) this._lastAppliedSeq = update.seq;
   }
 
   private _ensureOpen(): void {
@@ -214,8 +281,12 @@ function _marketIdsTouched(orders: Order[]): number[] {
   return [...seen];
 }
 
+function _isOrdersUpdate(event: FmEvent): event is OrdersUpdate {
+  return typeof event === "object" && event !== null && (event as OrdersUpdate).kind === "orders-update";
+}
+
 function _isSession(event: FmEvent): event is Session {
-  return typeof event === "object" && event !== null && "status" in event;
+  return typeof event === "object" && event !== null && "status" in event && "marketplaceId" in event;
 }
 
 function _isHolding(event: FmEvent): event is Holding {

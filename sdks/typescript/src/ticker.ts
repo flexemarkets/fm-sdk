@@ -9,7 +9,8 @@ import { Flexemarkets } from "./client.js";
 import { OrderBooks } from "./orderbook.js";
 import { MarketplaceTrades } from "./trades.js";
 import type { FmEvent } from "./stomp.js";
-import type { Order, Session } from "./types.js";
+import type { Session } from "./types.js";
+import type { OrdersUpdate } from "./stomp.js";
 import { SESSION_STATE_CLOSED } from "./types.js";
 
 const TRADE_DISPLAY_COUNT = 5;
@@ -67,8 +68,8 @@ function display(
   process.stdout.write(lines.join("\n"));
 }
 
-function isOrderArray(event: FmEvent): event is Order[] {
-  return Array.isArray(event) && (event.length === 0 || "supplier" in event[0]);
+function isOrdersUpdate(event: FmEvent): event is OrdersUpdate {
+  return typeof event === "object" && event !== null && (event as OrdersUpdate).kind === "orders-update";
 }
 
 function isSession(event: FmEvent): event is Session {
@@ -115,9 +116,9 @@ async function main(): Promise<void> {
     await fm.listen(marketplaceId, (event: FmEvent) => {
       let redraw = false;
 
-      if (isOrderArray(event)) {
-        books.update(event);
-        marketTrades.update(event);
+      if (isOrdersUpdate(event)) {
+        books.update(event.orders);
+        marketTrades.update(event.orders);
         redraw = true;
       } else if (isSession(event)) {
         session = event;

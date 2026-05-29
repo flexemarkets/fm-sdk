@@ -21,8 +21,9 @@ import type {
   Session,
   Token,
 } from "./types.js";
-import { EventListener, type EventCallback } from "./stomp.js";
+import { EventListener, NO_SEQ, type EventCallback } from "./stomp.js";
 import { DefaultMarketView, type MarketView } from "./market-view.js";
+import type { Snapshot } from "./snapshot.js";
 
 function readVersion(): string {
   try {
@@ -449,6 +450,27 @@ export class Flexemarkets {
     return JSON.parse(body);
   }
 
+  /**
+   * GET helper that returns the parsed body bundled with the
+   * `x-fm-as-of-seq` response header so callers (notably MarketView)
+   * can correlate the snapshot with the WS delta stream. Returns
+   * `Snapshot.NO_SEQ` when the header is absent.
+   */
+  private async _getSnapshot(url: string): Promise<{ data: JsonObject; asOfSeq: number }> {
+    const resp = await fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
+      headers: {
+        ...this._authHeaders(),
+        Accept: "application/json, application/hal+json",
+        "User-Agent": FM_NETWORK_CLIENT,
+      },
+    });
+    const body = await resp.text();
+    checkResponse(resp, body);
+    const raw = resp.headers.get("x-fm-as-of-seq");
+    const asOfSeq = raw === null ? NO_SEQ : Number.parseInt(raw, 10);
+    return { data: JSON.parse(body), asOfSeq: Number.isFinite(asOfSeq) ? asOfSeq : NO_SEQ };
+  }
+
   private async _post(url: string, json: unknown): Promise<JsonObject> {
     const resp = await fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
       method: "POST",
@@ -582,6 +604,33 @@ export class Flexemarkets {
       clientDescription: this._clientDescription,
     });
     return parseOrder(data);
+  }
+
+  /**
+   * V1 active-orders snapshot: every resting limit order on the
+   * marketplace's current session, plus the `x-fm-as-of-seq` sequence
+   * the snapshot was read at. Used by `MarketView` Phase 2a seeding
+   * — clients apply WS deltas whose seq is greater than the returned
+   * value and skip those whose seq is less than or equal.
+   */
+  async activeOrdersV1(marketplaceId: number): Promise<Snapshot<Order[]>> {
+    const baseRest = this._baseUrl;
+    const url = `${baseRest}/v1/marketplaces/${marketplaceId}/orders/active`;
+    const { data, asOfSeq } = await this._getSnapshot(url);
+    const orders = ((data as unknown as { _embedded?: { orderDtoes?: JsonObject[] } })._embedded?.orderDtoes ?? []).map(parseOrder);
+    return { body: orders, asOfSeq };
+  }
+
+  /**
+   * V1 recent-trades snapshot for seeding the trade-history tape.
+   * Same `x-fm-as-of-seq` contract as `activeOrdersV1`. Server caps
+   * at 5000; default size is 1000.
+   */
+  async recentTradesV1(marketplaceId: number, size = 1000): Promise<Snapshot<Order[]>> {
+    const url = `${this._baseUrl}/v1/marketplaces/${marketplaceId}/orders/recent-trades?size=${size}`;
+    const { data, asOfSeq } = await this._getSnapshot(url);
+    const orders = ((data as unknown as { _embedded?: { orderDtoes?: JsonObject[] } })._embedded?.orderDtoes ?? []).map(parseOrder);
+    return { body: orders, asOfSeq };
   }
 
   async orders(

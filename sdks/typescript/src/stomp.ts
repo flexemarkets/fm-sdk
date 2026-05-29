@@ -101,12 +101,28 @@ export interface WsException {
 // Event types
 // ---------------------------------------------------------------------------
 
+/**
+ * ORDERS-UPDATE delta from the WS stream, carrying the parsed orders
+ * plus the per-marketplace `seq` header fm-server stamps each frame
+ * with. Consumers reconcile this against a REST `Snapshot`: apply
+ * deltas whose `seq` is greater than the snapshot's `asOfSeq` and
+ * skip those whose seq is less than or equal.
+ *
+ * `seq` is `-1` when the server didn't stamp the header (older
+ * fm-server).
+ */
+export interface OrdersUpdate {
+  readonly kind: "orders-update";
+  readonly orders: Order[];
+  readonly seq: number;
+}
+
 export type FmEvent =
   | Version
   | Session
   | Session[]
   | Holding
-  | Order[]
+  | OrdersUpdate
   | WsTransportError
   | WsException;
 
@@ -117,6 +133,10 @@ export type EventCallback = (event: FmEvent) => void;
 // ---------------------------------------------------------------------------
 
 const MESSAGE_TYPE = "message-type";
+const SEQ_HEADER   = "seq";
+
+/** Sentinel for "no seq header" — see OrdersUpdate.seq docstring. */
+export const NO_SEQ = -1;
 
 function parseEvent(
   frame: StompFrame,
@@ -142,11 +162,21 @@ function parseEvent(
       return parseSession(data as Record<string, unknown>);
     case "HOLDING-UPDATE":
       return parseHolding(data as Record<string, unknown>);
-    case "ORDERS-UPDATE":
-      return parseOrders(data, parseOrder);
+    case "ORDERS-UPDATE": {
+      const seq = _parseSeq(frame.headers[SEQ_HEADER]);
+      return { kind: "orders-update", orders: parseOrders(data, parseOrder), seq };
+    }
     default:
       return null;
   }
+}
+
+/** Parse the per-frame `seq` header; falls back to NO_SEQ on absent
+ *  or malformed values. */
+function _parseSeq(value: string | undefined): number {
+  if (value === undefined) return NO_SEQ;
+  const n = Number.parseInt(value, 10);
+  return Number.isFinite(n) ? n : NO_SEQ;
 }
 
 function parseVersion(data: unknown): Version {

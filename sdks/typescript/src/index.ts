@@ -76,6 +76,10 @@ export type {
   EventCallback,
 } from "./stomp.js";
 
-// MarketView (Phase 1 — skeleton; reconciliation + sharing land in Phase 2)
+// MarketView (Phase 2a — REST snapshot seeding + seq-filtered deltas;
+// gap recovery + sharing + reconnect land in Phase 2b–2d)
 export { DefaultMarketView } from "./market-view.js";
 export type { MarketView, Subscription } from "./market-view.js";
+export type { Snapshot } from "./snapshot.js";
+export { NO_SEQ } from "./stomp.js";
+export type { OrdersUpdate } from "./stomp.js";
