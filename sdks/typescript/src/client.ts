@@ -22,6 +22,7 @@ import type {
   Token,
 } from "./types.js";
 import { EventListener, type EventCallback } from "./stomp.js";
+import { DefaultMarketView, type MarketView } from "./market-view.js";
 
 function readVersion(): string {
   try {
@@ -677,6 +678,22 @@ export class Flexemarkets {
   }
 
   // -- events / WebSocket ----------------------------------------------------
+
+  /**
+   * Open a stateful MarketView on this marketplace. The returned view
+   * drives its own WS subscription, dispatches events into per-market
+   * order books and trade tapes, and exposes always-current accessors
+   * and listener registration.
+   *
+   * Phase 1 (DefaultMarketView) skips REST-snapshot seeding,
+   * sequence-gap recovery, per-identity sharing, and automatic
+   * reconnect. See DefaultMarketView for the staged plan. Robots that
+   * don't depend on consistency-guaranteed startup state can use this
+   * today; those that do should wait for Phase 2.
+   */
+  async observe(marketplaceId: number): Promise<MarketView> {
+    return await DefaultMarketView.open(this, marketplaceId);
+  }
 
   /** Start receiving real-time events via WebSocket STOMP. */
   async listen(marketplaceId: number, callback: EventCallback): Promise<void> {

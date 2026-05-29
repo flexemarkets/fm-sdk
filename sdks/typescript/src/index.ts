@@ -75,3 +75,7 @@ export type {
   FmEvent,
   EventCallback,
 } from "./stomp.js";
+
+// MarketView (Phase 1 — skeleton; reconciliation + sharing land in Phase 2)
+export { DefaultMarketView } from "./market-view.js";
+export type { MarketView, Subscription } from "./market-view.js";
