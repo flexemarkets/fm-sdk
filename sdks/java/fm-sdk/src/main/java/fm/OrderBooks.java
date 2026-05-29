@@ -28,4 +28,9 @@ public class OrderBooks {
     public Collection<OrderBook> collection() {
         return books.values();
     }
+
+    /** Clear every contained book — see {@link OrderBook#clear()}. */
+    public void clear() {
+        books.values().forEach(OrderBook::clear);
+    }
 }

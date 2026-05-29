@@ -34,4 +34,9 @@ public class MarketplaceTrades {
             .map(orders -> Stream.of(orders).mapToLong(Order::price).toArray())
             .toArray(long[][]::new);
     }
+
+    /** Empty every per-market trade tape — see {@link Trades#clear()}. */
+    public void clear() {
+        collection.values().forEach(Trades::clear);
+    }
 }

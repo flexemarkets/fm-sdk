@@ -93,6 +93,21 @@ public class OrderBook {
         return Collections.unmodifiableMap(new TreeMap<>(sells));
     }
 
+    /**
+     * Reset the book to its just-constructed state — empty levels and
+     * {@code initialized=false}. Used by {@code MarketView}'s Phase 2b
+     * gap-recovery flow: on a detected gap the caller refetches the
+     * REST snapshot, calls {@link #clear()}, then replays the snapshot
+     * via {@link #update(Order[])} so the next delta with
+     * {@code isAvailable=false} doesn't underflow against stale price
+     * levels.
+     */
+    public synchronized void clear() {
+        buys.clear();
+        sells.clear();
+        initialized = false;
+    }
+
     private void add(String side, long price, long units) {
         var levels = priceLevels(side);
         levels.merge(price, units, Long::sum);

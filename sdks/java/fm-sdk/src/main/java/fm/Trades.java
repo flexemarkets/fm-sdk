@@ -68,6 +68,13 @@ public class Trades {
             .toArray();
     }
 
+    /** Empty the trade tape — used by {@code MarketView}'s gap-recovery
+     *  flow before reseeding from the {@code /v1/orders/recent-trades}
+     *  snapshot. */
+    public synchronized void clear() {
+        container.clear();
+    }
+
     private void saveResting(Order order) {
         if (container.size() == capacity) {
             container.removeFirst();

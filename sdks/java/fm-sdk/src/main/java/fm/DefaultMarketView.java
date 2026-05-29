@@ -122,6 +122,12 @@ public class DefaultMarketView implements MarketView {
         Snapshot<List<Types.Order>> orders = flexemarkets.activeOrdersV1(marketplaceId);
         Snapshot<List<Types.Order>> trades = flexemarkets.recentTradesV1(marketplaceId);
 
+        // Clear before reseeding so a resync (Phase 2b) doesn't
+        // double-add against existing price levels. Initial seed
+        // hits empty books so clear() is a no-op there.
+        this.orderBooks.clear();
+        this.trades.clear();
+
         // Snapshot orders are all available (consumer == null), so
         // OrderBook.update treats them as adds — same code path WS
         // deltas use. Trades snapshot feeds the tape via the same
@@ -219,31 +225,7 @@ public class DefaultMarketView implements MarketView {
                 if (event == null) continue;
 
                 if (event instanceof OrdersUpdate update) {
-                    // Phase 2a seq filter: drop deltas the snapshot
-                    // already reflects. NO_SEQ disables filtering for
-                    // older fm-server builds that don't stamp the
-                    // header.
-                    if (update.seq() != Snapshot.NO_SEQ
-                            && lastAppliedSeq != Snapshot.NO_SEQ
-                            && update.seq() <= lastAppliedSeq) {
-                        continue;
-                    }
-                    Order[] orders = update.orders();
-                    // Find which markets were touched so we only fire
-                    // those books' handlers, not every book's.
-                    var touched = _marketIdsTouched(orders);
-                    orderBooks.update(orders);
-                    trades.update(orders);
-                    for (long marketId : touched) {
-                        var book = orderBooks.get(marketId);
-                        if (book == null) continue;
-                        for (var h : bookHandlers) {
-                            if (h.marketId == marketId) h.handler.accept(book);
-                        }
-                    }
-                    if (update.seq() != Snapshot.NO_SEQ) {
-                        lastAppliedSeq = update.seq();
-                    }
+                    _processOrdersUpdate(update);
                 } else if (event instanceof Session s) {
                     session.set(s);
                     for (var h : sessionHandlers) h.accept(s);
@@ -261,6 +243,45 @@ public class DefaultMarketView implements MarketView {
             }
         } catch (InterruptedException ignored) {
             Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * Phase 2b gap recovery + Phase 2a filter. When a delta arrives
+     * with {@code seq > lastAppliedSeq + 1}, one or more frames were
+     * dropped between us and fm-server: re-fetch the V1 snapshot,
+     * clear local state, reseed, then let the filter below skip the
+     * triggering delta if the new {@code asOfSeq} already covers it.
+     */
+    private void _processOrdersUpdate(OrdersUpdate update) {
+        if (update.seq() != Snapshot.NO_SEQ
+                && lastAppliedSeq != Snapshot.NO_SEQ
+                && update.seq() > lastAppliedSeq + 1) {
+            System.err.println("[MarketView] ORDERS-UPDATE seq gap on marketplace "
+                    + marketplaceId + " — expected " + (lastAppliedSeq + 1)
+                    + ", got " + update.seq() + "; resyncing from snapshot");
+            _seedFromSnapshot();
+        }
+
+        if (update.seq() != Snapshot.NO_SEQ
+                && lastAppliedSeq != Snapshot.NO_SEQ
+                && update.seq() <= lastAppliedSeq) {
+            return;
+        }
+
+        Order[] orders = update.orders();
+        var touched = _marketIdsTouched(orders);
+        orderBooks.update(orders);
+        trades.update(orders);
+        for (long marketId : touched) {
+            var book = orderBooks.get(marketId);
+            if (book == null) continue;
+            for (var h : bookHandlers) {
+                if (h.marketId == marketId) h.handler.accept(book);
+            }
+        }
+        if (update.seq() != Snapshot.NO_SEQ) {
+            lastAppliedSeq = update.seq();
         }
     }
 
