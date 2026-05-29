@@ -134,7 +134,7 @@ public class Flexemarkets implements AutoCloseable {
      */
     public Snapshot<List<Order>> activeOrdersV1(long marketplaceId) {
         var url = server(endpointUrl()) + "/v1/marketplaces/" + marketplaceId + "/orders/active";
-        return getSnapshot(url, ORDERS_TYPE);
+        return _unwrapOrders(getSnapshot(url, ORDERS_COLLECTION_TYPE));
     }
 
     /**
@@ -145,8 +145,35 @@ public class Flexemarkets implements AutoCloseable {
     public Snapshot<List<Order>> recentTradesV1(long marketplaceId, int size) {
         var url = server(endpointUrl()) + "/v1/marketplaces/" + marketplaceId
                 + "/orders/recent-trades?size=" + size;
-        return getSnapshot(url, ORDERS_TYPE);
+        return _unwrapOrders(getSnapshot(url, ORDERS_COLLECTION_TYPE));
     }
+
+    /** Unwrap the Spring HATEOAS {@code CollectionModel<OrderDto>} envelope
+     *  that the V1 endpoints return, defaulting to an empty list when
+     *  {@code _embedded} is absent (which fm-server omits on empty
+     *  responses). */
+    private static Snapshot<List<Order>> _unwrapOrders(Snapshot<HateoasCollection<Order>> raw) {
+        List<Order> orders;
+        if (raw.body() == null || raw.body().embedded == null || raw.body().embedded.orderDtoes == null) {
+            orders = List.of();
+        } else {
+            orders = raw.body().embedded.orderDtoes;
+        }
+        return new Snapshot<>(orders, raw.asOfSeq());
+    }
+
+    /** Spring HATEOAS CollectionModel envelope, just the bits we need. */
+    private static class HateoasCollection<T> {
+        @com.fasterxml.jackson.annotation.JsonProperty("_embedded")
+        Embedded<T> embedded;
+    }
+
+    private static class Embedded<T> {
+        @com.fasterxml.jackson.annotation.JsonProperty("orderDtoes")
+        List<T> orderDtoes;
+    }
+
+    private static final TypeReference<HateoasCollection<Order>> ORDERS_COLLECTION_TYPE = new TypeReference<>() {};
 
     /** Sensible default — the server caps at 5000 and defaults to 1000. */
     public Snapshot<List<Order>> recentTradesV1(long marketplaceId) {
