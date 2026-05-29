@@ -13,7 +13,7 @@
 import type { Flexemarkets } from "./client.js";
 import { OrderBook, OrderBooks } from "./orderbook.js";
 import { MarketplaceTrades } from "./trades.js";
-import { NO_SEQ, type FmEvent, type OrdersUpdate } from "./stomp.js";
+import { NO_SEQ, type FmEvent, type OrdersUpdate, type WsException, type WsTransportError } from "./stomp.js";
 import type { Holding, Market, Order, Session } from "./types.js";
 
 /**
@@ -269,9 +269,51 @@ export class DefaultMarketView implements MarketView {
       for (const h of this._holdingHandlers) h(event);
       return;
     }
-    // VERSION, SESSION-LIST, WsTransportError, WsException — not
-    // reflected in the public surface yet. Reconnect on transport
-    // error lands in Phase 2c.
+    if (_isTransportError(event)) {
+      this._handleTransportError();
+      return;
+    }
+    if (_isWsException(event)) {
+      // STOMP ERROR / parse failure. Logged for visibility;
+      // reconnecting won't help with a malformed frame, so we leave
+      // the view as-is.
+      console.warn(
+        `[MarketView] WS error on marketplace ${this.marketplaceId}: ${event.command} ${event.body}`,
+      );
+      return;
+    }
+    // VERSION, SESSION-LIST — not reflected in the public surface yet.
+  }
+
+  /**
+   * Phase 2c auto-reconnect. On a WsTransportError, reconnect the
+   * underlying WS and re-seed from the V1 snapshot — reconnect is
+   * just the largest possible gap, so 2b's _seedFromSnapshot()
+   * (clear + REST snapshot + reapply + seq watermark) handles state
+   * convergence. One reconnect attempt; if it fails the view is left
+   * stale until the caller close()s and observe()s again.
+   */
+  private _handleTransportError(): void {
+    if (this._resyncInFlight) return; // already handling
+    console.warn(
+      `[MarketView] WS transport error on marketplace ${this.marketplaceId}; reconnecting`,
+    );
+    this._resyncInFlight = true;
+    this._seedComplete = false;
+    void (async () => {
+      try {
+        await this._flexemarkets.reconnect();
+        await this._seedFromSnapshot();
+      } catch (err) {
+        console.error(
+          `[MarketView] Reconnect failed on marketplace ${this.marketplaceId}; view is stale: ` +
+            (err instanceof Error ? err.message : String(err)),
+        );
+        // Leave _resyncInFlight=true so subsequent dispatches keep
+        // buffering rather than corrupting state; caller can close()
+        // and observe() to recover.
+      }
+    })();
   }
 
   private _applyOrdersUpdate(update: OrdersUpdate): void {
@@ -322,4 +364,12 @@ function _isSession(event: FmEvent): event is Session {
 
 function _isHolding(event: FmEvent): event is Holding {
   return typeof event === "object" && event !== null && "securities" in event;
+}
+
+function _isTransportError(event: FmEvent): event is WsTransportError {
+  return typeof event === "object" && event !== null && (event as WsTransportError).kind === "transport-error";
+}
+
+function _isWsException(event: FmEvent): event is WsException {
+  return typeof event === "object" && event !== null && (event as WsException).kind === "ws-exception";
 }
