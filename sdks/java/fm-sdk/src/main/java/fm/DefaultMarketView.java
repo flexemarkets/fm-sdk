@@ -71,6 +71,7 @@ public class DefaultMarketView implements MarketView {
     private final List<OrderBookHandler>                   bookHandlers    = new CopyOnWriteArrayList<>();
 
     private final BlockingQueue<Object> queue = new ArrayBlockingQueue<>(10_000);
+    private final Events events;
     private final Thread dispatcher;
     private volatile boolean closed;
 
@@ -96,10 +97,16 @@ public class DefaultMarketView implements MarketView {
 
         // Subscribe WS first so deltas start landing in the queue,
         // then fetch the REST snapshot, apply it, and only THEN start
-        // the dispatcher. Any deltas that arrive between listen() and
-        // snapshot apply sit in the queue and get filtered by seq
-        // when the dispatcher runs.
-        flexemarkets.listen(marketplaceId, queue);
+        // the dispatcher. Any deltas that arrive between subscribe
+        // and snapshot apply sit in the queue and get filtered by
+        // seq when the dispatcher runs.
+        //
+        // Phase 2d: own the Events instance directly rather than
+        // calling flexemarkets.listen() — that would clobber the
+        // singleton events field and prevent multiple shared views
+        // on different marketplaces from coexisting in one
+        // Flexemarkets.
+        this.events = flexemarkets._connectEvents(marketplaceId, queue);
         _seedFromSnapshot();
         this.dispatcher = Thread.startVirtualThread(this::_drain);
     }
@@ -213,6 +220,7 @@ public class DefaultMarketView implements MarketView {
         if (closed) return;
         closed = true;
         dispatcher.interrupt();
+        try { events.close(); } catch (Throwable ignored) { /* best-effort */ }
         // The Flexemarkets instance is owned by the caller; we don't
         // close it. If observe(...) was the only consumer, the caller
         // can close Flexemarkets themselves.
@@ -262,7 +270,7 @@ public class DefaultMarketView implements MarketView {
         System.err.println("[MarketView] WS transport error on marketplace "
                 + marketplaceId + "; reconnecting");
         try {
-            flexemarkets.reconnect();
+            events.reconnect();
             _seedFromSnapshot();
         } catch (Throwable t) {
             System.err.println("[MarketView] Reconnect failed on marketplace "
