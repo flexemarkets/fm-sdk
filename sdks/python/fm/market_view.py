@@ -239,11 +239,21 @@ class MarketView:
                     h(event)
                 continue
 
-            if isinstance(event, (WsTransportError, WsException)):
-                # Reconnect handling lands in Phase 2. For now the
-                # dispatcher exits and the view becomes useless;
-                # callers must close() and observe() again.
-                break
+            if isinstance(event, WsTransportError):
+                self._handle_transport_error()
+                continue
+
+            if isinstance(event, WsException):
+                # STOMP ERROR / parse failure. Logged for visibility;
+                # reconnecting won't help with a malformed frame, so
+                # we leave the view as-is.
+                log.warning(
+                    "WS error on marketplace %d: %s %s",
+                    self.marketplace_id,
+                    event.command,
+                    event.body,
+                )
+                continue
 
             # VERSION, SESSION-LIST aren't reflected in the public
             # surface yet; ignore.
@@ -291,6 +301,31 @@ class MarketView:
                     handler(book)
         if event.seq != NO_SEQ:
             self._last_applied_seq = event.seq
+
+    def _handle_transport_error(self) -> None:
+        """Phase 2c auto-reconnect. On a :class:`WsTransportError`,
+        reconnect the underlying WS and re-seed from the V1 snapshot
+        — reconnect is just the largest possible gap, so 2b's
+        :meth:`_seed_from_snapshot` (clear + REST snapshot + reapply
+        + seq watermark) handles state convergence. One reconnect
+        attempt; if it fails the view is left stale and the
+        dispatcher continues; caller's next access sees the
+        last-applied state. More sophisticated backoff/retry can
+        layer on later.
+        """
+        log.warning(
+            "WS transport error on marketplace %d; reconnecting",
+            self.marketplace_id,
+        )
+        try:
+            self._flexemarkets.reconnect()
+            self._seed_from_snapshot()
+        except Exception as e:
+            log.error(
+                "Reconnect failed on marketplace %d; view is stale: %s",
+                self.marketplace_id,
+                e,
+            )
 
     def _ensure_open(self) -> None:
         if self._closed:
