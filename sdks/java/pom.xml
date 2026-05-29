@@ -6,7 +6,7 @@
 
     <groupId>com.flexemarkets</groupId>
     <artifactId>fm-sdk-parent</artifactId>
-    <version>0.0.3</version><!-- fm-version -->
+    <version>0.0.4</version><!-- fm-version -->
     <packaging>pom</packaging>
 
     <name>Flexemarkets SDK Parent</name>
