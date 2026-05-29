@@ -232,17 +232,41 @@ public class DefaultMarketView implements MarketView {
                 } else if (event instanceof Holding h) {
                     holding.set(h);
                     for (var hh : holdingHandlers) hh.accept(h);
-                } else if (event instanceof WsTransportError || event instanceof WsException) {
-                    // Reconnect handling lands in Phase 2. For now the
-                    // dispatcher exits and the view becomes useless;
-                    // callers must close() and observe() again.
-                    break;
+                } else if (event instanceof WsTransportError) {
+                    _handleTransportError();
+                } else if (event instanceof WsException ex) {
+                    // STOMP ERROR / parse failure. Logged for
+                    // visibility; reconnecting won't help with a
+                    // malformed frame, so we leave the view as-is.
+                    System.err.println("[MarketView] WS error on marketplace "
+                            + marketplaceId + ": " + ex.message());
                 }
                 // VERSION and SESSION-LIST aren't reflected in the
                 // public surface yet; ignore.
             }
         } catch (InterruptedException ignored) {
             Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * Phase 2c auto-reconnect. On a WsTransportError, reconnect the
+     * underlying WS and re-seed from the V1 snapshot — reconnect is
+     * just the largest possible gap, so 2b's recovery machinery
+     * handles the state convergence. One reconnect attempt; if it
+     * fails the view is left stale and the caller's next access will
+     * see whatever state was last applied. More sophisticated
+     * backoff/retry can layer on later.
+     */
+    private void _handleTransportError() {
+        System.err.println("[MarketView] WS transport error on marketplace "
+                + marketplaceId + "; reconnecting");
+        try {
+            flexemarkets.reconnect();
+            _seedFromSnapshot();
+        } catch (Throwable t) {
+            System.err.println("[MarketView] Reconnect failed on marketplace "
+                    + marketplaceId + "; view is stale: " + t.getMessage());
         }
     }
 
