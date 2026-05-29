@@ -82,10 +82,15 @@ class MarketView:
 
         # Subscribe WS first so deltas start landing in the queue,
         # then fetch + apply the REST snapshot, only THEN start the
-        # dispatcher. Any deltas that arrive between listen() and
+        # dispatcher. Any deltas that arrive between subscribe and
         # snapshot apply sit in the queue and get filtered by seq
         # when the dispatcher runs.
-        flexemarkets.listen(marketplace_id, self._queue)
+        #
+        # Phase 2d: own the EventListener directly rather than calling
+        # flexemarkets.listen() — that would clobber the singleton
+        # _event_listener and prevent multiple shared views from
+        # coexisting in one Flexemarkets.
+        self._events = flexemarkets._connect_events(marketplace_id, self._queue)
         self._seed_from_snapshot()
         self._dispatcher = threading.Thread(
             target=self._drain, name=f"fm-market-view-{marketplace_id}", daemon=True
@@ -203,6 +208,10 @@ class MarketView:
         if self._closed:
             return
         self._closed = True
+        try:
+            self._events.close()
+        except Exception:
+            pass
         # Flexemarkets is owned by the caller; we don't close it. The
         # dispatcher thread is daemon so it'll exit with the process,
         # and the next queue.get() with timeout will see _closed and
@@ -318,7 +327,7 @@ class MarketView:
             self.marketplace_id,
         )
         try:
-            self._flexemarkets.reconnect()
+            self._events.reconnect()
             self._seed_from_snapshot()
         except Exception as e:
             log.error(
@@ -339,3 +348,97 @@ def _market_ids_touched(orders: list[Order]) -> list[int]:
     for o in orders:
         seen.add(o.market_id)
     return list(seen)
+
+
+class MarketViewHandle:
+    """Reader-side handle on a refcounted :class:`MarketView`.
+
+    Returned by :meth:`Flexemarkets.observe`; multiple handles for the
+    same ``marketplace_id`` share one underlying view + WS
+    subscription + materialized state. Each handle's :meth:`close`
+    decrements the shared refcount and tears down the shared
+    resources on the last close.
+
+    Subscriptions registered via ``on_*_change`` on this handle are
+    tracked locally and closed when the handle closes — so a handler
+    doesn't keep firing into stale state after the handle is gone.
+    """
+
+    def __init__(self, shared: MarketView, on_close: Callable[[], None]):
+        self._shared = shared
+        self._on_close = on_close
+        self._my_subscriptions: list[Subscription] = []
+        self._closed = False
+
+    @property
+    def marketplace_id(self) -> int:
+        return self._shared.marketplace_id
+
+    @property
+    def markets(self) -> list[Market]:
+        self._check()
+        return self._shared.markets
+
+    def order_book(self, market_id: int) -> Optional[OrderBook]:
+        self._check()
+        return self._shared.order_book(market_id)
+
+    def session(self) -> Optional[Session]:
+        self._check()
+        return self._shared.session()
+
+    def holding(self) -> Optional[Holding]:
+        self._check()
+        return self._shared.holding()
+
+    def on_session_change(self, handler: Callable[[Session], None]) -> Subscription:
+        self._check()
+        sub = self._shared.on_session_change(handler)
+        self._my_subscriptions.append(sub)
+        return sub
+
+    def on_order_book_change(
+        self, market_id: int, handler: Callable[[OrderBook], None]
+    ) -> Subscription:
+        self._check()
+        sub = self._shared.on_order_book_change(market_id, handler)
+        self._my_subscriptions.append(sub)
+        return sub
+
+    def on_holding_change(self, handler: Callable[[Holding], None]) -> Subscription:
+        self._check()
+        sub = self._shared.on_holding_change(handler)
+        self._my_subscriptions.append(sub)
+        return sub
+
+    def submit_limit(self, market_id: int, side: str, units: int, price: int) -> Order:
+        self._check()
+        return self._shared.submit_limit(market_id, side, units, price)
+
+    def submit_cancel(self, market_id: int, original_id: int) -> Order:
+        self._check()
+        return self._shared.submit_cancel(market_id, original_id)
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        for sub in self._my_subscriptions:
+            try:
+                sub()
+            except Exception:
+                pass
+        self._my_subscriptions.clear()
+        self._on_close()
+
+    def __enter__(self) -> "MarketViewHandle":
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        self.close()
+
+    def _check(self) -> None:
+        if self._closed:
+            raise RuntimeError(
+                f"MarketView handle for marketplace {self._shared.marketplace_id} is closed"
+            )

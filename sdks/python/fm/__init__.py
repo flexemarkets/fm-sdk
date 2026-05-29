@@ -14,7 +14,7 @@ from .exceptions import (
     InvalidArgumentError,
     PersonHasMarketplaceDataError,
 )
-from .market_view import MarketView, Subscription
+from .market_view import MarketView, MarketViewHandle, Subscription
 from .orderbook import OrderBook, OrderBooks
 from .trades import MarketplaceTrades, Trades
 from .types import (
@@ -56,8 +56,10 @@ __all__ = [
     "OrderBooks",
     "Trades",
     "MarketplaceTrades",
-    # market view (Phase 1 — skeleton; reconciliation + sharing in Phase 2)
+    # market view (Phase 2d-complete — REST snapshot seeding +
+    # seq-filtered deltas + gap recovery + auto-reconnect + sharing)
     "MarketView",
+    "MarketViewHandle",
     "Subscription",
     # events
     "EventListener",

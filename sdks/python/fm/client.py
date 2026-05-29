@@ -5,13 +5,25 @@ from __future__ import annotations
 import os
 import queue
 import re
+import threading
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 from .snapshot import NO_SEQ, Snapshot
 
 if TYPE_CHECKING:
+    from .events import EventListener
     from .market_view import MarketView
+
+
+@dataclass
+class _SharedView:
+    """Refcount registry entry — see ``Flexemarkets.observe``."""
+
+    view: "MarketView"
+    ref_count: int = 0
+
 
 import httpx
 
@@ -454,6 +466,10 @@ class Flexemarkets:
         self._api_root = self._fetch_api_root()
 
         self._event_listener = None
+
+        # Phase 2d shared-view registry, keyed by marketplace_id.
+        self._shared_views: dict[int, _SharedView] = {}
+        self._view_lock = threading.Lock()
 
     # -- factory helpers matching Java's connect() overloads ----------------
 
@@ -983,24 +999,36 @@ class Flexemarkets:
 
         Events are pushed onto *event_queue* as typed objects:
         :class:`~fm.types.Session`, :class:`~fm.types.Holding`,
-        ``list[Order]``, :class:`~fm.types.Version`,
+        :class:`~fm.events.OrdersUpdate`, :class:`~fm.types.Version`,
         :class:`~fm.events.WsTransportError`, or
         :class:`~fm.events.WsException`.
 
         This mirrors the Java ``Flexemarkets.listen()`` method.
         """
+        self._event_listener = self._connect_events(marketplace_id, event_queue)
+
+    def _connect_events(
+        self, marketplace_id: int, event_queue: queue.Queue[object]
+    ) -> "EventListener":
+        """Internal helper used by :class:`~fm.market_view.MarketView`
+        (Phase 2d) to own its own subscription rather than clobbering
+        the singleton ``_event_listener``. Lets multiple
+        ``observe(marketplace_id)`` calls coexist within one
+        Flexemarkets instance without trampling each other's WS
+        connections.
+        """
         from .events import EventListener
 
         ws_url = _server(self._endpoint).replace("https://", "wss://").replace("http://", "ws://") + "/events"
-
-        self._event_listener = EventListener(
+        ev = EventListener(
             ws_url=ws_url,
             bearer_token=self._bearer_token,
             marketplace_id=marketplace_id,
             event_queue=event_queue,
             client_description=self._client_description,
         )
-        self._event_listener.start()
+        ev.start()
+        return ev
 
     def reconnect(self) -> None:
         """Reconnect the WebSocket after a transport error."""
@@ -1011,20 +1039,44 @@ class Flexemarkets:
         """Open a stateful :class:`~fm.market_view.MarketView` on this
         marketplace.
 
-        The returned view drives its own WS subscription, dispatches
-        events into per-market order books and trade tapes, and exposes
-        always-current accessors plus listener registration.
+        Multiple calls for the same ``marketplace_id`` share a single
+        underlying view + WS subscription + materialized state within
+        this Flexemarkets instance — each call returns a fresh handle,
+        the handles refcount, and the shared resources tear down on
+        the last close.
 
-        Phase 1 (skeleton) skips REST-snapshot seeding, sequence-gap
-        recovery, per-identity sharing, and automatic reconnect — see
-        :class:`~fm.market_view.MarketView` for the staged plan.
-        Robots that don't depend on consistency-guaranteed startup
-        state can use this today; those that do should wait for
-        Phase 2.
+        Sharing is intentionally per-Flexemarkets (i.e. per-bearer).
+        Two callers with different identities each get their own view
+        — multi-tenant WS multiplexing is a server-side concern, not
+        a client-side one.
         """
-        from .market_view import MarketView
+        from .market_view import MarketView, MarketViewHandle
 
-        return MarketView(self, marketplace_id, self.markets(marketplace_id))
+        with self._view_lock:
+            entry = self._shared_views.get(marketplace_id)
+            if entry is None:
+                view = MarketView(self, marketplace_id, self.markets(marketplace_id))
+                entry = _SharedView(view=view, ref_count=0)
+                self._shared_views[marketplace_id] = entry
+            entry.ref_count += 1
+            shared = entry.view
+        return MarketViewHandle(
+            shared, lambda: self._release_shared_view(marketplace_id)
+        )
+
+    def _release_shared_view(self, marketplace_id: int) -> None:
+        with self._view_lock:
+            entry = self._shared_views.get(marketplace_id)
+            if entry is None:
+                return
+            entry.ref_count -= 1
+            if entry.ref_count <= 0:
+                self._shared_views.pop(marketplace_id, None)
+                to_close: Optional["MarketView"] = entry.view
+            else:
+                to_close = None
+        if to_close is not None:
+            to_close.close()
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -1032,6 +1084,16 @@ class Flexemarkets:
         if hasattr(self, "_event_listener") and self._event_listener is not None:
             self._event_listener.close()
             self._event_listener = None
+        # Force-close any remaining shared MarketViews — safety net for
+        # callers who didn't close their handles first.
+        with self._view_lock:
+            views = [entry.view for entry in self._shared_views.values()]
+            self._shared_views.clear()
+        for v in views:
+            try:
+                v.close()
+            except Exception:
+                pass
         self._http.close()
 
     def __enter__(self) -> Flexemarkets:
