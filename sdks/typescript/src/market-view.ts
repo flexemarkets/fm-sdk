@@ -22,6 +22,31 @@ import type { Holding, Market, Order, Session } from "./types.js";
  */
 export type Subscription = () => void;
 
+/**
+ * Fires when MarketView detects a sequence-gap in the ORDERS-UPDATE
+ * WS stream — one or more frames were dropped between client and
+ * fm-server. After a gap, MarketView re-runs the REST snapshot
+ * recovery flow before applying further deltas; the gap event is the
+ * signal callers can wire into their own observability stack instead
+ * of relying on the SDK's default console.warn.
+ */
+export interface GapEvent {
+  readonly marketplaceId: number;
+  readonly expectedSeq: number;
+  readonly receivedSeq: number;
+}
+
+/**
+ * Fires when MarketView reacts to a WsTransportError — either after
+ * the reconnect + resnapshot completes successfully, or after the
+ * attempt has failed and the view is left stale.
+ */
+export interface ReconnectEvent {
+  readonly marketplaceId: number;
+  readonly success: boolean;
+  readonly reason: string | null;
+}
+
 export interface MarketView {
   /** The marketplace this view tracks. */
   readonly marketplaceId: number;
@@ -60,6 +85,22 @@ export interface MarketView {
   /** Register a handler for the caller's holding changes. */
   onHoldingChange(handler: (h: Holding) => void): Subscription;
 
+  /**
+   * Register a handler that fires when MarketView detects a gap in
+   * the ORDERS-UPDATE seq stream. Use this to wire your own
+   * telemetry — by default the SDK logs to console.warn but
+   * otherwise hides the recovery flow.
+   */
+  onGap(handler: (event: GapEvent) => void): Subscription;
+
+  /**
+   * Register a handler that fires after the SDK reacts to a
+   * transport error — either when reconnect + resnapshot have
+   * completed, or when the attempt has failed and the view is left
+   * stale.
+   */
+  onReconnect(handler: (event: ReconnectEvent) => void): Subscription;
+
   /** Submit a limit order on this marketplace. */
   submitLimit(marketId: number, side: string, units: number, price: number): Promise<Order>;
 
@@ -88,6 +129,8 @@ export class DefaultMarketView implements MarketView {
   private readonly _sessionHandlers: Array<(s: Session) => void> = [];
   private readonly _holdingHandlers: Array<(h: Holding) => void> = [];
   private readonly _bookHandlers: Array<{ marketId: number; handler: (b: OrderBook) => void }> = [];
+  private readonly _gapHandlers: Array<(e: GapEvent) => void> = [];
+  private readonly _reconnectHandlers: Array<(e: ReconnectEvent) => void> = [];
 
   private _closed = false;
 
@@ -212,6 +255,24 @@ export class DefaultMarketView implements MarketView {
     };
   }
 
+  onGap(handler: (e: GapEvent) => void): Subscription {
+    this._ensureOpen();
+    this._gapHandlers.push(handler);
+    return () => {
+      const i = this._gapHandlers.indexOf(handler);
+      if (i >= 0) this._gapHandlers.splice(i, 1);
+    };
+  }
+
+  onReconnect(handler: (e: ReconnectEvent) => void): Subscription {
+    this._ensureOpen();
+    this._reconnectHandlers.push(handler);
+    return () => {
+      const i = this._reconnectHandlers.indexOf(handler);
+      if (i >= 0) this._reconnectHandlers.splice(i, 1);
+    };
+  }
+
   submitLimit(marketId: number, side: string, units: number, price: number): Promise<Order> {
     this._ensureOpen();
     return this._flexemarkets.submitLimit(this.marketplaceId, marketId, side, units, price);
@@ -254,10 +315,19 @@ export class DefaultMarketView implements MarketView {
         this._lastAppliedSeq !== NO_SEQ &&
         event.seq > this._lastAppliedSeq + 1
       ) {
+        const expectedSeq = this._lastAppliedSeq + 1;
         console.warn(
           `[MarketView] ORDERS-UPDATE seq gap on marketplace ${this.marketplaceId} ` +
-            `— expected ${this._lastAppliedSeq + 1}, got ${event.seq}; resyncing from snapshot`,
+            `— expected ${expectedSeq}, got ${event.seq}; resyncing from snapshot`,
         );
+        const gap: GapEvent = {
+          marketplaceId: this.marketplaceId,
+          expectedSeq,
+          receivedSeq: event.seq,
+        };
+        for (const h of this._gapHandlers) {
+          try { h(gap); } catch { /* one bad handler can't stop recovery */ }
+        }
         this._resyncInFlight = true;
         this._seedComplete = false;
         this._seedBuffer.push(event);
@@ -311,17 +381,23 @@ export class DefaultMarketView implements MarketView {
     this._resyncInFlight = true;
     this._seedComplete = false;
     void (async () => {
+      let outcome: ReconnectEvent;
       try {
         if (this._events !== null) await this._events.reconnect();
         await this._seedFromSnapshot();
+        outcome = { marketplaceId: this.marketplaceId, success: true, reason: null };
       } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
         console.error(
-          `[MarketView] Reconnect failed on marketplace ${this.marketplaceId}; view is stale: ` +
-            (err instanceof Error ? err.message : String(err)),
+          `[MarketView] Reconnect failed on marketplace ${this.marketplaceId}; view is stale: ${reason}`,
         );
+        outcome = { marketplaceId: this.marketplaceId, success: false, reason };
         // Leave _resyncInFlight=true so subsequent dispatches keep
         // buffering rather than corrupting state; caller can close()
         // and observe() to recover.
+      }
+      for (const h of this._reconnectHandlers) {
+        try { h(outcome); } catch { /* don't let one bad handler stop dispatch */ }
       }
     })();
   }
@@ -447,6 +523,20 @@ export class MarketViewHandle implements MarketView {
   onHoldingChange(handler: (h: Holding) => void): Subscription {
     this._check();
     const sub = this._shared.onHoldingChange(handler);
+    this._mySubscriptions.push(sub);
+    return sub;
+  }
+
+  onGap(handler: (e: GapEvent) => void): Subscription {
+    this._check();
+    const sub = this._shared.onGap(handler);
+    this._mySubscriptions.push(sub);
+    return sub;
+  }
+
+  onReconnect(handler: (e: ReconnectEvent) => void): Subscription {
+    this._check();
+    const sub = this._shared.onReconnect(handler);
     this._mySubscriptions.push(sub);
     return sub;
   }

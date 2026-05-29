@@ -80,7 +80,7 @@ export type {
 // deltas + gap recovery + auto-reconnect + per-(Flexemarkets, mpid)
 // sharing via refcounted handles)
 export { DefaultMarketView, MarketViewHandle } from "./market-view.js";
-export type { MarketView, Subscription } from "./market-view.js";
+export type { MarketView, Subscription, GapEvent, ReconnectEvent } from "./market-view.js";
 export type { Snapshot } from "./snapshot.js";
 export { NO_SEQ } from "./stomp.js";
 export type { OrdersUpdate } from "./stomp.js";
