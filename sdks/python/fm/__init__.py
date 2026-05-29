@@ -13,6 +13,7 @@ from .exceptions import (
     InvalidArgumentError,
     PersonHasMarketplaceDataError,
 )
+from .market_view import MarketView, Subscription
 from .orderbook import OrderBook, OrderBooks
 from .trades import MarketplaceTrades, Trades
 from .types import (
@@ -54,6 +55,9 @@ __all__ = [
     "OrderBooks",
     "Trades",
     "MarketplaceTrades",
+    # market view (Phase 1 — skeleton; reconciliation + sharing in Phase 2)
+    "MarketView",
+    "Subscription",
     # events
     "EventListener",
     "WsTransportError",

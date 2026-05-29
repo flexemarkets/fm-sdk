@@ -6,7 +6,10 @@ import os
 import queue
 import re
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .market_view import MarketView
 
 import httpx
 
@@ -956,6 +959,25 @@ class Flexemarkets:
         """Reconnect the WebSocket after a transport error."""
         if self._event_listener is not None:
             self._event_listener.reconnect()
+
+    def observe(self, marketplace_id: int) -> "MarketView":
+        """Open a stateful :class:`~fm.market_view.MarketView` on this
+        marketplace.
+
+        The returned view drives its own WS subscription, dispatches
+        events into per-market order books and trade tapes, and exposes
+        always-current accessors plus listener registration.
+
+        Phase 1 (skeleton) skips REST-snapshot seeding, sequence-gap
+        recovery, per-identity sharing, and automatic reconnect — see
+        :class:`~fm.market_view.MarketView` for the staged plan.
+        Robots that don't depend on consistency-guaranteed startup
+        state can use this today; those that do should wait for
+        Phase 2.
+        """
+        from .market_view import MarketView
+
+        return MarketView(self, marketplace_id, self.markets(marketplace_id))
 
     # -- lifecycle ---------------------------------------------------------
 

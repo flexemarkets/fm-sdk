@@ -191,5 +191,13 @@ class OrderBooks:
     def collection(self) -> list[OrderBook]:
         return list(self._books.values())
 
+    def get(self, market_id: int) -> OrderBook | None:
+        """Return the order book for *market_id*, or ``None`` if the
+        market isn't part of this marketplace. Mirrors the Java + TS
+        ``OrderBooks.get(marketId)`` signature so MarketView can do a
+        null-tolerant lookup.
+        """
+        return self._books.get(market_id)
+
     def __getitem__(self, market_id: int) -> OrderBook:
         return self._books[market_id]
