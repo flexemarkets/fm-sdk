@@ -206,7 +206,7 @@ public class Types {
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record ClientConnection(
         long marketplaceId,
-        long connectionId,
+        @JsonAlias("id") long connectionId,
         long ownerId,
         String established,
         String terminated,

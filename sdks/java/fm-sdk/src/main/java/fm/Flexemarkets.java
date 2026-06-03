@@ -189,7 +189,9 @@ public class Flexemarkets implements AutoCloseable {
     }
 
     public List<ClientConnection> connections(long marketplaceId) {
-        return get(uriIdSegmentParam(apiRoot, "marketplaces", marketplaceId, "connections", null), CONNECTIONS_TYPE);
+        // Connections live at the marketplace's "agents" sub-resource;
+        // format=application/json yields a plain list (vs the HAL _embedded form).
+        return get(uriIdSegmentParam(apiRoot, "marketplaces", marketplaceId, "agents", "format=application/json"), CONNECTIONS_TYPE);
     }
 
     public Order submitLimit(long marketplaceId, long marketId, String side, long units, long price) {
@@ -554,7 +556,15 @@ public class Flexemarkets implements AutoCloseable {
     }
 
     static String server(String endpoint) {
-        return endpoint.substring(0, endpoint.indexOf("/api") + 4);
+        // Locate "/api" in the path, not in the scheme/host. A host like
+        // "https://api.flexemarkets.com" otherwise matches at the "//api" of
+        // the host and truncates the base URL to "https://api" (unresolvable).
+        // Skip past the scheme + host before searching for the "/api" segment.
+        int scheme = endpoint.indexOf("://");
+        int pathStart = scheme >= 0 ? endpoint.indexOf('/', scheme + 3) : 0;
+        if (pathStart < 0) return endpoint;
+        int idx = endpoint.indexOf("/api", pathStart);
+        return idx < 0 ? endpoint : endpoint.substring(0, idx + 4);
     }
 
     static long resourceId(String endpoint) {
