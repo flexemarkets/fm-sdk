@@ -230,7 +230,7 @@ def _parse_allotment(data: dict[str, Any]) -> Allotment:
 def _parse_connection(data: dict[str, Any]) -> ClientConnection:
     return ClientConnection(
         marketplace_id=data.get("marketplaceId", 0),
-        connection_id=data.get("connectionId", 0),
+        connection_id=data.get("id", data.get("connectionId", 0)),
         owner_id=data.get("ownerId", 0),
         established=data.get("established"),
         terminated=data.get("terminated"),
@@ -302,7 +302,15 @@ def _is_valid_token(value: str) -> bool:
 
 
 def _server(endpoint: str) -> str:
-    idx = endpoint.find("/api")
+    # Locate "/api" in the path, not in the scheme/host. A host like
+    # "https://api.flexemarkets.com" otherwise matches at the "//api" of the
+    # host and truncates the base URL to "https://api" (unresolvable). Skip
+    # past the scheme + host before searching for the "/api" path segment.
+    scheme = endpoint.find("://")
+    path_start = endpoint.find("/", scheme + 3) if scheme >= 0 else 0
+    if path_start < 0:
+        return endpoint
+    idx = endpoint.find("/api", path_start)
     if idx < 0:
         return endpoint
     return endpoint[: idx + 4]
@@ -985,9 +993,12 @@ class Flexemarkets:
         marketplace_id: int,
         session_ids: list[int] | None = None,
     ) -> list[ClientConnection]:
+        # Connections live at the marketplace's "agents" sub-resource;
+        # format=application/json yields a plain list (vs the HAL _embedded form).
+        sid = _session_ids_param(session_ids)
+        param = f"{sid}&format=application/json" if sid else "format=application/json"
         url = _uri_id_segment_param(
-            self._api_root, "marketplaces", marketplace_id, "connections",
-            _session_ids_param(session_ids),
+            self._api_root, "marketplaces", marketplace_id, "agents", param,
         )
         data = self._get(url).json()
         return [_parse_connection(c) for c in data]
