@@ -722,15 +722,16 @@ export class Flexemarkets {
     marketplaceId: number,
     sessionIds?: number[] | null,
   ): Promise<ClientConnection[]> {
-    // Connections live at the marketplace's "agents" sub-resource;
-    // format=application/json yields a plain list (vs the HAL _embedded form).
+    // Canonical path is /marketplaces/{id}/connections ("/agents" is the
+    // retained pre-FM-4 alias); format=application/json yields a plain list
+    // (vs the HAL _embedded form).
     const sid = sessionIdsParam(sessionIds ?? null);
     const param = sid ? `${sid}&format=application/json` : "format=application/json";
     const url = uriIdSegmentParam(
       this._apiRoot,
       "marketplaces",
       marketplaceId,
-      "agents",
+      "connections",
       param,
     );
     const data = await this._get(url);
