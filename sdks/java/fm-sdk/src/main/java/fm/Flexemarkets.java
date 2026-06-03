@@ -189,9 +189,10 @@ public class Flexemarkets implements AutoCloseable {
     }
 
     public List<ClientConnection> connections(long marketplaceId) {
-        // Connections live at the marketplace's "agents" sub-resource;
-        // format=application/json yields a plain list (vs the HAL _embedded form).
-        return get(uriIdSegmentParam(apiRoot, "marketplaces", marketplaceId, "agents", "format=application/json"), CONNECTIONS_TYPE);
+        // Canonical path is /marketplaces/{id}/connections ("/agents" is the
+        // retained pre-FM-4 alias); format=application/json yields a plain list
+        // (vs the HAL _embedded form).
+        return get(uriIdSegmentParam(apiRoot, "marketplaces", marketplaceId, "connections", "format=application/json"), CONNECTIONS_TYPE);
     }
 
     public Order submitLimit(long marketplaceId, long marketId, String side, long units, long price) {
