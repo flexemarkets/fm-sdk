@@ -1,5 +1,8 @@
 PYTHON  := $(shell command -v python3.11 2>/dev/null || command -v python3 2>/dev/null || echo python)
-PIP     := $(PYTHON) -m pip
+# Python work happens in a venv — system interpreters are increasingly
+# externally-managed (PEP 668), so `pip install` into them is refused.
+PY_VENV := sdks/python/.venv
+VENV_PY := $(PY_VENV)/bin/python
 VERSION := $(shell cat VERSION)
 
 .PHONY: all install build check test clean set-version \
@@ -27,7 +30,7 @@ test: check
 clean:
 	rm -rf sdks/typescript/dist sdks/typescript/node_modules
 	rm -rf sdks/java/fm-sdk/target sdks/java/examples/ticker/target
-	rm -rf sdks/python/dist sdks/python/*.egg-info
+	rm -rf sdks/python/dist sdks/python/*.egg-info sdks/python/.venv
 	rm -rf mcp-server/.venv
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name '*.egg-info' -exec rm -rf {} + 2>/dev/null || true
@@ -37,24 +40,25 @@ clean:
 # ---------------------------------------------------------------------------
 
 install-python:
-	$(PIP) install --upgrade pip
-	$(PIP) install -e sdks/python
+	$(PYTHON) -m venv $(PY_VENV)
+	$(VENV_PY) -m pip install --upgrade pip
+	$(VENV_PY) -m pip install -e sdks/python
 
 build-python:
-	$(PYTHON) -m py_compile sdks/python/fm/client.py
-	$(PYTHON) -m py_compile sdks/python/fm/events.py
-	$(PYTHON) -m py_compile sdks/python/fm/types.py
+	$(VENV_PY) -m py_compile sdks/python/fm/client.py
+	$(VENV_PY) -m py_compile sdks/python/fm/events.py
+	$(VENV_PY) -m py_compile sdks/python/fm/types.py
 
 check-python:
-	$(PYTHON) -c "import fm; print('python sdk ok')"
+	$(VENV_PY) -c "import fm; print('python sdk ok')"
 
 ticker-python:
-	$(PYTHON) sdks/python/ticker.py $(ARGS)
+	$(VENV_PY) sdks/python/ticker.py $(ARGS)
 
 publish-python:
-	$(PIP) install build twine
-	$(PYTHON) -m build sdks/python
-	$(PYTHON) -m twine upload sdks/python/dist/*
+	$(VENV_PY) -m pip install build twine
+	$(VENV_PY) -m build sdks/python
+	$(VENV_PY) -m twine upload sdks/python/dist/*
 
 # ---------------------------------------------------------------------------
 # TypeScript SDK
