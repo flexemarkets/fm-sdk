@@ -185,7 +185,7 @@ export function parseHolding(data: JsonObject): Holding {
 function parseConnection(data: JsonObject): ClientConnection {
   return {
     marketplaceId: (data.marketplaceId as number) ?? 0,
-    connectionId: (data.connectionId as number) ?? 0,
+    connectionId: (data.id as number) ?? (data.connectionId as number) ?? 0,
     ownerId: (data.ownerId as number) ?? 0,
     established: (data.established as string) ?? null,
     terminated: (data.terminated as string) ?? null,
@@ -264,7 +264,14 @@ function isValidToken(value: string): boolean {
 }
 
 function server(endpoint: string): string {
-  const idx = endpoint.indexOf("/api");
+  // Locate "/api" in the path, not in the scheme/host. A host like
+  // "https://api.flexemarkets.com" otherwise matches at the "//api" of the
+  // host and truncates the base URL to "https://api" (unresolvable). Skip
+  // past the scheme + host before searching for the "/api" path segment.
+  const scheme = endpoint.indexOf("://");
+  const pathStart = scheme >= 0 ? endpoint.indexOf("/", scheme + 3) : 0;
+  if (pathStart < 0) return endpoint;
+  const idx = endpoint.indexOf("/api", pathStart);
   return idx < 0 ? endpoint : endpoint.substring(0, idx + 4);
 }
 
@@ -715,12 +722,16 @@ export class Flexemarkets {
     marketplaceId: number,
     sessionIds?: number[] | null,
   ): Promise<ClientConnection[]> {
+    // Connections live at the marketplace's "agents" sub-resource;
+    // format=application/json yields a plain list (vs the HAL _embedded form).
+    const sid = sessionIdsParam(sessionIds ?? null);
+    const param = sid ? `${sid}&format=application/json` : "format=application/json";
     const url = uriIdSegmentParam(
       this._apiRoot,
       "marketplaces",
       marketplaceId,
-      "connections",
-      sessionIdsParam(sessionIds ?? null),
+      "agents",
+      param,
     );
     const data = await this._get(url);
     return (data as unknown as JsonObject[]).map(parseConnection);
