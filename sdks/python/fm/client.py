@@ -993,12 +993,13 @@ class Flexemarkets:
         marketplace_id: int,
         session_ids: list[int] | None = None,
     ) -> list[ClientConnection]:
-        # Connections live at the marketplace's "agents" sub-resource;
-        # format=application/json yields a plain list (vs the HAL _embedded form).
+        # Canonical path is /marketplaces/{id}/connections ("/agents" is the
+        # retained pre-FM-4 alias); format=application/json yields a plain list
+        # (vs the HAL _embedded form).
         sid = _session_ids_param(session_ids)
         param = f"{sid}&format=application/json" if sid else "format=application/json"
         url = _uri_id_segment_param(
-            self._api_root, "marketplaces", marketplace_id, "agents", param,
+            self._api_root, "marketplaces", marketplace_id, "connections", param,
         )
         data = self._get(url).json()
         return [_parse_connection(c) for c in data]
