@@ -130,7 +130,7 @@ endif
 	cd sdks/typescript && npm version "$(V)" --no-git-tag-version --allow-same-version
 	@# Java (parent + children inherit)
 	sed -i 's|<version>[^<]*</version><!-- fm-version -->|<version>$(V)</version><!-- fm-version -->|g' \
-		sdks/java/pom.xml sdks/java/fm-sdk/pom.xml sdks/java/examples/ticker/pom.xml
+		sdks/java/pom.xml sdks/java/fm-sdk/pom.xml sdks/java/fm-spi/pom.xml sdks/java/examples/ticker/pom.xml
 	@# MCP server
 	sed -i 's|^version = ".*"|version = "$(V)"|' mcp-server/pyproject.toml
 	@echo "Version set to $(V)"
