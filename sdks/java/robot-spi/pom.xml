@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.flexemarkets</groupId>
+        <artifactId>fm-sdk-parent</artifactId>
+        <version>0.0.4</version><!-- fm-version -->
+    </parent>
+
+    <artifactId>fm-robot-spi</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Flexemarkets Robot SPI</name>
+    <description>
+        The plugin contract between Flex-E-Markets trading robots and their
+        hosts (the robot container, fm-server's in-process supervisor).
+        Interfaces and value types only — no strategy code, no server
+        internals. Published publicly so robots and hosts compile against one
+        shared contract without copying source; the robot implementations stay
+        private and are delivered to hosts as runtime plugin jars.
+    </description>
+
+    <!-- Interfaces only: no dependencies. -->
+</project>
