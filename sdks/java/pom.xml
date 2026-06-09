@@ -36,7 +36,7 @@
     </scm>
 
     <modules>
-        <module>robot-spi</module>
+        <module>fm-spi</module>
         <module>fm-sdk</module>
         <module>examples/ticker</module>
     </modules>

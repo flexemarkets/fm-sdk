@@ -10,17 +10,18 @@
         <version>0.0.4</version><!-- fm-version -->
     </parent>
 
-    <artifactId>fm-robot-spi</artifactId>
+    <artifactId>fm-spi</artifactId>
     <packaging>jar</packaging>
 
-    <name>Flexemarkets Robot SPI</name>
+    <name>Flexemarkets SPI</name>
     <description>
-        The plugin contract between Flex-E-Markets trading robots and their
-        hosts (the robot container, fm-server's in-process supervisor).
-        Interfaces and value types only — no strategy code, no server
-        internals. Published publicly so robots and hosts compile against one
-        shared contract without copying source; the robot implementations stay
-        private and are delivered to hosts as runtime plugin jars.
+        The plugin contract between Flex-E-Markets service implementations
+        (e.g. trading robots) and their hosts. A host discovers a ServiceProvider
+        via ServiceLoader and runs the Service it creates, without compiling
+        against the implementation. Interfaces only — no implementation code, no
+        host internals. Published publicly so providers and hosts share one
+        contract without copying source; the implementations stay private and
+        are delivered to hosts as runtime plugin jars.
     </description>
 
     <!-- Interfaces only: no dependencies. -->
