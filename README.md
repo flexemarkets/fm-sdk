@@ -33,7 +33,7 @@ make check      # verify everything compiles
 
 All SDKs share the same configuration mechanism:
 
-1. **Config files** — `~/.fm/credential` and `~/.fm/endpoint` (Java `.properties` format)
+1. **Default config files** — `~/.fm/credential` and `~/.fm/endpoint` (Java `.properties` format)
 2. **Environment variable** — `FM_API_URL` overrides the endpoint
 3. **CLI arguments** — `-C credential -E endpoint`
 
@@ -66,11 +66,13 @@ make install-python
 ```
 
 ```python
-from fm import Flexemarkets, OrderBooks, MarketplaceTrades
+from fm import Flexemarkets
 
-with Flexemarkets.connect(credential, endpoint, "my-bot") as fm:
-    markets = fm.markets(fm.endpoint_marketplace_id)
-    order = fm.submit_limit(marketplace_id, market_id, "BUY", units=1, price=950)
+# credential=None, endpoint=None fall back to ~/.fm/credential and ~/.fm/endpoint
+with Flexemarkets.connect(None, None, "my-bot") as fm:
+    marketplace_id = fm.endpoint_marketplace_id
+    markets = fm.markets(marketplace_id)
+    order = fm.submit_limit(marketplace_id, markets[0].id, "BUY", 1, 950)
 ```
 
 See [sdks/python/README.md](sdks/python/README.md) for full documentation.
@@ -82,9 +84,11 @@ make install-java
 ```
 
 ```java
-try (var fm = Flexemarkets.connect(credential, endpoint, "my-bot")) {
-    var markets = fm.markets(fm.endpointMarketplaceId());
-    var order = fm.submitLimit(marketplaceId, marketId, "BUY", 1, 950);
+// connect(null, null, ...) falls back to ~/.fm/credential and ~/.fm/endpoint
+try (var fm = Flexemarkets.connect(null, null, "my-bot")) {
+    var marketplaceId = fm.endpointMarketplaceId();
+    var markets = fm.markets(marketplaceId);
+    var order = fm.submitLimit(marketplaceId, markets.get(0).id(), "BUY", 1, 950);
 }
 ```
 
@@ -95,11 +99,13 @@ make install-typescript
 ```
 
 ```typescript
-import { Flexemarkets } from "fm-sdk";
+import { Flexemarkets } from "@flexemarkets/fm-sdk";
 
-const fm = await Flexemarkets.connect(credential, endpoint, "my-bot");
-const markets = await fm.markets(fm.endpointMarketplaceId);
-const order = await fm.submitLimit(marketplaceId, marketId, "BUY", 1, 950);
+// connect(null, null, ...) falls back to ~/.fm/credential and ~/.fm/endpoint
+const fm = await Flexemarkets.connect(null, null, "my-bot");
+const marketplaceId = fm.endpointMarketplaceId;
+const markets = await fm.markets(marketplaceId);
+const order = await fm.submitLimit(marketplaceId, markets[0].id, "BUY", 1, 950);
 ```
 
 ## Ticker
