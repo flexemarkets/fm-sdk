@@ -27,6 +27,15 @@ import java.util.ServiceLoader;
 public interface RobotPlugin {
 
     /**
+     * The SPI contract version this artifact publishes.
+     *
+     * <p>Semantics: bump the <em>minor</em> for additive, backward-compatible
+     * changes; bump the <em>major</em> for anything a host or plugin must
+     * adapt to. A host accepts any plugin whose major matches its own.
+     */
+    String SPI_VERSION = "1.0";
+
+    /**
      * Stable catalog id — e.g. {@code "fm-maker"}, {@code "fm-taker-mvo"}.
      * Matches the agent type the container already keys on.
      */
@@ -46,10 +55,10 @@ public interface RobotPlugin {
     /**
      * The SPI major.minor this plugin was built against. The host rejects a
      * plugin whose major differs from its own and logs a clear message; minor
-     * skew is allowed (additive changes only). Defaults to the version this
-     * jar was compiled with.
+     * skew is allowed (additive changes only). Defaults to {@link #SPI_VERSION},
+     * the version this jar was compiled with.
      */
     default String spiVersion() {
-        return SpiVersion.CURRENT;
+        return SPI_VERSION;
     }
 }
