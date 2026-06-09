@@ -29,7 +29,7 @@ public interface ServiceProvider {
      * provider must adapt to. A host accepts any provider whose major matches
      * its own.
      */
-    String SPI_VERSION = "1.0";
+    String SPI_VERSION = "0.0";
 
     /**
      * The unique catalog name identifier for this provider — e.g.

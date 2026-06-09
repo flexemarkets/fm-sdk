@@ -7,7 +7,6 @@ import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 
 import com.googlecode.lanterna.TerminalPosition;
-import com.googlecode.lanterna.TextColor;
 import com.googlecode.lanterna.graphics.TextGraphics;
 import com.googlecode.lanterna.screen.Screen;
 import com.googlecode.lanterna.screen.TerminalScreen;
@@ -20,7 +19,6 @@ import fm.MarketplaceTrades;
 import fm.OrderBook;
 import fm.OrderBooks;
 import fm.OrdersUpdate;
-import fm.Trades;
 import fm.Types.Holding;
 import fm.Types.Market;
 import fm.Types.Session;
@@ -106,8 +104,8 @@ public class Ticker {
                                 trades.update(update.orders());
                                 redraw = true;
                             }
-                            case Holding h -> { }
-                            case WsTransportError e -> {
+                            case Holding _ -> { }
+                            case WsTransportError _ -> {
                                 fm.reconnect();
                             }
                             default -> { }
