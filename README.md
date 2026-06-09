@@ -84,6 +84,10 @@ make install-java
 ```
 
 ```java
+import fm.Flexemarkets;
+
+// ... inside a method that throws IOException
+
 // connect(null, null, ...) falls back to ~/.fm/credential and ~/.fm/endpoint
 try (var fm = Flexemarkets.connect(null, null, "my-bot")) {
     var marketplaceId = fm.endpointMarketplaceId();
