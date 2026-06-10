@@ -12,7 +12,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Extract version from tag
         id: version
@@ -36,10 +36,10 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -55,6 +55,9 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: sdks/python/dist/
+          # Idempotent: a re-run after a partial release won't fail on a
+          # version that already shipped.
+          skip-existing: true
 
   publish-typescript:
     name: Publish TypeScript to npm
@@ -62,12 +65,12 @@ jobs:
     runs-on: ubuntu-latest
     environment: npm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "22"
           registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies
@@ -79,10 +82,19 @@ jobs:
         working-directory: sdks/typescript
 
       - name: Publish to npm
-        run: npm publish --access public
         working-directory: sdks/typescript
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          # Idempotent: skip if this version is already on the registry,
+          # so a re-run after a partial release is safe.
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "npm: $NAME@$VERSION already published — skipping."
+          else
+            npm publish --access public
+          fi
 
   publish-java:
     name: Publish Java to Maven Central
@@ -90,12 +102,12 @@ jobs:
     runs-on: ubuntu-latest
     environment: maven
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up JDK 25
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
-          java-version: "25-ea"
+          java-version: "25"
           distribution: "temurin"
           server-id: central
           server-username: MAVEN_USERNAME
@@ -104,11 +116,23 @@ jobs:
           gpg-passphrase: GPG_PASSPHRASE
 
       - name: Publish to Maven Central
-        run: mvn -B deploy -P release --file sdks/java/pom.xml
         env:
           MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
           MAVEN_PASSWORD: ${{ secrets.MAVEN_PASSWORD }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          # Idempotent: the central-publishing plugin uploads the whole
+          # reactor (fm-spi + fm-sdk) as one atomic deployment, so the
+          # presence of fm-sdk's POM on Central means this version already
+          # shipped. Skip rather than fail on a duplicate-coordinate re-run.
+          # (Central -> repo1 sync can lag ~15-30m, so a re-run within that
+          # window may still attempt and be rejected by the Portal.)
+          VERSION=$(cat VERSION)
+          if curl -sfI "https://repo1.maven.org/maven2/com/flexemarkets/fm-sdk/$VERSION/fm-sdk-$VERSION.pom" >/dev/null; then
+            echo "maven: com.flexemarkets:fm-sdk:$VERSION already on Central — skipping."
+          else
+            mvn -B deploy -P release --file sdks/java/pom.xml
+          fi
 
   github-release:
     name: Create GitHub Release
@@ -117,10 +141,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           body: |
