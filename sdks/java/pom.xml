@@ -11,7 +11,7 @@
 
     <name>Flexemarkets SDK Parent</name>
     <description>Parent POM for Flexemarkets SDK modules</description>
-    <url>https://github.com/flexemarkets/fm-sdk</url>
+    <url child.project.url.inherit.append.path="false">https://github.com/flexemarkets/fm-sdk</url>
 
     <licenses>
         <license>
@@ -29,7 +29,9 @@
         </developer>
     </developers>
 
-    <scm>
+    <scm child.scm.connection.inherit.append.path="false"
+         child.scm.developerConnection.inherit.append.path="false"
+         child.scm.url.inherit.append.path="false">
         <connection>scm:git:git://github.com/flexemarkets/fm-sdk.git</connection>
         <developerConnection>scm:git:ssh://github.com:flexemarkets/fm-sdk.git</developerConnection>
         <url>https://github.com/flexemarkets/fm-sdk/tree/main</url>
@@ -48,6 +50,10 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <jackson.version>2.18.3</jackson.version>
         <lanterna.version>3.1.3</lanterna.version>
+        <!-- Don't publish by default: the parent POM and the ticker example
+             stay off Central. Publishable library modules (fm-sdk, fm-spi)
+             override this to false. -->
+        <maven.deploy.skip>true</maven.deploy.skip>
     </properties>
 
     <dependencyManagement>
@@ -87,6 +93,39 @@
     </distributionManagement>
 
     <build>
+        <pluginManagement>
+            <plugins>
+                <!-- Flatten publishable modules to self-contained POMs (no
+                     <parent>) so fm-sdk-parent need not be published. oss mode
+                     inlines the Central-required metadata (licenses, scm,
+                     developers, url) and resolves inherited dependency
+                     versions. Activated per-module in fm-sdk and fm-spi. -->
+                <plugin>
+                    <groupId>org.codehaus.mojo</groupId>
+                    <artifactId>flatten-maven-plugin</artifactId>
+                    <version>1.7.3</version>
+                    <configuration>
+                        <flattenMode>oss</flattenMode>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <id>flatten</id>
+                            <phase>process-resources</phase>
+                            <goals>
+                                <goal>flatten</goal>
+                            </goals>
+                        </execution>
+                        <execution>
+                            <id>flatten-clean</id>
+                            <phase>clean</phase>
+                            <goals>
+                                <goal>clean</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+            </plugins>
+        </pluginManagement>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

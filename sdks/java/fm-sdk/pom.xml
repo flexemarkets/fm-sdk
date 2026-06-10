@@ -15,6 +15,12 @@
 
     <name>Flexemarkets SDK</name>
     <description>Java SDK for the Flexemarkets trading API</description>
+    <url>https://github.com/flexemarkets/fm-sdk</url>
+
+    <properties>
+        <!-- Override the parent's skip default: this module IS published. -->
+        <maven.deploy.skip>false</maven.deploy.skip>
+    </properties>
 
     <dependencies>
         <dependency>
@@ -42,6 +48,11 @@
 
     <build>
         <plugins>
+            <!-- Self-contained published POM (no <parent>); see parent pluginManagement. -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>flatten-maven-plugin</artifactId>
+            </plugin>
             <plugin>
                 <!-- Tests need the enable-preview flag to match the main classpath. -->
                 <groupId>org.apache.maven.plugins</groupId>

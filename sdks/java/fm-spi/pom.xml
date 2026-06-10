@@ -23,6 +23,22 @@
         contract without copying source; the implementations stay private and
         are delivered to hosts as runtime plugin jars.
     </description>
+    <url>https://github.com/flexemarkets/fm-sdk</url>
+
+    <properties>
+        <!-- Override the parent's skip default: this module IS published. -->
+        <maven.deploy.skip>false</maven.deploy.skip>
+    </properties>
 
     <!-- Interfaces only: no dependencies. -->
+
+    <build>
+        <plugins>
+            <!-- Self-contained published POM (no <parent>); see parent pluginManagement. -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>flatten-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
 </project>
