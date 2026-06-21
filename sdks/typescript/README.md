@@ -4,7 +4,7 @@ TypeScript / JavaScript SDK for the [Flexemarkets](https://api.flexemarkets.com)
 
 ## Requirements
 
-- Node.js 18+ (ES modules)
+- Node.js 22+ (ES modules)
 
 ## Install
 

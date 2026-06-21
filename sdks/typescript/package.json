@@ -31,6 +31,9 @@
   ],
   "author": "Flexemarkets <support@flexemarkets.com>",
   "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/flexemarkets/fm-sdk.git",
