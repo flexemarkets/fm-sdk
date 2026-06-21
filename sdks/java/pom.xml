@@ -204,6 +204,18 @@
                         <configuration>
                             <publishingServerId>central</publishingServerId>
                             <autoPublish>true</autoPublish>
+                            <!-- This plugin bundles every reactor module and
+                                 does NOT honour maven.deploy.skip (that flag
+                                 only governs maven-deploy-plugin, a different
+                                 code path). excludeArtifacts is matched against
+                                 artifactId and is the real knob for keeping the
+                                 parent POM and the ticker example off Central.
+                                 fm-sdk/fm-spi are flattened (parentless), so
+                                 dropping fm-sdk-parent leaves nothing dangling. -->
+                            <excludeArtifacts>
+                                <excludeArtifact>fm-sdk-parent</excludeArtifact>
+                                <excludeArtifact>fm-ticker</excludeArtifact>
+                            </excludeArtifacts>
                         </configuration>
                     </plugin>
                 </plugins>
