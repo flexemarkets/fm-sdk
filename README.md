@@ -12,7 +12,7 @@ fm-sdk/
 │   └── typescript/    TypeScript SDK (fetch + ws)
 ├── mcp-server/        MCP server exposing FM API as tools
 ├── Makefile           Build, check, and run targets
-└── VERSION            Centralized version (0.0.1)
+└── VERSION            Centralized version (0.0.4)
 ```
 
 ## Prerequisites
@@ -61,6 +61,14 @@ endpoint=https://api.flexemarkets.com/api/marketplaces/123
 
 ### Python
 
+Install the published package:
+
+```bash
+pip install fm-sdk==0.0.4
+```
+
+Or, to work in this repo:
+
 ```bash
 make install-python
 ```
@@ -78,6 +86,18 @@ with Flexemarkets.connect(None, None, "my-bot") as fm:
 See [sdks/python/README.md](sdks/python/README.md) for full documentation.
 
 ### Java
+
+Add the dependency (Maven Central):
+
+```xml
+<dependency>
+    <groupId>com.flexemarkets</groupId>
+    <artifactId>fm-sdk</artifactId>
+    <version>0.0.4</version>
+</dependency>
+```
+
+Or, to work in this repo:
 
 ```bash
 make install-java
@@ -97,6 +117,14 @@ try (var fm = Flexemarkets.connect(null, null, "my-bot")) {
 ```
 
 ### TypeScript
+
+Install the published package:
+
+```bash
+npm install @flexemarkets/fm-sdk@0.0.4
+```
+
+Or, to work in this repo:
 
 ```bash
 make install-typescript
