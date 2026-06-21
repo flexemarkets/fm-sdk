@@ -95,6 +95,8 @@ try (var fm = Flexemarkets.connect(null, null, "my-bot")) {
 
 Requires Java 25+ (the SDK uses preview features).
 
+See [sdks/java/README.md](sdks/java/README.md) for full documentation.
+
 ### TypeScript
 
 ```typescript
@@ -105,6 +107,8 @@ const marketplaceId = fm.endpointMarketplaceId;
 const markets = await fm.markets(marketplaceId);
 const order = await fm.submitLimit(marketplaceId, markets[0].id, "BUY", 1, 950);
 ```
+
+See [sdks/typescript/README.md](sdks/typescript/README.md) for full documentation.
 
 ## Ticker
 
