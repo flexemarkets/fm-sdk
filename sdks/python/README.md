@@ -9,13 +9,7 @@ Python SDK for the [Flexemarkets](https://api.flexemarkets.com) API.
 ## Install
 
 ```bash
-python3.11 -m pip install .
-```
-
-Or install dependencies directly:
-
-```bash
-python3.11 -m pip install httpx websockets
+pip install fm-sdk
 ```
 
 ## Configuration
