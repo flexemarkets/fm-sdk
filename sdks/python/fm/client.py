@@ -320,6 +320,27 @@ def _resource_id(endpoint: str) -> int:
     return int(endpoint.rstrip("/").rsplit("/", 1)[-1])
 
 
+def _marketplace_endpoint(marketplace_id: str) -> str:
+    """A bare marketplace id resolves to that marketplace on the default production host."""
+    return f"{_DEFAULT_ENDPOINT}/api/marketplaces/{marketplace_id}"
+
+
+def _resolve_endpoint(endpoint: str) -> dict[str, str]:
+    """Resolve an ``--endpoint`` value to config overrides.
+
+    A bare marketplace id (e.g. "2540") resolves to that marketplace on the
+    default production host; a file is loaded as Java-style properties;
+    anything else is treated as a full URL. Development environments give a
+    full URL when localhost is wanted.
+    """
+    if endpoint.isdigit():
+        return {"endpoint": _marketplace_endpoint(endpoint)}
+    path = Path(endpoint)
+    if path.is_file():
+        return _load_properties_file(path)
+    return {"endpoint": endpoint}
+
+
 def _session_ids_param(session_ids: list[int] | None) -> str:
     if not session_ids:
         return ""
@@ -439,11 +460,7 @@ class Flexemarkets:
                 )
 
         if endpoint is not None:
-            path = Path(endpoint)
-            if path.is_file():
-                config.update(_load_properties_file(path))
-            else:
-                config["endpoint"] = endpoint
+            config.update(_resolve_endpoint(endpoint))
 
         if account is not None:
             config["account"] = account
