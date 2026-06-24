@@ -638,6 +638,15 @@ public class Flexemarkets implements AutoCloseable {
     }
 
     private static void loadEndpoint(Properties properties, String endpoint) {
+        // A bare marketplace id (e.g. "2540") resolves to that marketplace on the
+        // default production host. Development environments give a full URL when
+        // localhost is wanted. Checked before the URL branch: a bare number is a
+        // valid relative URI, so isValidUrl would otherwise swallow it.
+        if (isMarketplaceId(endpoint)) {
+            properties.setProperty("endpoint", marketplaceEndpoint(endpoint));
+            return;
+        }
+
         var endpointPath = Path.of(endpoint);
 
         if (Files.isRegularFile(endpointPath)) {
@@ -645,8 +654,17 @@ public class Flexemarkets implements AutoCloseable {
         } else if (isValidUrl(endpoint)) {
             properties.setProperty("endpoint", endpoint);
         } else {
-            throw new IllegalArgumentException("Invalid endpoint: '%s' is not a file or URL.".formatted(endpoint));
+            throw new IllegalArgumentException("Invalid endpoint: '%s' is not a marketplace id, file, or URL.".formatted(endpoint));
         }
+    }
+
+    private static boolean isMarketplaceId(String endpoint) {
+        return endpoint != null && endpoint.matches("\\d+");
+    }
+
+    /** A bare marketplace id resolves to that marketplace on the default production host. */
+    private static String marketplaceEndpoint(String marketplaceId) {
+        return "https://api.flexemarkets.com/api/marketplaces/" + marketplaceId;
     }
 
     private static void loadConfiguration(Properties properties, Path filePath) {
