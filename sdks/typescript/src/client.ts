@@ -281,6 +281,27 @@ function resourceId(endpoint: string): number {
   return parseInt(trimmed.substring(last + 1), 10);
 }
 
+/** A bare marketplace id resolves to that marketplace on the default production host. */
+function marketplaceEndpoint(marketplaceId: string): string {
+  return `${DEFAULT_ENDPOINT}/api/marketplaces/${marketplaceId}`;
+}
+
+/**
+ * Resolve an `--endpoint` value to config overrides. A bare marketplace id
+ * (e.g. "2540") resolves to that marketplace on the default production host; a
+ * file is loaded as Java-style properties; anything else is treated as a full
+ * URL. Development environments give a full URL when localhost is wanted.
+ */
+export function resolveEndpoint(endpoint: string): Record<string, string> {
+  if (/^\d+$/.test(endpoint)) {
+    return { endpoint: marketplaceEndpoint(endpoint) };
+  }
+  if (existsSync(endpoint)) {
+    return loadPropertiesFile(endpoint);
+  }
+  return { endpoint };
+}
+
 function sessionIdsParam(sessionIds: number[] | null): string {
   if (!sessionIds || sessionIds.length === 0) return "";
   return "sessionIds=" + sessionIds.join(",");
@@ -384,11 +405,7 @@ export class Flexemarkets {
     }
 
     if (endpoint != null) {
-      if (existsSync(endpoint)) {
-        Object.assign(config, loadPropertiesFile(endpoint));
-      } else {
-        config.endpoint = endpoint;
-      }
+      Object.assign(config, resolveEndpoint(endpoint));
     }
 
     const ep = config.endpoint ?? DEFAULT_ENDPOINT;
