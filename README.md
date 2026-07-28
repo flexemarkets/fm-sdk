@@ -69,7 +69,7 @@ The client authenticates with the account/email/password (or bearer `token`) abo
 To drive **many participants at once** — running robots or replaying a session — a **manager** mints short-lived one-time passwords rather than collecting each participant's password:
 
 1. `POST /api/otp/manager` (requires the **MANAGER** role) with a list of user IDs returns a bundle of per-user OTPs, valid for about five minutes.
-2. `POST /api/otp` redeems each OTP for that user's session, so a tool can submit and cancel orders as that participant.
+2. `GET /api/otp?otp=…` redeems each OTP for that user's session, so a tool can submit and cancel orders as that participant. Each OTP is single-use.
 
 Impersonation is scoped to the manager's own account, and no participant password is ever exposed. The platform's in-app **Authentication & OTP** guide (`/documentation/AUTH-AND-OTP`) covers the concept for non-developers.
 
