@@ -10,6 +10,16 @@ Client SDKs for the [Flexemarkets](https://api.flexemarkets.com) trading API —
 | TypeScript / JavaScript | `@flexemarkets/fm-sdk` | [npm](https://www.npmjs.com/package/@flexemarkets/fm-sdk) |
 | Java | `com.flexemarkets:fm-sdk` | [Maven Central](https://central.sonatype.com/artifact/com.flexemarkets/fm-sdk) |
 
+## Documentation
+
+| Document | Covers |
+|----------|--------|
+| [docs/API-REFERENCE.md](docs/API-REFERENCE.md) | The REST and WebSocket (STOMP) surface the SDKs wrap — auth, OTP, error bodies, endpoints, the snapshot/sequence contract |
+| [docs/FM-ROBOTS.md](docs/FM-ROBOTS.md) | The `fm-manager` CLI, the robot agents, and the `fm-spi` plugin contract |
+
+Per-language quickstarts are in each SDK's README, linked from [Usage](#usage)
+below.
+
 ## Install
 
 **Python**
