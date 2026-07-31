@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reproduce the fm-data#751 marketplace-endpoint stall under concurrent load.
+"""Reproduce the fm-server#751 marketplace-endpoint stall under concurrent load.
 
 Symptom (production, marketplace 1524): a single ``GET /api/marketplaces/{id}``
 is slow, and a handful of them issued *at the same time* — e.g. 7 browsers
@@ -115,7 +115,7 @@ def summarize(label: str, times):
 
 def main(argv=None):
     p = argparse.ArgumentParser(
-        description="Reproduce fm-data#751 concurrent marketplace-fetch stall.",
+        description="Reproduce fm-server#751 concurrent marketplace-fetch stall.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument("--marketplace", type=int, required=True,

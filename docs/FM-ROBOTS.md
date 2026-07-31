@@ -99,7 +99,7 @@ Most read commands also take `-j`/`--json` for machine-readable output and
 | `tokens issue` | mint per-user OTPs so the manager can act on their behalf |
 | `events` | stream marketplace events (sessions, orders, holdings) |
 | `connections` | list client connections |
-| `test` / `validate` | fm-data API integration tests and a role-based access matrix (**admin credentials**) |
+| `test` / `validate` | fm-server API integration tests and a role-based access matrix (**admin credentials**) |
 
 Most commands exist both at the top level and under `marketplace` — `fm orders`
 and `fm marketplace orders` are the same operation, the latter letting you name
