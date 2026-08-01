@@ -40,7 +40,7 @@ npm install @flexemarkets/fm-sdk
 <dependency>
     <groupId>com.flexemarkets</groupId>
     <artifactId>fm-sdk</artifactId>
-    <version><!--see latests version--></version>
+    <version><!--see latest version--></version>
 </dependency>
 ```
 
