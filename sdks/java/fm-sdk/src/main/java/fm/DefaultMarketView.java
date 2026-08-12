@@ -53,7 +53,7 @@ import fm.Types.Session;
  */
 public class DefaultMarketView implements MarketView {
 
-    private final Flexemarkets flexemarkets;
+    private final HttpFlexemarkets flexemarkets;
     private final long marketplaceId;
     private final List<Market> markets;
 
@@ -86,7 +86,7 @@ public class DefaultMarketView implements MarketView {
      */
     private long lastAppliedSeq;
 
-    DefaultMarketView(Flexemarkets flexemarkets, long marketplaceId, List<Market> markets) {
+    DefaultMarketView(HttpFlexemarkets flexemarkets, long marketplaceId, List<Market> markets) {
         this.flexemarkets = flexemarkets;
         this.marketplaceId = marketplaceId;
         this.markets = List.copyOf(markets);
