@@ -2,7 +2,8 @@ package fm;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 import org.junit.jupiter.api.Test;
 
@@ -41,7 +42,8 @@ class ApiRootLinksTest {
         }
         """;
 
-    private final ObjectMapper mapper = new ObjectMapper();
+    // Jackson 3 mappers are built, not constructed and configured.
+    private final ObjectMapper mapper = JsonMapper.builder().build();
 
     @Test
     void readsTheWiresUnderscoreIntoTheLinksComponent() throws Exception {

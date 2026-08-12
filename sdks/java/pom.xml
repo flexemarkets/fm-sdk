@@ -6,7 +6,7 @@
 
     <groupId>com.flexemarkets</groupId>
     <artifactId>fm-sdk-parent</artifactId>
-    <version>0.0.7</version><!-- fm-version -->
+    <version>0.0.8</version><!-- fm-version -->
     <packaging>pom</packaging>
 
     <name>Flexemarkets SDK Parent</name>
@@ -48,7 +48,7 @@
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <jackson.version>2.18.9</jackson.version>
+        <jackson.version>3.2.1</jackson.version>
         <lanterna.version>3.1.3</lanterna.version>
         <!-- Don't publish by default: the parent POM and the ticker example
              stay off Central. Publishable library modules (fm-sdk, fm-spi)
@@ -63,15 +63,21 @@
                 <artifactId>fm-sdk</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <!--
+                Jackson 3. The BOM governs every Jackson artifact, matching how
+                fm-server and fm-robots manage it, so an SDK consumer sharing a
+                classpath with either does not end up straddling two majors.
+
+                jackson-datatype-jsr310 is gone on purpose: Jackson 3 folded
+                java.time support into databind, so registering JavaTimeModule
+                is no longer needed and the separate artifact no longer exists.
+            -->
             <dependency>
-                <groupId>com.fasterxml.jackson.core</groupId>
-                <artifactId>jackson-databind</artifactId>
+                <groupId>tools.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
                 <version>${jackson.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.fasterxml.jackson.datatype</groupId>
-                <artifactId>jackson-datatype-jsr310</artifactId>
-                <version>${jackson.version}</version>
+                <scope>import</scope>
+                <type>pom</type>
             </dependency>
             <dependency>
                 <groupId>com.googlecode.lanterna</groupId>

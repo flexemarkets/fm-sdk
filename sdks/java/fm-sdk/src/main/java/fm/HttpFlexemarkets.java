@@ -15,10 +15,11 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.BlockingQueue;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 import fm.Exceptions.ApiException;
 import fm.Exceptions.AuthenticationException;
@@ -39,9 +40,11 @@ import fm.Types.Token;
 public class HttpFlexemarkets implements Flexemarkets {
     private static final String FM_SDK_CLIENT = "fm-sdk-java/0.1.0";
 
-    private static final ObjectMapper MAPPER = new ObjectMapper()
-        .registerModule(new JavaTimeModule())
-        .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+    // Jackson 3 mappers are immutable and built, not configured after the fact.
+    // java.time support is in databind now, so there is no module to register.
+    private static final ObjectMapper MAPPER = JsonMapper.builder()
+        .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+        .build();
 
     private static final TypeReference<Token>               TOKEN_TYPE        = new TypeReference<>() {};
     private static final TypeReference<ApiRoot>              API_ROOT_TYPE     = new TypeReference<>() {};
@@ -395,7 +398,7 @@ public class HttpFlexemarkets implements Flexemarkets {
                 .POST(HttpRequest.BodyPublishers.ofString(json))
                 .build();
             return send(request, type);
-        } catch (IOException e) {
+        } catch (JacksonException e) {
             throw new ApiException("Failed to serialize request body", e);
         }
     }
@@ -451,7 +454,7 @@ public class HttpFlexemarkets implements Flexemarkets {
                     .header("User-Agent", FM_SDK_CLIENT)
                     .POST(HttpRequest.BodyPublishers.ofString(json))
                     .build();
-            } catch (IOException e) {
+            } catch (JacksonException e) {
                 throw new ApiException("Failed to serialize sign-in body", e);
             }
         } else {
@@ -470,7 +473,7 @@ public class HttpFlexemarkets implements Flexemarkets {
                     .header("User-Agent", FM_SDK_CLIENT)
                     .POST(HttpRequest.BodyPublishers.ofString(json))
                     .build();
-            } catch (IOException e) {
+            } catch (JacksonException e) {
                 throw new ApiException("Failed to serialize sign-in body", e);
             }
         }
