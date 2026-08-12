@@ -8,7 +8,7 @@ VERSION := $(shell cat VERSION)
 .PHONY: all install build check test clean set-version \
        install-python install-typescript install-java install-mcp \
        build-python build-typescript build-java \
-       check-python check-typescript check-java check-mcp \
+       check-parity check-python check-typescript check-java check-mcp \
        ticker-python ticker-typescript ticker-java \
        mcp-server \
        publish publish-python publish-typescript publish-java
@@ -23,7 +23,14 @@ install: install-python install-typescript install-java install-mcp
 
 build: build-python build-typescript build-java
 
-check: check-python check-typescript check-java check-mcp
+check: check-parity check-python check-typescript check-java check-mcp
+
+# The three SDKs are hand-written and every type is declared three times, so
+# nothing but this holds them to the same wire format. Runs first because it
+# needs no toolchain — a mismatch should be reported before spending time
+# installing three of them.
+check-parity:
+	$(PYTHON) scripts/check-parity.py
 
 test: check
 
