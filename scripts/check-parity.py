@@ -34,18 +34,35 @@ TYPESCRIPT = ROOT / "sdks/typescript/src/types.ts"
 
 # Divergences that are intended. Each needs a reason, so that adding one is a
 # decision someone wrote down rather than a way to silence the check.
-_HATEOAS = (
-    "HATEOAS envelope, spelled `_links` on the wire. Java keeps that name "
-    "literally; Python and TypeScript normalise it to `links`, the same "
-    "per-language idiom that makes marketplace_id / marketplaceId acceptable. "
-    "Both spellings are listed because the same field is otherwise reported "
-    "missing from each side in turn."
-)
+#
+# Empty, and worth keeping that way. The one entry this started with was
+# ApiRoot's HAL envelope, which Java spelled `_links` while Python and
+# TypeScript spelled `links`. Renaming the Java component and binding it with
+# @JsonProperty("_links") removed the difference rather than excusing it.
+EXEMPTIONS: dict[tuple[str, str], str] = {}
 
-EXEMPTIONS = {
-    ("ApiRoot", "_links"): _HATEOAS,
-    ("ApiRoot", "links"): _HATEOAS,
-}
+
+def _components(body: str) -> list[str]:
+    """Split a record's component list on commas, ignoring those inside generics.
+
+    `Map<String, LinkObject> links` is one component, not two. Splitting naively
+    produced a field called `Map<String`, which went unnoticed only because the
+    fragment happened to be a single token and was skipped -- until an
+    annotation was added and it became two.
+    """
+    parts, depth, current = [], 0, []
+    for char in body:
+        if char == "<":
+            depth += 1
+        elif char == ">":
+            depth -= 1
+        if char == "," and depth == 0:
+            parts.append("".join(current))
+            current = []
+        else:
+            current.append(char)
+    parts.append("".join(current))
+    return parts
 
 
 def java_types(path: Path) -> dict[str, tuple[list[str], set[str]]]:
@@ -67,8 +84,8 @@ def java_types(path: Path) -> dict[str, tuple[list[str], set[str]]]:
 
         fields: list[str] = []
         ignored: set[str] = set()
-        for component in source[open_paren + 1 : cursor].split(","):
-            tokens = component.split()
+        for component in _components(source[open_paren + 1 : cursor]):
+            tokens = re.sub(r"@\w+(\([^)]*\))?", " ", component).split()
             if len(tokens) < 2:
                 continue
             name = tokens[-1].strip()
