@@ -11,6 +11,27 @@
     </parent>
 
     <artifactId>fm-spi</artifactId>
+
+    <!--
+        Its own version line, deliberately not the SDK's.
+
+        This artifact is a contract: two interfaces and a version constant. It
+        should change rarely, and when it does the change matters to every host
+        and every provider. The SDK beside it is a client that changes often,
+        and while the two moved together every SDK release minted an fm-spi
+        release containing no change — which consumers then saw as a dependency
+        update to review, and Dependabot filed a pull request for.
+
+        0.0.9 because the shared line already reached it; the contract itself
+        has not changed since 0.0.5. Bump the patch for an additive change, and
+        the major only alongside ServiceProvider.SPI_VERSION, since hosts reject
+        a provider whose major differs from their own.
+
+        Set with `make set-spi-version V=x.y.z`. `make set-version` moves the
+        parent reference below but leaves this alone.
+    -->
+    <version>0.0.9</version><!-- spi-version -->
+
     <packaging>jar</packaging>
 
     <name>Flexemarkets SPI</name>

@@ -5,7 +5,7 @@ PY_VENV := sdks/python/.venv
 VENV_PY := $(PY_VENV)/bin/python
 VERSION := $(shell cat VERSION)
 
-.PHONY: all install build check test clean set-version \
+.PHONY: all install build check test clean set-version set-spi-version spi-version \
        install-python install-typescript install-java install-mcp \
        build-python build-typescript build-java \
        check-parity check-python check-typescript check-java check-mcp \
@@ -135,9 +135,33 @@ endif
 	@echo "$(V)" > VERSION
 	@# TypeScript
 	cd sdks/typescript && npm version "$(V)" --no-git-tag-version --allow-same-version
-	@# Java (parent + children inherit)
+	@# Java (parent + children inherit). fm-spi's own <version> is not touched
+	@# here -- it is a contract on its own line, see set-spi-version. Its parent
+	@# reference is, so it keeps building against this parent.
 	sed -i 's|<version>[^<]*</version><!-- fm-version -->|<version>$(V)</version><!-- fm-version -->|g' \
 		sdks/java/pom.xml sdks/java/fm-sdk/pom.xml sdks/java/fm-spi/pom.xml sdks/java/examples/ticker/pom.xml
 	@# MCP server
 	sed -i 's|^version = ".*"|version = "$(V)"|' mcp-server/pyproject.toml
 	@echo "Version set to $(V)"
+	@echo "fm-spi stays at $$(make -s spi-version) — use set-spi-version to move it"
+
+# The SPI is a contract, not a client: two interfaces and a version constant,
+# changing rarely and mattering to every host and provider when it does. It is
+# versioned apart from the SDK so that a busy client release does not mint an
+# empty contract release for consumers to review.
+#
+# Bump the patch for an additive change. Bump the major only together with
+# ServiceProvider.SPI_VERSION, because a host rejects a provider whose major
+# differs from its own -- that is the whole point of the constant.
+set-spi-version:
+ifndef V
+	$(error Usage: make set-spi-version V=x.y.z)
+endif
+	sed -i 's|<version>[^<]*</version><!-- spi-version -->|<version>$(V)</version><!-- spi-version -->|' \
+		sdks/java/fm-spi/pom.xml
+	@echo "fm-spi version set to $(V) (SDK line unchanged at $$(cat VERSION))"
+	@echo "Remember ServiceProvider.SPI_VERSION if the major moved."
+
+spi-version:
+	@grep -o '<version>[^<]*</version><!-- spi-version -->' sdks/java/fm-spi/pom.xml \
+		| sed 's|<version>\(.*\)</version>.*|\1|'
