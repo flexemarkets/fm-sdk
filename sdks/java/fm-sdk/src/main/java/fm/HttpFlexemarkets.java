@@ -442,21 +442,22 @@ public class HttpFlexemarkets implements Flexemarkets {
         HttpRequest request;
 
         if (tokenValue != null && !tokenValue.isBlank()) {
-            // Token-based auth: just GET the API root to validate
-            var body = Map.of("username", account + "|" + email, "password", "token");
-            try {
-                var json = MAPPER.writeValueAsString(body);
-                request = HttpRequest.newBuilder()
-                    .uri(URI.create(endpoint))
-                    .header("Authorization", "Bearer " + tokenValue)
-                    .header("Content-Type", "application/json")
-                    .header("Accept", "application/json")
-                    .header("User-Agent", FM_SDK_CLIENT)
-                    .POST(HttpRequest.BodyPublishers.ofString(json))
-                    .build();
-            } catch (JacksonException e) {
-                throw new ApiException("Failed to serialize sign-in body", e);
-            }
+            // A caller who already holds a token has no account/email/password
+            // to present, so signing in is not available: POSTing /tokens with
+            // the blanks left by loadCredential is rejected, and the identity
+            // this constructor needs never arrives. Refreshing the token both
+            // validates it and returns the account and person behind it.
+            //
+            // This is the second time: fm-lib-net carries the same branch, with
+            // a comment recording that an earlier rewrite dropped it. Restored
+            // here, and covered by a test so it cannot be dropped a third time.
+            request = HttpRequest.newBuilder()
+                .uri(URI.create(endpoint + "/refresh"))
+                .header("Authorization", "Bearer " + tokenValue)
+                .header("Accept", "application/json")
+                .header("User-Agent", FM_SDK_CLIENT)
+                .GET()
+                .build();
         } else {
             var username = account + "|" + email;
             var basicAuth = "Basic " + Base64.getEncoder().encodeToString(
