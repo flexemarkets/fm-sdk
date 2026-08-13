@@ -109,8 +109,15 @@ publish-java:
 # MCP server
 # ---------------------------------------------------------------------------
 
+# mcp is pinned below 2. The dependency was unpinned, so a fresh venv picked
+# up 2.0.0, which renamed FastMCP to MCPServer under mcp.server.mcpserver and
+# broke server.py's import -- the failure looked like a missing venv rather
+# than an API change, which is what an unpinned major buys you.
+#
+# Porting server.py to the 2.x API is real work and unrelated to the SDK
+# itself: mcp-server is a local tool and is in no publish target.
 install-mcp:
-	cd mcp-server && $(PYTHON) -m venv .venv && .venv/bin/pip install --upgrade pip && .venv/bin/pip install -q -e ../sdks/python "mcp[cli]"
+	cd mcp-server && $(PYTHON) -m venv .venv && .venv/bin/pip install --upgrade pip && .venv/bin/pip install -q -e ../sdks/python "mcp[cli]<2"
 
 check-mcp:
 	cd mcp-server && .venv/bin/python -c "import server; print('mcp server ok')"
