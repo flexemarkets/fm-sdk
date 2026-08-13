@@ -129,7 +129,14 @@ mcp-server:
 # Publishing (all SDKs)
 # ---------------------------------------------------------------------------
 
-publish: publish-python publish-typescript publish-java
+# Gated on purpose. The three uploads cannot be undone and cannot be replaced,
+# so a run that succeeds on PyPI and fails on Central burns the version on one
+# and leaves it unusable on the other. check-publish verifies every credential
+# and every registry's view of this version before the first byte is sent.
+publish: check-publish publish-python publish-typescript publish-java
+
+check-publish:
+	@scripts/check-publish.sh
 
 # ---------------------------------------------------------------------------
 # Version management
