@@ -47,7 +47,7 @@ if [[ -n "${TWINE_USERNAME:-}" && -n "${TWINE_PASSWORD:-}" ]]; then
 elif [[ -f "$HOME/.pypirc" ]]; then
     pass "pypi" "~/.pypirc present"
 else
-    fail "pypi" "no ~/.pypirc and no TWINE_USERNAME/TWINE_PASSWORD"
+    fail "pypi" "no ~/.pypirc, and TWINE_* unset in THIS shell"
 fi
 
 # --- Maven Central ----------------------------------------------------------
@@ -56,7 +56,11 @@ fi
 if grep -q '<id>central</id>' "$HOME/.m2/settings.xml" 2>/dev/null; then
     pass "maven central" "server id 'central' in ~/.m2/settings.xml"
 else
-    fail "maven central" "no <server><id>central</id> in ~/.m2/settings.xml"
+    if [[ -f "$HOME/.m2/settings.xml" ]]; then
+        fail "maven central" "~/.m2/settings.xml has no <server><id>central</id>"
+    else
+        fail "maven central" "no ~/.m2/settings.xml at all"
+    fi
 fi
 
 # Central refuses unsigned artifacts, and the release profile runs maven-gpg.
@@ -99,6 +103,15 @@ done
 echo ""
 if (( problems )); then
     echo "REFUSING: $problems check(s) failed."
+    echo ""
+    echo "Note: a browser session on pypi.org or central.sonatype.com is not a"
+    echo "publishing credential. twine needs an API token in ~/.pypirc or in"
+    echo "TWINE_USERNAME/TWINE_PASSWORD; Maven needs a <server><id>central</id>"
+    echo "entry holding a portal token; and Central refuses unsigned artifacts,"
+    echo "so a GPG secret key is required regardless of either."
+    echo ""
+    echo "TWINE_* are read from the environment of the shell that runs this, so"
+    echo "run it in the shell you exported them in, not another one."
     echo ""
     echo "Nothing has been uploaded. Publishing part-way is worse than not"
     echo "starting: a version that lands on one registry and fails on another"
