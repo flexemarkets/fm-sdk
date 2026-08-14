@@ -122,6 +122,24 @@ public interface Flexemarkets extends AutoCloseable {
      */
     void listen(long marketplaceId, BlockingQueue<Object> queue);
 
+    /**
+     * Open an <em>independent</em> event subscription, delivering onto
+     * {@code queue} until the returned {@link Subscription} is closed.
+     *
+     * <p>Unlike {@link #listen}, several of these coexist: each has its own
+     * stream and its own lifetime. That is what lets more than one
+     * {@link MarketView} live in one connection without trampling each other.
+     *
+     * <p>Defaulted rather than abstract so that existing implementations --
+     * test fakes especially -- keep compiling. An implementation that cannot
+     * multiplex says so here instead of pretending, and a {@link MarketView}
+     * over it will fail loudly rather than silently sharing one stream.
+     */
+    default Subscription subscribe(long marketplaceId, BlockingQueue<Object> queue) {
+        throw new UnsupportedOperationException(
+                getClass().getName() + " does not support independent subscriptions");
+    }
+
     /** A maintained view of the order books, kept current from the event stream. */
     MarketView observe(long marketplaceId);
 

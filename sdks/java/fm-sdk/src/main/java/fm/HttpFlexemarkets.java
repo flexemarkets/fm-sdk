@@ -246,6 +246,11 @@ public class HttpFlexemarkets implements Flexemarkets {
      * one {@code Flexemarkets} instance without trampling each other's
      * WS connections.
      */
+    @Override
+    public Subscription subscribe(long marketplaceId, BlockingQueue<Object> queue) {
+        return _connectEvents(marketplaceId, queue);
+    }
+
     Events _connectEvents(long marketplaceId, BlockingQueue<Object> queue) {
         var ev = new Events(wsUrl(), bearerToken, marketplaceId, clientDescription(), MAPPER, queue);
         ev.connect();

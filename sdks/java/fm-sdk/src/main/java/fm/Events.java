@@ -20,7 +20,7 @@ import fm.Types.Order;
 import fm.Types.Session;
 import fm.Types.Version;
 
-public class Events implements AutoCloseable {
+public class Events implements Subscription {
 
     /**
      * Prefix on the {@code /app} SUBSCRIBE destination selecting fm-server's
@@ -121,7 +121,8 @@ public class Events implements AutoCloseable {
         }
     }
 
-    void reconnect() throws InterruptedException {
+    @Override
+    public void reconnect() throws InterruptedException {
         while (!closed) {
             try {
                 closeWebSocket();

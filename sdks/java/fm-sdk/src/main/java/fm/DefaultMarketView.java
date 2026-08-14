@@ -53,7 +53,7 @@ import fm.Types.Session;
  */
 public class DefaultMarketView implements MarketView {
 
-    private final HttpFlexemarkets flexemarkets;
+    private final Flexemarkets flexemarkets;
     private final long marketplaceId;
     private final List<Market> markets;
 
@@ -72,7 +72,7 @@ public class DefaultMarketView implements MarketView {
     private final List<Consumer<ReconnectEvent>>           reconnectHandlers = new CopyOnWriteArrayList<>();
 
     private final BlockingQueue<Object> queue = new ArrayBlockingQueue<>(10_000);
-    private final Events events;
+    private final Subscription events;
     private final Thread dispatcher;
     private volatile boolean closed;
 
@@ -86,7 +86,7 @@ public class DefaultMarketView implements MarketView {
      */
     private long lastAppliedSeq;
 
-    DefaultMarketView(HttpFlexemarkets flexemarkets, long marketplaceId, List<Market> markets) {
+    public DefaultMarketView(Flexemarkets flexemarkets, long marketplaceId, List<Market> markets) {
         this.flexemarkets = flexemarkets;
         this.marketplaceId = marketplaceId;
         this.markets = List.copyOf(markets);
@@ -107,7 +107,7 @@ public class DefaultMarketView implements MarketView {
         // singleton events field and prevent multiple shared views
         // on different marketplaces from coexisting in one
         // Flexemarkets.
-        this.events = flexemarkets._connectEvents(marketplaceId, queue);
+        this.events = flexemarkets.subscribe(marketplaceId, queue);
         _seedFromSnapshot();
         this.dispatcher = Thread.startVirtualThread(this::_drain);
     }
