@@ -70,9 +70,19 @@ public class Events implements Subscription {
 
     private volatile WebSocket webSocket;
     private volatile boolean closed;
+
+    /** One reconnect at a time: onClose and onError can both fire for one drop. */
+    private final java.util.concurrent.atomic.AtomicBoolean reconnecting =
+            new java.util.concurrent.atomic.AtomicBoolean();
     private final AtomicInteger subscriptionId = new AtomicInteger(0);
 
     public record WsTransportError(Throwable failure) {}
+
+    /**
+     * The stream is back. Emitted once this has re-established itself after a
+     * {@link WsTransportError}; a consumer's state is stale until it reseeds.
+     */
+    public record Reconnected(long marketplaceId) {}
     public record WsException(String message, Throwable failure) {}
 
     Events(String wsUrl, String bearerToken, long marketplaceId, String clientDescription,
@@ -121,8 +131,19 @@ public class Events implements Subscription {
         }
     }
 
-    @Override
-    public void reconnect() throws InterruptedException {
+    /**
+     * Re-establish the stream, retrying until it succeeds or this is closed.
+     *
+     * <p>Driven from {@link #_reconnectInBackground()} rather than by a
+     * consumer: whether the socket is up is this class's business, and a
+     * consumer that had to run the retry loop would be doing the transport's
+     * job on its own thread.
+     *
+     * <p>Package-private, not private, because {@link Flexemarkets#reconnect()}
+     * still lets a caller force one deliberately. That is a different thing
+     * from recovering a drop, and only the recovery moved in here.
+     */
+    void reconnect() throws InterruptedException {
         while (!closed) {
             try {
                 closeWebSocket();
@@ -132,6 +153,31 @@ public class Events implements Subscription {
                 TimeUnit.SECONDS.sleep(2);
             }
         }
+    }
+
+    /**
+     * React to a dropped stream by restoring it, off the callback thread.
+     *
+     * <p>The WebSocket listener must not block, and reconnect() sleeps between
+     * attempts. On success a {@link Reconnected} goes onto the queue so
+     * consumers know their state needs reseeding.
+     */
+    private void _reconnectInBackground() {
+        if (closed || !reconnecting.compareAndSet(false, true)) {
+            return;
+        }
+        Thread.startVirtualThread(() -> {
+            try {
+                reconnect();
+                if (!closed) {
+                    queue.offer(new Reconnected(marketplaceId));
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                reconnecting.set(false);
+            }
+        });
     }
 
     @Override
@@ -307,6 +353,7 @@ public class Events implements Subscription {
             if (!closed) {
                 queue.offer(new WsTransportError(
                     new Exception("WebSocket closed: %d %s".formatted(statusCode, reason))));
+                _reconnectInBackground();
             }
             return CompletableFuture.completedFuture(null);
         }
@@ -314,6 +361,7 @@ public class Events implements Subscription {
         @Override
         public void onError(WebSocket webSocket, Throwable error) {
             queue.offer(new WsTransportError(error));
+            _reconnectInBackground();
         }
     }
 }

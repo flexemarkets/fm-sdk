@@ -4,8 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * The wiring, end to end.
@@ -21,6 +24,26 @@ import org.junit.jupiter.api.Test;
  * what it would do if the feature did not exist.
  */
 class ProviderDiscoveryTest {
+
+    @TempDir
+    Path directory;
+
+    /**
+     * The defect that prompted the endpoint-resolution rework, end to end: a
+     * provider's endpoint supplied the way robots are routinely pointed at one.
+     * Before resolution moved ahead of selection this reached HttpFlexemarkets,
+     * which read the file and tried to dial an endpoint it could not.
+     */
+    @Test
+    void aProviderEndpointCanArriveInAFile() throws IOException {
+        Path file = directory.resolve("endpoint");
+        Files.writeString(file, "endpoint=loopback:1744\n");
+
+        try (Flexemarkets fm = Flexemarkets.connect("credential", file.toString(), "test")) {
+            assertThat(fm.accountName()).isEqualTo(TestLoopbackProvider.DESCRIPTION);
+            assertThat(fm.endpointMarketplaceId()).isEqualTo(1744L);
+        }
+    }
 
     @Test
     void aRegisteredProviderServesItsOwnEndpointForm() throws IOException {

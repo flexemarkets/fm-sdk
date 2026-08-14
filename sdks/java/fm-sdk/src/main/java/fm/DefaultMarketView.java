@@ -86,7 +86,7 @@ public class DefaultMarketView implements MarketView {
      */
     private long lastAppliedSeq;
 
-    public DefaultMarketView(Flexemarkets flexemarkets, long marketplaceId, List<Market> markets) {
+    DefaultMarketView(Flexemarkets flexemarkets, long marketplaceId, List<Market> markets) {
         this.flexemarkets = flexemarkets;
         this.marketplaceId = marketplaceId;
         this.markets = List.copyOf(markets);
@@ -255,8 +255,12 @@ public class DefaultMarketView implements MarketView {
                 } else if (event instanceof Holding h) {
                     holding.set(h);
                     for (var hh : holdingHandlers) hh.accept(h);
-                } else if (event instanceof WsTransportError) {
-                    _handleTransportError();
+                } else if (event instanceof WsTransportError error) {
+                    // The subscription restores itself; nothing to do but say so.
+                    System.err.println("[MarketView] WS transport error on marketplace "
+                            + marketplaceId + ": " + error.failure().getMessage());
+                } else if (event instanceof Events.Reconnected) {
+                    _reseedAfterReconnect();
                 } else if (event instanceof WsException ex) {
                     // STOMP ERROR / parse failure. Logged for
                     // visibility; reconnecting won't help with a
@@ -273,24 +277,25 @@ public class DefaultMarketView implements MarketView {
     }
 
     /**
-     * Phase 2c auto-reconnect. On a WsTransportError, reconnect the
-     * underlying WS and re-seed from the V1 snapshot — reconnect is
-     * just the largest possible gap, so 2b's recovery machinery
-     * handles the state convergence. One reconnect attempt; if it
-     * fails the view is left stale and the caller's next access will
-     * see whatever state was last applied. More sophisticated
-     * backoff/retry can layer on later.
+     * Converge state after the subscription has restored itself.
+     *
+     * <p>A reconnect is just the largest possible gap, so the same snapshot
+     * reseed that recovers from a missed sequence recovers from this. The view
+     * no longer performs the reconnect: whether the stream is up belongs to the
+     * subscription, and driving its retry loop from this thread meant the
+     * dispatcher sat blocked in sleeps while events queued behind it.
+     *
+     * <p>A failure here is a failed <em>reseed</em>, not a failed reconnect —
+     * the stream is live and the view is stale, which is worth telling handlers
+     * apart from a dead connection.
      */
-    private void _handleTransportError() {
-        System.err.println("[MarketView] WS transport error on marketplace "
-                + marketplaceId + "; reconnecting");
+    private void _reseedAfterReconnect() {
         ReconnectEvent event;
         try {
-            events.reconnect();
             _seedFromSnapshot();
             event = new ReconnectEvent(marketplaceId, true, null);
         } catch (Throwable t) {
-            System.err.println("[MarketView] Reconnect failed on marketplace "
+            System.err.println("[MarketView] Reseed failed on marketplace "
                     + marketplaceId + "; view is stale: " + t.getMessage());
             event = new ReconnectEvent(marketplaceId, false, t.getMessage());
         }

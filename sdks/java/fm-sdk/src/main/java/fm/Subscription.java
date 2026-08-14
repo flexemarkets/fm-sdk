@@ -8,22 +8,15 @@ package fm;
  * {@link MarketView} live in a single {@link Flexemarkets} without trampling
  * the others.
  *
+ * <p>Reconnection is not here. A stream that drops is the transport's problem
+ * and the transport's to fix; an implementation that crosses a network retries
+ * on its own and announces the result on the queue, and one that does not cross
+ * anything has nothing to announce. Putting it on this interface made every
+ * implementation carry a method most of them could only no-op.
+ *
  * @see Flexemarkets#subscribe(long, java.util.concurrent.BlockingQueue)
  */
 public interface Subscription extends AutoCloseable {
-
-    /**
-     * Re-establish the stream after a transport failure.
-     *
-     * <p>A no-op by default, because a subscription with no transport has
-     * nothing to re-establish -- an in-process stream cannot drop the way a
-     * WebSocket can. Implementations that do cross a network override this;
-     * a {@link MarketView} calls it on transport error and reseeds from a
-     * snapshot afterwards either way.
-     */
-    default void reconnect() throws InterruptedException {
-        // nothing to reconnect
-    }
 
     @Override
     void close();

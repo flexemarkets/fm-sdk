@@ -9,11 +9,12 @@ import org.junit.jupiter.api.Test;
 /**
  * Choosing between a registered provider and this SDK's own HTTP client.
  *
- * <p>The selection logic is tested directly rather than through
- * {@link Flexemarkets#connect}, because the fallback half of that method opens
- * a real socket. What matters here is which of the two is picked, and that a
- * misbehaving provider cannot take the HTTP path down with it — a host's
- * loopback provider has no business breaking an unrelated connection.
+ * <p>Drives {@link Providers#select} directly, over lists these tests build.
+ * The cached entry point is awkward to steer, but a test that reimplemented the
+ * loop would be asserting against its own copy — green while the real rule
+ * drifted. Selection is tested here rather than through
+ * {@link Flexemarkets#connect} because the fallback half of that opens a real
+ * socket.
  */
 class ProvidersTest {
 
@@ -45,43 +46,21 @@ class ProvidersTest {
         }
     }
 
-    /**
-     * The selection, expressed the way Providers.forEndpoint does it, so the
-     * rule is checked without depending on what happens to be on the test
-     * classpath.
-     */
-    private static FlexemarketsProvider choose(java.util.List<FlexemarketsProvider> providers,
-                                               String endpoint) {
-        if (null == endpoint) {
-            return null;
-        }
-        for (FlexemarketsProvider provider : providers) {
-            try {
-                if (provider.handles(endpoint)) {
-                    return provider;
-                }
-            } catch (RuntimeException ignored) {
-                // next
-            }
-        }
-        return null;
-    }
-
     @Test
     void aProviderIsChosenForAnEndpointItClaims() {
-        assertThat(choose(java.util.List.of(new Loopback()), LOOPBACK)).isInstanceOf(Loopback.class);
+        assertThat(Providers.select(java.util.List.of(new Loopback()), LOOPBACK)).isInstanceOf(Loopback.class);
     }
 
     /** The ordinary case: a provider is present but this is not its endpoint. */
     @Test
     void anHttpEndpointFallsThroughToTheSdksOwnClient() {
-        assertThat(choose(java.util.List.of(new Loopback()), HTTP)).isNull();
+        assertThat(Providers.select(java.util.List.of(new Loopback()), HTTP)).isNull();
     }
 
     @Test
     void withNoProvidersEverythingFallsThrough() {
-        assertThat(choose(java.util.List.of(), LOOPBACK)).isNull();
-        assertThat(choose(java.util.List.of(), HTTP)).isNull();
+        assertThat(Providers.select(java.util.List.of(), LOOPBACK)).isNull();
+        assertThat(Providers.select(java.util.List.of(), HTTP)).isNull();
     }
 
     /**
@@ -90,14 +69,14 @@ class ProvidersTest {
      */
     @Test
     void aProviderThatThrowsIsSkippedRatherThanPropagated() {
-        assertThat(choose(java.util.List.of(new Broken()), HTTP)).isNull();
-        assertThat(choose(java.util.List.of(new Broken(), new Loopback()), LOOPBACK))
+        assertThat(Providers.select(java.util.List.of(new Broken()), HTTP)).isNull();
+        assertThat(Providers.select(java.util.List.of(new Broken(), new Loopback()), LOOPBACK))
                 .isInstanceOf(Loopback.class);
     }
 
     @Test
     void aNullEndpointClaimsNothing() {
-        assertThat(choose(java.util.List.of(new Loopback()), null)).isNull();
+        assertThat(Providers.select(java.util.List.of(new Loopback()), null)).isNull();
     }
 
     /**

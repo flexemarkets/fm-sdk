@@ -34,6 +34,19 @@ import fm.Types.Session;
 public interface MarketView extends AutoCloseable {
 
     /**
+     * A view over any connection, maintained from its event stream.
+     *
+     * <p>The way a host that supplies its own {@link Flexemarkets} gets one.
+     * A factory rather than a public constructor so the implementing class
+     * stays an implementation detail: naming it in the published API would
+     * commit to it for good, and callers only ever want "a view over this".
+     */
+    static MarketView over(Flexemarkets flexemarkets, long marketplaceId,
+                           java.util.List<Types.Market> markets) {
+        return new DefaultMarketView(flexemarkets, marketplaceId, markets);
+    }
+
+    /**
      * The marketplace this view tracks.
      */
     long marketplaceId();

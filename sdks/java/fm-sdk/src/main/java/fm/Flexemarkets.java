@@ -35,18 +35,24 @@ public interface Flexemarkets extends AutoCloseable {
     /**
      * Connect and authenticate. The caller owns the result and must close it.
      *
-     * <p>A registered {@link FlexemarketsProvider} is offered the endpoint
-     * first, so a host running robots inside its own JVM can hand them an
-     * endpoint form it serves directly rather than over a socket. Nothing is
-     * registered by default and the fallback is HTTP, so ordinary use is
-     * unchanged — including the case where a provider is present but does not
+     * <p>The endpoint is {@linkplain Endpoints#resolve resolved} first -- a
+     * bare marketplace id or a file holding one becomes the endpoint it
+     * denotes -- and a registered {@link FlexemarketsProvider} is then offered
+     * the result. Resolving first is what lets a provider's endpoint be
+     * supplied the same ways any other can, including from a file; asking
+     * about the argument as typed meant only a literal could ever be claimed.
+     *
+     * <p>Nothing is registered by default and the fallback is HTTP, so ordinary
+     * use is unchanged -- including when a provider is present but does not
      * recognise the endpoint.
      */
     static Flexemarkets connect(String credential, String endpoint, String clientDescription)
             throws IOException {
-        FlexemarketsProvider provider = Providers.forEndpoint(endpoint);
+        String resolved = Endpoints.resolve(endpoint);
+
+        FlexemarketsProvider provider = Providers.forEndpoint(resolved);
         if (null != provider) {
-            return provider.connect(credential, endpoint, clientDescription);
+            return provider.connect(credential, resolved, clientDescription);
         }
         return new HttpFlexemarkets(
                 HttpFlexemarkets.loadProperties(credential, endpoint, clientDescription));

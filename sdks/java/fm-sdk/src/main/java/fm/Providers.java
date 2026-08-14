@@ -48,10 +48,23 @@ final class Providers {
      * connection it was never going to serve.
      */
     static FlexemarketsProvider forEndpoint(String endpoint) {
-        if (null == endpoint) {
+        return select(Holder.PROVIDERS, endpoint);
+    }
+
+    /**
+     * The rule itself, over a given list.
+     *
+     * <p>Separate from {@link #forEndpoint} so it can be exercised against
+     * providers a test constructs. The cached list makes the public entry
+     * awkward to drive, and a test that reimplemented this loop would be
+     * asserting against its own copy -- which stays green while the real one
+     * drifts.
+     */
+    static FlexemarketsProvider select(List<FlexemarketsProvider> providers, String endpoint) {
+        if (null == endpoint || null == providers) {
             return null;
         }
-        for (FlexemarketsProvider provider : Holder.PROVIDERS) {
+        for (FlexemarketsProvider provider : providers) {
             try {
                 if (provider.handles(endpoint)) {
                     return provider;
