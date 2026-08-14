@@ -11,7 +11,8 @@ VERSION := $(shell cat VERSION)
        check-parity check-python check-typescript check-java check-mcp \
        ticker-python ticker-typescript ticker-java \
        mcp-server \
-       publish publish-python publish-typescript publish-java
+       publish publish-python publish-typescript publish-java \
+       check-publish check-publish-python check-publish-typescript check-publish-java
 
 # ---------------------------------------------------------------------------
 # Aggregate targets
@@ -62,7 +63,7 @@ check-python:
 ticker-python:
 	$(VENV_PY) sdks/python/ticker.py $(ARGS)
 
-publish-python:
+publish-python: check-publish-python
 	$(VENV_PY) -m pip install build twine
 	$(VENV_PY) -m build sdks/python
 	$(VENV_PY) -m twine upload sdks/python/dist/*
@@ -83,7 +84,7 @@ check-typescript:
 ticker-typescript:
 	cd sdks/typescript && npx tsx src/ticker.ts $(ARGS)
 
-publish-typescript:
+publish-typescript: check-publish-typescript
 	cd sdks/typescript && npm publish --access public
 
 # ---------------------------------------------------------------------------
@@ -102,7 +103,7 @@ check-java:
 ticker-java:
 	java --enable-preview -jar sdks/java/examples/ticker/target/fm-ticker-$(VERSION).jar $(ARGS)
 
-publish-java:
+publish-java: check-publish-java
 	cd sdks/java && mvn deploy -P release
 
 # ---------------------------------------------------------------------------
@@ -135,8 +136,25 @@ mcp-server:
 # and every registry's view of this version before the first byte is sent.
 publish: check-publish publish-python publish-typescript publish-java
 
+# Every publish target carries its own gate as well, because each is also run
+# on its own -- and when only the aggregate was gated, `make publish-python`
+# and `make publish-typescript` put 0.0.7 on PyPI and npm with nothing checked.
+# A gate that one target can walk around is not a gate.
+#
+# Running `make publish` therefore checks a registry twice: once up front via
+# check-publish, once at its own target. That is a handful of HTTP requests,
+# and it is what makes the individual targets safe in isolation.
 check-publish:
-	@scripts/check-publish.sh
+	@scripts/check-publish.sh all
+
+check-publish-python:
+	@scripts/check-publish.sh pypi
+
+check-publish-typescript:
+	@scripts/check-publish.sh npm
+
+check-publish-java:
+	@scripts/check-publish.sh java
 
 # ---------------------------------------------------------------------------
 # Version management
