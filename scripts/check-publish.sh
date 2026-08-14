@@ -125,12 +125,30 @@ check_pypi_version() {
     fi
 }
 
-# fm-spi is on its own version line, so it is checked against its own version
-# rather than the SDK's — they are equal today and are not required to stay so.
+# Artifacts the release profile keeps off Central, read from the pom rather
+# than repeated here. A gate with its own idea of what ships is a gate that
+# eventually disagrees with the build, and the disagreement is silent in
+# whichever direction hurts: refusing a release that would work, or waving one
+# through that will not.
+excluded_artifacts() {
+    grep -o '<excludeArtifact>[^<]*</excludeArtifact>' "$ROOT/sdks/java/pom.xml" \
+        | sed 's|</\?excludeArtifact>||g'
+}
+
+# fm-spi is checked against its own version, not the SDK's: it is on a separate
+# line and the two are not required to agree.
 check_java_version() {
-    local artifact name want
+    local artifact name want excluded
+    excluded="$(excluded_artifacts)"
+
     for artifact in "fm-sdk:$VERSION" "fm-spi:$SPI_VERSION"; do
         name="${artifact%%:*}"; want="${artifact##*:}"
+
+        if grep -qx "$name" <<< "$excluded"; then
+            pass "central $name" "excluded from this release by the pom"
+            continue
+        fi
+
         if curl -fsS --max-time 20 \
              "https://repo1.maven.org/maven2/com/flexemarkets/$name/maven-metadata.xml" 2>/dev/null \
              | grep -q "<version>$want</version>"; then
@@ -147,7 +165,13 @@ case "$TARGET" in
     all)  echo "Publishing fm-sdk $VERSION to npm, PyPI and Maven Central (fm-spi $SPI_VERSION)" ;;
     npm)  echo "Publishing fm-sdk $VERSION to npm" ;;
     pypi) echo "Publishing fm-sdk $VERSION to PyPI" ;;
-    java) echo "Publishing fm-sdk $VERSION and fm-spi $SPI_VERSION to Maven Central" ;;
+    java)
+        if grep -qx "fm-spi" <<< "$(excluded_artifacts)"; then
+            echo "Publishing fm-sdk $VERSION to Maven Central (fm-spi $SPI_VERSION excluded)"
+        else
+            echo "Publishing fm-sdk $VERSION and fm-spi $SPI_VERSION to Maven Central"
+        fi
+        ;;
 esac
 
 echo ""
