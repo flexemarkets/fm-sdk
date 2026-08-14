@@ -32,9 +32,22 @@ import fm.Types.Session;
  */
 public interface Flexemarkets extends AutoCloseable {
 
-    /** Connect and authenticate. The caller owns the result and must close it. */
+    /**
+     * Connect and authenticate. The caller owns the result and must close it.
+     *
+     * <p>A registered {@link FlexemarketsProvider} is offered the endpoint
+     * first, so a host running robots inside its own JVM can hand them an
+     * endpoint form it serves directly rather than over a socket. Nothing is
+     * registered by default and the fallback is HTTP, so ordinary use is
+     * unchanged — including the case where a provider is present but does not
+     * recognise the endpoint.
+     */
     static Flexemarkets connect(String credential, String endpoint, String clientDescription)
             throws IOException {
+        FlexemarketsProvider provider = Providers.forEndpoint(endpoint);
+        if (null != provider) {
+            return provider.connect(credential, endpoint, clientDescription);
+        }
         return new HttpFlexemarkets(
                 HttpFlexemarkets.loadProperties(credential, endpoint, clientDescription));
     }
