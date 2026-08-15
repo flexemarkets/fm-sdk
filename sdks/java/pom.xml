@@ -205,7 +205,24 @@
                     <plugin>
                         <groupId>org.sonatype.central</groupId>
                         <artifactId>central-publishing-maven-plugin</artifactId>
-                        <version>0.7.0</version>
+                        <!--
+                            0.11.0, up from 0.7.0. The older client deserialised
+                            the portal's status response into a fixed set of
+                            fields, and the portal has since added `warnings`, so
+                            waitUntil=published failed on every poll with an
+                            UnrecognizedPropertyException.
+
+                            That failure mode is the dangerous one: the bundle
+                            uploads, the portal publishes it, and the build goes
+                            red anyway. fm-spi 0.0.10 went out exactly that way
+                            and looked like a failed release for as long as it
+                            took to check repo1. Every registry here is
+                            append-only, so the obvious response (run it again)
+                            cannot work, and the second run reports the version
+                            as already taken, which reads like the first one
+                            having succeeded in some other sense.
+                        -->
+                        <version>0.11.0</version>
                         <extensions>true</extensions>
                         <configuration>
                             <publishingServerId>central</publishingServerId>
