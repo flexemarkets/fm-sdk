@@ -210,6 +210,23 @@
                         <configuration>
                             <publishingServerId>central</publishingServerId>
                             <autoPublish>true</autoPublish>
+                            <!-- Wait for PUBLISHED, not the default VALIDATED.
+                                 A validated bundle has passed its checks and
+                                 has not been published: with autoPublish the
+                                 portal goes on to publish it after the build
+                                 has exited, so a failure there lands nowhere a
+                                 person is looking. The whole point of the
+                                 publish gate is that a release fails loudly
+                                 while someone is still watching it, and every
+                                 registry here is append-only: a half-landed
+                                 version cannot be replaced, only renumbered.
+
+                                 This does NOT mean the artifact is on
+                                 repo1.maven.org: the Central sync runs
+                                 afterwards and takes minutes to hours. It
+                                 means Central accepted and published it, which
+                                 is the part the build can be held to. -->
+                            <waitUntil>PUBLISHED</waitUntil>
                             <!-- This plugin bundles every reactor module and
                                  does NOT honour maven.deploy.skip (that flag
                                  only governs maven-deploy-plugin, a different
