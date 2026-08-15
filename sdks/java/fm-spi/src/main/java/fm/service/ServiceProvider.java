@@ -35,6 +35,10 @@ public interface ServiceProvider {
      * The unique catalog name identifier for this provider — e.g.
      * {@code "fm-maker"}. Hosts key their catalog on it, so it must be unique
      * across the providers a host loads.
+     *
+     * @return the catalog name, matching the {@code id} of the manifest shipped
+     *         in the same jar. A provider and manifest that disagree describe a
+     *         robot that can be started but not configured, or the reverse.
      */
     String name();
 
@@ -42,12 +46,18 @@ public interface ServiceProvider {
      * Create a runnable {@link Service} bound to the given arguments (a
      * CLI-style {@code -E <endpoint> -C <credential> ...} vector). The returned
      * service does not begin work until {@link Service#start()} is called.
+     *
+     * @param arguments the vector, as {@link fm.manifest.CliBuilder} builds it
+     *                  from this robot's manifest.
+     * @return a service that has not started.
      */
     Service create(String[] arguments);
 
     /**
      * The contract version this provider was built against; defaults to
      * {@link #SPI_VERSION}. The host compares majors and rejects a mismatch.
+     *
+     * @return the {@code major.minor} this provider compiled against.
      */
     default String spiVersion() {
         return SPI_VERSION;

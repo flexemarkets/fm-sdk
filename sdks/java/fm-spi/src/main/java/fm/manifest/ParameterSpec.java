@@ -48,11 +48,20 @@ public record ParameterSpec(
         Integer minPairs,
         KeyValueType keyValueType) {
 
-    /** The types of each half of a {@link ParameterType#POSITIONAL_PAIRS} entry. */
+    /**
+     * The types of each half of a {@link ParameterType#POSITIONAL_PAIRS} entry.
+     *
+     * @param key   the type of the first token, e.g. a symbol.
+     * @param value the type of the second, e.g. a spread.
+     */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record KeyValueType(ValueType key, ValueType value) {}
 
-    /** True if this parameter can be left unset at launch time. */
+    /**
+     * True if this parameter can be left unset at launch time.
+     *
+     * @return true unless it is required and has no default to fall back to.
+     */
     public boolean optional() {
         return !required || defaultValue != null;
     }
@@ -60,6 +69,10 @@ public record ParameterSpec(
     /**
      * The value to use when the manager or participant supplied none, or null
      * if there is nothing to fall back to.
+     *
+     * @param supplied what was supplied, possibly null or blank.
+     * @return {@code supplied} if it has content, otherwise the declared
+     *         default, otherwise null.
      */
     public String effective(String supplied) {
         return supplied != null && !supplied.isBlank() ? supplied : defaultValue;

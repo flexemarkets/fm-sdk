@@ -40,21 +40,42 @@ public enum ParameterType {
      * value is whole: three symbols and two prices is a typo, not a spread
      * list, and it should be caught before it becomes a robot that will not
      * start.
+     *
+     * @return the number of bare arguments per entry; 1 for the types that do
+     *         not repeat.
      */
     public int groupSize() {
         return groupSize;
     }
 
-    /** True if this type repeats, so its tokens must be emitted last. */
+    /**
+     * True if this type repeats, so its tokens must be emitted last.
+     *
+     * @return whether one declaration can contribute many arguments.
+     */
     public boolean repeating() {
         return groupSize > 1;
     }
 
+    /**
+     * How this type is spelt in a manifest.
+     *
+     * @return the JSON spelling, e.g. {@code positional-pairs}.
+     */
     @JsonValue
     public String json() {
         return json;
     }
 
+    /**
+     * The type a manifest's spelling names.
+     *
+     * @param value the JSON spelling.
+     * @return the matching type.
+     * @throws IllegalArgumentException if no type is spelt that way. Refused
+     *         rather than defaulted: a misspelt type would otherwise become an
+     *         option, and its value would reach the robot in the wrong place.
+     */
     @JsonCreator
     public static ParameterType of(String value) {
         for (ParameterType type : values()) {

@@ -21,6 +21,13 @@ public final class CliBuilder {
 
     /** Thrown when supplied values do not satisfy the manifest. */
     public static class InvalidLaunchException extends RuntimeException {
+
+        /**
+         * Refuse a launch, saying why.
+         *
+         * @param message what was wrong, named specifically enough to fix:
+         *                which parameter, and what was expected of it.
+         */
         public InvalidLaunchException(String message) {
             super(message);
         }
@@ -30,9 +37,15 @@ public final class CliBuilder {
      * Merge the three sources into one map, refusing any attempt to supply a
      * value the caller does not own.
      *
+     * @param manifest the robot's declaration of what it takes
      * @param manager  values the manager configured for this marketplace
      * @param user     values the participant supplied at launch
      * @param platform values the server injects
+     * @return every parameter with a value: the declared defaults, overlaid by
+     *         each owner's own.
+     * @throws InvalidLaunchException if a value is supplied by someone who does
+     *         not own it, is not a parameter of this robot, does not satisfy
+     *         its declared type, or is required and missing.
      */
     public static Map<String, String> merge(
             Manifest manifest,
@@ -95,6 +108,13 @@ public final class CliBuilder {
      * <p>Options first, then positionals in declaration order, then repeating
      * pairs — which must come last, since a trailing {@code (SYMBOL SPREAD)...}
      * would otherwise swallow the arguments that follow it.
+     *
+     * @param manifest the robot's declaration of what it takes
+     * @param values   already merged and checked, as {@link #merge} returns
+     * @return the argument vector, in the order above. Parameters with no value
+     *         contribute nothing rather than an empty argument.
+     * @throws InvalidLaunchException if a repeating parameter's tokens do not
+     *         divide into whole groups.
      */
     public static List<String> arguments(Manifest manifest, Map<String, String> values) {
         List<String> options = new ArrayList<>();
@@ -138,7 +158,16 @@ public final class CliBuilder {
         return arguments;
     }
 
-    /** Merge and build in one step. */
+    /**
+     * Merge and build in one step. This is what a host calls.
+     *
+     * @param manifest the robot's declaration of what it takes
+     * @param manager  values the manager configured for this marketplace
+     * @param user     values the participant supplied at launch
+     * @param platform values the server injects
+     * @return the argument vector to start the robot with.
+     * @throws InvalidLaunchException for anything either step refuses.
+     */
     public static List<String> arguments(
             Manifest manifest,
             Map<String, String> manager,

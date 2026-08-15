@@ -103,4 +103,37 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!--
+            Javadoc warnings fail this module, and only this module.
+
+            This artifact is a contract between fm-server, fm-robots-server and
+            every robot: its Javadoc is the specification an implementor reads,
+            so an undocumented parameter here is a gap in the contract rather
+            than a tidiness matter. Small enough to hold to that, too - eight
+            files.
+
+            Inside the release profile because that is where the parent gives
+            the plugin its version and binds it. Declaring it in <build> instead
+            leaves an unversioned plugin in every ordinary `mvn install`, which
+            fails to resolve.
+
+            Not set on the parent: fm-sdk has ~100 of these and does not pass.
+        -->
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <configuration>
+                            <failOnWarnings>true</failOnWarnings>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>
