@@ -1003,6 +1003,35 @@ class Flexemarkets:
         allotments = [_parse_allotment(a) for a in resp.json()]
         return _allotments_to_holdings(allotments)
 
+    def allotments(self, marketplace_id: int, allocation_id: int) -> list[Allotment]:
+        """The opening positions of one allocation.
+
+        Not on the API root: allotments are a V1 route, addressed from the
+        server rather than through a HAL link.
+        """
+        url = (
+            f"{_server(self.endpoint_url)}/v1/marketplaces/{marketplace_id}"
+            f"/allotments?allocation={allocation_id}"
+        )
+        return [_parse_allotment(a) for a in self._get(url).json()]
+
+    def allocate(self, marketplace_id: int, holdings: list[Holding]) -> list[Holding]:
+        """Stage the opening positions for the next session.
+
+        Staged, not applied: an allocation lands when a *closed* session is
+        opened, and pausing and re-opening does not consume it. Calling this
+        against a live session appears to succeed and changes nobody's
+        position.
+
+        Takes holdings because that is the shape a caller reads positions in
+        and computes with; the allotment encoding the endpoint wants is applied
+        here.
+        """
+        url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "allocations")
+        body = [_holding_to_allotment(marketplace_id, h) for h in holdings]
+        resp = self._post(url, body)
+        return _allotments_to_holdings([_parse_allotment(a) for a in resp.json()])
+
     # -- connections -------------------------------------------------------
 
     def connections(
@@ -1135,6 +1164,36 @@ class Flexemarkets:
 # ---------------------------------------------------------------------------
 # Allotment → Holding conversion
 # ---------------------------------------------------------------------------
+
+def _holding_to_allotment(marketplace_id: int, holding: Holding) -> dict[str, Any]:
+    """Encode a holding as the allotment the /allocations endpoint reads.
+
+    The positions go out as ``grants``. That is the server's own field name,
+    and it is the one thing here that fails silently: send ``securities`` and
+    the server finds no grants, creates the allocation with the cash and no
+    positions, and answers 200 -- an experiment whose participants hold
+    nothing. ``_parse_allotment`` accepts either spelling coming back.
+    """
+    return {
+        "marketplaceId": marketplace_id,
+        "ownerId": holding.owner_id,
+        "name": holding.name,
+        "assets": {
+            "name": holding.name,
+            "cash": holding.cash,
+            "grants": [
+                {
+                    "marketId": s.market_id,
+                    "units": s.units,
+                    "availableUnits": s.available_units,
+                    "canBuy": s.can_buy,
+                    "canSell": s.can_sell,
+                }
+                for s in holding.securities
+            ],
+        },
+    }
+
 
 def _allotments_to_holdings(allotments: list[Allotment]) -> list[Holding]:
     holdings: list[Holding] = []
