@@ -84,8 +84,10 @@ check-typescript:
 ticker-typescript:
 	cd sdks/typescript && npx tsx src/ticker.ts $(ARGS)
 
+# OTP=<code> is passed through to npm for accounts with two-factor auth on
+# writes. Without it npm prompts, and a prompt inside make is a hang.
 publish-typescript: check-publish-typescript
-	cd sdks/typescript && npm publish --access public
+	cd sdks/typescript && npm publish --access public $(if $(OTP),--otp=$(OTP),)
 
 # ---------------------------------------------------------------------------
 # Java SDK
@@ -134,7 +136,13 @@ mcp-server:
 # so a run that succeeds on PyPI and fails on Central burns the version on one
 # and leaves it unusable on the other. check-publish verifies every credential
 # and every registry's view of this version before the first byte is sent.
-publish: check-publish publish-python publish-typescript publish-java
+#
+# npm goes FIRST, and the order is load-bearing. It is the only registry that
+# can stop and ask a human something -- a 2FA one-time password -- and when it
+# ran second, 0.0.9 was already live on PyPI by the time it refused. PyPI is
+# append-only, so that version was burned there and unusable everywhere else.
+# Put the registry that can demand interaction where a refusal costs nothing.
+publish: check-publish publish-typescript publish-python publish-java
 
 # Every publish target carries its own gate as well, because each is also run
 # on its own -- and when only the aggregate was gated, `make publish-python`

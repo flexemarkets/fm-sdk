@@ -20,6 +20,16 @@
 # `all` additionally serves the aggregate `publish` target, which has to know
 # every registry will accept before the first byte is sent to any of them.
 #
+# The checks ask whether publishing can proceed UNATTENDED, not merely whether
+# a credential exists. 0.0.9 taught that distinction: `npm whoami` succeeded,
+# the gate passed, and `npm publish` then stopped for a two-factor one-time
+# password that make could not answer -- by which point PyPI had already
+# uploaded, and PyPI is append-only. A credential that will pause for a human
+# is not a credential this can publish with.
+#
+# `make publish` now runs npm first for the same reason: it is the only
+# registry that can demand interaction, so a refusal there costs nothing.
+#
 # Usage: scripts/check-publish.sh [all|npm|pypi|java]
 # Exit:  0 when the named registry could publish the current version, 1 otherwise.
 
@@ -57,12 +67,50 @@ wants() { [[ "$TARGET" == "all" || "$TARGET" == "$1" ]]; }
 # ---------------------------------------------------------------------------
 
 check_npm_credentials() {
-    if npm_user=$(npm whoami 2>/dev/null); then
-        pass "npm" "authenticated as $npm_user"
-    else
+    if ! npm_user=$(npm whoami 2>/dev/null); then
         fail "npm" "not logged in — run: npm login"
         hints+=("npm: a browser session on npmjs.com is not a publishing credential; npm login writes the token this needs.")
+        return
     fi
+
+    # Being logged in is not the same as being able to publish, and the gap
+    # between them is what half-published 0.0.9. `npm whoami` succeeds under
+    # two-factor auth; `npm publish` then stops and demands a one-time
+    # password, which a script cannot answer. PyPI had already uploaded by
+    # then, and PyPI is append-only.
+    #
+    # An automation token is exempt -- it publishes without an OTP by design --
+    # but nothing in the CLI distinguishes one from a login token, so that case
+    # is declared rather than detected. See FM_NPM_AUTOMATION_TOKEN below.
+    local tfa_mode
+    tfa_mode=$(npm profile get --json 2>/dev/null \
+                 | tr -d ' \n' | grep -o '"mode":"[^"]*"' | cut -d'"' -f4)
+
+    if [[ -n "${FM_NPM_AUTOMATION_TOKEN:-}" ]]; then
+        pass "npm" "authenticated as $npm_user (automation token declared)"
+        return
+    fi
+
+    case "$tfa_mode" in
+        auth-and-writes)
+            if [[ -n "${OTP:-}" ]]; then
+                pass "npm" "authenticated as $npm_user (2FA on writes, OTP supplied)"
+            else
+                fail "npm" "2FA required for publishing, no OTP supplied"
+                hints+=("npm: this account has two-factor auth set to auth-and-writes, so npm publish will stop and ask for a code that make cannot answer. Re-run as: make publish OTP=<code from your authenticator>. If the credential is an automation token, which is exempt, set FM_NPM_AUTOMATION_TOKEN=1 to say so.")
+            fi
+            ;;
+        auth-only|disabled)
+            pass "npm" "authenticated as $npm_user (2FA: $tfa_mode, no OTP needed)"
+            ;;
+        *)
+            # Same rule as everywhere else here: a check that cannot reach its
+            # evidence refuses rather than assumes. Publishing is append-only,
+            # so guessing costs a version number.
+            fail "npm" "could not read the account's 2FA setting"
+            hints+=("npm: 'npm profile get' did not report a tfa mode, so whether publishing needs an OTP is unknown. Check 'npm profile get' by hand, or set FM_NPM_AUTOMATION_TOKEN=1 if this is an automation token.")
+            ;;
+    esac
 }
 
 check_pypi_credentials() {
