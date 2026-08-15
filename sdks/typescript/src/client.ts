@@ -6,11 +6,13 @@
 
 import { readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type {
   Account,
+  Allotment,
   ApiRoot,
+  Assets,
   ClientConnection,
   Holding,
   Market,
@@ -165,6 +167,78 @@ export function parseOrder(data: JsonObject): Order {
     createdDate: (data.createdDate as string) ?? null,
     lastModifiedDate: (data.lastModifiedDate as string) ?? null,
   };
+}
+
+function parseAllotment(data: JsonObject): Allotment {
+  // The server spells the nested capital "capital" on some responses and
+  // "assets" on others, and the positions inside it "grants" or "securities".
+  const assetsRaw = (data.assets as JsonObject) ?? (data.capital as JsonObject) ?? null;
+  let assets: Assets | null = null;
+  if (assetsRaw) {
+    const securitiesRaw =
+      (assetsRaw.grants as JsonObject[]) ?? (assetsRaw.securities as JsonObject[]) ?? [];
+    assets = {
+      id: (assetsRaw.id as number) ?? null,
+      name: (assetsRaw.name as string) ?? null,
+      cash: (assetsRaw.cash as number) ?? 0,
+      securities: securitiesRaw.map(parseSecurity),
+    };
+  }
+  return {
+    id: (data.id as number) ?? null,
+    allocationId: (data.allocationId as number) ?? null,
+    marketplaceId: (data.marketplaceId as number) ?? null,
+    ownerId: (data.ownerId as number) ?? null,
+    name: (data.name as string) ?? null,
+    assets,
+  };
+}
+
+/**
+ * Encode a holding as the allotment `/allocations` reads.
+ *
+ * The positions go out as `grants`. That is the server's own field name, and
+ * it is the one thing here that fails silently: send `securities` and the
+ * server finds no grants, creates the allocation with the cash and no
+ * positions, and answers 200 — an experiment whose participants hold nothing.
+ */
+function holdingToAllotment(marketplaceId: number, holding: Holding): JsonObject {
+  return {
+    marketplaceId,
+    ownerId: holding.ownerId,
+    name: holding.name,
+    assets: {
+      name: holding.name,
+      cash: holding.cash,
+      grants: holding.securities.map((s) => ({
+        marketId: s.marketId,
+        units: s.units,
+        availableUnits: s.availableUnits,
+        canBuy: s.canBuy,
+        canSell: s.canSell,
+      })),
+    },
+  } as unknown as JsonObject;
+}
+
+/**
+ * An allotment predates the session it will be opened under, so sessionId is 0;
+ * nothing has been committed against it, so availableCash equals cash.
+ */
+function allotmentsToHoldings(allotments: Allotment[]): Holding[] {
+  return allotments.map((a) => {
+    const cash = a.assets?.cash ?? 0;
+    return {
+      marketplaceId: a.marketplaceId ?? 0,
+      sessionId: 0,
+      allocationId: a.allocationId ?? 0,
+      ownerId: a.ownerId ?? 0,
+      name: a.name,
+      cash,
+      availableCash: cash,
+      securities: a.assets?.securities ?? [],
+    };
+  });
 }
 
 export function parseHolding(data: JsonObject): Holding {
@@ -495,6 +569,42 @@ export class Flexemarkets {
     return { data: JSON.parse(body), asOfSeq: Number.isFinite(asOfSeq) ? asOfSeq : NO_SEQ };
   }
 
+  /**
+   * PATCH with no body — the shape every session transition takes: the verb and
+   * the path carry the whole request.
+   */
+  private async _patch(url: string): Promise<JsonObject> {
+    const resp = await fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
+      method: "PATCH",
+      headers: {
+        ...this._authHeaders(),
+        Accept: "application/json, application/hal+json",
+        "User-Agent": FM_NETWORK_CLIENT,
+      },
+    });
+    const body = await resp.text();
+    checkResponse(resp, body);
+    return JSON.parse(body);
+  }
+
+  /**
+   * GET returning the body verbatim, for endpoints that answer with something
+   * other than JSON — the holdings download is a CSV, and JSON.parse dies on
+   * the header row.
+   */
+  private async _getText(url: string): Promise<string> {
+    const resp = await fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
+      headers: {
+        ...this._authHeaders(),
+        Accept: "text/csv, */*",
+        "User-Agent": FM_NETWORK_CLIENT,
+      },
+    });
+    const body = await resp.text();
+    checkResponse(resp, body);
+    return body;
+  }
+
   private async _post(url: string, json: unknown): Promise<JsonObject> {
     const resp = await fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
       method: "POST",
@@ -753,6 +863,89 @@ export class Flexemarkets {
     );
     const data = await this._get(url);
     return (data as unknown as JsonObject[]).map(parseConnection);
+  }
+
+  // -- management ------------------------------------------------------------
+  //
+  // Running an experiment, as opposed to trading in one: set the opening
+  // positions, open the session, close it, collect the result. Authorization
+  // stays the server's business — these need a manager or admin, and it
+  // answers 401/403 when they are not.
+
+  /** Opens the marketplace's session, returning it in its new state. */
+  async openSession(marketplaceId: number): Promise<Session> {
+    return parseSession(
+      await this._patch(uriIdSegment(this._apiRoot, "marketplaces", marketplaceId, "open")),
+    );
+  }
+
+  async pauseSession(marketplaceId: number): Promise<Session> {
+    return parseSession(
+      await this._patch(uriIdSegment(this._apiRoot, "marketplaces", marketplaceId, "pause")),
+    );
+  }
+
+  async closeSession(marketplaceId: number): Promise<Session> {
+    return parseSession(
+      await this._patch(uriIdSegment(this._apiRoot, "marketplaces", marketplaceId, "close")),
+    );
+  }
+
+  /** Everyone in the caller's account. `usersJson`, not the HAL `users` form. */
+  async users(): Promise<Person[]> {
+    const data = await this._get(uri(this._apiRoot, "usersJson"));
+    return (data as unknown as JsonObject[]).map((u) => parsePerson(u) as Person);
+  }
+
+  /** The opening positions of one allocation. A V1 route, not on the API root. */
+  async allotments(marketplaceId: number, allocationId: number): Promise<Allotment[]> {
+    const url =
+      `${server(this._endpoint)}/v1/marketplaces/${marketplaceId}` +
+      `/allotments?allocation=${allocationId}`;
+    const data = await this._get(url);
+    return (data as unknown as JsonObject[]).map(parseAllotment);
+  }
+
+  /**
+   * Stage the opening positions for the next session.
+   *
+   * Staged, not applied: an allocation lands when a *closed* session is opened,
+   * and pausing and re-opening does not consume it. Calling this against a live
+   * session appears to succeed and changes nobody's position.
+   *
+   * Takes Holdings because that is the shape a caller reads positions in and
+   * computes with; the allotment encoding is applied here.
+   */
+  async allocate(marketplaceId: number, holdings: Holding[]): Promise<Holding[]> {
+    const url = uriIdSegment(this._apiRoot, "marketplaces", marketplaceId, "allocations");
+    const body = holdings.map((h) => holdingToAllotment(marketplaceId, h));
+    const data = await this._post(url, body);
+    return allotmentsToHoldings((data as unknown as JsonObject[]).map(parseAllotment));
+  }
+
+  /** The holdings CSV, verbatim, as the server renders it. */
+  async downloadHoldings(marketplaceId: number): Promise<string> {
+    return this._getText(
+      uriIdSegment(this._apiRoot, "marketplaces", marketplaceId, "holdings/downloads"),
+    );
+  }
+
+  /**
+   * Load opening positions from a holdings CSV. Stages the next allocation on
+   * the same terms as {@link allocate}.
+   */
+  async uploadHoldings(marketplaceId: number, filename: string): Promise<Holding[]> {
+    const url = uriIdSegment(this._apiRoot, "marketplaces", marketplaceId, "holdings/uploads");
+    const form = new FormData();
+    form.append("file", new Blob([readFileSync(filename)]), basename(filename));
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { ...this._authHeaders(), "User-Agent": FM_NETWORK_CLIENT },
+      body: form,
+    });
+    const body = await resp.text();
+    checkResponse(resp, body);
+    return allotmentsToHoldings((JSON.parse(body) as JsonObject[]).map(parseAllotment));
   }
 
   // -- events / WebSocket ----------------------------------------------------

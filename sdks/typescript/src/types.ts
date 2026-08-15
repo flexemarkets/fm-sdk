@@ -38,6 +38,29 @@ export interface Security {
   canSell: boolean;
 }
 
+/** The capital half of an allotment: opening cash and opening positions. */
+export interface Assets {
+  id: number | null;
+  name: string | null;
+  cash: number;
+  securities: Security[];
+}
+
+/**
+ * A participant's opening position in an allocation.
+ *
+ * Distinct from a Holding: an allotment is what a session will START from,
+ * so it has no session of its own and nothing has been committed against it.
+ */
+export interface Allotment {
+  id: number | null;
+  allocationId: number | null;
+  marketplaceId: number | null;
+  ownerId: number | null;
+  name: string | null;
+  assets: Assets | null;
+}
+
 export interface Holding {
   marketplaceId: number;
   sessionId: number;
