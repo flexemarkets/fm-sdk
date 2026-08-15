@@ -71,6 +71,12 @@ class ManagementApiTest {
             });
         }
 
+        server.createContext("/api/marketplaces/1/holdings", exchange -> {
+            record(exchange);
+            respond(exchange, 200,
+                    "[{\"ownerId\":8,\"name\":\"alice\",\"cash\":10000,\"sessionId\":300}]");
+        });
+
         server.createContext("/api/usersJson", exchange -> {
             record(exchange);
             respond(exchange, 200, "[{\"id\":7,\"email\":\"dev@dev\"},{\"id\":8,\"email\":\"t1@dev\"}]");
@@ -285,6 +291,32 @@ class ManagementApiTest {
         }
 
         assertThat(requests).noneSatisfy(r -> assertThat(r).contains("POST /api/v1/marketplaces"));
+    }
+
+    /**
+     * A settlement reads a finished run's positions, which belong to its
+     * session rather than to now.
+     */
+    @Test
+    void holdingsCanBeReadForParticularSessions() throws Exception {
+        List<Types.Holding> holdings;
+        try (Flexemarkets fm = connect()) {
+            holdings = fm.holdings(1, List.of(300L, 301L));
+        }
+
+        assertThat(holdings).singleElement()
+                .satisfies(h -> assertThat(h.sessionId()).isEqualTo(300L));
+        assertThat(requests).contains("GET /api/marketplaces/1/holdings?sessions=300,301");
+    }
+
+    /** An empty filter means "now", not "no sessions" — and asks for no filter. */
+    @Test
+    void anEmptySessionFilterFallsBackToTheCurrentHoldings() throws Exception {
+        try (Flexemarkets fm = connect()) {
+            fm.holdings(1, List.of());
+        }
+
+        assertThat(requests).contains("GET /api/marketplaces/1/holdings");
     }
 
     /** A CSV, returned as-is. Parsing it as JSON would fail on the header row. */

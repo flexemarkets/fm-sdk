@@ -94,6 +94,18 @@ public interface Flexemarkets extends AutoCloseable {
 
     List<Holding> holdings(long marketplaceId);
 
+    /**
+     * Holdings as they stood in particular sessions, rather than now.
+     *
+     * <p>What a settlement report reads: a finished run's positions are a
+     * property of its session, and {@link #holdings(long)} only ever answers
+     * for the current one. Defaulted so implementations that only follow live
+     * state need not answer for history.
+     */
+    default List<Holding> holdings(long marketplaceId, List<Long> sessionIds) {
+        throw unsupported("holdings(marketplaceId, sessionIds)");
+    }
+
     /** The caller's own holding in {@code marketplaceId}. */
     Holding holding(long marketplaceId);
 

@@ -186,6 +186,17 @@ public class HttpFlexemarkets implements Flexemarkets {
         return get(uriIdSegment(apiRoot, "marketplaces", marketplaceId, "holdings"), HOLDINGS_TYPE);
     }
 
+    /** Comma-separated ids, matching the server's {@code ?sessions=} filter. */
+    @Override
+    public List<Holding> holdings(long marketplaceId, List<Long> sessionIds) {
+        if (sessionIds == null || sessionIds.isEmpty()) {
+            return holdings(marketplaceId);
+        }
+        var ids = sessionIds.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(","));
+        return get(uriIdSegmentParam(apiRoot, "marketplaces", marketplaceId, "holdings", "sessions=" + ids),
+                   HOLDINGS_TYPE);
+    }
+
     public Holding holding(long marketplaceId) {
         return get(uriIdSegment(apiRoot, "marketplaces", marketplaceId, "currentHolding"), new TypeReference<>() {});
     }
