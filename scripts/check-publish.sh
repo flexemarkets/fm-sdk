@@ -30,7 +30,12 @@
 # `make publish` now runs npm first for the same reason: it is the only
 # registry that can demand interaction, so a refusal there costs nothing.
 #
-# Usage: scripts/check-publish.sh [all|npm|pypi|java]
+# fm-sdk and fm-spi are on separate version lines but ship through one reactor
+# deploy, so whenever one moves without the other the unchanged one is already
+# published and blocks the changed one. `java` covers the pair; `spi` covers
+# fm-spi alone, for the release where only the contract changed.
+#
+# Usage: scripts/check-publish.sh [all|npm|pypi|java|spi]
 # Exit:  0 when the named registry could publish the current version, 1 otherwise.
 
 set -uo pipefail
@@ -38,13 +43,13 @@ set -uo pipefail
 TARGET="${1:-all}"
 
 case "$TARGET" in
-    all|npm|pypi|java) ;;
+    all|npm|pypi|java|spi) ;;
     -h|--help)
         sed -n '3,25p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'
         exit 0
         ;;
     *)
-        echo "check-publish: unknown registry '$TARGET' (want: all, npm, pypi, java)" >&2
+        echo "check-publish: unknown registry '$TARGET' (want: all, npm, pypi, java, spi)" >&2
         exit 1
         ;;
 esac
@@ -185,6 +190,16 @@ excluded_artifacts() {
 
 # fm-spi is checked against its own version, not the SDK's: it is on a separate
 # line and the two are not required to agree.
+check_spi_version() {
+    if curl -fsS --max-time 20 \
+         "https://repo1.maven.org/maven2/com/flexemarkets/fm-spi/maven-metadata.xml" 2>/dev/null \
+         | grep -q "<version>$SPI_VERSION</version>"; then
+        fail "central fm-spi $SPI_VERSION" "already published — Central is immutable"
+    else
+        pass "central fm-spi $SPI_VERSION" "not yet published"
+    fi
+}
+
 check_java_version() {
     local artifact name want excluded
     excluded="$(excluded_artifacts)"
@@ -213,6 +228,7 @@ case "$TARGET" in
     all)  echo "Publishing fm-sdk $VERSION to npm, PyPI and Maven Central (fm-spi $SPI_VERSION)" ;;
     npm)  echo "Publishing fm-sdk $VERSION to npm" ;;
     pypi) echo "Publishing fm-sdk $VERSION to PyPI" ;;
+    spi) echo "Publishing fm-spi $SPI_VERSION to Maven Central (fm-sdk $VERSION unchanged)" ;;
     java)
         if grep -qx "fm-spi" <<< "$(excluded_artifacts)"; then
             echo "Publishing fm-sdk $VERSION to Maven Central (fm-spi $SPI_VERSION excluded)"
@@ -227,12 +243,14 @@ echo "Credentials:"
 wants npm  && check_npm_credentials
 wants pypi && check_pypi_credentials
 wants java && check_java_credentials
+wants spi  && check_java_credentials
 
 echo ""
 echo "Version availability:"
 wants npm  && check_npm_version
 wants pypi && check_pypi_version
 wants java && check_java_version
+wants spi  && check_spi_version
 
 echo ""
 if (( problems )); then
@@ -256,5 +274,6 @@ fi
 
 case "$TARGET" in
     all) echo "All three registries are ready for $VERSION." ;;
+    spi) echo "central is ready for fm-spi $SPI_VERSION." ;;
     *)   echo "$TARGET is ready for $VERSION." ;;
 esac

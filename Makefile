@@ -12,7 +12,8 @@ VERSION := $(shell cat VERSION)
        ticker-python ticker-typescript ticker-java \
        mcp-server \
        publish publish-python publish-typescript publish-java \
-       check-publish check-publish-python check-publish-typescript check-publish-java
+       check-publish check-publish-python check-publish-typescript check-publish-java \
+       publish-spi check-publish-spi
 
 # ---------------------------------------------------------------------------
 # Aggregate targets
@@ -108,6 +109,15 @@ ticker-java:
 publish-java: check-publish-java
 	cd sdks/java && mvn deploy -P release
 
+# fm-spi alone, for a release where only the contract changed.
+#
+# -pl narrows the reactor to that one module, so central-publishing stages only
+# its artifacts. Without it the deploy carries fm-sdk too, and Central refuses
+# the whole bundle because that version is already there. The alternative was
+# excluding fm-sdk by hand for one release and remembering to put it back.
+publish-spi: check-publish-spi
+	cd sdks/java && mvn deploy -P release -pl fm-spi
+
 # ---------------------------------------------------------------------------
 # MCP server
 # ---------------------------------------------------------------------------
@@ -163,6 +173,9 @@ check-publish-typescript:
 
 check-publish-java:
 	@scripts/check-publish.sh java
+
+check-publish-spi:
+	@scripts/check-publish.sh spi
 
 # ---------------------------------------------------------------------------
 # Version management
