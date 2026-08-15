@@ -872,6 +872,31 @@ export class Flexemarkets {
   // stays the server's business — these need a manager or admin, and it
   // answers 401/403 when they are not.
 
+  /**
+   * Create a marketplace from its JSON definition, returning what was made.
+   *
+   * Takes JSON rather than arguments because that is how the definitions
+   * exist: a study keeps its marketplace as a document it can print, diff and
+   * hand to someone, and the CLI's dry-run prints exactly the document that
+   * would be posted. Assembling it from arguments here would mean the thing
+   * printed and the thing sent were built by different code.
+   *
+   * Parsed before it is sent, so a malformed definition fails here rather than
+   * as a 400 describing a document the caller never sees.
+   */
+  async createMarketplaceFromJson(definition: string): Promise<Marketplace> {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(definition);
+    } catch (e) {
+      throw new InvalidArgumentError(
+        `Marketplace definition is not valid JSON: ${(e as Error).message}`,
+      );
+    }
+    const url = `${server(this._endpoint)}/v1/marketplaces`;
+    return parseMarketplace(await this._post(url, parsed));
+  }
+
   /** Opens the marketplace's session, returning it in its new state. */
   async openSession(marketplaceId: number): Promise<Session> {
     return parseSession(

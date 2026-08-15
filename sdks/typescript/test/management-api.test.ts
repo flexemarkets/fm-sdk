@@ -71,6 +71,8 @@ before(async () => {
             usersJson: { href: `${api()}/usersJson` },
           },
         });
+      } else if (url === "/api/v1/marketplaces" && req.method === "POST") {
+        send({ id: 77, name: "simple-dividend", markets: [] });
       } else if (url === "/api/usersJson") {
         send([{ id: 7, email: "dev@dev" }, { id: 8, email: "t1@dev" }]);
       } else if (url.startsWith("/api/marketplaces/1/holdings/downloads")) {
@@ -219,4 +221,40 @@ test("uploadHoldings posts the file as multipart", async () => {
   assert.ok(body.includes('name="file"'), "the part must be named 'file'");
   assert.ok(body.includes('filename="holdings.csv"'), "and carry the file's own name");
   assert.ok(body.includes("owner,cash"));
+});
+
+test("a marketplace is created from its JSON definition", async () => {
+  const fm = await connect();
+  let created;
+  try {
+    created = await fm.createMarketplaceFromJson(
+      '{"name":"simple-dividend","markets":[{"symbol":"STK"}]}');
+  } finally {
+    fm.close();
+  }
+
+  assert.equal(created.id, 77);
+  assert.ok(requests.includes("POST /api/v1/marketplaces"));
+  assert.ok(
+    (bodies.get("POST /api/v1/marketplaces") ?? "").includes('"STK"'),
+    "the definition is forwarded, not rebuilt",
+  );
+});
+
+/**
+ * Parsed before it is sent, so a bad definition fails here rather than as a
+ * 400 whose message is about a document the caller cannot see.
+ */
+test("malformed marketplace JSON fails before any request", async () => {
+  const fm = await connect();
+  try {
+    await assert.rejects(
+      () => fm.createMarketplaceFromJson("{not json"),
+      /not valid JSON/,
+    );
+  } finally {
+    fm.close();
+  }
+
+  assert.ok(!requests.includes("POST /api/v1/marketplaces"));
 });
