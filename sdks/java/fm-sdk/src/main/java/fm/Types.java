@@ -222,24 +222,28 @@ public class Types {
         @JsonAlias("capital") Assets assets) {
     }
 
+    /**
+     * The capital half of an allotment: opening cash and opening positions.
+     *
+     * <p>The positions cross the wire as {@code grants} in BOTH directions --
+     * that is the server's own {@code Assets.grants} -- while the component
+     * stays {@code securities} so it reads the same as
+     * {@link Holding#securities()} on this side.
+     *
+     * <p>Hence {@code @JsonProperty}, which binds both ways, and not
+     * {@code @JsonAlias} alone, which binds only on the way in. That was the
+     * original defect: nothing serialized this type, so being half-bound cost
+     * nothing until {@code allocate()} posted one -- at which point the request
+     * would carry "securities", the server would find no "grants", and the
+     * allocation would be created with the cash and no positions. Accepted,
+     * 200, and quietly wrong. The alias is kept so a response spelling it
+     * "securities" still parses.
+     */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Assets(
         Long id,
         String name,
         long cash,
-        /*
-         * The wire name is "grants" in BOTH directions -- it matches the
-         * server's own Assets.grants -- while the component stays "securities"
-         * to read the same as Holding.securities on this side.
-         *
-         * @JsonProperty, not @JsonAlias alone. An alias binds only on the way
-         * in, and these records are now serialized as well as parsed:
-         * allocate() POSTs them. Left as an alias, the request would carry
-         * "securities", the server would find no "grants", and the allocation
-         * would be created with cash and no positions -- accepted, 200, and
-         * quietly wrong. The alias is kept so a response spelling it
-         * "securities" still parses.
-         */
         @JsonProperty("grants") @JsonAlias("securities") List<Security> securities) {
     }
 
