@@ -68,6 +68,16 @@ def _components(body: str) -> list[str]:
 def java_types(path: Path) -> dict[str, tuple[list[str], set[str]]]:
     """Record name -> (all components, components excluded from the wire)."""
     source = path.read_text()
+
+    # Strip block comments before looking for components. A record's component
+    # list is a natural place to explain a field, and prose there was read as
+    # fields: a comment inside Assets reported "in", "alias" and "accepted" as
+    # Java-only fields, and one inside Security reported six more. Both times
+    # the checker was right that something was wrong with the declaration and
+    # wrong about what, which is the worst way for a check to fail. Line
+    # comments are left alone -- they cannot span into a component list without
+    # ending it.
+    source = re.sub(r"/\*.*?\*/", " ", source, flags=re.S)
     types: dict[str, tuple[list[str], set[str]]] = {}
 
     for match in re.finditer(r"public record (\w+)\(", source):
