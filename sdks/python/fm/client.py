@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import queue
 import re
@@ -766,6 +767,27 @@ class Flexemarkets:
         url = _uri(self._api_root, "marketplaces")
         resp = self._post(url, {"name": name, "description": description})
         return _parse_marketplace(resp.json())
+
+    def create_marketplace_from_json(self, definition: str) -> Marketplace:
+        """Create a marketplace from its JSON definition, returning what was made.
+
+        Takes JSON rather than arguments because that is how the definitions
+        exist: a study keeps its marketplace as a document it can print, diff
+        and hand to someone, and the CLI's dry-run prints exactly the document
+        that would be posted. Building it from arguments here would mean the
+        thing printed and the thing sent were assembled by different code.
+
+        The definition is parsed before it is sent, so a malformed one fails
+        here rather than as a 400 describing a document the caller never sees.
+        """
+        try:
+            parsed = json.loads(definition)
+        except ValueError as e:
+            raise InvalidArgumentError(
+                f"Marketplace definition is not valid JSON: {e}") from e
+
+        url = f"{_server(self.endpoint_url)}/v1/marketplaces"
+        return _parse_marketplace(self._post(url, parsed).json())
 
     def delete_marketplace(self, marketplace_id: int) -> None:
         url = _uri_id(self._api_root, "marketplaces", marketplace_id)

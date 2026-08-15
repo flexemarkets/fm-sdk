@@ -13,6 +13,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import pytest
 
 from fm.client import Flexemarkets
+from fm.exceptions import InvalidArgumentError
 from fm.types import Holding, Security
 
 TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl"
@@ -73,6 +74,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         self._record()
+        if self.path == "/api/v1/marketplaces":
+            self._send({"id": 77, "name": "simple-dividend", "markets": []})
+            return
         # Sign-in posts here too; answering it with an allotment list makes the
         # connection fail somewhere far from the cause.
         if self.path.startswith("/api/tokens"):
@@ -147,3 +151,21 @@ def test_allocate_returns_what_the_server_created(fm):
     assert back.available_cash == 10000
     assert back.session_id == 0
     assert back.securities[0].market_id == 10
+
+
+def test_a_marketplace_is_created_from_its_json_definition(fm):
+    created = fm.create_marketplace_from_json(
+        '{"name":"simple-dividend","markets":[{"symbol":"STK"}]}')
+
+    assert created.id == 77
+    assert ("POST", "/api/v1/marketplaces") in requests
+    assert '"STK"' in bodies["POST /api/v1/marketplaces"], "the definition is forwarded, not rebuilt"
+
+
+def test_malformed_marketplace_json_fails_before_any_request(fm):
+    """Parsed before it is sent, so a bad definition fails here rather than as
+    a 400 whose message is about a document the caller cannot see."""
+    with pytest.raises(InvalidArgumentError, match="not valid JSON"):
+        fm.create_marketplace_from_json("{not json")
+
+    assert not any(path == "/api/v1/marketplaces" for _, path in requests)
