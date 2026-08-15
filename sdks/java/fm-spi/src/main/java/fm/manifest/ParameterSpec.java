@@ -25,6 +25,9 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * @param label      human-readable name for the manager's form.
  * @param description help text for the same form.
  * @param required   whether a value must be present before a launch is allowed.
+ *                   Boxed, and normalised to false by the constructor: the
+ *                   robots emit {@code "required": null} for the parameters
+ *                   that are not, and a primitive here refuses that outright.
  * @param defaultValue value used when none is supplied. Bound from the JSON key
  *                   {@code default}, which is a Java keyword.
  * @param unit       display-only suffix, e.g. {@code ms}.
@@ -41,12 +44,29 @@ public record ParameterSpec(
         ValueType valueType,
         String label,
         String description,
-        boolean required,
+        Boolean required,
         @JsonProperty("default") String defaultValue,
         String unit,
         String source,
         Integer minPairs,
         KeyValueType keyValueType) {
+
+    /**
+     * Absent or null {@code required} means not required.
+     *
+     * <p>It was a primitive until fm-spi 0.0.9, and every shipped manifest
+     * failed to parse: the robots write {@code "required": null} rather than
+     * omitting the key, and Jackson refuses null for a primitive. Both hosts
+     * caught the exception per jar and carried on with an empty catalogue, so
+     * the symptom was not a parse error but four robots that could be listed
+     * and never launched.
+     *
+     * <p>Normalised here rather than at each reader, so {@link #required()}
+     * never returns null and callers can use it as a boolean.
+     */
+    public ParameterSpec {
+        required = null != required && required;
+    }
 
     /**
      * The types of each half of a {@link ParameterType#POSITIONAL_PAIRS} entry.

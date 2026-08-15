@@ -7,7 +7,7 @@
     <parent>
         <groupId>com.flexemarkets</groupId>
         <artifactId>fm-sdk-parent</artifactId>
-        <version>0.0.10</version><!-- fm-version -->
+        <version>0.0.11</version><!-- fm-version -->
     </parent>
 
     <artifactId>fm-spi</artifactId>
@@ -22,15 +22,19 @@
         release containing no change — which consumers then saw as a dependency
         update to review, and Dependabot filed a pull request for.
 
-        0.0.9 because the shared line already reached it; the contract itself
-        has not changed since 0.0.5. Bump the patch for an additive change, and
-        the major only alongside ServiceProvider.SPI_VERSION, since hosts reject
-        a provider whose major differs from their own.
+        0.0.9 carries a real fix: ParameterSpec.required was a primitive, and
+        the shipped manifests write `"required": null`, so every one of them
+        failed to parse and both hosts ran with an empty catalogue. 0.0.8 is
+        published and immutable, hence the bump rather than a correction.
+
+        Bump the patch for an additive change, and the major only alongside
+        ServiceProvider.SPI_VERSION, since hosts reject a provider whose major
+        differs from their own.
 
         Set with `make set-spi-version V=x.y.z`. `make set-version` moves the
         parent reference below but leaves this alone.
     -->
-    <version>0.0.8</version><!-- spi-version -->
+    <version>0.0.9</version><!-- spi-version -->
 
     <packaging>jar</packaging>
 
