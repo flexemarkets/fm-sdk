@@ -88,6 +88,14 @@ class ManagementApiTest {
                     "[{\"id\":9,\"ownerId\":8,\"marketplaceId\":1,\"sessionId\":300}]");
         });
 
+        server.createContext("/api/symbolTradesJson", exchange -> {
+            record(exchange);
+            // The symbol-keyed route answers with the trade id in "original"
+            // and no symbol on the order.
+            respond(exchange, 200,
+                    "[{\"id\":0,\"original\":4242,\"units\":5,\"price\":950}]");
+        });
+
         server.createContext("/api/usersJson", exchange -> {
             record(exchange);
             respond(exchange, 200, "[{\"id\":7,\"email\":\"dev@dev\"},{\"id\":8,\"email\":\"t1@dev\"}]");
@@ -122,6 +130,7 @@ class ManagementApiTest {
             record(exchange);
             respond(exchange, 200, """
                 {"_links":{"marketplaces":{"href":"%1$s/marketplaces"},
+                           "symbolTradesJson":{"href":"%1$s/symbolTradesJson"},
                            "usersJson":{"href":"%1$s/usersJson"}}}
                 """.formatted(api()));
         });
@@ -373,6 +382,25 @@ class ManagementApiTest {
 
         assertThat(connections).singleElement()
                 .satisfies(c -> assertThat(c.sessionId()).isEqualTo(300L));
+    }
+
+    /**
+     * Trades come back with the trade id in {@code original} and no symbol,
+     * because the query already fixed it. Both are filled in, so the result is
+     * a trade list rather than half-populated orders.
+     */
+    @Test
+    void tradesCarryTheirIdAndSymbol() throws Exception {
+        List<Types.Order> trades;
+        try (Flexemarkets fm = connect()) {
+            trades = fm.trades(1, "STK");
+        }
+
+        assertThat(trades).singleElement().satisfies(t -> {
+            assertThat(t.id()).as("the trade id, taken from original").isEqualTo(4242L);
+            assertThat(t.symbol()).isEqualTo("STK");
+        });
+        assertThat(requests).anySatisfy(r -> assertThat(r).contains("symbol=STK"));
     }
 
     /** An empty filter means "now", and asks for no filter at all. */

@@ -68,6 +68,7 @@ before(async () => {
         send({
           _links: {
             marketplaces: { href: `${api()}/marketplaces` },
+            symbolTradesJson: { href: `${api()}/symbolTradesJson` },
             usersJson: { href: `${api()}/usersJson` },
           },
         });
@@ -77,6 +78,10 @@ before(async () => {
         send([{ id: 300, state: "CLOSED" }]);
       } else if (url.startsWith("/api/marketplaces/1/connections")) {
         send([{ id: 9, ownerId: 8, marketplaceId: 1, sessionId: 300 }]);
+      } else if (url.startsWith("/api/symbolTradesJson")) {
+        // The symbol-keyed route answers with the trade id in "original" and
+        // no symbol on the order.
+        send([{ id: 0, original: 4242, units: 5, price: 950 }]);
       } else if (url === "/api/usersJson") {
         send([{ id: 7, email: "dev@dev" }, { id: 8, email: "t1@dev" }]);
       } else if (url.startsWith("/api/marketplaces/1/holdings/downloads")) {
@@ -337,6 +342,25 @@ test("a connection carries its session", async () => {
   } finally {
     fm.close();
   }
+});
+
+/**
+ * Trades come back with the trade id in `original` and no symbol, because the
+ * query already fixed it. Both are filled in, so the result is a trade list
+ * rather than half-populated orders.
+ */
+test("trades carry their id and symbol", async () => {
+  const fm = await connect();
+  try {
+    const trades = await fm.trades(1, "STK");
+    assert.equal(trades.length, 1);
+    assert.equal(trades[0]!.id, 4242, "the trade id, taken from original");
+    assert.equal(trades[0]!.symbol, "STK");
+  } finally {
+    fm.close();
+  }
+
+  assert.ok(requests.some((r) => r.includes("symbol=STK")));
 });
 
 /** An empty filter means "now", and asks for no filter at all. */

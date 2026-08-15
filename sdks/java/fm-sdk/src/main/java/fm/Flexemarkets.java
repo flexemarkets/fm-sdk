@@ -234,6 +234,18 @@ public interface Flexemarkets extends AutoCloseable {
     }
 
     /**
+     * Trades in one market, most recent first.
+     *
+     * <p>Answered by a symbol-keyed route, so the orders come back without the
+     * symbol on them and with the trade id in {@code original}; both are filled
+     * in before returning, which is what makes the result usable as a trade
+     * list rather than a set of half-populated orders.
+     */
+    default List<Order> trades(long marketplaceId, String symbol) {
+        throw unsupported("trades");
+    }
+
+    /**
      * Load opening positions from a holdings CSV, returning what was created.
      *
      * <p>Stages the next allocation on the same terms as {@link #allocate}: it

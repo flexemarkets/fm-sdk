@@ -988,6 +988,11 @@ class Flexemarkets:
         data = self._get(url).json()
         orders = [_parse_order(o) for o in data]
         for o in orders:
+            # The symbol-keyed route answers with the trade id in "original"
+            # and no symbol, because the query already fixed it. Filling both
+            # in is what makes the result a trade list rather than a set of
+            # half-populated orders.
+            o.id = o.original
             o.symbol = symbol
         return orders
 

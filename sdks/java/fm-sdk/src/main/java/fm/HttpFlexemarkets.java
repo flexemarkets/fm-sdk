@@ -243,6 +243,26 @@ public class HttpFlexemarkets implements Flexemarkets {
                         "holdings/downloads", "sessions=" + _ids(sessionIds)));
     }
 
+    /**
+     * The symbol-keyed trades route answers with the trade id in
+     * {@code original} and no symbol on the orders, because the query already
+     * fixed the symbol. Both are filled in here so a caller gets trades rather
+     * than half-populated orders -- fm-lib-net does the same, and a study that
+     * groups by symbol or keys by id depends on it.
+     */
+    @Override
+    public List<Order> trades(long marketplaceId, String symbol) {
+        var url = uriParam(apiRoot, "symbolTradesJson", "marketplaceId=" + marketplaceId)
+                + "&symbol=" + symbol;
+        return get(url, ORDERS_TYPE).stream()
+                .map(o -> new Order(o.createdDate(), o.lastModifiedDate(), o.original(),
+                                    o.original(), o.supplier(), o.consumer(), o.type(), o.side(),
+                                    o.units(), o.price(), o.mine(), o.ownerId(), o.marketplaceId(),
+                                    o.sessionId(), symbol, o.marketId(), o.ownerTarget(),
+                                    o.clientDescription()))
+                .toList();
+    }
+
     private static String _ids(List<Long> ids) {
         return ids.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(","));
     }

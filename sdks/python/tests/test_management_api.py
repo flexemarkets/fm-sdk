@@ -67,6 +67,7 @@ class Handler(BaseHTTPRequestHandler):
             base = f"http://127.0.0.1:{self.server.server_address[1]}/api"
             self._send({"_links": {
                 "marketplaces": {"href": f"{base}/marketplaces"},
+                "symbolTradesJson": {"href": f"{base}/symbolTradesJson"},
                 "usersJson": {"href": f"{base}/usersJson"},
             }})
         elif self.path.startswith("/api/marketplaces/1/holdings/downloads"):
@@ -75,6 +76,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send([{"id": 300, "state": "CLOSED"}])
         elif self.path.startswith("/api/marketplaces/1/connections"):
             self._send([{"id": 9, "ownerId": 8, "marketplaceId": 1, "sessionId": 300}])
+        elif self.path.startswith("/api/symbolTradesJson"):
+            # The symbol-keyed route answers with the trade id in "original"
+            # and no symbol on the order.
+            self._send([{"id": 0, "original": 4242, "units": 5, "price": 950}])
         else:
             self._send([])
 
@@ -229,6 +234,19 @@ def test_a_connection_carries_its_session(fm):
 
     assert len(connections) == 1
     assert connections[0].session_id == 300
+
+
+def test_trades_carry_their_id_and_symbol(fm):
+    """Trades come back with the trade id in ``original`` and no symbol, because
+    the query already fixed it. Both are filled in, so the result is a trade
+    list rather than half-populated orders.
+    """
+    trades = fm.trades(1, "STK")
+
+    assert len(trades) == 1
+    assert trades[0].id == 4242, "the trade id, taken from original"
+    assert trades[0].symbol == "STK"
+    assert any("symbol=STK" in p for _, p in requests)
 
 
 def test_empty_filters_fall_back_to_the_unfiltered_routes(fm):

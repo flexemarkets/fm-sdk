@@ -812,6 +812,10 @@ export class Flexemarkets {
     const data = await this._get(url);
     const orders = (data as unknown as JsonObject[]).map(parseOrder);
     for (const o of orders) {
+      // The symbol-keyed route answers with the trade id in `original` and no
+      // symbol, because the query already fixed it. Filling both in is what
+      // makes the result a trade list rather than half-populated orders.
+      o.id = o.original;
       o.symbol = symbol;
     }
     return orders;
