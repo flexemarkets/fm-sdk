@@ -1,0 +1,149 @@
+package fm.manifest;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Turns a manifest plus the values from all three owners into the argument list
+ * a robot is actually launched with.
+ *
+ * <p>This is where ownership stops being documentation. The manager's values and
+ * the participant's values arrive from different requests, at different times,
+ * with different authority, and this is the one place they are combined — so
+ * "the participant cannot change the risk penalty" is enforced by the merge
+ * rather than by the form that happens to be rendered.
+ */
+public final class CliBuilder {
+
+    private CliBuilder() {}
+
+    /** Thrown when supplied values do not satisfy the manifest. */
+    public static class InvalidLaunchException extends RuntimeException {
+        public InvalidLaunchException(String message) {
+            super(message);
+        }
+    }
+
+    /**
+     * Merge the three sources into one map, refusing any attempt to supply a
+     * value the caller does not own.
+     *
+     * @param manager  values the manager configured for this marketplace
+     * @param user     values the participant supplied at launch
+     * @param platform values the server injects
+     */
+    public static Map<String, String> merge(
+            Manifest manifest,
+            Map<String, String> manager,
+            Map<String, String> user,
+            Map<String, String> platform) {
+
+        Map<String, String> merged = new LinkedHashMap<>(manifest.defaults());
+
+        accept(manifest, merged, manager, Ownership.MANAGER);
+        accept(manifest, merged, user, Ownership.USER);
+        accept(manifest, merged, platform, Ownership.PLATFORM);
+
+        for (ParameterSpec spec : manifest.all()) {
+            if (spec.required() && !merged.containsKey(spec.name())) {
+                throw new InvalidLaunchException(
+                        "'" + spec.name() + "' is required and was not supplied");
+            }
+        }
+
+        return merged;
+    }
+
+    private static void accept(
+            Manifest manifest,
+            Map<String, String> merged,
+            Map<String, String> supplied,
+            Ownership by) {
+
+        if (supplied == null) {
+            return;
+        }
+        for (Map.Entry<String, String> entry : supplied.entrySet()) {
+            String name = entry.getKey();
+            Ownership owner = manifest.ownerOf(name).orElseThrow(() ->
+                    new InvalidLaunchException(
+                            "'" + name + "' is not a parameter of " + manifest.id()));
+
+            // Refused, not dropped. Silently ignoring a participant's attempt to
+            // set a manager parameter would leave them believing the value took
+            // effect, and would hide an attempt to override a credential.
+            if (owner != by) {
+                throw new InvalidLaunchException(
+                        "'" + name + "' is owned by " + owner + " and cannot be set by " + by);
+            }
+
+            ParameterSpec spec = manifest.parameter(name).orElseThrow();
+            String value = entry.getValue();
+            if (spec.valueType() != null && value != null && !spec.valueType().accepts(value)) {
+                throw new InvalidLaunchException(
+                        "'" + name + "' expects " + spec.valueType().json() + ", got: " + value);
+            }
+            merged.put(name, value);
+        }
+    }
+
+    /**
+     * Build the argument list.
+     *
+     * <p>Options first, then positionals in declaration order, then repeating
+     * pairs — which must come last, since a trailing {@code (SYMBOL SPREAD)...}
+     * would otherwise swallow the arguments that follow it.
+     */
+    public static List<String> arguments(Manifest manifest, Map<String, String> values) {
+        List<String> options = new ArrayList<>();
+        List<String> positionals = new ArrayList<>();
+        List<String> pairs = new ArrayList<>();
+
+        for (ParameterSpec spec : manifest.all()) {
+            String value = values.get(spec.name());
+            if (value == null || value.isBlank()) {
+                continue;
+            }
+            switch (spec.type() == null ? ParameterType.OPTION : spec.type()) {
+                case OPTION -> {
+                    options.add(spec.cli());
+                    options.add(value);
+                }
+                case POSITIONAL -> positionals.add(value);
+                case POSITIONAL_PAIRS, POSITIONAL_TRIPLES -> {
+                    // Stored as one flat whitespace-separated string: the robots
+                    // take these as bare arguments, so the grouping is
+                    // positional on the command line too.
+                    String[] tokens = value.trim().split("\\s+");
+                    int size = spec.type().groupSize();
+                    if (tokens.length % size != 0) {
+                        throw new InvalidLaunchException(
+                                "'" + spec.name() + "' takes groups of " + size
+                                        + " but got " + tokens.length + " values: " + value);
+                    }
+                    for (String token : tokens) {
+                        if (!token.isEmpty()) {
+                            pairs.add(token);
+                        }
+                    }
+                }
+            }
+        }
+
+        List<String> arguments = new ArrayList<>(options);
+        arguments.addAll(positionals);
+        arguments.addAll(pairs);
+        return arguments;
+    }
+
+    /** Merge and build in one step. */
+    public static List<String> arguments(
+            Manifest manifest,
+            Map<String, String> manager,
+            Map<String, String> user,
+            Map<String, String> platform) {
+        return arguments(manifest, merge(manifest, manager, user, platform));
+    }
+}

@@ -221,23 +221,6 @@
                             <excludeArtifacts>
                                 <excludeArtifact>fm-sdk-parent</excludeArtifact>
                                 <excludeArtifact>fm-ticker</excludeArtifact>
-                                <!-- TOGGLE ME when the SPI changes.
-
-                                     fm-spi is on its own version line so a busy
-                                     client release does not mint an empty
-                                     contract release for consumers to review.
-                                     While its version is unchanged it is
-                                     already on Central, which is immutable, and
-                                     staging it again fails the whole deploy.
-
-                                     The cost of this line is that a real SPI
-                                     change ships nowhere while it is here. Take
-                                     it off in the same commit that bumps
-                                     spi-version. scripts/check-publish.sh reads
-                                     this list, so the gate follows whatever
-                                     this says rather than keeping its own
-                                     opinion. -->
-                                <excludeArtifact>fm-spi</excludeArtifact>
                             </excludeArtifacts>
                         </configuration>
                     </plugin>

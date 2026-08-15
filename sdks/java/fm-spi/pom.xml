@@ -30,19 +30,60 @@
         Set with `make set-spi-version V=x.y.z`. `make set-version` moves the
         parent reference below but leaves this alone.
     -->
-    <version>0.0.7</version><!-- spi-version -->
+    <version>0.0.8</version><!-- spi-version -->
 
     <packaging>jar</packaging>
+
+    <dependencies>
+        <!--
+            Annotations only, not databind. The manifest is JSON on the wire and
+            a couple of its fields cannot be mapped by name alone (`default` is
+            a Java keyword), so the mapping has to be declared somewhere. This
+            is metadata on the classes, not a parser: what reads the JSON is the
+            host's own Jackson, whichever major version it runs.
+
+            It is the single dependency this artifact has, and worth keeping
+            that way.
+        -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.11.4</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>3.27.7</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
 
     <name>Flexemarkets SPI</name>
     <description>
         The plugin contract between Flex-E-Markets service implementations
         (e.g. trading robots) and their hosts. A host discovers a ServiceProvider
         via ServiceLoader and runs the Service it creates, without compiling
-        against the implementation. Interfaces only — no implementation code, no
-        host internals. Published publicly so providers and hosts share one
-        contract without copying source; the implementations stay private and
-        are delivered to hosts as runtime plugin jars.
+        against the implementation.
+
+        Carries three things: the ServiceProvider/Service interfaces, the
+        manifest a service uses to describe itself, and CliBuilder, which turns
+        described parameters into the argument array the provider is created
+        with. The manifest and the builder are here because both sides must
+        agree on them exactly: a host that derived arguments its own way would
+        be a second implementation of the contract, differing from the first
+        only where it was wrong.
+
+        No host internals and no implementation of any service. Published
+        publicly so providers and hosts share one contract without copying
+        source; the implementations stay private and are delivered to hosts as
+        runtime plugin jars.
     </description>
     <url>https://github.com/flexemarkets/fm-sdk</url>
 
