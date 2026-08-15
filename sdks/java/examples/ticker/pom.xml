@@ -60,6 +60,56 @@
                         <goals>
                             <goal>shade</goal>
                         </goals>
+                        <configuration>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <!-- Every dependency brings its own module
+                                             descriptor, and an uber jar has one
+                                             classpath and no module graph: shade
+                                             warns that flattening them breaks
+                                             strong encapsulation, and it is right.
+                                             This jar is run with -jar, not as a
+                                             module, so the descriptors describe
+                                             nothing and are dropped. -->
+                                        <exclude>module-info.class</exclude>
+                                        <exclude>META-INF/versions/*/module-info.class</exclude>
+                                        <!-- A signature covers the jar it was made
+                                             for. Repackaged into a different jar it
+                                             cannot verify, and a JVM that checks
+                                             will refuse to load the classes. -->
+                                        <!-- Shade counts the manifest as an
+                                             overlapping resource even though the
+                                             transformer below claims it, so the
+                                             warning survives handling it. Dropping
+                                             the dependencies' copies removes the
+                                             overlap; the transformer still writes
+                                             ours, Main-Class included. -->
+                                        <exclude>META-INF/MANIFEST.MF</exclude>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                            <transformers>
+                                <!-- Six jars carry a MANIFEST.MF and shade keeps
+                                     whichever it meets first, so Main-Class was a
+                                     matter of dependency order. State it. -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>fm.ticker.Ticker</mainClass>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                                <!-- LICENSE and NOTICE are the one case where
+                                     "keep one, drop the rest" is not merely untidy:
+                                     the Apache licence requires the NOTICE content
+                                     to travel with the redistribution. These merge
+                                     rather than pick. -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer"/>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer"/>
+                            </transformers>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>
