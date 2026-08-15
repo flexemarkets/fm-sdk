@@ -205,6 +205,13 @@ public class Types {
         }
     }
 
+    /**
+     * A participant's opening position in an allocation.
+     *
+     * <p>The server spells the nested capital {@code capital} on some responses
+     * and {@code assets} on others, so both are accepted; requests send
+     * {@code assets}, which is what {@code /allocations} reads.
+     */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Allotment(
         Long id,
@@ -212,7 +219,7 @@ public class Types {
         Long marketplaceId,
         Long ownerId,
         String name,
-        Assets assets) {
+        @JsonAlias("capital") Assets assets) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -220,7 +227,20 @@ public class Types {
         Long id,
         String name,
         long cash,
-        @JsonAlias("grants") List<Security> securities) {
+        /*
+         * The wire name is "grants" in BOTH directions -- it matches the
+         * server's own Assets.grants -- while the component stays "securities"
+         * to read the same as Holding.securities on this side.
+         *
+         * @JsonProperty, not @JsonAlias alone. An alias binds only on the way
+         * in, and these records are now serialized as well as parsed:
+         * allocate() POSTs them. Left as an alias, the request would carry
+         * "securities", the server would find no "grants", and the allocation
+         * would be created with cash and no positions -- accepted, 200, and
+         * quietly wrong. The alias is kept so a response spelling it
+         * "securities" still parses.
+         */
+        @JsonProperty("grants") @JsonAlias("securities") List<Security> securities) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
