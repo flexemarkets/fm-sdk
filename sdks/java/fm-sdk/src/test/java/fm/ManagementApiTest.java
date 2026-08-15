@@ -88,6 +88,18 @@ class ManagementApiTest {
                     "[{\"id\":9,\"ownerId\":8,\"marketplaceId\":1,\"sessionId\":300}]");
         });
 
+        server.createContext("/api/symbolOrdersJson", exchange -> {
+            record(exchange);
+            // An order keeps its own id; only the symbol is absent.
+            respond(exchange, 200,
+                    "[{\"id\":11,\"original\":7,\"units\":5,\"price\":950}]");
+        });
+
+        server.createContext("/api/sessionOrdersJson", exchange -> {
+            record(exchange);
+            respond(exchange, 200, "[{\"id\":12,\"original\":12,\"sessionId\":300}]");
+        });
+
         server.createContext("/api/symbolTradesJson", exchange -> {
             record(exchange);
             // The symbol-keyed route answers with the trade id in "original"
@@ -131,6 +143,8 @@ class ManagementApiTest {
             respond(exchange, 200, """
                 {"_links":{"marketplaces":{"href":"%1$s/marketplaces"},
                            "symbolTradesJson":{"href":"%1$s/symbolTradesJson"},
+                           "symbolOrdersJson":{"href":"%1$s/symbolOrdersJson"},
+                           "sessionOrdersJson":{"href":"%1$s/sessionOrdersJson"},
                            "usersJson":{"href":"%1$s/usersJson"}}}
                 """.formatted(api()));
         });
@@ -401,6 +415,44 @@ class ManagementApiTest {
             assertThat(t.symbol()).isEqualTo("STK");
         });
         assertThat(requests).anySatisfy(r -> assertThat(r).contains("symbol=STK"));
+    }
+
+    /**
+     * Orders from a finished run come off a different route: the marketplace's
+     * orders collection is current-session only, so filtering it is not
+     * possible and asking it for an old session silently answers about now.
+     */
+    @Test
+    void ordersCanBeReadForParticularSessions() throws Exception {
+        List<Types.Order> orders;
+        try (Flexemarkets fm = connect()) {
+            orders = fm.orders(1, List.of(300L));
+        }
+
+        assertThat(orders).singleElement()
+                .satisfies(o -> assertThat(o.sessionId()).isEqualTo(300L));
+        assertThat(requests).anySatisfy(r -> assertThat(r)
+                .contains("/api/sessionOrdersJson?marketplaceId=1&sessionIds=300"));
+    }
+
+    /**
+     * The symbol is filled in, and the id is not touched -- the difference from
+     * {@link #tradesCarryTheirIdAndSymbol()}. An order has its own id; only a
+     * trade carries it in {@code original}, and copying that here would give
+     * every order the id of the order it was matched against.
+     */
+    @Test
+    void symbolOrdersKeepTheirOwnId() throws Exception {
+        List<Types.Order> orders;
+        try (Flexemarkets fm = connect()) {
+            orders = fm.orders(1, "STK");
+        }
+
+        assertThat(orders).singleElement().satisfies(o -> {
+            assertThat(o.id()).as("the order's own id, not original").isEqualTo(11L);
+            assertThat(o.original()).isEqualTo(7L);
+            assertThat(o.symbol()).isEqualTo("STK");
+        });
     }
 
     /** An empty filter means "now", and asks for no filter at all. */

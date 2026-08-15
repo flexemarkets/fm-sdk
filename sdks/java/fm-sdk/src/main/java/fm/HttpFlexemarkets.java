@@ -250,6 +250,31 @@ public class HttpFlexemarkets implements Flexemarkets {
      * than half-populated orders -- fm-lib-net does the same, and a study that
      * groups by symbol or keys by id depends on it.
      */
+    /** {@code sessionOrdersJson}, not the marketplace's orders collection: that one is current-session only. */
+    @Override
+    public List<Order> orders(long marketplaceId, List<Long> sessionIds) {
+        if (sessionIds == null || sessionIds.isEmpty()) {
+            return orders(marketplaceId);
+        }
+        var url = uriParam(apiRoot, "sessionOrdersJson", "marketplaceId=" + marketplaceId)
+                + "&sessionIds=" + _ids(sessionIds);
+        return get(url, ORDERS_TYPE);
+    }
+
+    /** The symbol is filled in; the ids are left alone. See {@link #trades}. */
+    @Override
+    public List<Order> orders(long marketplaceId, String symbol) {
+        var url = uriParam(apiRoot, "symbolOrdersJson", "marketplaceId=" + marketplaceId)
+                + "&symbol=" + symbol;
+        return get(url, ORDERS_TYPE).stream()
+                .map(o -> new Order(o.createdDate(), o.lastModifiedDate(), o.id(),
+                                    o.original(), o.supplier(), o.consumer(), o.type(), o.side(),
+                                    o.units(), o.price(), o.mine(), o.ownerId(), o.marketplaceId(),
+                                    o.sessionId(), symbol, o.marketId(), o.ownerTarget(),
+                                    o.clientDescription()))
+                .toList();
+    }
+
     @Override
     public List<Order> trades(long marketplaceId, String symbol) {
         var url = uriParam(apiRoot, "symbolTradesJson", "marketplaceId=" + marketplaceId)

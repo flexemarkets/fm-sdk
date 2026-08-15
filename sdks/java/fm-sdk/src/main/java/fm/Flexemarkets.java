@@ -97,6 +97,30 @@ public interface Flexemarkets extends AutoCloseable {
 
     List<Order> orders(long marketplaceId);
 
+    /**
+     * Orders from particular sessions, rather than the current one.
+     *
+     * <p>Answered by a different route from {@link #orders(long)} -- the
+     * current-session collection cannot be filtered -- so a study reading a
+     * finished run's orders needs this one. Both Python and TypeScript have
+     * had it since the management surface landed; Java had not.
+     */
+    default List<Order> orders(long marketplaceId, List<Long> sessionIds) {
+        throw unsupported("orders(marketplaceId, sessionIds)");
+    }
+
+    /**
+     * Orders in one market, by symbol.
+     *
+     * <p>The symbol-keyed route answers without the symbol on each order,
+     * because the query already fixed it; it is filled in before returning.
+     * Unlike {@link #trades(long, String)} the ids are left alone -- an order
+     * has its own id, and only a trade carries it in {@code original}.
+     */
+    default List<Order> orders(long marketplaceId, String symbol) {
+        throw unsupported("orders(marketplaceId, symbol)");
+    }
+
     List<Holding> holdings(long marketplaceId);
 
     /**
