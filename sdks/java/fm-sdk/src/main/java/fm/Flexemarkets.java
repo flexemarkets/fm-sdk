@@ -1,10 +1,12 @@
 package fm;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 
 import fm.Types.Account;
+import fm.Types.Allotment;
 import fm.Types.ClientConnection;
 import fm.Types.Holding;
 import fm.Types.Market;
@@ -121,16 +123,17 @@ public interface Flexemarkets extends AutoCloseable {
     // --- management ---------------------------------------------------------
 
     /*
-     * Running an experiment, as opposed to trading in one. Every study in
+     * Running an experiment, as opposed to trading in one: set up the opening
+     * positions, open the session, close it, collect the result. Every study in
      * fm-robots drives this sequence, and none of it existed here -- which is
      * why they are all still on fm-lib-net, and through it on Spring.
      *
      * Defaulted rather than abstract, for the reason given on subscribe(): this
-     * is a published interface, and an implementation that only trades -- a test
-     * fake, a read-only provider -- should keep compiling and say so plainly if
-     * called, rather than be forced to stub a surface it has no use for.
-     * Authorization is the server's business: these need a manager or admin, and
-     * it answers 401/403 when they are not.
+     * is a published interface, and an implementation that cannot manage
+     * sessions -- a test fake, a read-only provider -- should keep compiling and
+     * say so plainly if called, rather than force every implementor to write
+     * eight stubs. Authorization is the server's business: these need a manager
+     * or admin, and it answers 401/403 when they are not.
      */
 
     /** Opens the marketplace's session, returning it in its new state. */
@@ -149,6 +152,48 @@ public interface Flexemarkets extends AutoCloseable {
     /** Everyone in the caller's account. */
     default List<Person> users() {
         throw unsupported("users");
+    }
+
+    /** The opening positions of one allocation. */
+    default List<Allotment> allotments(long marketplaceId, long allocationId) {
+        throw unsupported("allotments");
+    }
+
+    /**
+     * Stage the opening positions for the next session, returning them as read
+     * back from the server.
+     *
+     * <p><b>Staged, not applied.</b> An allocation lands when a <em>closed</em>
+     * session is opened; pausing and re-opening does not consume it. So the
+     * sequence is allocate, then {@link #closeSession} if one is running, then
+     * {@link #openSession}. Calling this against a live session appears to
+     * succeed and changes nobody's position.
+     *
+     * <p>Takes {@link Holding}s because that is what a caller has -- the shape
+     * it reads positions in and computes with. The allotment form the endpoint
+     * wants is an encoding detail and is applied here.
+     */
+    default List<Holding> allocate(long marketplaceId, List<Holding> holdings) {
+        throw unsupported("allocate");
+    }
+
+    /** The holdings CSV, verbatim, as the server renders it. */
+    default String downloadHoldings(long marketplaceId) {
+        throw unsupported("downloadHoldings");
+    }
+
+    /**
+     * Load opening positions from a holdings CSV, returning what was created.
+     *
+     * <p>Stages the next allocation on the same terms as {@link #allocate}: it
+     * lands when a closed session is opened.
+     *
+     * <p>A {@link Path}: the file is the thing being uploaded. fm-lib-net's
+     * equivalent takes a Spring {@code Resource}, which is exactly the sort of
+     * dependency in a signature that this SDK exists to avoid.
+     */
+    default List<Holding> uploadHoldings(long marketplaceId, Path csv) {
+        throw unsupported("uploadHoldings");
     }
 
     private UnsupportedOperationException unsupported(String operation) {

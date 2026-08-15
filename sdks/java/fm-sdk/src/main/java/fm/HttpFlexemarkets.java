@@ -26,6 +26,7 @@ import fm.Exceptions.AuthenticationException;
 import fm.Exceptions.ConflictException;
 import fm.Exceptions.HttpException;
 import fm.Types.Account;
+import fm.Types.Allotment;
 import fm.Types.ApiRoot;
 import fm.Types.ClientConnection;
 import fm.Types.ConflictFailure;
@@ -59,6 +60,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     private static final TypeReference<List<ClientConnection>> CONNECTIONS_TYPE = new TypeReference<>() {};
     private static final TypeReference<ConflictFailure>      CONFLICT_TYPE     = new TypeReference<>() {};
     private static final TypeReference<List<Person>>         PERSONS_TYPE      = new TypeReference<>() {};
+    private static final TypeReference<List<Allotment>>      ALLOTMENTS_TYPE   = new TypeReference<>() {};
 
     private final Properties properties;
     private final HttpClient httpClient;
@@ -257,6 +259,72 @@ public class HttpFlexemarkets implements Flexemarkets {
         return get(uri(apiRoot, "usersJson"), PERSONS_TYPE);
     }
 
+    /** Not on the API root -- allotments are a V1 route, addressed from the server. */
+    @Override
+    public List<Allotment> allotments(long marketplaceId, long allocationId) {
+        var url = server(endpointUrl()) + "/v1/marketplaces/" + marketplaceId
+                + "/allotments?allocation=" + allocationId;
+        return List.copyOf(get(url, ALLOTMENTS_TYPE));
+    }
+
+    @Override
+    public List<Holding> allocate(long marketplaceId, List<Holding> holdings) {
+        var allotments = holdings.stream().map(h -> _toAllotment(marketplaceId, h)).toList();
+        return _toHoldings(post(
+                uriIdSegment(apiRoot, "marketplaces", marketplaceId, "allocations"),
+                allotments, ALLOTMENTS_TYPE));
+    }
+
+    @Override
+    public String downloadHoldings(long marketplaceId) {
+        return getText(uriIdSegment(apiRoot, "marketplaces", marketplaceId, "holdings/downloads"));
+    }
+
+    @Override
+    public List<Holding> uploadHoldings(long marketplaceId, Path csv) {
+        return _toHoldings(postMultipart(
+                uriIdSegment(apiRoot, "marketplaces", marketplaceId, "holdings/uploads"),
+                "file", csv, ALLOTMENTS_TYPE));
+    }
+
+    /*
+     * Allotment <-> Holding. The allocation endpoints speak allotments; callers
+     * hold holdings. Converting here keeps that asymmetry out of every caller,
+     * which is the whole reason allocate() takes holdings.
+     */
+
+    private static Allotment _toAllotment(long marketplaceId, Holding holding) {
+        var assets = new Types.Assets(null, holding.name(), holding.cash(), holding.securities());
+        return new Allotment(null, null, marketplaceId, holding.ownerId(), holding.name(), assets);
+    }
+
+    private static List<Holding> _toHoldings(List<Allotment> allotments) {
+        return allotments.stream().map(HttpFlexemarkets::_toHolding).toList();
+    }
+
+    /**
+     * An allotment is an opening position, so it has no session yet: sessionId
+     * is 0 until one is opened over it, and availableCash equals cash because
+     * nothing has been committed against it.
+     */
+    private static Holding _toHolding(Allotment allotment) {
+        var assets = allotment.assets();
+        long cash = assets != null ? assets.cash() : 0L;
+        return new Holding(
+                _unbox(allotment.marketplaceId()),
+                0L,
+                _unbox(allotment.allocationId()),
+                _unbox(allotment.ownerId()),
+                allotment.name(),
+                cash,
+                cash,
+                assets != null ? assets.securities() : List.of());
+    }
+
+    private static long _unbox(Long value) {
+        return value != null ? value : 0L;
+    }
+
     public void listen(long marketplaceId, BlockingQueue<Object> queue) {
         events = new Events(wsUrl(), bearerToken, marketplaceId, clientDescription(), MAPPER, queue);
         events.connect();
@@ -446,6 +514,76 @@ public class HttpFlexemarkets implements Flexemarkets {
             .method("PATCH", HttpRequest.BodyPublishers.noBody())
             .build();
         return send(request, type);
+    }
+
+    /**
+     * GET returning the body verbatim, for endpoints that answer with something
+     * other than JSON. The holdings download is a CSV, and parsing it as JSON
+     * would fail on the first line.
+     */
+    private String getText(String url) {
+        var request = HttpRequest.newBuilder()
+            .uri(URI.create(url))
+            .header("Authorization", bearerToken)
+            .header("Accept", "text/csv, */*")
+            .header("User-Agent", FM_SDK_CLIENT)
+            .GET()
+            .build();
+        try {
+            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            var statusCode = response.statusCode();
+            if (statusCode >= 200 && statusCode < 300) {
+                return response.body();
+            }
+            if (statusCode == 401) {
+                throw new AuthenticationException("Authentication failed: " + response.body());
+            }
+            throw new HttpException(statusCode, response.body());
+        } catch (Exceptions.FlexemarketsException e) {
+            throw e;
+        } catch (IOException e) {
+            throw new ApiException("HTTP request failed", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ApiException("HTTP request interrupted", e);
+        }
+    }
+
+    /**
+     * POST one file as {@code multipart/form-data}.
+     *
+     * <p>Assembled by hand because {@code java.net.http} has no multipart body
+     * publisher and this is the only place the SDK needs one -- a dependency
+     * would cost more than the twenty lines. The parts are written as bytes,
+     * not through a string, so the file's own encoding survives.
+     */
+    private <T> T postMultipart(String url, String partName, Path file, TypeReference<T> type) {
+        var boundary = "fm-sdk-" + java.util.UUID.randomUUID();
+        try {
+            var head = ("--" + boundary + "\r\n"
+                    + "Content-Disposition: form-data; name=\"" + partName + "\"; filename=\""
+                    + file.getFileName() + "\"\r\n"
+                    + "Content-Type: text/csv\r\n\r\n").getBytes(StandardCharsets.UTF_8);
+            var tail = ("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8);
+            var content = Files.readAllBytes(file);
+
+            var body = new java.io.ByteArrayOutputStream();
+            body.write(head);
+            body.write(content);
+            body.write(tail);
+
+            var request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Authorization", bearerToken)
+                .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                .header("Accept", "application/json")
+                .header("User-Agent", FM_SDK_CLIENT)
+                .POST(HttpRequest.BodyPublishers.ofByteArray(body.toByteArray()))
+                .build();
+            return send(request, type);
+        } catch (IOException e) {
+            throw new ApiException("Failed to read " + file, e);
+        }
     }
 
     private <T> T send(HttpRequest request, TypeReference<T> type) {

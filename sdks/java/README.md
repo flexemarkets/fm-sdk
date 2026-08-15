@@ -103,6 +103,50 @@ try (var fm = Flexemarkets.connect(null, null, "my-bot")) {
 }
 ```
 
+## Running an experiment
+
+Trading in a marketplace is one thing; running one is another. These need
+manager (or admin) credentials — the server answers 401/403 otherwise.
+
+```java
+import fm.Flexemarkets;
+import fm.Types.Holding;
+import fm.Types.Person;
+import java.nio.file.Path;
+import java.util.List;
+
+try (var fm = Flexemarkets.connect(null, null, "my-study")) {
+    long marketplaceId = fm.endpointMarketplaceId();
+
+    // Who is in the account, so positions can be assigned to real people.
+    List<Person> users = fm.users();
+
+    // Stage the opening positions — either built here…
+    fm.allocate(marketplaceId, List.of(/* Holding per participant */));
+    // …or loaded from a holdings CSV.
+    fm.uploadHoldings(marketplaceId, Path.of("holdings.csv"));
+
+    // An allocation LANDS when a CLOSED session is opened. Pausing and
+    // re-opening does not consume it, so close first if one is running.
+    fm.closeSession(marketplaceId);
+    fm.openSession(marketplaceId);
+
+    // ... the run happens ...
+
+    fm.closeSession(marketplaceId);
+
+    // Collect: the server's own CSV, verbatim.
+    String csv = fm.downloadHoldings(marketplaceId);
+}
+```
+
+`allotments(marketplaceId, allocationId)` reads back the opening positions of a
+particular allocation.
+
+These methods are `default` on `Flexemarkets` and throw
+`UnsupportedOperationException`, so an implementation that only trades — a test
+fake, a read-only provider — stays valid without stubbing them.
+
 ## Example: ticker
 
 The SDK includes a ticker example — a live terminal display of order book best
