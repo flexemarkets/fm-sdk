@@ -87,6 +87,11 @@ public interface Flexemarkets extends AutoCloseable {
 
     List<Session> sessions(long marketplaceId);
 
+    /** Particular sessions by id, rather than the marketplace's whole history. */
+    default List<Session> sessions(long marketplaceId, List<Long> sessionIds) {
+        throw unsupported("sessions(marketplaceId, sessionIds)");
+    }
+
     /** The current session, or null when the marketplace has never opened one. */
     Session session(long marketplaceId);
 
@@ -110,6 +115,16 @@ public interface Flexemarkets extends AutoCloseable {
     Holding holding(long marketplaceId);
 
     List<ClientConnection> connections(long marketplaceId);
+
+    /**
+     * Connections attached during particular sessions.
+     *
+     * <p>Who was present in a given run, which is not the same question as who
+     * is attached now. An empty or null filter means the latter.
+     */
+    default List<ClientConnection> connections(long marketplaceId, List<Long> sessionIds) {
+        throw unsupported("connections(marketplaceId, sessionIds)");
+    }
 
     /**
      * Resting orders, with the sequence number they were correct as of.
@@ -208,6 +223,14 @@ public interface Flexemarkets extends AutoCloseable {
     /** The holdings CSV, verbatim, as the server renders it. */
     default String downloadHoldings(long marketplaceId) {
         throw unsupported("downloadHoldings");
+    }
+
+    /**
+     * The same CSV for particular sessions — a finished run's export, rather
+     * than the current one's.
+     */
+    default String downloadHoldings(long marketplaceId, List<Long> sessionIds) {
+        throw unsupported("downloadHoldings(marketplaceId, sessionIds)");
     }
 
     /**

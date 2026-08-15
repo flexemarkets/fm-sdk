@@ -238,6 +238,7 @@ def _parse_connection(data: dict[str, Any]) -> ClientConnection:
         established=data.get("established"),
         terminated=data.get("terminated"),
         description=data.get("description"),
+        session_id=data.get("sessionId"),
     )
 
 
@@ -1011,8 +1012,23 @@ class Flexemarkets:
         url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "currentHolding")
         return _parse_holding(self._get(url).json())
 
-    def download_holdings(self, marketplace_id: int) -> str:
-        url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "holdings/downloads")
+    def download_holdings(
+        self, marketplace_id: int, session_ids: list[int] | None = None,
+    ) -> str:
+        """The holdings CSV, verbatim, for the current session or for given ones.
+
+        The filter is spelled ``sessions=`` on this route and ``sessionIds=``
+        on sessions and connections. Using the wrong one is not an error --
+        it is an unfiltered answer.
+        """
+        if session_ids:
+            url = _uri_id_segment_param(
+                self._api_root, "marketplaces", marketplace_id, "holdings/downloads",
+                f"sessions={_ids_param(session_ids)}",
+            )
+        else:
+            url = _uri_id_segment(
+                self._api_root, "marketplaces", marketplace_id, "holdings/downloads")
         return self._get(url).text
 
     def upload_holdings(self, marketplace_id: int, filename: str) -> list[Holding]:

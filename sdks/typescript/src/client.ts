@@ -267,6 +267,7 @@ function parseConnection(data: JsonObject): ClientConnection {
     established: (data.established as string) ?? null,
     terminated: (data.terminated as string) ?? null,
     description: (data.description as string) ?? null,
+    sessionId: (data.sessionId as number) ?? null,
   };
 }
 
@@ -810,7 +811,9 @@ export class Flexemarkets {
     );
     const data = await this._get(url);
     const orders = (data as unknown as JsonObject[]).map(parseOrder);
-    for (const o of orders) o.symbol = symbol;
+    for (const o of orders) {
+      o.symbol = symbol;
+    }
     return orders;
   }
 
@@ -951,8 +954,25 @@ export class Flexemarkets {
     return allotmentsToHoldings((data as unknown as JsonObject[]).map(parseAllotment));
   }
 
-  /** The holdings CSV, verbatim, as the server renders it. */
-  async downloadHoldings(marketplaceId: number): Promise<string> {
+  /**
+   * The holdings CSV, verbatim, for the current session or for given ones.
+   *
+   * The filter is spelled `sessions=` on this route and `sessionIds=` on
+   * sessions and connections. Using the wrong one is not an error — it is an
+   * unfiltered answer.
+   */
+  async downloadHoldings(marketplaceId: number, sessionIds?: number[] | null): Promise<string> {
+    if (sessionIds && sessionIds.length > 0) {
+      return this._getText(
+        uriIdSegmentParam(
+          this._apiRoot,
+          "marketplaces",
+          marketplaceId,
+          "holdings/downloads",
+          `sessions=${sessionIds.join(",")}`,
+        ),
+      );
+    }
     return this._getText(
       uriIdSegment(this._apiRoot, "marketplaces", marketplaceId, "holdings/downloads"),
     );

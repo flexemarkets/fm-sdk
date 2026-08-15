@@ -172,6 +172,13 @@ export interface ClientConnection {
   established: string | null;
   terminated: string | null;
   description: string | null;
+  /**
+   * The session the connection was attached during, or null when the
+   * marketplace has never opened one. How a study works out who was present in
+   * a finished run — which is not the same question as who is attached now, and
+   * was silently unanswerable before 0.0.11.
+   */
+  sessionId: number | null;
 }
 
 export interface Version {

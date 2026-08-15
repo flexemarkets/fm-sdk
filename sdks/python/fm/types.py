@@ -182,6 +182,11 @@ class ClientConnection:
     established: str | None = None
     terminated: str | None = None
     description: str | None = None
+    #: The session the connection was attached during, or None when the
+    #: marketplace has never opened one. How a study works out who was present
+    #: in a finished run -- which is not the same question as who is attached
+    #: now, and was silently unanswerable before 0.0.11.
+    session_id: int | None = None
 
 
 @dataclass

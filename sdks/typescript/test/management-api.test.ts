@@ -73,6 +73,10 @@ before(async () => {
         });
       } else if (url === "/api/v1/marketplaces" && req.method === "POST") {
         send({ id: 77, name: "simple-dividend", markets: [] });
+      } else if (url.startsWith("/api/marketplaces/1/sessions")) {
+        send([{ id: 300, state: "CLOSED" }]);
+      } else if (url.startsWith("/api/marketplaces/1/connections")) {
+        send([{ id: 9, ownerId: 8, marketplaceId: 1, sessionId: 300 }]);
       } else if (url === "/api/usersJson") {
         send([{ id: 7, email: "dev@dev" }, { id: 8, email: "t1@dev" }]);
       } else if (url.startsWith("/api/marketplaces/1/holdings/downloads")) {
@@ -288,4 +292,64 @@ test("a short allowance is read under either name and sent as shortUnits", async
   // The stub answers with "grants" carrying neither spelling, so absent must
   // read as none rather than undefined — callers do arithmetic on this.
   assert.equal(allotments[0].assets?.securities[0].shortUnits, 0);
+});
+
+/**
+ * The filter is spelled `sessionIds` here and `sessions` on the holdings
+ * download. Getting it wrong is not an error -- it is an unfiltered answer that
+ * looks right until someone checks the totals.
+ */
+test("sessions and connections filter on sessionIds", async () => {
+  const fm = await connect();
+  try {
+    await fm.sessions(1, [300, 301]);
+    await fm.connections(1, [300]);
+  } finally {
+    fm.close();
+  }
+
+  assert.ok(requests.some((r) => r.includes("/sessions?sessionIds=300,301")));
+  assert.ok(requests.some((r) => r.includes("/connections?sessionIds=300")));
+});
+
+test("the holdings download filters on sessions", async () => {
+  const fm = await connect();
+  try {
+    await fm.downloadHoldings(1, [300]);
+  } finally {
+    fm.close();
+  }
+
+  assert.ok(requests.some((r) => r.includes("/holdings/downloads?sessions=300")));
+});
+
+/**
+ * A connection belongs to a session, and that is how a study works out who was
+ * present in a run. The field was absent until 0.0.11, so every connection read
+ * as belonging to none.
+ */
+test("a connection carries its session", async () => {
+  const fm = await connect();
+  try {
+    const connections = await fm.connections(1, [300]);
+    assert.equal(connections.length, 1);
+    assert.equal(connections[0]!.sessionId, 300);
+  } finally {
+    fm.close();
+  }
+});
+
+/** An empty filter means "now", and asks for no filter at all. */
+test("empty filters fall back to the unfiltered routes", async () => {
+  const fm = await connect();
+  try {
+    await fm.sessions(1, []);
+    await fm.connections(1, []);
+    await fm.downloadHoldings(1, []);
+  } finally {
+    fm.close();
+  }
+
+  assert.ok(!requests.some((r) => r.includes("sessionIds=")));
+  assert.ok(!requests.some((r) => r.includes("?sessions=")));
 });

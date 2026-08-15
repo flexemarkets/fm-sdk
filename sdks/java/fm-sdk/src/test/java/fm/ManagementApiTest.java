@@ -77,6 +77,17 @@ class ManagementApiTest {
                     "[{\"ownerId\":8,\"name\":\"alice\",\"cash\":10000,\"sessionId\":300}]");
         });
 
+        server.createContext("/api/marketplaces/1/sessions", exchange -> {
+            record(exchange);
+            respond(exchange, 200, "[{\"id\":300,\"state\":\"CLOSED\"}]");
+        });
+
+        server.createContext("/api/marketplaces/1/connections", exchange -> {
+            record(exchange);
+            respond(exchange, 200,
+                    "[{\"id\":9,\"ownerId\":8,\"marketplaceId\":1,\"sessionId\":300}]");
+        });
+
         server.createContext("/api/usersJson", exchange -> {
             record(exchange);
             respond(exchange, 200, "[{\"id\":7,\"email\":\"dev@dev\"},{\"id\":8,\"email\":\"t1@dev\"}]");
@@ -317,6 +328,64 @@ class ManagementApiTest {
         }
 
         assertThat(requests).contains("GET /api/marketplaces/1/holdings");
+    }
+
+    /**
+     * The filter is spelled {@code sessionIds} here and {@code sessions} on the
+     * holdings download. Getting it wrong is not an error -- it is an
+     * unfiltered answer that looks right until someone checks the totals.
+     */
+    @Test
+    void sessionsAndConnectionsFilterOnSessionIds() throws Exception {
+        try (Flexemarkets fm = connect()) {
+            fm.sessions(1, List.of(300L, 301L));
+            fm.connections(1, List.of(300L));
+        }
+
+        assertThat(requests).anySatisfy(r -> assertThat(r)
+                .contains("/api/marketplaces/1/sessions?sessionIds=300,301"));
+        assertThat(requests).anySatisfy(r -> assertThat(r)
+                .contains("/api/marketplaces/1/connections?sessionIds=300"));
+    }
+
+    /** The holdings download spells it {@code sessions}. */
+    @Test
+    void theHoldingsDownloadFiltersOnSessions() throws Exception {
+        try (Flexemarkets fm = connect()) {
+            fm.downloadHoldings(1, List.of(300L));
+        }
+
+        assertThat(requests).anySatisfy(r -> assertThat(r)
+                .contains("/api/marketplaces/1/holdings/downloads?sessions=300"));
+    }
+
+    /**
+     * A connection belongs to a session, and that is how a study works out who
+     * was present in a run. The record had no such component until 0.0.11, so
+     * every connection read as belonging to none.
+     */
+    @Test
+    void aConnectionCarriesItsSession() throws Exception {
+        List<Types.ClientConnection> connections;
+        try (Flexemarkets fm = connect()) {
+            connections = fm.connections(1, List.of(300L));
+        }
+
+        assertThat(connections).singleElement()
+                .satisfies(c -> assertThat(c.sessionId()).isEqualTo(300L));
+    }
+
+    /** An empty filter means "now", and asks for no filter at all. */
+    @Test
+    void emptyFiltersFallBackToTheUnfilteredRoutes() throws Exception {
+        try (Flexemarkets fm = connect()) {
+            fm.sessions(1, List.of());
+            fm.connections(1, List.of());
+            fm.downloadHoldings(1, List.of());
+        }
+
+        assertThat(requests).noneSatisfy(r -> assertThat(r).contains("sessionIds="));
+        assertThat(requests).noneSatisfy(r -> assertThat(r).contains("?sessions="));
     }
 
     /** A CSV, returned as-is. Parsing it as JSON would fail on the header row. */

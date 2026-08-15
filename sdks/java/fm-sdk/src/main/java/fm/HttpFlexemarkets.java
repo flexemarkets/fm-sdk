@@ -208,6 +208,45 @@ public class HttpFlexemarkets implements Flexemarkets {
         return get(uriIdSegmentParam(apiRoot, "marketplaces", marketplaceId, "connections", "format=application/json"), CONNECTIONS_TYPE);
     }
 
+    /**
+     * {@code sessionIds=}, not {@code sessions=}. The server spells the filter
+     * differently on this route than on the holdings download, and using the
+     * wrong one is not an error -- it is an unfiltered answer.
+     */
+    @Override
+    public List<Session> sessions(long marketplaceId, List<Long> sessionIds) {
+        if (sessionIds == null || sessionIds.isEmpty()) {
+            return sessions(marketplaceId);
+        }
+        return get(uriIdSegmentParam(apiRoot, "marketplaces", marketplaceId, "sessions",
+                        "sessionIds=" + _ids(sessionIds) + "&format=application/json"),
+                   SESSIONS_TYPE);
+    }
+
+    @Override
+    public List<ClientConnection> connections(long marketplaceId, List<Long> sessionIds) {
+        if (sessionIds == null || sessionIds.isEmpty()) {
+            return connections(marketplaceId);
+        }
+        return get(uriIdSegmentParam(apiRoot, "marketplaces", marketplaceId, "connections",
+                        "sessionIds=" + _ids(sessionIds) + "&format=application/json"),
+                   CONNECTIONS_TYPE);
+    }
+
+    /** {@code sessions=} here, unlike the two routes above. */
+    @Override
+    public String downloadHoldings(long marketplaceId, List<Long> sessionIds) {
+        if (sessionIds == null || sessionIds.isEmpty()) {
+            return downloadHoldings(marketplaceId);
+        }
+        return getText(uriIdSegmentParam(apiRoot, "marketplaces", marketplaceId,
+                        "holdings/downloads", "sessions=" + _ids(sessionIds)));
+    }
+
+    private static String _ids(List<Long> ids) {
+        return ids.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(","));
+    }
+
     public Order submitLimit(long marketplaceId, long marketId, String side, long units, long price) {
         var order = Map.of(
             "marketplaceId", marketplaceId,

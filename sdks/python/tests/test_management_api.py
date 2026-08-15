@@ -69,6 +69,12 @@ class Handler(BaseHTTPRequestHandler):
                 "marketplaces": {"href": f"{base}/marketplaces"},
                 "usersJson": {"href": f"{base}/usersJson"},
             }})
+        elif self.path.startswith("/api/marketplaces/1/holdings/downloads"):
+            self._send("owner,cash\nalice,10000\n", "text/csv")
+        elif self.path.startswith("/api/marketplaces/1/sessions"):
+            self._send([{"id": 300, "state": "CLOSED"}])
+        elif self.path.startswith("/api/marketplaces/1/connections"):
+            self._send([{"id": 9, "ownerId": 8, "marketplaceId": 1, "sessionId": 300}])
         else:
             self._send([])
 
@@ -193,3 +199,44 @@ def test_allocate_sends_the_short_allowance(fm):
 
     body = bodies["POST /api/marketplaces/1/allocations"]
     assert '"shortUnits": 50' in body or '"shortUnits":50' in body
+
+
+def test_sessions_and_connections_filter_on_session_ids(fm):
+    """The filter is spelled ``sessionIds`` here and ``sessions`` on the
+    holdings download. Getting it wrong is not an error -- it is an unfiltered
+    answer that looks right until someone checks the totals.
+    """
+    fm.sessions(1, [300, 301])
+    fm.connections(1, [300])
+
+    paths = [p for _, p in requests]
+    assert any("/sessions?sessionIds=300,301" in p for p in paths)
+    assert any("/connections?sessionIds=300" in p for p in paths)
+
+
+def test_the_holdings_download_filters_on_sessions(fm):
+    fm.download_holdings(1, [300])
+
+    assert any("/holdings/downloads?sessions=300" in p for _, p in requests)
+
+
+def test_a_connection_carries_its_session(fm):
+    """A connection belongs to a session, and that is how a study works out who
+    was present in a run. The field was absent until 0.0.11, so every connection
+    read as belonging to none.
+    """
+    connections = fm.connections(1, [300])
+
+    assert len(connections) == 1
+    assert connections[0].session_id == 300
+
+
+def test_empty_filters_fall_back_to_the_unfiltered_routes(fm):
+    """An empty filter means "now", and asks for no filter at all."""
+    fm.sessions(1, [])
+    fm.connections(1, [])
+    fm.download_holdings(1, [])
+
+    paths = [p for _, p in requests]
+    assert not any("sessionIds=" in p for p in paths)
+    assert not any("?sessions=" in p for p in paths)
