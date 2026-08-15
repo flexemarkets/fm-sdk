@@ -118,6 +118,44 @@ public interface Flexemarkets extends AutoCloseable {
 
     Order submitMarket(long marketplaceId, long marketId, String side, long units);
 
+    // --- management ---------------------------------------------------------
+
+    /*
+     * Running an experiment, as opposed to trading in one. Every study in
+     * fm-robots drives this sequence, and none of it existed here -- which is
+     * why they are all still on fm-lib-net, and through it on Spring.
+     *
+     * Defaulted rather than abstract, for the reason given on subscribe(): this
+     * is a published interface, and an implementation that only trades -- a test
+     * fake, a read-only provider -- should keep compiling and say so plainly if
+     * called, rather than be forced to stub a surface it has no use for.
+     * Authorization is the server's business: these need a manager or admin, and
+     * it answers 401/403 when they are not.
+     */
+
+    /** Opens the marketplace's session, returning it in its new state. */
+    default Session openSession(long marketplaceId) {
+        throw unsupported("openSession");
+    }
+
+    default Session pauseSession(long marketplaceId) {
+        throw unsupported("pauseSession");
+    }
+
+    default Session closeSession(long marketplaceId) {
+        throw unsupported("closeSession");
+    }
+
+    /** Everyone in the caller's account. */
+    default List<Person> users() {
+        throw unsupported("users");
+    }
+
+    private UnsupportedOperationException unsupported(String operation) {
+        return new UnsupportedOperationException(
+                getClass().getName() + " does not support " + operation + "(...)");
+    }
+
     // --- events -------------------------------------------------------------
 
     /**

@@ -58,6 +58,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     private static final TypeReference<List<Holding>>        HOLDINGS_TYPE     = new TypeReference<>() {};
     private static final TypeReference<List<ClientConnection>> CONNECTIONS_TYPE = new TypeReference<>() {};
     private static final TypeReference<ConflictFailure>      CONFLICT_TYPE     = new TypeReference<>() {};
+    private static final TypeReference<List<Person>>         PERSONS_TYPE      = new TypeReference<>() {};
 
     private final Properties properties;
     private final HttpClient httpClient;
@@ -233,6 +234,29 @@ public class HttpFlexemarkets implements Flexemarkets {
         return post(uri(apiRoot, "orders"), order, ORDER_TYPE);
     }
 
+    // --- management ---------------------------------------------------------
+
+    @Override
+    public Session openSession(long marketplaceId) {
+        return patch(uriIdSegment(apiRoot, "marketplaces", marketplaceId, "open"), SESSION_TYPE);
+    }
+
+    @Override
+    public Session pauseSession(long marketplaceId) {
+        return patch(uriIdSegment(apiRoot, "marketplaces", marketplaceId, "pause"), SESSION_TYPE);
+    }
+
+    @Override
+    public Session closeSession(long marketplaceId) {
+        return patch(uriIdSegment(apiRoot, "marketplaces", marketplaceId, "close"), SESSION_TYPE);
+    }
+
+    /** {@code usersJson} rather than {@code users}: the latter is the HAL form. */
+    @Override
+    public List<Person> users() {
+        return get(uri(apiRoot, "usersJson"), PERSONS_TYPE);
+    }
+
     public void listen(long marketplaceId, BlockingQueue<Object> queue) {
         events = new Events(wsUrl(), bearerToken, marketplaceId, clientDescription(), MAPPER, queue);
         events.connect();
@@ -406,6 +430,22 @@ public class HttpFlexemarkets implements Flexemarkets {
         } catch (JacksonException e) {
             throw new ApiException("Failed to serialize request body", e);
         }
+    }
+
+    /**
+     * PATCH with no body -- the shape every session transition takes
+     * ({@code /open}, {@code /pause}, {@code /close}): the verb and the path
+     * carry the whole request.
+     */
+    private <T> T patch(String url, TypeReference<T> type) {
+        var request = HttpRequest.newBuilder()
+            .uri(URI.create(url))
+            .header("Authorization", bearerToken)
+            .header("Accept", "application/json")
+            .header("User-Agent", FM_SDK_CLIENT)
+            .method("PATCH", HttpRequest.BodyPublishers.noBody())
+            .build();
+        return send(request, type);
     }
 
     private <T> T send(HttpRequest request, TypeReference<T> type) {
