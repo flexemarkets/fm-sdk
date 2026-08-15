@@ -125,6 +125,8 @@ def _parse_security(data: dict[str, Any]) -> Security:
         market_id=data.get("marketId", 0),
         units=data.get("units", 0),
         available_units=data.get("availableUnits", 0),
+        # Either spelling, depending on which response produced the holding.
+        short_units=data.get("shortUnits", data.get("initialShortUnits", 0)) or 0,
         can_buy=data.get("canBuy", False),
         can_sell=data.get("canSell", False),
     )
@@ -1208,6 +1210,7 @@ def _holding_to_allotment(marketplace_id: int, holding: Holding) -> dict[str, An
                     "marketId": s.market_id,
                     "units": s.units,
                     "availableUnits": s.available_units,
+                    "shortUnits": s.short_units,
                     "canBuy": s.can_buy,
                     "canSell": s.can_sell,
                 }

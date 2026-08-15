@@ -155,7 +155,7 @@ test("allocate sends positions as grants", async () => {
   const holding: Holding = {
     marketplaceId: 1, sessionId: 0, allocationId: 0, ownerId: 8, name: "alice",
     cash: 10000, availableCash: 10000,
-    securities: [{ marketId: 10, units: 50, availableUnits: 50, canBuy: true, canSell: true }],
+    securities: [{ marketId: 10, units: 50, availableUnits: 50, shortUnits: 0, canBuy: true, canSell: true }],
   };
 
   const fm = await connect();
@@ -257,4 +257,35 @@ test("malformed marketplace JSON fails before any request", async () => {
   }
 
   assert.ok(!requests.includes("POST /api/v1/marketplaces"));
+});
+
+/**
+ * fm-server's Asset emits initialShortUnits for a live session; the allotments
+ * path emits shortUnits. Before this field existed both were dropped in
+ * silence, so a participant permitted to short 50 read as one permitted to
+ * short nothing.
+ */
+test("a short allowance is read under either name and sent as shortUnits", async () => {
+  const holding: Holding = {
+    marketplaceId: 1, sessionId: 0, allocationId: 0, ownerId: 8, name: "alice",
+    cash: 10000, availableCash: 10000,
+    securities: [{ marketId: 10, units: 5, availableUnits: 55, shortUnits: 50, canBuy: true, canSell: true }],
+  };
+
+  const fm = await connect();
+  let allotments;
+  try {
+    await fm.allocate(1, [holding]);
+    allotments = await fm.allotments(1, 42);
+  } finally {
+    fm.close();
+  }
+
+  assert.ok(
+    (bodies.get("POST /api/marketplaces/1/allocations") ?? "").includes('"shortUnits":50'),
+    "requests carry shortUnits",
+  );
+  // The stub answers with "grants" carrying neither spelling, so absent must
+  // read as none rather than undefined — callers do arithmetic on this.
+  assert.equal(allotments[0].assets?.securities[0].shortUnits, 0);
 });

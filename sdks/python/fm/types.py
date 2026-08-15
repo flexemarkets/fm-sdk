@@ -47,9 +47,19 @@ class Approval:
 
 @dataclass
 class Security:
+    """A position in one market, and how far short the holder may go.
+
+    ``short_units`` is the absolute floor: the position may not fall below
+    ``-short_units``, so ``available_units == units + short_units``. It reaches
+    the client under two names -- fm-server's Asset emits
+    ``initialShortUnits`` for a live session, the allotments path emits
+    ``shortUnits`` -- and both are accepted. Requests carry ``shortUnits``.
+    """
+
     market_id: int = 0
     units: int = 0
     available_units: int = 0
+    short_units: int = 0
     can_buy: bool = False
     can_sell: bool = False
 

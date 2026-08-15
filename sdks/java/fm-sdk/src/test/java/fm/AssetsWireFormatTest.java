@@ -36,7 +36,7 @@ class AssetsWireFormatTest {
 
     private static Types.Assets assets() {
         return new Types.Assets(null, "alice", 10_000,
-                List.of(new Types.Security(10L, 50L, 50L, true, true)));
+                List.of(new Types.Security(10L, 50L, 50L, 0L, true, true)));
     }
 
     @Test
@@ -71,6 +71,42 @@ class AssetsWireFormatTest {
 
         assertThat(parsed.securities()).singleElement()
                 .satisfies(s -> assertThat(s.units()).isEqualTo(50L));
+    }
+
+    /**
+     * A short allowance arrives under either name, depending on which response
+     * produced the holding: fm-server's Asset emits "initialShortUnits" for a
+     * live session, the allotments path emits "shortUnits".
+     *
+     * <p>Before 0.0.10 the field did not exist and the record ignores unknown
+     * properties, so both spellings were dropped in silence -- a participant
+     * permitted to short 50 read as one permitted to short nothing.
+     */
+    @Test
+    void aShortAllowanceIsReadUnderEitherName() {
+        var viaShortUnits = mapper.readValue(
+                "{\"marketId\":10,\"units\":5,\"shortUnits\":50}", Types.Security.class);
+        var viaInitial = mapper.readValue(
+                "{\"marketId\":10,\"units\":5,\"initialShortUnits\":50}", Types.Security.class);
+
+        assertThat(viaShortUnits.shortUnits()).isEqualTo(50L);
+        assertThat(viaInitial.shortUnits()).isEqualTo(50L);
+    }
+
+    /** Absent means none, not null -- callers do arithmetic on this. */
+    @Test
+    void anAbsentShortAllowanceIsZero() {
+        var parsed = mapper.readValue("{\"marketId\":10,\"units\":5}", Types.Security.class);
+
+        assertThat(parsed.shortUnits()).isZero();
+    }
+
+    /** Requests carry "shortUnits", which is the name /allocations reads. */
+    @Test
+    void aShortAllowanceIsWrittenAsShortUnits() {
+        var json = mapper.writeValueAsString(new Types.Security(10L, 5L, 55L, 50L, true, true));
+
+        assertThat(json).contains("\"shortUnits\":50");
     }
 
     /** Same shape one level up: responses spell the nested capital either way. */

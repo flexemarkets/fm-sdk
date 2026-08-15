@@ -102,6 +102,8 @@ function parseSecurity(data: JsonObject): Security {
     marketId: (data.marketId as number) ?? 0,
     units: (data.units as number) ?? 0,
     availableUnits: (data.availableUnits as number) ?? 0,
+    // Either spelling, depending on which response produced the holding.
+    shortUnits: (data.shortUnits as number) ?? (data.initialShortUnits as number) ?? 0,
     canBuy: (data.canBuy as boolean) ?? false,
     canSell: (data.canSell as boolean) ?? false,
   };
@@ -214,6 +216,7 @@ function holdingToAllotment(marketplaceId: number, holding: Holding): JsonObject
         marketId: s.marketId,
         units: s.units,
         availableUnits: s.availableUnits,
+        shortUnits: s.shortUnits,
         canBuy: s.canBuy,
         canSell: s.canSell,
       })),

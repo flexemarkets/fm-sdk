@@ -169,3 +169,27 @@ def test_malformed_marketplace_json_fails_before_any_request(fm):
         fm.create_marketplace_from_json("{not json")
 
     assert not any(path == "/api/v1/marketplaces" for _, path in requests)
+
+
+def test_a_short_allowance_is_read_under_either_name():
+    """fm-server's Asset emits initialShortUnits for a live session; the
+    allotments path emits shortUnits. Before this field existed both were
+    dropped in silence, so a participant permitted to short 50 read as one
+    permitted to short nothing."""
+    from fm.client import _parse_security
+
+    assert _parse_security({"marketId": 10, "shortUnits": 50}).short_units == 50
+    assert _parse_security({"marketId": 10, "initialShortUnits": 50}).short_units == 50
+    assert _parse_security({"marketId": 10}).short_units == 0, "absent means none, not None"
+
+
+def test_allocate_sends_the_short_allowance(fm):
+    holding = Holding(
+        marketplace_id=1, owner_id=8, name="alice", cash=10000, available_cash=10000,
+        securities=[Security(market_id=10, units=5, available_units=55, short_units=50)],
+    )
+
+    fm.allocate(1, [holding])
+
+    body = bodies["POST /api/marketplaces/1/allocations"]
+    assert '"shortUnits": 50' in body or '"shortUnits":50' in body

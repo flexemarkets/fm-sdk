@@ -226,7 +226,7 @@ class ManagementApiTest {
     @Test
     void allocateSendsPositionsAsGrants() throws Exception {
         var holding = new Types.Holding(1, 0, 0, 8, "alice", 10000, 10000,
-                List.of(new Types.Security(10L, 50L, 50L, true, true)));
+                List.of(new Types.Security(10L, 50L, 50L, 0L, true, true)));
 
         try (Flexemarkets fm = connect()) {
             fm.allocate(1, List.of(holding));

@@ -30,10 +30,20 @@ export interface Token {
   token: string | null;
 }
 
+/**
+ * A position in one market, and how far short the holder may go.
+ *
+ * `shortUnits` is the absolute floor: the position may not fall below
+ * `-shortUnits`, so `availableUnits === units + shortUnits`. It arrives under
+ * two names — fm-server's Asset emits `initialShortUnits` for a live session,
+ * the allotments path emits `shortUnits` — and both are accepted. Requests
+ * carry `shortUnits`.
+ */
 export interface Security {
   marketId: number;
   units: number;
   availableUnits: number;
+  shortUnits: number;
   canBuy: boolean;
   canSell: boolean;
 }
