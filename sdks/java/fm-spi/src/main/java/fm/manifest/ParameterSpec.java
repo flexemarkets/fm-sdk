@@ -1,5 +1,7 @@
 package fm.manifest;
 
+import java.math.BigDecimal;
+
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
@@ -35,6 +37,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  *                   server gets the value, e.g. {@code session-token}.
  * @param minPairs   for pairs only: the fewest acceptable.
  * @param keyValueType for pairs only: the types of each half.
+ * @param min        the robot's own lower bound, or null for unbounded.
+ * @param max        the robot's own upper bound, or null for unbounded.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record ParameterSpec(
@@ -49,7 +53,9 @@ public record ParameterSpec(
         String unit,
         String source,
         Integer minPairs,
-        KeyValueType keyValueType) {
+        KeyValueType keyValueType,
+        BigDecimal min,
+        BigDecimal max) {
 
     /**
      * Absent or null {@code required} means not required.
@@ -84,6 +90,66 @@ public record ParameterSpec(
      */
     public boolean optional() {
         return !required || defaultValue != null;
+    }
+
+    /**
+     * Whether {@code value} lies inside the robot's own hard bounds.
+     *
+     * <p>Hard bounds are physical validity, not pedagogical sense: a negative
+     * penalty is meaningless and a one-millisecond interval across a fleet is
+     * an outage. The range a manager exposes is theirs to choose and is free
+     * inside these and refused outside them. Absent bounds admit everything, so
+     * this reads correctly against manifests that declare none -- which today
+     * is all of them.
+     *
+     * @param value the candidate, or null.
+     * @return false for null, otherwise whether it satisfies both bounds.
+     */
+    public boolean withinHardBounds(BigDecimal value) {
+        return within(min, max, value);
+    }
+
+    /**
+     * The hard bounds, for a message a manager will read.
+     *
+     * @return e.g. {@code "0 to 1"}, or {@code "unbounded"} on either side.
+     */
+    public String hardBoundsDescription() {
+        return boundsDescription(min, max);
+    }
+
+    /**
+     * The bounds rule itself, over a pair of bounds rather than a whole spec.
+     *
+     * <p>Static because a host that projects the manifest into a shape of its
+     * own -- fm-server serves a narrower record to the browser -- still has to
+     * apply the same rule to the same numbers, and should not have to rebuild a
+     * spec around them or write the comparison again.
+     *
+     * @param min   lower bound, or null for unbounded.
+     * @param max   upper bound, or null for unbounded.
+     * @param value the candidate, or null.
+     * @return false for a null value; otherwise whether both bounds admit it.
+     */
+    public static boolean within(BigDecimal min, BigDecimal max, BigDecimal value) {
+        if (null == value) {
+            return false;
+        }
+        return (null == min || value.compareTo(min) >= 0)
+                && (null == max || value.compareTo(max) <= 0);
+    }
+
+    /**
+     * The same bounds, spelt for a message.
+     *
+     * @param min lower bound, or null for unbounded.
+     * @param max upper bound, or null for unbounded.
+     * @return e.g. {@code "0 to 1"}, or {@code "unbounded"} on either side.
+     */
+    public static String boundsDescription(BigDecimal min, BigDecimal max) {
+        return (null == min ? "unbounded" : min.toPlainString())
+                + " to "
+                + (null == max ? "unbounded" : max.toPlainString());
     }
 
     /**

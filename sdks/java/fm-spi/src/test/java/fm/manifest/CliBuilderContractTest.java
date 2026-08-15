@@ -26,22 +26,22 @@ class CliBuilderContractTest {
 
     private static ParameterSpec option(String name, String cli, String defaultValue) {
         return new ParameterSpec(name, cli, ParameterType.OPTION, ValueType.INTEGER,
-                null, null, false, defaultValue, null, null, null, null);
+                null, null, false, defaultValue, null, null, null, null, null, null);
     }
 
     private static ParameterSpec positional(String name, boolean required) {
         return new ParameterSpec(name, name.toUpperCase(java.util.Locale.ROOT), ParameterType.POSITIONAL,
-                ValueType.FLOAT, null, null, required, null, null, null, null, null);
+                ValueType.FLOAT, null, null, required, null, null, null, null, null, null, null);
     }
 
     private static ParameterSpec pairs(String name) {
         return new ParameterSpec(name, "(SYMBOL SPREAD)...", ParameterType.POSITIONAL_PAIRS,
-                null, null, null, true, null, null, null, null, null);
+                null, null, null, true, null, null, null, null, null, null, null);
     }
 
     private static ParameterSpec platform(String name, String cli, String source) {
         return new ParameterSpec(name, cli, ParameterType.OPTION, ValueType.STRING,
-                null, null, true, null, null, source, null, null);
+                null, null, true, null, null, source, null, null, null, null);
     }
 
     private static Manifest manifest() {
@@ -134,6 +134,43 @@ class CliBuilderContractTest {
                 Map.of("credential", "a-token")))
                 .isInstanceOf(CliBuilder.InvalidLaunchException.class)
                 .hasMessageContaining("groups of 2");
+    }
+
+    // --- hard bounds ---------------------------------------------------------------
+
+    /**
+     * Bounds a robot declares about itself, which a manager's range must sit
+     * inside. They live here rather than in a host because they are part of what
+     * a robot says about itself -- the schema has carried them since
+     * PLATFORM-ROBOTS.md §5.3, and fm-server was reading them through a second
+     * manifest type of its own for want of them in the contract.
+     */
+    @Test
+    void aValueOutsideTheRobotsOwnBoundsIsNotWithinThem() {
+        ParameterSpec bounded = new ParameterSpec("penalty", "PENALTY", ParameterType.POSITIONAL,
+                ValueType.FLOAT, null, null, true, null, null, null, null, null,
+                new java.math.BigDecimal("0"), new java.math.BigDecimal("1"));
+
+        assertThat(bounded.withinHardBounds(new java.math.BigDecimal("0.5"))).isTrue();
+        assertThat(bounded.withinHardBounds(new java.math.BigDecimal("0"))).as("inclusive").isTrue();
+        assertThat(bounded.withinHardBounds(new java.math.BigDecimal("1"))).as("inclusive").isTrue();
+        assertThat(bounded.withinHardBounds(new java.math.BigDecimal("-0.1"))).isFalse();
+        assertThat(bounded.withinHardBounds(new java.math.BigDecimal("1.1"))).isFalse();
+        assertThat(bounded.withinHardBounds(null)).as("nothing is not a value in range").isFalse();
+        assertThat(bounded.hardBoundsDescription()).isEqualTo("0 to 1");
+    }
+
+    /**
+     * No robot declares bounds yet, so the common case is both absent, and it
+     * must admit everything rather than nothing.
+     */
+    @Test
+    void anUndeclaredBoundAdmitsEverything() {
+        ParameterSpec unbounded = positional("penalty", true);
+
+        assertThat(unbounded.withinHardBounds(new java.math.BigDecimal("-1e9"))).isTrue();
+        assertThat(unbounded.withinHardBounds(new java.math.BigDecimal("1e9"))).isTrue();
+        assertThat(unbounded.hardBoundsDescription()).isEqualTo("unbounded to unbounded");
     }
 
     @Test
