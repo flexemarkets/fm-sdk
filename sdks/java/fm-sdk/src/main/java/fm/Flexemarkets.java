@@ -160,6 +160,22 @@ public interface Flexemarkets extends AutoCloseable {
     }
 
     /**
+     * Create a marketplace from its JSON definition, returning what was made.
+     *
+     * <p>Takes JSON rather than a builder because that is how the definitions
+     * exist: a study keeps its marketplace as a file it can print, diff and
+     * hand to someone, and the CLI's {@code --dry-run} prints exactly the
+     * document that would be posted. A typed builder here would mean the thing
+     * printed and the thing sent were assembled by different code.
+     *
+     * <p>The JSON is parsed before it is sent, so a malformed definition fails
+     * locally rather than as a 400 from the server.
+     */
+    default Marketplace createMarketplaceFromJson(String json) {
+        throw unsupported("createMarketplaceFromJson");
+    }
+
+    /**
      * Stage the opening positions for the next session, returning them as read
      * back from the server.
      *

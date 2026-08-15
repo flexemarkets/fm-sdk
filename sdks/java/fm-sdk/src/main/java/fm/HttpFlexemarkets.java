@@ -267,6 +267,18 @@ public class HttpFlexemarkets implements Flexemarkets {
         return List.copyOf(get(url, ALLOTMENTS_TYPE));
     }
 
+    /** V1 route, addressed from the server rather than through a HAL link. */
+    @Override
+    public Marketplace createMarketplaceFromJson(String json) {
+        Object definition;
+        try {
+            definition = MAPPER.readValue(json, new TypeReference<Object>() {});
+        } catch (JacksonException e) {
+            throw new ApiException("Marketplace definition is not valid JSON", e);
+        }
+        return post(server(endpointUrl()) + "/v1/marketplaces", definition, MARKETPLACE_TYPE);
+    }
+
     @Override
     public List<Holding> allocate(long marketplaceId, List<Holding> holdings) {
         var allotments = holdings.stream().map(h -> _toAllotment(marketplaceId, h)).toList();

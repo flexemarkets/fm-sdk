@@ -81,6 +81,11 @@ class ManagementApiTest {
             respond(exchange, 200, allotmentsJson());
         });
 
+        server.createContext("/api/v1/marketplaces", exchange -> {
+            record(exchange);
+            respond(exchange, 200, "{\"id\":77,\"name\":\"simple-dividend\",\"markets\":[]}");
+        });
+
         server.createContext("/api/marketplaces/1/allocations", exchange -> {
             record(exchange);
             respond(exchange, 200, allotmentsJson());
@@ -250,6 +255,36 @@ class ManagementApiTest {
                 .as("an allotment predates the session it will be opened under")
                 .isZero();
         assertThat(back.securities().get(0).marketId()).isEqualTo(10L);
+    }
+
+    @Test
+    void aMarketplaceIsCreatedFromItsJsonDefinition() throws Exception {
+        Types.Marketplace created;
+        try (Flexemarkets fm = connect()) {
+            created = fm.createMarketplaceFromJson(
+                    "{\"name\":\"simple-dividend\",\"markets\":[{\"symbol\":\"STK\"}]}");
+        }
+
+        assertThat(created.id()).isEqualTo(77L);
+        assertThat(requests).contains("POST /api/v1/marketplaces");
+        assertThat(bodyOf("POST /api/v1/marketplaces"))
+                .as("the definition is forwarded, not rebuilt")
+                .contains("\"STK\"");
+    }
+
+    /**
+     * Parsed before it is sent, so a malformed definition fails here rather
+     * than as a 400 whose message is about a document the caller cannot see.
+     */
+    @Test
+    void malformedMarketplaceJsonFailsBeforeAnyRequest() throws Exception {
+        try (Flexemarkets fm = connect()) {
+            assertThatThrownBy(() -> fm.createMarketplaceFromJson("{not json"))
+                    .isInstanceOf(Exceptions.ApiException.class)
+                    .hasMessageContaining("not valid JSON");
+        }
+
+        assertThat(requests).noneSatisfy(r -> assertThat(r).contains("POST /api/v1/marketplaces"));
     }
 
     /** A CSV, returned as-is. Parsing it as JSON would fail on the header row. */
