@@ -672,6 +672,27 @@ export class Flexemarkets {
     return parseAccount(data.account as JsonObject);
   }
 
+  /** One account by id. */
+  async accountById(accountId: number): Promise<Account | null> {
+    return parseAccount(await this._get(uriId(this._apiRoot, "accounts", accountId)));
+  }
+
+  /** One user by id. */
+  async userById(userId: number): Promise<Person> {
+    return parsePerson(await this._get(uriId(this._apiRoot, "users", userId))) as Person;
+  }
+
+  /** The marketplace's private-trader identifiers. */
+  async identifiers(marketplaceId: number): Promise<string[]> {
+    const url = uriIdSegment(this._apiRoot, "marketplaces", marketplaceId, "privateTraders");
+    return (await this._get(url)) as unknown as string[];
+  }
+
+  /** Delete the caller's own account. Its own route, not accounts/{yourId}. */
+  async deleteMyAccount(): Promise<void> {
+    await this._delete(`${server(this._endpoint)}/accounts/me`);
+  }
+
   /** Every account on the server. Admin-only. */
   async accounts(): Promise<Account[]> {
     const url = uriParam(this._apiRoot, "accounts", "format=application/json");

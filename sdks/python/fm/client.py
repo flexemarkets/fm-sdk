@@ -886,6 +886,19 @@ class Flexemarkets:
         url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "currentSession")
         return _parse_session(self._get(url).json())
 
+    def account_by_id(self, account_id: int) -> Account:
+        """One account by id.
+
+        Named apart from the ``account`` property, which is the account this
+        connection signed in to. Java overloads the two; a property cannot
+        take an argument, so here they are separate names.
+        """
+        return _parse_account(self._get(_uri_id(self._api_root, "accounts", account_id)).json())
+
+    def user_by_id(self, user_id: int) -> Person:
+        """One user by id; see :meth:`account_by_id` for the name."""
+        return _parse_person(self._get(_uri_id(self._api_root, "users", user_id)).json())
+
     def identifiers(self, marketplace_id: int) -> list[str]:
         url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "privateTraders")
         return self._get(url).json()
