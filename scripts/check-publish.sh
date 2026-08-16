@@ -169,27 +169,40 @@ check_java_credentials() {
 # Is this release recorded in git?
 # ---------------------------------------------------------------------------
 
-# The tag has to exist, name this version, sit on the commit being published,
-# and be on every remote -- in that order, because each answer makes the next
-# question meaningful. A tag pointing somewhere other than HEAD is worse than
-# no tag: it says the artifact came from a commit it did not.
+# Each artifact's tag has to exist, sit on the commit being published, and be on
+# every remote -- in that order, because each answer makes the next question
+# meaningful. A tag pointing somewhere other than HEAD is worse than no tag: it
+# says the artifact came from a commit it did not.
 #
-# fm-spi is exempt. It is on its own version line with no tag convention of its
-# own, and `v$VERSION` names the SDK, which an spi-only release does not move.
-# Gating spi on the SDK's tag would refuse every such release, so it is left
-# alone deliberately rather than by omission.
-check_release_tag() {
-    local tag="v$VERSION"
+# fm-sdk and fm-spi are tagged separately because they are versioned separately:
+# `v$VERSION` is the SDK, `fm-spi-v$SPI_VERSION` the contract. Neither prefix
+# reaches the other's, and only the SDK's matches release.yml's `v*.*.*`
+# trigger, so tagging the contract cannot fire an SDK publish.
 
+# The tree itself, asked once however many artifacts ship from it.
+check_git_worktree() {
     if ! git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
-        fail "git $tag" "not a git checkout — cannot confirm the release is recorded"
+        fail "git" "not a git checkout — cannot confirm the release is recorded"
         hints+=("git: publishing from an unpacked archive leaves nothing pointing at the source of the artifact. Publish from a clone.")
-        return
+        return 1
     fi
 
+    if [[ -n "$(git -C "$ROOT" status --porcelain --untracked-files=no)" ]]; then
+        fail "git worktree" "tracked files modified since the last commit"
+        hints+=("git: the tree has changes no tag covers, so the build would not be any tagged commit. Commit them or stash them.")
+        return 1
+    fi
+
+    pass "git worktree" "clean at $(git -C "$ROOT" rev-parse --short HEAD)"
+}
+
+# $1 tag, $2 what it names (for the hint), $3 version
+check_release_tag() {
+    local tag="$1" what="$2" version="$3"
+
     if ! git -C "$ROOT" rev-parse -q --verify "refs/tags/$tag" >/dev/null 2>&1; then
-        fail "git $tag" "no such tag"
-        hints+=("git: tag the release commit first — git tag -a $tag -m \"fm-sdk $VERSION\" && git push origin $tag. 0.0.7 through 0.0.12 all shipped without one, and which commit built them had to be reconstructed afterwards from chore: messages and pom diffs.")
+        fail "$tag" "no such tag"
+        hints+=("git: tag the release commit first — git tag -a $tag -m \"$what $version\" && git push origin $tag. fm-sdk 0.0.7 through 0.0.12 and fm-spi 0.0.7 through 0.0.11 all shipped without one, and which commit built them had to be reconstructed afterwards from release messages and pom diffs.")
         return
     fi
 
@@ -198,18 +211,12 @@ check_release_tag() {
     head=$(git -C "$ROOT" rev-parse HEAD)
 
     if [[ "$tagged" != "$head" ]]; then
-        fail "git $tag" "points at ${tagged:0:8}, HEAD is ${head:0:8}"
+        fail "$tag" "points at ${tagged:0:8}, HEAD is ${head:0:8}"
         hints+=("git: $tag names a different commit than the one about to be published, so the artifact would not match what the tag claims. Move the tag, or publish from the tagged commit.")
         return
     fi
 
-    if [[ -n "$(git -C "$ROOT" status --porcelain --untracked-files=no)" ]]; then
-        fail "git $tag" "tracked files modified since the commit"
-        hints+=("git: the tree has changes the tag does not cover, so the build would not be the tagged commit. Commit them or stash them.")
-        return
-    fi
-
-    pass "git $tag" "at HEAD (${head:0:8}), tree clean"
+    pass "$tag" "at HEAD"
 
     # A tag only on this machine records nothing anyone else can reach, which
     # is most of the point. Same rule as the registry checks: unreachable
@@ -224,6 +231,18 @@ check_release_tag() {
             pass "$tag on $remote" "present"
         fi
     done
+}
+
+# fm-spi ships inside the same reactor bundle as the SDK, so it needs its own
+# tag whenever it is actually in that bundle -- and does not when the pom holds
+# it back for not having moved.
+check_spi_release_tag() {
+    if grep -qx "fm-spi" <<< "$(excluded_artifacts)"; then
+        pass "fm-spi-v$SPI_VERSION" "excluded from this release by the pom"
+        return
+    fi
+
+    check_release_tag "fm-spi-v$SPI_VERSION" "fm-spi" "$SPI_VERSION"
 }
 
 # ---------------------------------------------------------------------------
@@ -314,11 +333,12 @@ echo ""
 # Checked first, and for every registry: it is the one failure here that costs
 # nothing to fix and cannot be fixed afterwards without the answer already
 # being lost.
-if [[ "$TARGET" != "spi" ]]; then
-    echo "Release record:"
-    check_release_tag
-    echo ""
+echo "Release record:"
+if check_git_worktree; then
+    [[ "$TARGET" != "spi" ]] && check_release_tag "v$VERSION" "fm-sdk" "$VERSION"
+    { wants java || [[ "$TARGET" == "spi" ]]; } && check_spi_release_tag
 fi
+echo ""
 
 echo "Credentials:"
 wants npm  && check_npm_credentials
