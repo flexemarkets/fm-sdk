@@ -341,6 +341,26 @@ public interface Flexemarkets extends AutoCloseable {
         throw unsupported("approveAccount");
     }
 
+    /** One account by id. */
+    default Account account(long accountId) {
+        throw unsupported("account(accountId)");
+    }
+
+    /** One user by id. */
+    default Person user(long userId) {
+        throw unsupported("user(userId)");
+    }
+
+    /** The marketplace's private-trader identifiers. */
+    default List<String> identifiers(long marketplaceId) {
+        throw unsupported("identifiers");
+    }
+
+    /** Delete the caller's own account. Destructive, and not undoable. */
+    default void deleteMyAccount() {
+        throw unsupported("deleteMyAccount");
+    }
+
     /** Every account on the server. Admin-only. */
     default List<Account> accounts() {
         throw unsupported("accounts");

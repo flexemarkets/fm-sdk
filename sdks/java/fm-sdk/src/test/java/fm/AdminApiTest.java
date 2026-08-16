@@ -64,6 +64,8 @@ class AdminApiTest {
                     """.formatted(TOKEN));
             } else if ("DELETE".equals(exchange.getRequestMethod())) {
                 respond(exchange, 204, "");
+            } else if (exchange.getRequestURI().getPath().matches(".*/accounts/\\d+")) {
+                respond(exchange, 200, "{\"id\":2,\"name\":\"acme\",\"approval\":true}");
             } else {
                 respond(exchange, 200,
                         "[{\"id\":1,\"name\":\"dev\"},{\"id\":2,\"name\":\"acme\"}]");
@@ -96,6 +98,16 @@ class AdminApiTest {
             } else {
                 respond(exchange, 200, "{\"id\":5,\"name\":\"course\",\"markets\":[]}");
             }
+        });
+
+        server.createContext("/api/marketplaces/1/privateTraders", exchange -> {
+            record(exchange);
+            respond(exchange, 200, "[\"t1\",\"t2\"]");
+        });
+
+        server.createContext("/api/accounts/me", exchange -> {
+            record(exchange);
+            respond(exchange, 204, "");
         });
 
         server.createContext("/api/marketplaces/1/symbols", exchange -> {
@@ -306,6 +318,28 @@ class AdminApiTest {
         }
 
         assertThat(symbols).containsExactly("STK", "BND");
+    }
+
+    @Test
+    void singleAccountsUsersAndIdentifiersAreReadById() throws Exception {
+        try (Flexemarkets fm = connect()) {
+            assertThat(fm.account(2).name()).isEqualTo("acme");
+            assertThat(fm.user(42).email()).isEqualTo("alice@lab.edu");
+            assertThat(fm.identifiers(1)).containsExactly("t1", "t2");
+        }
+
+        assertThat(requests).contains("GET /api/accounts/2");
+        assertThat(requests).contains("GET /api/users/42");
+    }
+
+    /** Deleting your own account is its own route, not accounts/{yourId}. */
+    @Test
+    void deletingYourOwnAccountUsesTheMeRoute() throws Exception {
+        try (Flexemarkets fm = connect()) {
+            fm.deleteMyAccount();
+        }
+
+        assertThat(requests).contains("DELETE /api/accounts/me");
     }
 
     // --- identity -----------------------------------------------------------

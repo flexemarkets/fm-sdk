@@ -348,6 +348,26 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     @Override
+    public Account account(long accountId) {
+        return get(uriId(apiRoot, "accounts", accountId), ACCOUNT_TYPE);
+    }
+
+    @Override
+    public Person user(long userId) {
+        return get(uriId(apiRoot, "users", userId), PERSON_TYPE);
+    }
+
+    @Override
+    public List<String> identifiers(long marketplaceId) {
+        return get(uriIdSegment(apiRoot, "marketplaces", marketplaceId, "privateTraders"), SYMBOLS_TYPE);
+    }
+
+    @Override
+    public void deleteMyAccount() {
+        delete(server(endpointUrl()) + "/accounts/me");
+    }
+
+    @Override
     public List<Account> accounts() {
         return get(uriParam(apiRoot, "accounts", "format=application/json"), ACCOUNTS_TYPE);
     }
