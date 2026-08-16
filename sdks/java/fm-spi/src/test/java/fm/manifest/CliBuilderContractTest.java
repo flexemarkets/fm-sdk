@@ -66,6 +66,43 @@ class CliBuilderContractTest {
                 .isInstanceOf(CliBuilder.InvalidLaunchException.class);
     }
 
+    /**
+     * The ordinary case, and the one this refused until fm-spi 0.0.11.
+     *
+     * <p>{@code symbolSpreads} is declared in the user block, which says only
+     * that it <em>may</em> face a participant. Until a manager exposes it, the
+     * manager sets it — that is what a freshly configured robot looks like, so
+     * this is the common path rather than an edge case, and refusing it made
+     * every robot with a user block impossible to launch.
+     */
+    @Test
+    void aManagerMaySupplyAUserEligibleParameterTheyHaveNotExposed() {
+        Map<String, String> merged = CliBuilder.merge(manifest(),
+                Map.of("penalty", "0.03", "symbolSpreads", "AAPL 0.5"),
+                Map.of(),
+                Map.of("credential", "a-token"));
+
+        assertThat(merged)
+                .as("eligibility is the robot's; disposition is the manager's (§5.1)")
+                .containsEntry("symbolSpreads", "AAPL 0.5");
+    }
+
+    /** The rule itself, stated as a table, since only PLATFORM is absolute. */
+    @Test
+    void onlyPlatformIsAbsolute() {
+        assertThat(CliBuilder.maySupply(Ownership.USER, Ownership.MANAGER))
+                .as("a manager may fix what they have not exposed").isTrue();
+        assertThat(CliBuilder.maySupply(Ownership.MANAGER, Ownership.USER))
+                .as("a participant may never set a manager parameter").isFalse();
+        assertThat(CliBuilder.maySupply(Ownership.PLATFORM, Ownership.MANAGER))
+                .as("a credential is not the manager's either").isFalse();
+        assertThat(CliBuilder.maySupply(Ownership.USER, Ownership.PLATFORM))
+                .as("the platform supplies platform parameters and nothing else").isFalse();
+        assertThat(CliBuilder.maySupply(Ownership.PLATFORM, Ownership.PLATFORM)).isTrue();
+        assertThat(CliBuilder.maySupply(Ownership.USER, Ownership.USER)).isTrue();
+        assertThat(CliBuilder.maySupply(Ownership.MANAGER, Ownership.MANAGER)).isTrue();
+    }
+
     @Test
     void nobodyButThePlatformSuppliesAPlatformParameter() {
         assertThatThrownBy(() -> CliBuilder.merge(manifest(),

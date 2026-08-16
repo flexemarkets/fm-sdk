@@ -69,6 +69,46 @@ public final class CliBuilder {
         return merged;
     }
 
+    /**
+     * Whether {@code by} may supply a value for a parameter the manifest
+     * declares under {@code owner}.
+     *
+     * <p>Only {@link Ownership#PLATFORM} is absolute. A credential is never
+     * eligible to be anyone else's, and that is the robot's call rather than the
+     * manager's, so platform parameters may be supplied by the platform and by
+     * nothing else, in either direction.
+     *
+     * <p>The manager/user split is not absolute, and reading it that way was a
+     * defect. PLATFORM-ROBOTS.md §5.1 is explicit: the blocks state
+     * <em>eligibility</em> — may this ever face a participant — decided by the
+     * robot at build time, while <em>disposition</em> is the manager's, per
+     * marketplace. The blocks are a suggested default split, "not the
+     * enforcement point": an earlier draft made ownership static in the manifest
+     * and could not express "the manager decides which controls their
+     * participants get".
+     *
+     * <p>This built that draft anyway, and the effect was worse than a strict
+     * rule. A manager who fixes a user-eligible parameter — which is what every
+     * robot looks like before anyone exposes anything — produced a launch that
+     * fm-server accepted, resolved correctly, and then could not build a command
+     * line for. Robots with any user block could be configured and never
+     * started, and the failure arrived as a 500 at the moment of launch.
+     *
+     * <p>So: a participant may never supply a manager parameter, which is the
+     * guarantee worth keeping and the reason this rule is in the contract at
+     * all. A manager supplying a user-eligible one is ordinary.
+     *
+     * @param owner the block the manifest declares the parameter in.
+     * @param by    who is supplying the value.
+     * @return whether the value is admissible.
+     */
+    static boolean maySupply(Ownership owner, Ownership by) {
+        if (Ownership.PLATFORM == owner || Ownership.PLATFORM == by) {
+            return owner == by;
+        }
+        return Ownership.MANAGER == by || owner == by;
+    }
+
     private static void accept(
             Manifest manifest,
             Map<String, String> merged,
@@ -87,7 +127,7 @@ public final class CliBuilder {
             // Refused, not dropped. Silently ignoring a participant's attempt to
             // set a manager parameter would leave them believing the value took
             // effect, and would hide an attempt to override a credential.
-            if (owner != by) {
+            if (!maySupply(owner, by)) {
                 throw new InvalidLaunchException(
                         "'" + name + "' is owned by " + owner + " and cannot be set by " + by);
             }
