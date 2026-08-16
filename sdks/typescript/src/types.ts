@@ -181,6 +181,32 @@ export interface ClientConnection {
   sessionId: number | null;
 }
 
+export interface ManagerOtpEntry {
+  userId: number;
+  email: string | null;
+  otp: string | null;
+}
+
+/**
+ * One-time passcodes a manager mints on behalf of their users.
+ *
+ * Credentials, and short-lived: `expiresAt` is when the whole bundle stops
+ * working, not a per-entry deadline. This is how a classroom signs in without
+ * passwords being handed around, which is also why nothing here should be
+ * logged.
+ */
+export interface ManagerOtpBundle {
+  expiresAt: string | null;
+  otps: ManagerOtpEntry[];
+}
+
+/** The server's answer to an approval request. */
+export interface Approval {
+  account: Account | null;
+  description: string | null;
+  approve: boolean | null;
+}
+
 export interface Version {
   version: number;
 }

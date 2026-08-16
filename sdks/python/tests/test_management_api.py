@@ -88,6 +88,12 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/v1/marketplaces":
             self._send({"id": 77, "name": "simple-dividend", "markets": []})
             return
+        if self.path == "/api/otp/manager":
+            self._send({
+                "expiresAt": "2026-08-15T18:00:00Z",
+                "otps": [{"userId": 1, "email": "alice@lab.edu", "otp": "123456"}],
+            })
+            return
         # Sign-in posts here too; answering it with an allotment list makes the
         # connection fail somewhere far from the cause.
         if self.path.startswith("/api/tokens"):
@@ -258,3 +264,23 @@ def test_empty_filters_fall_back_to_the_unfiltered_routes(fm):
     paths = [p for _, p in requests]
     assert not any("sessionIds=" in p for p in paths)
     assert not any("?sessions=" in p for p in paths)
+
+
+def test_manager_otp_bundles_are_minted_for_the_users_asked(fm):
+    """These are credentials, so the shape matters: a bundle read as empty
+    would send a class away with no way to sign in, and look like success.
+    """
+    bundle = fm.manager_otp_bundle([1, 2])
+
+    assert bundle.expires_at == "2026-08-15T18:00:00Z"
+    assert len(bundle.otps) == 1
+    assert bundle.otps[0].user_id == 1
+    assert bundle.otps[0].otp == "123456"
+    assert '"userIds":[1,2]' in bodies["POST /api/otp/manager"].replace(" ", "")
+
+
+def test_the_token_is_the_one_signed_in_with(fm):
+    """Handed back so a caller can open a sibling connection on the same
+    identity without holding the password again.
+    """
+    assert fm.token().token == TOKEN

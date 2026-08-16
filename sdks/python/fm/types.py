@@ -190,6 +190,27 @@ class ClientConnection:
 
 
 @dataclass
+class ManagerOtpEntry:
+    user_id: int = 0
+    email: str | None = None
+    otp: str | None = None
+
+
+@dataclass
+class ManagerOtpBundle:
+    """One-time passcodes a manager mints on behalf of their users.
+
+    Credentials, and short-lived: ``expires_at`` is when the whole bundle
+    stops working, not a per-entry deadline. This is how a classroom signs
+    in without passwords being handed around, which is also why nothing
+    here should be logged.
+    """
+
+    expires_at: str | None = None
+    otps: list[ManagerOtpEntry] = field(default_factory=list)
+
+
+@dataclass
 class Version:
     version: int = 0
 

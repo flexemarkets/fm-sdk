@@ -61,13 +61,15 @@ before(async () => {
       if (url.startsWith("/api/tokens")) {
         send({
           token: TOKEN,
-          person: { id: 7, accountId: 1, email: "dev@dev" },
+          person: { id: 7, accountId: 1, email: "dev@dev", roles: ["ROLE_MANAGER"] },
           account: { id: 1, name: "dev" },
         });
       } else if (url === "/api") {
         send({
           _links: {
             marketplaces: { href: `${api()}/marketplaces` },
+            accounts: { href: `${api()}/accounts` },
+            users: { href: `${api()}/users` },
             symbolTradesJson: { href: `${api()}/symbolTradesJson` },
             usersJson: { href: `${api()}/usersJson` },
           },
@@ -82,6 +84,22 @@ before(async () => {
         // The symbol-keyed route answers with the trade id in "original" and
         // no symbol on the order.
         send([{ id: 0, original: 4242, units: 5, price: 950 }]);
+      } else if (url === "/api/approvals" && req.method === "POST") {
+        send({ account: { id: 2, name: "acme", approval: true }, approve: true });
+      } else if (url === "/api/otp/manager" && req.method === "POST") {
+        send({
+          expiresAt: "2026-08-15T18:00:00Z",
+          otps: [{ userId: 1, email: "alice@lab.edu", otp: "123456" }],
+        });
+      } else if (url === "/api/accounts" && req.method === "POST") {
+        send({ token: TOKEN, person: { id: 8 }, account: { id: 2, name: "acme" } });
+      } else if (url.startsWith("/api/accounts")) {
+        send([{ id: 1, name: "dev" }, { id: 2, name: "acme" }]);
+      } else if (url.startsWith("/api/users/") && req.method === "DELETE") {
+        res.writeHead(204);
+        res.end();
+      } else if (url === "/api/users" && req.method === "POST") {
+        send({ id: 42, accountId: 1, email: "alice@lab.edu" });
       } else if (url === "/api/usersJson") {
         send([{ id: 7, email: "dev@dev" }, { id: 8, email: "t1@dev" }]);
       } else if (url.startsWith("/api/marketplaces/1/holdings/downloads")) {
@@ -376,4 +394,104 @@ test("empty filters fall back to the unfiltered routes", async () => {
 
   assert.ok(!requests.some((r) => r.includes("sessionIds=")));
   assert.ok(!requests.some((r) => r.includes("?sessions=")));
+});
+
+/**
+ * The owner's credentials go out as ownerEmail/ownerPassword. The plausible
+ * guess -- email/password -- creates an account with an owner the server
+ * cannot sign in as, and answers 200 while doing it.
+ */
+test("signup names the owner's credentials the way the server reads them", async () => {
+  const fm = await connect();
+  try {
+    const created = await fm.signup("acme", "owner@new", "s3cret", "Ada", "Lovelace");
+    assert.equal(created.account?.name, "acme");
+  } finally {
+    fm.close();
+  }
+
+  const body = bodies.get("POST /api/accounts")!;
+  assert.ok(body.includes('"ownerEmail":"owner@new"'));
+  assert.ok(body.includes('"ownerPassword":"s3cret"'));
+  assert.ok(!body.includes('"email":"owner@new"'));
+});
+
+test("accounts are listed and approved", async () => {
+  const fm = await connect();
+  try {
+    assert.equal((await fm.accounts()).length, 2);
+    const approved = await fm.approveAccount("acme");
+    assert.equal(approved?.name, "acme");
+  } finally {
+    fm.close();
+  }
+
+  assert.ok(bodies.get("POST /api/approvals")!.includes('"approval":true'));
+});
+
+test("a user is created with the roles given", async () => {
+  const fm = await connect();
+  try {
+    const created = await fm.createUser("alice@lab.edu", "pw", "Alice", "Anderson", ["ROLE_MANAGER"]);
+    assert.equal(created.id, 42);
+  } finally {
+    fm.close();
+  }
+
+  const body = bodies.get("POST /api/users")!;
+  assert.ok(body.includes('"roles":["ROLE_MANAGER"]'));
+});
+
+/**
+ * The verb is the whole request for a delete: a POST to the same path would
+ * answer 2xx and leave the user standing.
+ */
+test("deletes use the DELETE verb", async () => {
+  const fm = await connect();
+  try {
+    await fm.deleteUser(42);
+  } finally {
+    fm.close();
+  }
+
+  assert.ok(requests.some((r) => r === "DELETE /api/users/42"), requests.join(", "));
+});
+
+/** Unit bounds are sent fixed; a market without them rejects every order. */
+test("createMarket sends the fixed unit bounds", async () => {
+  const fm = await connect();
+  try {
+    await fm.createMarket(1, "STK", "Stock", 0, 10000, 1, false);
+  } finally {
+    fm.close();
+  }
+
+  const body = bodies.get("POST /api/marketplaces/1/markets")!;
+  assert.ok(body.includes('"unitMinimum":1'));
+  assert.ok(body.includes('"unitMaximum":100'));
+  assert.ok(body.includes('"unitTick":1'));
+});
+
+test("otp bundles are minted for the users asked", async () => {
+  const fm = await connect();
+  try {
+    const bundle = await fm.managerOtpBundle([1, 2]);
+    assert.equal(bundle.expiresAt, "2026-08-15T18:00:00Z");
+    assert.equal(bundle.otps.length, 1);
+    assert.equal(bundle.otps[0]!.otp, "123456");
+  } finally {
+    fm.close();
+  }
+
+  assert.ok(bodies.get("POST /api/otp/manager")!.includes('"userIds":[1,2]'));
+});
+
+test("isAdmin reads the roles on the token", async () => {
+  const fm = await connect();
+  try {
+    assert.equal(fm.isAdmin(), false, "ROLE_MANAGER is not ROLE_ADMIN");
+    assert.equal(fm.token().token, TOKEN);
+  } finally {
+    fm.close();
+  }
 });

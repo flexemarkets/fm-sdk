@@ -44,6 +44,8 @@ from .types import (
     Approval,
     ClientConnection,
     Holding,
+    ManagerOtpBundle,
+    ManagerOtpEntry,
     Market,
     Marketplace,
     Order,
@@ -562,6 +564,14 @@ class Flexemarkets:
     def endpoint_marketplace_id(self) -> int:
         return _resource_id(self._endpoint)
 
+    def token(self) -> Token:
+        """The token this connection signed in with.
+
+        Exposed so a caller can mint a sibling connection on the same
+        identity without holding the password again.
+        """
+        return self._token_obj
+
     def is_admin(self) -> bool:
         return self.has_role("ROLE_ADMIN")
 
@@ -716,6 +726,26 @@ class Flexemarkets:
     def delete_account(self, account_id: int) -> None:
         url = _uri_id(self._api_root, "accounts", account_id)
         self._delete(url)
+
+    def manager_otp_bundle(self, user_ids: list[int]) -> ManagerOtpBundle:
+        """Mint one-time passcodes for the given users.
+
+        These are credentials: not to be logged, not to be persisted, and
+        delivered to the person they belong to.
+        """
+        url = _server(self._endpoint) + "/otp/manager"
+        data = self._post(url, {"userIds": user_ids}).json()
+        return ManagerOtpBundle(
+            expires_at=data.get("expiresAt"),
+            otps=[
+                ManagerOtpEntry(
+                    user_id=o.get("userId", 0),
+                    email=o.get("email"),
+                    otp=o.get("otp"),
+                )
+                for o in data.get("otps") or []
+            ],
+        )
 
     def delete_my_account(self) -> None:
         url = _server(self._endpoint) + "/accounts/me"

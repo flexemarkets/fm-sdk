@@ -15,6 +15,7 @@ import type {
   Assets,
   ClientConnection,
   Holding,
+  ManagerOtpBundle,
   Market,
   Marketplace,
   Order,
@@ -447,6 +448,7 @@ export class Flexemarkets {
   private _apiRoot!: ApiRoot;
   private _account!: Account;
   private _user!: Person;
+  private _tokenObj!: Token;
   private _eventListener: EventListener | null = null;
 
   private constructor(
@@ -494,6 +496,7 @@ export class Flexemarkets {
     const bearer = `Bearer ${tokenObj.token}`;
 
     const fm = new Flexemarkets(ep, baseUrl, bearer, desc);
+    fm._tokenObj = tokenObj;
     fm._account = tokenObj.account!;
     fm._user = tokenObj.person!;
 
@@ -625,6 +628,150 @@ export class Flexemarkets {
     return JSON.parse(body);
   }
 
+  // -- administration --------------------------------------------------------
+
+  /*
+   * Creating accounts and users, approving them, deleting them, and minting
+   * one-time passcodes. fm-server's administrative surface, carried here so
+   * that the tools which run a course have a client that is not fm-lib-net.
+   *
+   * Several are destructive and one issues credentials. They need an admin or
+   * manager and the server answers 401/403 otherwise, which is the only
+   * guard: possessing the method is not possessing the right.
+   */
+
+  /**
+   * Register a new account and its owner, returning the owner's token.
+   *
+   * The owner's credentials go out as `ownerEmail`/`ownerPassword`. Sending
+   * `email`/`password` instead creates an account with an owner the server
+   * cannot sign in as.
+   */
+  async signup(
+    accountName: string,
+    email: string,
+    password: string,
+    firstName?: string | null,
+    lastName?: string | null,
+  ): Promise<Token> {
+    const url = uri(this._apiRoot, "accounts");
+    const data = await this._post(url, {
+      accountName,
+      ownerEmail: email,
+      ownerPassword: password,
+      firstName: firstName ?? null,
+      lastName: lastName ?? null,
+    });
+    return parseToken(data);
+  }
+
+  /** Approve an account by name, returning it as it now stands. */
+  async approveAccount(accountName: string): Promise<Account | null> {
+    const url = `${server(this._endpoint)}/approvals`;
+    const data = await this._post(url, { name: accountName, approval: true });
+    return parseAccount(data.account as JsonObject);
+  }
+
+  /** Every account on the server. Admin-only. */
+  async accounts(): Promise<Account[]> {
+    const url = uriParam(this._apiRoot, "accounts", "format=application/json");
+    const data = await this._get(url);
+    return (data as unknown as JsonObject[]).map(parseAccount) as Account[];
+  }
+
+  /** Delete an account. Destructive, and takes its users with it. */
+  async deleteAccount(accountId: number): Promise<void> {
+    await this._delete(uriId(this._apiRoot, "accounts", accountId));
+  }
+
+  /** Create a user in the caller's account. */
+  async createUser(
+    email: string,
+    password: string,
+    firstName: string,
+    lastName: string,
+    roles: string[] = [],
+  ): Promise<Person> {
+    const url = uri(this._apiRoot, "users");
+    const data = await this._post(url, { email, password, firstName, lastName, roles });
+    return parsePerson(data) as Person;
+  }
+
+  /** Delete a user. Destructive. */
+  async deleteUser(userId: number): Promise<void> {
+    await this._delete(uriId(this._apiRoot, "users", userId));
+  }
+
+  /** Create an empty marketplace. See also {@link createMarketplaceFromJson}. */
+  async createMarketplace(name: string, description: string): Promise<Marketplace> {
+    const url = uri(this._apiRoot, "marketplaces");
+    return parseMarketplace(await this._post(url, { name, description }));
+  }
+
+  /** Delete a marketplace, and with it its sessions and their history. */
+  async deleteMarketplace(marketplaceId: number): Promise<void> {
+    await this._delete(uriId(this._apiRoot, "marketplaces", marketplaceId));
+  }
+
+  /**
+   * Add a market to a marketplace.
+   *
+   * Unit bounds are not parameters: they are fixed at 1/100/1, as the other
+   * SDKs send them. A marketplace needing other bounds is built from JSON,
+   * where every field is stated.
+   */
+  async createMarket(
+    marketplaceId: number,
+    symbol: string,
+    name: string,
+    priceMinimum: number,
+    priceMaximum: number,
+    priceTick: number,
+    privateMarket: boolean,
+  ): Promise<Market> {
+    const url = uriIdSegment(this._apiRoot, "marketplaces", marketplaceId, "markets");
+    return parseMarket(await this._post(url, {
+      symbol,
+      name,
+      priceMinimum,
+      priceMaximum,
+      priceTick,
+      unitMinimum: 1,
+      unitMaximum: 100,
+      unitTick: 1,
+      privateMarket,
+    }));
+  }
+
+  /**
+   * Mint one-time passcodes for the given users.
+   *
+   * These are credentials: not to be logged, not to be persisted, and
+   * delivered to the person they belong to.
+   */
+  async managerOtpBundle(userIds: number[]): Promise<ManagerOtpBundle> {
+    const url = `${server(this._endpoint)}/otp/manager`;
+    const data = await this._post(url, { userIds });
+    return {
+      expiresAt: (data.expiresAt as string) ?? null,
+      otps: ((data.otps as JsonObject[]) ?? []).map((o) => ({
+        userId: (o.userId as number) ?? 0,
+        email: (o.email as string) ?? null,
+        otp: (o.otp as string) ?? null,
+      })),
+    };
+  }
+
+  /** DELETE, whose answer is a status and nothing worth parsing. */
+  private async _delete(url: string): Promise<void> {
+    const resp = await fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
+      method: "DELETE",
+      headers: { ...this._authHeaders(), Accept: "application/json" },
+    });
+    const body = await resp.text();
+    checkResponse(resp, body);
+  }
+
   private async _fetchApiRoot(): Promise<ApiRoot> {
     const data = await this._get(this._baseUrl);
     return parseApiRoot(data);
@@ -659,6 +806,25 @@ export class Flexemarkets {
     );
     const data = await this._get(url);
     return (data as unknown as JsonObject[]).map(parseMarket);
+  }
+
+  /**
+   * The token this connection signed in with.
+   *
+   * Exposed so a caller can open a sibling connection on the same identity
+   * without holding the password again.
+   */
+  token(): Token {
+    return this._tokenObj;
+  }
+
+  /** Whether this connection's user holds ROLE_ADMIN. */
+  isAdmin(): boolean {
+    return this.hasRole("ROLE_ADMIN");
+  }
+
+  hasRole(role: string): boolean {
+    return (this._user?.roles ?? []).includes(role);
   }
 
   async symbols(marketplaceId: number): Promise<string[]> {
