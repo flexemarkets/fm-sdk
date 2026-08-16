@@ -4,7 +4,8 @@ public class Exceptions {
     private Exceptions() {}
 
     public sealed static class FlexemarketsException extends RuntimeException
-        permits AuthenticationException, HttpException, ConflictException, ApiException {
+        permits AuthenticationException, HttpException, ConflictException, ApiException,
+                AccountNameConflictException, PersonHasMarketplaceDataException {
 
         protected FlexemarketsException(String message) {
             super(message);
@@ -48,6 +49,45 @@ public class Exceptions {
         }
 
         public Types.ConflictFailure failure() { return failure; }
+    }
+
+    /**
+     * An account name was taken, and the server proposed another.
+     *
+     * <p>A subtype of {@link ConflictException} rather than a sibling, so a
+     * caller that handles conflicts generally still catches this one. The
+     * suggestion is worth surfacing rather than retrying blindly: it is the
+     * name the account would end up known by.
+     */
+    public static final class AccountNameConflictException extends FlexemarketsException {
+        private final String requestedName;
+        private final String suggestedName;
+
+        public AccountNameConflictException(String requestedName, String suggestedName) {
+            super("Account name '%s' is taken%s".formatted(requestedName,
+                    suggestedName == null ? "" : "; server suggests '%s'".formatted(suggestedName)));
+            this.requestedName = requestedName;
+            this.suggestedName = suggestedName;
+        }
+
+        public String requestedName() { return requestedName; }
+        public String suggestedName() { return suggestedName; }
+    }
+
+    /**
+     * A user could not be deleted because they still own marketplace data --
+     * orders or allotments. Deleting them would orphan it, so the server
+     * refuses; the caller has to decide what happens to the data first.
+     */
+    public static final class PersonHasMarketplaceDataException extends FlexemarketsException {
+        private final long userId;
+
+        public PersonHasMarketplaceDataException(long userId, String message) {
+            super(message);
+            this.userId = userId;
+        }
+
+        public long userId() { return userId; }
     }
 
     public static final class ApiException extends FlexemarketsException {

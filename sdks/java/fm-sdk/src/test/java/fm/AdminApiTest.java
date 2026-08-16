@@ -43,6 +43,9 @@ class AdminApiTest {
     /** Roles the sign-in token reports; a test may change this before connecting. */
     private String roles = "[\"ROLE_MANAGER\"]";
 
+    /** When set, POST /api/accounts and DELETE /api/users/* answer 409. */
+    private boolean conflict = false;
+
     @BeforeEach
     void startServer() throws IOException {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -57,6 +60,11 @@ class AdminApiTest {
         server.createContext("/api/accounts", exchange -> {
             record(exchange);
             if ("POST".equals(exchange.getRequestMethod())) {
+                if (conflict) {
+                    respond(exchange, 409,
+                            "{\"status\":\"CONFLICT\",\"message\":\"taken\",\"suggestedName\":\"acme-2\"}");
+                    return;
+                }
                 respond(exchange, 200, """
                     {"token":"%s",
                      "person":{"id":8,"accountId":2,"email":"owner@new"},
@@ -81,6 +89,10 @@ class AdminApiTest {
         server.createContext("/api/users", exchange -> {
             record(exchange);
             if ("DELETE".equals(exchange.getRequestMethod())) {
+                if (conflict) {
+                    respond(exchange, 409, "{\"message\":\"user still owns orders\"}");
+                    return;
+                }
                 respond(exchange, 204, "");
             } else {
                 respond(exchange, 200,
@@ -340,6 +352,39 @@ class AdminApiTest {
         }
 
         assertThat(requests).contains("DELETE /api/accounts/me");
+    }
+
+    /**
+     * A taken name arrives with the server's suggestion, and is raised as its
+     * own type so a caller can offer it rather than digging it back out of a
+     * generic conflict.
+     */
+    @Test
+    void aTakenAccountNameCarriesTheServersSuggestion() throws Exception {
+        conflict = true;
+
+        try (Flexemarkets fm = connect()) {
+            assertThatThrownBy(() -> fm.signup("acme", "owner@new", "s3cret"))
+                    .isInstanceOf(Exceptions.AccountNameConflictException.class)
+                    .satisfies(e -> {
+                        var conflictException = (Exceptions.AccountNameConflictException) e;
+                        assertThat(conflictException.requestedName()).isEqualTo("acme");
+                        assertThat(conflictException.suggestedName()).isEqualTo("acme-2");
+                    });
+        }
+    }
+
+    /** Deleting a user who still owns data is refused, and says whose. */
+    @Test
+    void deletingAUserWhoOwnsDataIsRefused() throws Exception {
+        conflict = true;
+
+        try (Flexemarkets fm = connect()) {
+            assertThatThrownBy(() -> fm.deleteUser(42))
+                    .isInstanceOf(Exceptions.PersonHasMarketplaceDataException.class)
+                    .satisfies(e -> assertThat(
+                            ((Exceptions.PersonHasMarketplaceDataException) e).userId()).isEqualTo(42L));
+        }
     }
 
     // --- identity -----------------------------------------------------------

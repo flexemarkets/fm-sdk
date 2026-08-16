@@ -335,9 +335,18 @@ public class HttpFlexemarkets implements Flexemarkets {
     @Override
     public Token signup(String accountName, String email, String password,
                         String firstName, String lastName) {
-        return post(uri(apiRoot, "accounts"),
-                    new SignUp(accountName, email, password, firstName, lastName),
-                    TOKEN_TYPE);
+        try {
+            return post(uri(apiRoot, "accounts"),
+                        new SignUp(accountName, email, password, firstName, lastName),
+                        TOKEN_TYPE);
+        } catch (ConflictException e) {
+            // A taken name, with the server's proposed alternative. Raised as
+            // its own type so a caller can offer the suggestion rather than
+            // parsing it back out of a generic conflict.
+            var failure = e.failure();
+            throw new Exceptions.AccountNameConflictException(
+                    accountName, failure == null ? null : failure.suggestedName());
+        }
     }
 
     @Override
@@ -387,7 +396,14 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     @Override
     public void deleteUser(long userId) {
-        delete(uriId(apiRoot, "users", userId));
+        try {
+            delete(uriId(apiRoot, "users", userId));
+        } catch (ConflictException e) {
+            // The user still owns orders or allotments. Deleting them would
+            // orphan it, so the server refuses and the caller has to decide
+            // what happens to the data first.
+            throw new Exceptions.PersonHasMarketplaceDataException(userId, e.getMessage());
+        }
     }
 
     @Override
