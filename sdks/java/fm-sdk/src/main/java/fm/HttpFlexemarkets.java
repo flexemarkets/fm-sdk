@@ -70,6 +70,12 @@ public class HttpFlexemarkets implements Flexemarkets {
     private static final TypeReference<List<Person>>         PERSONS_TYPE      = new TypeReference<>() {};
     private static final TypeReference<List<Allotment>>      ALLOTMENTS_TYPE   = new TypeReference<>() {};
 
+    /**
+     * Who the server should treat the caller as, rather than whoever the
+     * bearer token names. Admin-only, and refused server-side otherwise.
+     */
+    private static final String HEADER_IMPERSONATION = "X-FM-Account";
+
     private final Properties properties;
     private final HttpClient httpClient;
     private final String bearerToken;
@@ -78,12 +84,19 @@ public class HttpFlexemarkets implements Flexemarkets {
     private final Person user;
     private final ApiRoot apiRoot;
 
+    private final String impersonateAccount;
+    private final boolean capture;
+
     private Events events;
     private volatile boolean closed;
 
     HttpFlexemarkets(Properties properties) {
         this.properties = properties;
         this.httpClient = HttpClient.newHttpClient();
+
+        var impersonate = properties.getProperty("impersonate-account");
+        this.impersonateAccount = impersonate == null || impersonate.isBlank() ? null : impersonate;
+        this.capture = Boolean.parseBoolean(properties.getProperty("capture"));
 
         this.token = signIn();
         this.account = token.account();
@@ -704,12 +717,85 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     // --- HTTP helpers ---
 
-    private <T> T get(String url, TypeReference<T> type) {
-        var request = HttpRequest.newBuilder()
+    /**
+     * A request builder carrying everything every authenticated call sends:
+     * the bearer token, the client's user agent, and — when the caller asked
+     * to act as another account — the impersonation header.
+     *
+     * <p>Every authenticated request goes through here so impersonation cannot
+     * be applied to some routes and quietly missed on others. That failure
+     * mode is silent in the shape that matters: the call succeeds, answering
+     * for the wrong account.
+     */
+    private HttpRequest.Builder request(String url, String accept) {
+        var builder = HttpRequest.newBuilder()
             .uri(URI.create(url))
             .header("Authorization", bearerToken)
-            .header("Accept", "application/json")
-            .header("User-Agent", FM_SDK_CLIENT)
+            .header("Accept", accept)
+            .header("User-Agent", FM_SDK_CLIENT);
+
+        if (impersonateAccount != null) {
+            builder.header(HEADER_IMPERSONATION, impersonateAccount);
+        }
+
+        return builder;
+    }
+
+    /**
+     * Send one request, tracing it to stdout when the caller asked for capture.
+     *
+     * <p>Every send goes through here, sign-in included, so {@code capture}
+     * cannot cover most of a session and silently miss the rest.
+     *
+     * <p>The {@code Authorization} value is redacted, and the sign-in routes'
+     * bodies are withheld entirely — that document *is* a token. Capture
+     * writes to stdout and stdout is what gets pasted into a bug report;
+     * fm-lib-net printed both in full, which this deliberately does not.
+     */
+    private HttpResponse<String> exchange(HttpRequest request) throws IOException, InterruptedException {
+        if (!capture) {
+            return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        }
+
+        var out = System.out;
+        out.printf("> %s %s%n", request.method(), request.uri());
+        printCapturedHeaders(out, ">", request.headers().map());
+        out.println(">");
+
+        var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+        out.printf("< %s%n", response.statusCode());
+        printCapturedHeaders(out, "<", response.headers().map());
+        if (isCredentialRoute(request)) {
+            out.printf("<%n[body withheld: credential document]%n");
+        } else if (response.body() != null && !response.body().isEmpty()) {
+            out.printf("<%n%s%n", response.body());
+        }
+        out.println("<");
+        out.flush();
+
+        return response;
+    }
+
+    /** Routes whose body is a credential rather than a document about one. */
+    private static boolean isCredentialRoute(HttpRequest request) {
+        var path = request.uri().getPath();
+
+        return path.endsWith("/tokens") || path.endsWith("/refresh") || path.contains("/otp");
+    }
+
+    private static void printCapturedHeaders(java.io.PrintStream out, String prefix,
+                                             Map<String, List<String>> headers) {
+        headers.keySet().stream().sorted().forEach(name -> {
+            var value = "authorization".equalsIgnoreCase(name)
+                    ? "[redacted]"
+                    : headers.get(name).toString();
+            out.printf("%s %s: %s%n", prefix, name, value);
+        });
+    }
+
+    private <T> T get(String url, TypeReference<T> type) {
+        var request = request(url, "application/json")
             .GET()
             .build();
         return send(request, type);
@@ -723,15 +809,11 @@ public class HttpFlexemarkets implements Flexemarkets {
      * is absent.
      */
     private <T> Snapshot<T> getSnapshot(String url, TypeReference<T> type) {
-        var request = HttpRequest.newBuilder()
-            .uri(URI.create(url))
-            .header("Authorization", bearerToken)
-            .header("Accept", "application/json")
-            .header("User-Agent", FM_SDK_CLIENT)
+        var request = request(url, "application/json")
             .GET()
             .build();
         try {
-            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            var response = exchange(request);
             var statusCode = response.statusCode();
             if (statusCode >= 200 && statusCode < 300) {
                 T body = MAPPER.readValue(response.body(), type);
@@ -757,12 +839,8 @@ public class HttpFlexemarkets implements Flexemarkets {
     private <T> T post(String url, Object body, TypeReference<T> type) {
         try {
             var json = MAPPER.writeValueAsString(body);
-            var request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .header("Authorization", bearerToken)
+            var request = request(url, "application/json")
                 .header("Content-Type", "application/json")
-                .header("Accept", "application/json")
-                .header("User-Agent", FM_SDK_CLIENT)
                 .POST(HttpRequest.BodyPublishers.ofString(json))
                 .build();
             return send(request, type);
@@ -777,11 +855,7 @@ public class HttpFlexemarkets implements Flexemarkets {
      * carry the whole request.
      */
     private <T> T patch(String url, TypeReference<T> type) {
-        var request = HttpRequest.newBuilder()
-            .uri(URI.create(url))
-            .header("Authorization", bearerToken)
-            .header("Accept", "application/json")
-            .header("User-Agent", FM_SDK_CLIENT)
+        var request = request(url, "application/json")
             .method("PATCH", HttpRequest.BodyPublishers.noBody())
             .build();
         return send(request, type);
@@ -794,26 +868,18 @@ public class HttpFlexemarkets implements Flexemarkets {
      */
     /** DELETE, whose answer is a status and nothing worth parsing. */
     private void delete(String url) {
-        var request = HttpRequest.newBuilder()
-            .uri(URI.create(url))
-            .header("Authorization", bearerToken)
-            .header("Accept", "application/json")
-            .header("User-Agent", FM_SDK_CLIENT)
+        var request = request(url, "application/json")
             .DELETE()
             .build();
         sendDiscardingBody(request);
     }
 
     private String getText(String url) {
-        var request = HttpRequest.newBuilder()
-            .uri(URI.create(url))
-            .header("Authorization", bearerToken)
-            .header("Accept", "text/csv, */*")
-            .header("User-Agent", FM_SDK_CLIENT)
+        var request = request(url, "text/csv, */*")
             .GET()
             .build();
         try {
-            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            var response = exchange(request);
             var statusCode = response.statusCode();
             if (statusCode >= 200 && statusCode < 300) {
                 return response.body();
@@ -855,12 +921,8 @@ public class HttpFlexemarkets implements Flexemarkets {
             body.write(content);
             body.write(tail);
 
-            var request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .header("Authorization", bearerToken)
+            var request = request(url, "application/json")
                 .header("Content-Type", "multipart/form-data; boundary=" + boundary)
-                .header("Accept", "application/json")
-                .header("User-Agent", FM_SDK_CLIENT)
                 .POST(HttpRequest.BodyPublishers.ofByteArray(body.toByteArray()))
                 .build();
             return send(request, type);
@@ -871,7 +933,7 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     private <T> T send(HttpRequest request, TypeReference<T> type) {
         try {
-            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            var response = exchange(request);
             var statusCode = response.statusCode();
 
             if (statusCode >= 200 && statusCode < 300) {
@@ -908,7 +970,7 @@ public class HttpFlexemarkets implements Flexemarkets {
      */
     private void sendDiscardingBody(HttpRequest request) {
         try {
-            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            var response = exchange(request);
             var statusCode = response.statusCode();
 
             if (statusCode >= 200 && statusCode < 300) {
@@ -983,7 +1045,7 @@ public class HttpFlexemarkets implements Flexemarkets {
         }
 
         try {
-            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            var response = exchange(request);
             if (response.statusCode() == 401) {
                 throw new AuthenticationException("Authentication failed.");
             }
@@ -1003,11 +1065,7 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     private ApiRoot fetchApiRoot() {
         var url = server(endpointUrl());
-        var request = HttpRequest.newBuilder()
-            .uri(URI.create(url))
-            .header("Authorization", bearerToken)
-            .header("Accept", "application/json")
-            .header("User-Agent", FM_SDK_CLIENT)
+        var request = request(url, "application/json")
             .GET()
             .build();
         return send(request, API_ROOT_TYPE);

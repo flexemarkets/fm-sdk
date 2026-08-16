@@ -62,6 +62,42 @@ public interface Flexemarkets extends AutoCloseable {
                 HttpFlexemarkets.loadProperties(credential, endpoint, clientDescription));
     }
 
+    /**
+     * Connect, tracing the exchange and/or acting as another account.
+     *
+     * <p>Both are operator concerns rather than programming ones, which is why
+     * they are a separate overload and not options on every call: {@code
+     * capture} writes each request and response to stdout while a human works
+     * out what the server actually said, and {@code impersonateAccount} makes
+     * an administrator's calls answer for that account instead of their own.
+     * The server refuses impersonation for anyone else, so this is a request,
+     * not a grant.
+     *
+     * <p>A provider that claims the endpoint is handed the plain connect: these
+     * two are properties of the HTTP exchange, and a provider that does not
+     * speak HTTP has nothing to apply them to.
+     */
+    static Flexemarkets connect(String credential, String endpoint, String clientDescription,
+                                boolean capture, String impersonateAccount) throws IOException {
+        String resolved = Endpoints.resolve(endpoint);
+
+        FlexemarketsProvider provider = Providers.forEndpoint(resolved);
+        if (null != provider) {
+            return provider.connect(credential, resolved, clientDescription);
+        }
+
+        var properties = HttpFlexemarkets.loadProperties(credential, endpoint, clientDescription);
+
+        if (capture) {
+            properties.setProperty("capture", "true");
+        }
+        if (null != impersonateAccount && !impersonateAccount.isBlank()) {
+            properties.setProperty("impersonate-account", impersonateAccount);
+        }
+
+        return new HttpFlexemarkets(properties);
+    }
+
     // --- identity -----------------------------------------------------------
 
     Account account();
