@@ -9,11 +9,13 @@ import fm.Types.Account;
 import fm.Types.Allotment;
 import fm.Types.ClientConnection;
 import fm.Types.Holding;
+import fm.Types.ManagerOtpBundle;
 import fm.Types.Market;
 import fm.Types.Marketplace;
 import fm.Types.Order;
 import fm.Types.Person;
 import fm.Types.Session;
+import fm.Types.Token;
 
 /**
  * A connection to Flexemarkets.
@@ -72,6 +74,22 @@ public interface Flexemarkets extends AutoCloseable {
 
     long userId();
 
+    /**
+     * The token this connection signed in with.
+     *
+     * <p>Exposed so a caller can mint a sibling connection on the same
+     * identity without holding the password again -- {@code connect(token
+     * .token(), ...)} takes it directly.
+     */
+    default Token token() {
+        throw unsupported("token");
+    }
+
+    /** Whether this connection's user holds ROLE_ADMIN. */
+    default boolean isAdmin() {
+        throw unsupported("isAdmin");
+    }
+
     /** The marketplace this connection was pointed at, from its endpoint. */
     long endpointMarketplaceId();
 
@@ -84,6 +102,11 @@ public interface Flexemarkets extends AutoCloseable {
     Marketplace marketplace(long marketplaceId);
 
     List<Market> markets(long marketplaceId);
+
+    /** The marketplace's market symbols. */
+    default List<String> symbols(long marketplaceId) {
+        throw unsupported("symbols");
+    }
 
     List<Session> sessions(long marketplaceId);
 
@@ -281,6 +304,97 @@ public interface Flexemarkets extends AutoCloseable {
      */
     default List<Holding> uploadHoldings(long marketplaceId, Path csv) {
         throw unsupported("uploadHoldings");
+    }
+
+    // --- administration -----------------------------------------------------
+
+    /*
+     * Creating accounts and users, approving them, deleting them, and minting
+     * one-time passcodes. This is fm-server's administrative surface, and it
+     * is here because fm-robots' manager -- the tool that runs a course -- is
+     * built on it and had no way off fm-lib-net otherwise.
+     *
+     * Several of these are destructive and one issues credentials. They need
+     * an admin or manager and the server answers 401/403 otherwise, which is
+     * the only guard: possessing the method is not possessing the right.
+     */
+
+    /**
+     * Register a new account and its owner, returning the owner's token.
+     *
+     * <p>Account names are unique. A clash raises {@link
+     * fm.Exceptions.ConflictException}, whose {@code failure().suggestedName()}
+     * carries the server's proposed alternative -- worth surfacing rather than
+     * retrying blindly, since the suggestion is what the user will be known as.
+     */
+    default Token signup(String accountName, String email, String password) {
+        throw unsupported("signup");
+    }
+
+    default Token signup(String accountName, String email, String password,
+                         String firstName, String lastName) {
+        throw unsupported("signup");
+    }
+
+    /** Approve an account by name, returning it as it now stands. */
+    default Account approveAccount(String accountName) {
+        throw unsupported("approveAccount");
+    }
+
+    /** Every account on the server. Admin-only. */
+    default List<Account> accounts() {
+        throw unsupported("accounts");
+    }
+
+    /** Delete an account. Destructive, and takes its users with it. */
+    default void deleteAccount(long accountId) {
+        throw unsupported("deleteAccount");
+    }
+
+    /** Create a user in the caller's account. Roles are optional. */
+    default Person createUser(String email, String password, String firstName,
+                              String lastName, String... roles) {
+        throw unsupported("createUser");
+    }
+
+    /** Delete a user. Destructive. */
+    default void deleteUser(long userId) {
+        throw unsupported("deleteUser");
+    }
+
+    /** Create an empty marketplace. See also {@link #createMarketplaceFromJson}. */
+    default Marketplace createMarketplace(String name, String description) {
+        throw unsupported("createMarketplace");
+    }
+
+    /** Delete a marketplace, and with it its sessions and their history. */
+    default void deleteMarketplace(long marketplaceId) {
+        throw unsupported("deleteMarketplace");
+    }
+
+    /**
+     * Add a market to a marketplace.
+     *
+     * <p>Unit bounds are not parameters: they are fixed at 1/100/1, matching
+     * fm-lib-net's call. A study that needs other bounds builds its
+     * marketplace from JSON, where every field is stated.
+     */
+    default Market createMarket(long marketplaceId, String symbol, String name,
+                                long priceMinimum, long priceMaximum, long priceTick,
+                                boolean privateMarket) {
+        throw unsupported("createMarket");
+    }
+
+    /**
+     * Mint one-time passcodes for the given users.
+     *
+     * <p>These are credentials. They are how a classroom signs in without
+     * passwords being handed around, and they should be treated like
+     * passwords: not logged, not persisted, and delivered to the person they
+     * belong to.
+     */
+    default ManagerOtpBundle managerOtpBundle(List<Long> userIds) {
+        throw unsupported("managerOtpBundle");
     }
 
     private UnsupportedOperationException unsupported(String operation) {

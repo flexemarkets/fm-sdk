@@ -32,6 +32,7 @@ import fm.Types.ClientConnection;
 import fm.Types.ConflictFailure;
 import fm.Types.Holding;
 import fm.Types.Market;
+import fm.Types.ManagerOtpBundle;
 import fm.Types.Marketplace;
 import fm.Types.Order;
 import fm.Types.Person;
@@ -52,6 +53,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     private static final TypeReference<List<Marketplace>>    MARKETPLACES_TYPE = new TypeReference<>() {};
     private static final TypeReference<Marketplace>          MARKETPLACE_TYPE  = new TypeReference<>() {};
     private static final TypeReference<List<Market>>         MARKETS_TYPE      = new TypeReference<>() {};
+    private static final TypeReference<Market>               MARKET_TYPE       = new TypeReference<>() {};
     private static final TypeReference<List<Session>>        SESSIONS_TYPE     = new TypeReference<>() {};
     private static final TypeReference<Session>              SESSION_TYPE      = new TypeReference<>() {};
     private static final TypeReference<List<Order>>          ORDERS_TYPE       = new TypeReference<>() {};
@@ -59,6 +61,12 @@ public class HttpFlexemarkets implements Flexemarkets {
     private static final TypeReference<List<Holding>>        HOLDINGS_TYPE     = new TypeReference<>() {};
     private static final TypeReference<List<ClientConnection>> CONNECTIONS_TYPE = new TypeReference<>() {};
     private static final TypeReference<ConflictFailure>      CONFLICT_TYPE     = new TypeReference<>() {};
+    private static final TypeReference<List<Account>>        ACCOUNTS_TYPE     = new TypeReference<>() {};
+    private static final TypeReference<Account>              ACCOUNT_TYPE      = new TypeReference<>() {};
+    private static final TypeReference<Person>               PERSON_TYPE       = new TypeReference<>() {};
+    private static final TypeReference<Types.Approval>       APPROVAL_TYPE     = new TypeReference<>() {};
+    private static final TypeReference<ManagerOtpBundle>     OTP_BUNDLE_TYPE   = new TypeReference<>() {};
+    private static final TypeReference<List<String>>         SYMBOLS_TYPE      = new TypeReference<>() {};
     private static final TypeReference<List<Person>>         PERSONS_TYPE      = new TypeReference<>() {};
     private static final TypeReference<List<Allotment>>      ALLOTMENTS_TYPE   = new TypeReference<>() {};
 
@@ -112,6 +120,30 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     public List<Market> markets(long marketplaceId) {
         return get(uriIdSegmentParam(apiRoot, "marketplaces", marketplaceId, "markets", "format=application/json"), MARKETS_TYPE);
+    }
+
+    @Override
+    public List<String> symbols(long marketplaceId) {
+        return get(uriIdSegment(apiRoot, "marketplaces", marketplaceId, "symbols"), SYMBOLS_TYPE);
+    }
+
+    @Override
+    public Token token() {
+        return token;
+    }
+
+    /** Roles come from the sign-in token; an absent roles array is not admin. */
+    @Override
+    public boolean isAdmin() {
+        if (user == null || user.roles() == null) {
+            return false;
+        }
+        for (var role : user.roles()) {
+            if ("ROLE_ADMIN".equals(role)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public List<Session> sessions(long marketplaceId) {
@@ -291,6 +323,102 @@ public class HttpFlexemarkets implements Flexemarkets {
     private static String _ids(List<Long> ids) {
         return ids.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(","));
     }
+
+    // --- administration -----------------------------------------------------
+
+    @Override
+    public Token signup(String accountName, String email, String password) {
+        return signup(accountName, email, password, null, null);
+    }
+
+    /** A name clash arrives as 409 and becomes a ConflictException carrying the server's suggestion. */
+    @Override
+    public Token signup(String accountName, String email, String password,
+                        String firstName, String lastName) {
+        return post(uri(apiRoot, "accounts"),
+                    new SignUp(accountName, email, password, firstName, lastName),
+                    TOKEN_TYPE);
+    }
+
+    @Override
+    public Account approveAccount(String accountName) {
+        var approval = post(server(endpointUrl()) + "/approvals",
+                            new ApproveAccount(accountName, true), APPROVAL_TYPE);
+        return approval == null ? null : approval.account();
+    }
+
+    @Override
+    public List<Account> accounts() {
+        return get(uriParam(apiRoot, "accounts", "format=application/json"), ACCOUNTS_TYPE);
+    }
+
+    @Override
+    public void deleteAccount(long accountId) {
+        delete(uriId(apiRoot, "accounts", accountId));
+    }
+
+    @Override
+    public Person createUser(String email, String password, String firstName,
+                             String lastName, String... roles) {
+        return post(uri(apiRoot, "users"),
+                    new CreateUser(email, password, firstName, lastName, roles),
+                    PERSON_TYPE);
+    }
+
+    @Override
+    public void deleteUser(long userId) {
+        delete(uriId(apiRoot, "users", userId));
+    }
+
+    @Override
+    public Marketplace createMarketplace(String name, String description) {
+        return post(uri(apiRoot, "marketplaces"),
+                    new CreateMarketplace(name, description), MARKETPLACE_TYPE);
+    }
+
+    @Override
+    public void deleteMarketplace(long marketplaceId) {
+        delete(uriId(apiRoot, "marketplaces", marketplaceId));
+    }
+
+    /** Unit bounds are fixed at 1/100/1, as fm-lib-net sends them. */
+    @Override
+    public Market createMarket(long marketplaceId, String symbol, String name,
+                               long priceMinimum, long priceMaximum, long priceTick,
+                               boolean privateMarket) {
+        return post(uriIdSegment(apiRoot, "marketplaces", marketplaceId, "markets"),
+                    new CreateMarket(symbol, name, priceMinimum, priceMaximum, priceTick,
+                                     1, 100, 1, privateMarket),
+                    MARKET_TYPE);
+    }
+
+    @Override
+    public ManagerOtpBundle managerOtpBundle(List<Long> userIds) {
+        return post(server(endpointUrl()) + "/otp/manager",
+                    new ManagerOtpRequest(userIds), OTP_BUNDLE_TYPE);
+    }
+
+    /*
+     * Request bodies. Records rather than maps so a field that the server
+     * renamed fails to compile here rather than being silently dropped from
+     * the JSON -- the shape of the grants/securities bug.
+     */
+    private record SignUp(String accountName, String ownerEmail, String ownerPassword,
+                          String firstName, String lastName) {}
+
+    private record ApproveAccount(String name, Boolean approval) {}
+
+    private record CreateUser(String email, String password, String firstName,
+                              String lastName, String[] roles) {}
+
+    private record CreateMarketplace(String name, String description) {}
+
+    private record CreateMarket(String symbol, String name,
+                                long priceMinimum, long priceMaximum, long priceTick,
+                                long unitMinimum, long unitMaximum, long unitTick,
+                                boolean privateMarket) {}
+
+    private record ManagerOtpRequest(List<Long> userIds) {}
 
     public Order submitLimit(long marketplaceId, long marketId, String side, long units, long price) {
         var order = Map.of(
@@ -628,6 +756,18 @@ public class HttpFlexemarkets implements Flexemarkets {
      * other than JSON. The holdings download is a CSV, and parsing it as JSON
      * would fail on the first line.
      */
+    /** DELETE, whose answer is a status and nothing worth parsing. */
+    private void delete(String url) {
+        var request = HttpRequest.newBuilder()
+            .uri(URI.create(url))
+            .header("Authorization", bearerToken)
+            .header("Accept", "application/json")
+            .header("User-Agent", FM_SDK_CLIENT)
+            .DELETE()
+            .build();
+        sendDiscardingBody(request);
+    }
+
     private String getText(String url) {
         var request = HttpRequest.newBuilder()
             .uri(URI.create(url))
@@ -700,6 +840,43 @@ public class HttpFlexemarkets implements Flexemarkets {
 
             if (statusCode >= 200 && statusCode < 300) {
                 return MAPPER.readValue(response.body(), type);
+            }
+
+            if (statusCode == 401) {
+                throw new AuthenticationException("Authentication failed: " + response.body());
+            }
+
+            if (statusCode == 409) {
+                var failure = tryParseConflict(response.body());
+                throw new ConflictException("Conflict: " + response.body(), failure);
+            }
+
+            throw new HttpException(statusCode, response.body());
+        } catch (Exceptions.FlexemarketsException e) {
+            throw e;
+        } catch (IOException e) {
+            throw new ApiException("HTTP request failed", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ApiException("HTTP request interrupted", e);
+        }
+    }
+
+    /**
+     * Send a request whose answer is a status, not a document.
+     *
+     * <p>DELETE answers 204 with an empty body, which {@link #send} would try
+     * to parse as JSON and fail on. The error mapping is otherwise the same,
+     * including 409 -- deleting a user who still owns something is a conflict,
+     * and it says which.
+     */
+    private void sendDiscardingBody(HttpRequest request) {
+        try {
+            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            var statusCode = response.statusCode();
+
+            if (statusCode >= 200 && statusCode < 300) {
+                return;
             }
 
             if (statusCode == 401) {
