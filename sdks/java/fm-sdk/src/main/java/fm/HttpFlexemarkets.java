@@ -837,16 +837,25 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     private <T> T post(String url, Object body, TypeReference<T> type) {
+        String json;
+
+        // Only the write is guarded. The catch used to cover send() as well, so
+        // a failure parsing the *response* was reported as "Failed to serialize
+        // request body" -- a message that names the wrong direction, the wrong
+        // payload, and sends the reader to the wrong side of the wire. It cost
+        // an afternoon on a null the response carried.
         try {
-            var json = MAPPER.writeValueAsString(body);
-            var request = request(url, "application/json")
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(json))
-                .build();
-            return send(request, type);
+            json = MAPPER.writeValueAsString(body);
         } catch (JacksonException e) {
             throw new ApiException("Failed to serialize request body", e);
         }
+
+        var request = request(url, "application/json")
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(json))
+            .build();
+
+        return send(request, type);
     }
 
     /**
@@ -952,6 +961,13 @@ public class HttpFlexemarkets implements Flexemarkets {
             throw new HttpException(statusCode, response.body());
         } catch (Exceptions.FlexemarketsException e) {
             throw e;
+        } catch (JacksonException e) {
+            // The call succeeded and its answer is unreadable, which is a
+            // different fault from the call failing and worth naming: it means
+            // this client and the server disagree about a type. Unwrapped, it
+            // surfaced as a bare Jackson exception naming a field, with nothing
+            // to say which SDK call had produced it.
+            throw new ApiException("Failed to parse the response body", e);
         } catch (IOException e) {
             throw new ApiException("HTTP request failed", e);
         } catch (InterruptedException e) {
