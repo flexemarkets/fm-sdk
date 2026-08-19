@@ -50,13 +50,9 @@
                 <artifactId>flatten-maven-plugin</artifactId>
             </plugin>
             <plugin>
-                <!-- Tests need the enable-preview flag to match the main classpath. -->
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.2</version>
-                <configuration>
-                    <argLine>--enable-preview</argLine>
-                </configuration>
             </plugin>
         </plugins>
     </build>

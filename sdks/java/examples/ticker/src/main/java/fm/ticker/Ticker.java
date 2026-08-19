@@ -104,8 +104,8 @@ public class Ticker {
                                 trades.update(update.orders());
                                 redraw = true;
                             }
-                            case Holding _ -> { }
-                            case WsTransportError _ -> {
+                            case Holding ignored -> { }
+                            case WsTransportError ignored -> {
                                 fm.reconnect();
                             }
                             default -> { }
