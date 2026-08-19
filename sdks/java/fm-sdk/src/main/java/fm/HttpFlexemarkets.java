@@ -76,6 +76,27 @@ public class HttpFlexemarkets implements Flexemarkets {
      */
     private static final String HEADER_IMPERSONATION = "X-FM-Account";
 
+    /**
+     * What the previous call cost, reported to the server on the next one.
+     *
+     * <p>The same header fm-ui has always sent, and the same one fm-server
+     * already parses into its connectivity histograms — a robot is another
+     * client on the same path, so it reports the same way rather than on a
+     * header of its own.
+     *
+     * <p>This is how a {@code container:} robot's distance from the exchange
+     * becomes visible at all. Its orders arrive at fm-server as ordinary REST
+     * calls, so the server sees them land and never sees them sent; only the
+     * caller holds both ends of the round trip.
+     */
+    private static final String HEADER_CLIENT_TIMING = "Client-Timing";
+
+    /** The server's own handling time, which it reports back on every response. */
+    private static final String HEADER_SERVER_TIMING = "Server-Timing";
+
+    private static final java.util.regex.Pattern SERVER_TIMING_ST =
+        java.util.regex.Pattern.compile("st=(\\d+)");
+
     private final Properties properties;
     private final HttpClient httpClient;
     private final String bearerToken;
@@ -738,7 +759,50 @@ public class HttpFlexemarkets implements Flexemarkets {
             builder.header(HEADER_IMPERSONATION, impersonateAccount);
         }
 
+        // What the previous call cost, carried on this one. A round trip is not
+        // known until it has finished, and by then the request that would have
+        // reported it has gone -- so each measurement arrives one call late,
+        // which for a robot on an interval is a lag of one tick.
+        //
+        // Taken rather than read, so a figure is reported once. Sending the
+        // same measurement on every subsequent request would weight a single
+        // slow call by however many quiet ones followed it.
+        var timing = lastTiming.getAndSet(null);
+
+        if (timing != null) {
+            builder.header(HEADER_CLIENT_TIMING, timing.header());
+        }
+
         return builder;
+    }
+
+    /**
+     * What one call cost this client, split into the wire and the server.
+     *
+     * <p>Nanoseconds, and both measured on this machine's clock: the round trip
+     * here, and the server's own share reported back by it. Neither is ever
+     * compared with the other's clock, which is what keeps skew out of the
+     * figure -- a robot in a container is a machine nobody has promised
+     * anything about the time on.
+     *
+     * @param roundTripNanos the whole wait, as this client measured it
+     * @param networkNanos   what is left after the server's share, or -1 when
+     *                       the server did not say
+     */
+    private record Timing(long roundTripNanos, long networkNanos) {
+
+        String header() {
+            var value = new StringBuilder("rtt=").append(roundTripNanos);
+
+            // Omitted rather than sent as zero when unknown. fm-server reads an
+            // absent net= as "all of it was the server", which understates the
+            // wire; a zero would claim there was none.
+            if (networkNanos >= 0) {
+                value.append(";net=").append(networkNanos);
+            }
+
+            return value.toString();
+        }
     }
 
     /**
@@ -753,6 +817,63 @@ public class HttpFlexemarkets implements Flexemarkets {
      * fm-lib-net printed both in full, which this deliberately does not.
      */
     private HttpResponse<String> exchange(HttpRequest request) throws IOException, InterruptedException {
+        var started = System.nanoTime();
+        var response = dispatch(request);
+
+        // Only a completed call is a measurement. A request that threw took an
+        // unknown amount of an unknown thing -- a refused connection is not a
+        // slow network -- so nothing is recorded and the next request simply
+        // carries no header.
+        recordTiming(System.nanoTime() - started, response);
+
+        return response;
+    }
+
+    /**
+     * How long the last call took, waiting to be told to whoever asks next.
+     *
+     * <p>Held rather than sent immediately because there is nowhere to put it:
+     * the response carrying the answer has already been written by the time the
+     * answer exists.
+     */
+    private final java.util.concurrent.atomic.AtomicReference<Timing> lastTiming =
+        new java.util.concurrent.atomic.AtomicReference<>();
+
+    /**
+     * Record what a call cost, taking the server's share out of it.
+     *
+     * <p>The server reports its own handling as {@code Server-Timing: st=<nanos>},
+     * so what remains of the round trip is the wire. Without that header the
+     * network figure is unknown rather than zero, and is left out — fm-server
+     * then charges the whole trip to itself, which overstates its own share and
+     * can never hide a slow link behind it.
+     */
+    private void recordTiming(long roundTripNanos, HttpResponse<String> response) {
+        var serverNanos = response.headers().firstValue(HEADER_SERVER_TIMING)
+            .map(HttpFlexemarkets::serviceNanos)
+            .orElse(-1L);
+
+        var networkNanos = serverNanos < 0 ? -1L : Math.max(0, roundTripNanos - serverNanos);
+
+        lastTiming.set(new Timing(roundTripNanos, networkNanos));
+    }
+
+    /** The {@code st=} field of a Server-Timing header, or -1 if it has none. */
+    private static long serviceNanos(String header) {
+        var matcher = SERVER_TIMING_ST.matcher(header);
+
+        if (!matcher.find()) {
+            return -1;
+        }
+
+        try {
+            return Long.parseLong(matcher.group(1));
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+
+    private HttpResponse<String> dispatch(HttpRequest request) throws IOException, InterruptedException {
         if (!capture) {
             return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         }
