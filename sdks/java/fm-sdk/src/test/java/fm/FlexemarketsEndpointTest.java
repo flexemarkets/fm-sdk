@@ -3,7 +3,11 @@ package fm;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Endpoint resolution is pure (no network): a bare marketplace id expands to the
@@ -30,6 +34,25 @@ public class FlexemarketsEndpointTest {
         var properties = HttpFlexemarkets.loadProperties(null, url, "fm-endpoint-test");
 
         assertThat(properties.getProperty("endpoint")).isEqualTo(url);
+    }
+
+    /**
+     * The same defect on the path a robot actually takes. {@code -E} is usually
+     * a file, and {@code ~/.fm/endpoint} is read on every connection whether one
+     * is named or not. A file's contents are loaded verbatim, so a bare id in a
+     * file never reaches {@code marketplaceEndpoint} — the id expands when typed
+     * as the argument and not when written in the file, which is the reported
+     * asymmetry.
+     */
+    @Test
+    public void aFileHoldingABareMarketplaceIdExpandsToThatMarketplacesUrl(@TempDir Path directory) throws Exception {
+        Path file = directory.resolve("endpoint");
+        Files.writeString(file, "endpoint=2540\n");
+
+        var properties = HttpFlexemarkets.loadProperties(null, file.toString(), "fm-endpoint-test");
+
+        assertThat(properties.getProperty("endpoint"))
+            .isEqualTo("https://api.flexemarkets.com/api/marketplaces/2540");
     }
 
     @Test

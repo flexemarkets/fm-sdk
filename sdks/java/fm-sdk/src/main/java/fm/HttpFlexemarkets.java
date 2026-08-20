@@ -1293,6 +1293,14 @@ public class HttpFlexemarkets implements Flexemarkets {
             loadEndpoint(properties, endpoint);
         }
 
+        // Last, because an endpoint arrives from three places and only one of
+        // them used to expand a bare id: the argument. A file's contents are
+        // loaded verbatim, so "endpoint=1234" in ~/.fm/endpoint -- read by
+        // setDefaultProperties on every connection -- or in a file named by -E
+        // reached the HTTP client as "1234". Normalising here covers all three,
+        // and is a no-op on the form the argument path already produced.
+        expandBareMarketplaceId(properties);
+
         if (clientDescription != null) {
             properties.setProperty("client-description", clientDescription);
         } else {
@@ -1310,7 +1318,7 @@ public class HttpFlexemarkets implements Flexemarkets {
         properties.setProperty("password", "");
 
         var envUrl = System.getenv("FM_API_URL");
-        properties.setProperty("endpoint", envUrl != null ? envUrl : "https://adhocmarkets.com");
+        properties.setProperty("endpoint", envUrl != null ? envUrl : Endpoints.DEFAULT_HOST);
 
         for (var file : List.of("credential", "endpoint")) {
             var filePath = Path.of(System.getProperty("user.home"), ".fm", file);
@@ -1361,9 +1369,17 @@ public class HttpFlexemarkets implements Flexemarkets {
         return endpoint != null && endpoint.matches("\\d+");
     }
 
+    /** Expand an endpoint that is still a bare marketplace id, wherever it came from. */
+    private static void expandBareMarketplaceId(Properties properties) {
+        var endpoint = properties.getProperty("endpoint");
+        if (endpoint != null && isMarketplaceId(endpoint.trim())) {
+            properties.setProperty("endpoint", marketplaceEndpoint(endpoint.trim()));
+        }
+    }
+
     /** A bare marketplace id resolves to that marketplace on the default production host. */
     private static String marketplaceEndpoint(String marketplaceId) {
-        return "https://api.flexemarkets.com/api/marketplaces/" + marketplaceId;
+        return Endpoints.DEFAULT_HOST + "/api/marketplaces/" + marketplaceId;
     }
 
     private static void loadConfiguration(Properties properties, Path filePath) {

@@ -31,6 +31,37 @@ class EndpointsTest {
         assertThat(Endpoints.resolve("1744")).endsWith("/api/marketplaces/1744");
     }
 
+    /**
+     * A defect, reported 2026-08-20: {@code endpoint=1234} in {@code ~/.fm/endpoint}
+     * does not work, though {@code 1234} passed as the argument does.
+     *
+     * <p>A bare id is expanded only when it arrives as the argument. Arriving
+     * from a file it is returned verbatim, because the file branch returns what
+     * it read without resolving it again — so the rest of the SDK is handed
+     * "1234" where it expects a URL.
+     */
+    @Test
+    void aFileHoldingABareMarketplaceIdResolvesLikeTheIdItself() throws IOException {
+        Path file = directory.resolve("endpoint");
+        Files.writeString(file, "endpoint=1744\n");
+
+        assertThat(Endpoints.resolve(file.toString())).isEqualTo(Endpoints.resolve("1744"));
+    }
+
+    /**
+     * The second half of that defect. {@code marketplaceUrl} defaults to
+     * {@code https://adhocmarkets.com}, which is the website: it answers 200
+     * with 63KB of HTML for {@code /api/marketplaces/1744}. The API is on
+     * {@code api.}, and the rest of the SDK already knows that — see
+     * {@link FlexemarketsEndpointTest#bareIdResolvesToDefaultProductionHost}.
+     * Two defaults for one idea, and this is the one that cannot work.
+     */
+    @Test
+    void aBareMarketplaceIdResolvesOntoTheApiHostNotTheWebsite() throws IOException {
+        assertThat(Endpoints.resolve("1744"))
+                .isEqualTo("https://api.flexemarkets.com/api/marketplaces/1744");
+    }
+
     @Test
     void aUrlIsAlreadyResolved() throws IOException {
         String url = "http://localhost:8080/api/marketplaces/1744";

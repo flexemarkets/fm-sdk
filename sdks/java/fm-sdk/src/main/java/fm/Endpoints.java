@@ -23,6 +23,9 @@ import java.util.regex.Pattern;
  */
 public final class Endpoints {
 
+    /** Where the API is served. The website is on the apex; this is not it. */
+    static final String DEFAULT_HOST = "https://api.flexemarkets.com";
+
     private static final Pattern MARKETPLACE_ID = Pattern.compile("^\\d+$");
 
     /** The trailing id in {@code .../marketplaces/1744}, and in {@code loopback:1744}. */
@@ -56,7 +59,17 @@ public final class Endpoints {
         Path path = asPath(trimmed);
         if (null != path && Files.isRegularFile(path)) {
             String fromFile = endpointIn(path);
-            return null == fromFile ? trimmed : fromFile.trim();
+            if (null == fromFile) {
+                return trimmed;
+            }
+
+            // A bare id is expanded here too. It used to be expanded only when
+            // it arrived as the argument, so "endpoint=1234" in ~/.fm/endpoint
+            // reached the HTTP client as "1234" and failed a long way from the
+            // cause. Only the id form is re-resolved -- a file naming another
+            // file is not followed, so this cannot loop.
+            String value = fromFile.trim();
+            return MARKETPLACE_ID.matcher(value).matches() ? marketplaceUrl(value) : value;
         }
 
         return trimmed;
@@ -86,10 +99,18 @@ public final class Endpoints {
         throw new IllegalArgumentException("An endpoint names its marketplace; got: " + endpoint);
     }
 
-    /** The default host, overridable for development. */
+    /**
+     * The default host, overridable for development.
+     *
+     * <p>The API is on {@code api.}. This defaulted to the apex
+     * {@code https://adhocmarkets.com}, which is the website: it answers
+     * {@code /api/marketplaces/1234} with 200 and a page of HTML, so a bare id
+     * failed while parsing that as JSON rather than saying it could not reach
+     * the API.
+     */
     static String marketplaceUrl(String marketplaceId) {
         String host = System.getenv("FM_URL");
-        return (null == host ? "https://adhocmarkets.com" : host) + "/api/marketplaces/" + marketplaceId;
+        return (null == host ? DEFAULT_HOST : host) + "/api/marketplaces/" + marketplaceId;
     }
 
     private static String endpointIn(Path path) throws IOException {
