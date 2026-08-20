@@ -100,7 +100,12 @@ public class Events implements Subscription {
             var connectedLatch = new CountDownLatch(1);
             var listener = new StompListener(connectedLatch);
 
-            this.webSocket = HttpClient.newHttpClient()
+            // NORMAL rather than the JDK's default of NEVER, for the same reason
+            // the REST client uses it: an edge that upgrades plain HTTP to HTTPS
+            // answers the handshake with a 301 the client must follow.
+            this.webSocket = HttpClient.newBuilder()
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .build()
                 .newWebSocketBuilder()
                 .header("Authorization", bearerToken)
                 .subprotocols("v12.stomp", "v11.stomp", "v10.stomp")

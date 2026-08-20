@@ -113,7 +113,15 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     HttpFlexemarkets(Properties properties) {
         this.properties = properties;
-        this.httpClient = HttpClient.newHttpClient();
+        // NORMAL, not the JDK's default of NEVER. The edge in front of
+        // production answers plain HTTP with a 301 to the same host on HTTPS,
+        // and a client that does not follow it reads the edge's HTML error page
+        // as the response -- which then fails as a JSON parse error, nowhere
+        // near the cause. NORMAL declines to follow HTTPS back down to HTTP, so
+        // an endpoint cannot be quietly downgraded.
+        this.httpClient = HttpClient.newBuilder()
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .build();
 
         var impersonate = properties.getProperty("impersonate-account");
         this.impersonateAccount = impersonate == null || impersonate.isBlank() ? null : impersonate;
