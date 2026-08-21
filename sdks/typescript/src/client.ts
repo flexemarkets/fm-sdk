@@ -25,7 +25,12 @@ import type {
   Token,
 } from "./types.js";
 import { EventListener, NO_SEQ, type EventCallback } from "./stomp.js";
-import { DefaultMarketView, MarketViewHandle, type MarketView } from "./market-view.js";
+import {
+  DefaultMarketView,
+  MarketViewHandle,
+  type MarketView,
+  type Subscription,
+} from "./market-view.js";
 import type { Snapshot } from "./snapshot.js";
 
 function readVersion(): string {
@@ -1394,6 +1399,28 @@ export class Flexemarkets {
   /** Start receiving real-time events via WebSocket STOMP. */
   async listen(marketplaceId: number, callback: EventCallback): Promise<void> {
     this._eventListener = await this._connectEvents(marketplaceId, callback);
+  }
+
+  /**
+   * Open an *independent* event subscription, delivering to `callback` until
+   * the returned unsubscribe function is invoked.
+   *
+   * Unlike {@link listen}, which is one per connection and replaces itself,
+   * several of these coexist: each has its own stream and its own lifetime.
+   * That is what lets more than one MarketView live in one connection without
+   * trampling each other — the mechanism was already here for exactly that, as
+   * the package-private `_connectEvents`, but a caller who wanted a second
+   * stream of their own had no way to ask for one.
+   *
+   * Returns an unsubscribe function rather than an object with `close()`,
+   * matching what MarketView's `on*` handlers already return here. Java
+   * returns a `Subscription`; both names describe the same lifetime.
+   */
+  async subscribe(marketplaceId: number, callback: EventCallback): Promise<Subscription> {
+    const listener = await this._connectEvents(marketplaceId, callback);
+    return () => {
+      void listener.close();
+    };
   }
 
   /**
