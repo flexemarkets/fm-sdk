@@ -14,6 +14,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Optional
 
 from .snapshot import NO_SEQ, Snapshot
+from .timestamps import parse as _timestamp
 
 if TYPE_CHECKING:
     from .events import EventListener
@@ -100,8 +101,8 @@ def _parse_person(data: dict[str, Any] | None) -> Person | None:
         email=data.get("email"),
         roles=data.get("roles") or [],
         account_owner=data.get("accountOwner", False),
-        created_date=data.get("createdDate"),
-        last_modified_date=data.get("lastModifiedDate"),
+        created_date=_timestamp(data.get("createdDate")),
+        last_modified_date=_timestamp(data.get("lastModifiedDate")),
     )
 
 
@@ -115,8 +116,8 @@ def _parse_account(data: dict[str, Any] | None) -> Account | None:
         owner=_parse_person(data.get("owner")),
         approval=data.get("approval", False),
         approval_description=data.get("approvalDescription"),
-        created_date=data.get("createdDate"),
-        last_modified_date=data.get("lastModifiedDate"),
+        created_date=_timestamp(data.get("createdDate")),
+        last_modified_date=_timestamp(data.get("lastModifiedDate")),
     )
 
 
@@ -176,8 +177,8 @@ def _parse_session(data: dict[str, Any]) -> Session:
         state=data.get("state"),
         name=data.get("name"),
         description=data.get("description"),
-        open_date=data.get("openDate"),
-        close_date=data.get("closeDate"),
+        open_date=_timestamp(data.get("openDate")),
+        close_date=_timestamp(data.get("closeDate")),
     )
 
 
@@ -198,8 +199,8 @@ def _parse_order(data: dict[str, Any]) -> Order:
         market_id=data.get("marketId", 0),
         owner_target=data.get("ownerTarget"),
         client_description=data.get("clientDescription"),
-        created_date=data.get("createdDate"),
-        last_modified_date=data.get("lastModifiedDate"),
+        created_date=_timestamp(data.get("createdDate")),
+        last_modified_date=_timestamp(data.get("lastModifiedDate")),
     )
 
 
@@ -244,8 +245,8 @@ def _parse_connection(data: dict[str, Any]) -> ClientConnection:
         marketplace_id=data.get("marketplaceId", 0),
         connection_id=data.get("id", data.get("connectionId", 0)),
         owner_id=data.get("ownerId", 0),
-        established=data.get("established"),
-        terminated=data.get("terminated"),
+        established=_timestamp(data.get("established")),
+        terminated=_timestamp(data.get("terminated")),
         description=data.get("description"),
         session_id=data.get("sessionId"),
     )
@@ -822,7 +823,7 @@ class Flexemarkets:
         url = _server(self._endpoint) + "/otp/manager"
         data = self._post(url, {"userIds": user_ids}).json()
         return ManagerOtpBundle(
-            expires_at=data.get("expiresAt"),
+            expires_at=_timestamp(data.get("expiresAt")),
             otps=[
                 ManagerOtpEntry(
                     user_id=o.get("userId", 0),

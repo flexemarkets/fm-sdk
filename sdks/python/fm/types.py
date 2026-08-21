@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from .enums import OrderType, Side
 
 from dataclasses import dataclass, field
@@ -16,8 +18,8 @@ class Person:
     email: str | None = None
     roles: list[str] = field(default_factory=list)
     account_owner: bool = False
-    created_date: str | None = None
-    last_modified_date: str | None = None
+    created_date: "datetime | None" = None
+    last_modified_date: "datetime | None" = None
 
 
 @dataclass
@@ -28,8 +30,8 @@ class Account:
     owner: Person | None = None
     approval: bool = False
     approval_description: str | None = None
-    created_date: str | None = None
-    last_modified_date: str | None = None
+    created_date: "datetime | None" = None
+    last_modified_date: "datetime | None" = None
 
 
 @dataclass
@@ -139,8 +141,8 @@ class Session:
     state: str | None = None
     name: str | None = None
     description: str | None = None
-    open_date: str | None = None
-    close_date: str | None = None
+    open_date: "datetime | None" = None
+    close_date: "datetime | None" = None
 
     STATE_INIT = "INIT"
     STATE_OPEN = "OPEN"
@@ -165,8 +167,8 @@ class Order:
     market_id: int = 0
     owner_target: str | None = None
     client_description: str | None = None
-    created_date: str | None = None
-    last_modified_date: str | None = None
+    created_date: "datetime | None" = None
+    last_modified_date: "datetime | None" = None
 
 
 
@@ -193,8 +195,8 @@ class ClientConnection:
     marketplace_id: int = 0
     connection_id: int = 0
     owner_id: int = 0
-    established: str | None = None
-    terminated: str | None = None
+    established: "datetime | None" = None
+    terminated: "datetime | None" = None
     description: str | None = None
     #: The session the connection was attached during, or None when the
     #: marketplace has never opened one. How a study works out who was present
@@ -220,7 +222,7 @@ class ManagerOtpBundle:
     here should be logged.
     """
 
-    expires_at: str | None = None
+    expires_at: "datetime | None" = None
     otps: list[ManagerOtpEntry] = field(default_factory=list)
 
 

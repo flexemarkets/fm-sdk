@@ -7,6 +7,7 @@ assert only that the client called itself the way this test expected.
 """
 
 import json
+from datetime import UTC, datetime
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -272,7 +273,7 @@ def test_manager_otp_bundles_are_minted_for_the_users_asked(fm):
     """
     bundle = fm.manager_otp_bundle([1, 2])
 
-    assert bundle.expires_at == "2026-08-15T18:00:00Z"
+    assert bundle.expires_at == datetime(2026, 8, 15, 18, 0, tzinfo=UTC)
     assert len(bundle.otps) == 1
     assert bundle.otps[0].user_id == 1
     assert bundle.otps[0].otp == "123456"
