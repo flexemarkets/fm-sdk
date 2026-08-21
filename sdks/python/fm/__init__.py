@@ -56,9 +56,7 @@ __all__ = [
     "OrderBooks",
     "Trades",
     "MarketplaceTrades",
-    # market view (Phase 2d-complete — REST snapshot seeding +
-    # seq-filtered deltas + gap recovery + auto-reconnect + sharing
-    # + onGap/onReconnect telemetry hooks)
+    # market view
     "MarketView",
     "MarketViewHandle",
     "Subscription",
@@ -69,7 +67,7 @@ __all__ = [
     "WsTransportError",
     "WsException",
     "OrdersUpdate",
-    # snapshot (Phase 2a)
+    # snapshot
     "Snapshot",
     "NO_SEQ",
     # exceptions

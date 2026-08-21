@@ -78,9 +78,7 @@ export type {
   EventCallback,
 } from "./stomp.js";
 
-// MarketView (Phase 2d-complete — REST snapshot seeding + seq-filtered
-// deltas + gap recovery + auto-reconnect + per-(Flexemarkets, mpid)
-// sharing via refcounted handles)
+// MarketView
 export { DefaultMarketView, MarketViewHandle } from "./market-view.js";
 export type { MarketView, Subscription, GapEvent, ReconnectEvent } from "./market-view.js";
 export type { Snapshot } from "./snapshot.js";
