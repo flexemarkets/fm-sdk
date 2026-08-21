@@ -177,19 +177,9 @@ public class HttpFlexemarkets implements Flexemarkets {
         return token;
     }
 
-    /** Roles come from the sign-in token; an absent roles array is not admin. */
-    @Override
-    public boolean isAdmin() {
-        if (user == null || user.roles() == null) {
-            return false;
-        }
-        for (var role : user.roles()) {
-            if ("ROLE_ADMIN".equals(role)) {
-                return true;
-            }
-        }
-        return false;
-    }
+    // isAdmin/isManager/hasRole are the interface's defaults: roles come from
+    // the sign-in token, which this class exposes through user(), so there was
+    // nothing here the default could not do.
 
     public List<Session> sessions(long marketplaceId) {
         return get(uriIdSegmentParam(apiRoot, "marketplaces", marketplaceId, "sessions", "format=application/json"), SESSIONS_TYPE);

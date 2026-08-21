@@ -440,6 +440,26 @@ class AdminApiTest {
 
         try (Flexemarkets fm = connect()) {
             assertThat(fm.isAdmin()).isFalse();
+            assertThat(fm.isManager()).isFalse();
+            assertThat(fm.hasRole("ROLE_USER")).isFalse();
+        }
+    }
+
+    /**
+     * The role that runs a study, and the general form behind both names.
+     *
+     * <p>Python has answered {@code is_manager()} and {@code has_role()} since
+     * the management surface landed; Java answered neither, so a study asking
+     * whether it could open a session had to read {@code user().roles()} and
+     * compare strings the SDK already knows how to compare.
+     */
+    @Test
+    void managerAndArbitraryRolesAreAnswerableToo() throws Exception {
+        try (Flexemarkets fm = connect()) {
+            assertThat(fm.isManager()).isTrue();
+            assertThat(fm.hasRole("ROLE_MANAGER")).isTrue();
+            assertThat(fm.hasRole("ROLE_ADMIN")).isFalse();
+            assertThat(fm.hasRole(null)).as("no role is not every role").isFalse();
         }
     }
 
