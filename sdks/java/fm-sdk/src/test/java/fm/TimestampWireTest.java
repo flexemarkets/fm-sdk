@@ -45,6 +45,40 @@ class TimestampWireTest {
         assertThat(person.email()).isEqualTo("dev@dev");
     }
 
+    /**
+     * The other shape. expiresAt is the one field that comes from a real
+     * Instant on the server, so it arrives with a Z and must not be shifted
+     * again on the way in.
+     */
+    @Test
+    void anOtpBundleExpiryKeepsItsZone() {
+        var json = """
+            {"expiresAt":"2026-08-15T18:00:00Z",
+             "otps":[{"userId":1,"email":"alice@lab.edu","otp":"123456"}]}
+            """;
+
+        var bundle = MAPPER.readValue(json, ManagerOtpBundle.class);
+
+        assertThat(bundle.expiresAt()).isEqualTo(Instant.parse("2026-08-15T18:00:00Z"));
+        assertThat(bundle.otps()).singleElement()
+                .extracting(ManagerOtpBundle.Entry::otp).isEqualTo("123456");
+    }
+
+    /** A session's dates are bare, like the audit ones. */
+    @Test
+    void aSessionsDatesArriveAsInstants() {
+        var json = """
+            {"id":300,"marketplaceId":1,"state":"CLOSED",
+             "openDate":"2026-08-15T09:00:00.5","closeDate":"2026-08-15T17:30:00"}
+            """;
+
+        var session = MAPPER.readValue(json, Session.class);
+
+        assertThat(session.openDate()).isEqualTo(Instant.parse("2026-08-15T09:00:00.5Z"));
+        assertThat(session.closeDate()).isEqualTo(Instant.parse("2026-08-15T17:30:00Z"));
+        assertThat(session.state()).isEqualTo("CLOSED");
+    }
+
     /** The rest of the record still binds; the creator does not drop fields. */
     @Test
     void theOtherComponentsSurviveTheCreator() {

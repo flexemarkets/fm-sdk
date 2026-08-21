@@ -1,5 +1,8 @@
 package fm;
 
+import java.time.Instant;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
@@ -18,8 +21,26 @@ public record ClientConnection(
     long marketplaceId,
     @JsonAlias("id") long connectionId,
     long ownerId,
-    String established,
-    String terminated,
+    Instant established,
+    Instant terminated,
     String description,
     Long sessionId) {
+
+    /**
+     * Built from the wire, where a timestamp is a string in one of two shapes.
+     * See {@link Timestamps}; a @JsonCreator rather than a @JsonDeserialize so
+     * the record does not depend on one Jackson major.
+     */
+    @JsonCreator
+    static ClientConnection fromWire(
+            @JsonProperty("marketplaceId") long marketplaceId,
+            @JsonProperty("connectionId") long connectionId,
+            @JsonProperty("ownerId") long ownerId,
+            @JsonProperty("established") String established,
+            @JsonProperty("terminated") String terminated,
+            @JsonProperty("description") String description,
+            @JsonProperty("sessionId") Long sessionId) {
+        return new ClientConnection(marketplaceId, connectionId, ownerId, Timestamps.parse(established), Timestamps.parse(terminated), description, sessionId);
+    }
+
 }
