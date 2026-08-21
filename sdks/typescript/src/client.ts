@@ -978,6 +978,15 @@ export class Flexemarkets {
     return this.hasRole("ROLE_ADMIN");
   }
 
+  /**
+   * Whether this connection's user holds ROLE_MANAGER — the role that runs a
+   * study: opening and closing sessions, staging allocations, minting
+   * passcodes. Python has had it since the management surface landed.
+   */
+  isManager(): boolean {
+    return this.hasRole("ROLE_MANAGER");
+  }
+
   hasRole(role: string): boolean {
     return (this._user?.roles ?? []).includes(role);
   }
