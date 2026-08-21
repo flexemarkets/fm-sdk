@@ -499,57 +499,51 @@ class ManagementApiTest {
     }
 
     /**
-     * The defaults exist so that implementations which cannot manage sessions --
-     * test fakes, read-only providers -- keep compiling when this surface grows.
-     * They have to fail in a way that names what was called and by whom, or the
-     * cost of that convenience is an unexplained failure in someone else's code.
+     * What the roles buy: an implementation models what it can do, and the type
+     * says so.
+     *
+     * <p>This used to build a fake that implemented the whole interface and
+     * assert that the management methods threw at runtime, because they were
+     * defaults. There are no such defaults now. A reader that cannot manage
+     * does not implement {@link Management}, so the compiler refuses the call
+     * and no test can reach it -- which is the improvement, and also why the
+     * old assertion has nothing left to assert.
+     *
+     * <p>What is worth holding still is that narrowing works at all: a reader
+     * can be written without stubbing sixty methods, and it is not a manager.
      */
     @Test
-    void anImplementationThatCannotManageSaysSo() {
-        var readOnly = new Flexemarkets() {
-            public Types.Account account() { return null; }
-            public long accountId() { return 0; }
-            public String accountName() { return null; }
-            public Types.Person user() { return null; }
-            public long userId() { return 0; }
-            public Types.Token token() { return null; }
-            public long endpointMarketplaceId() { return 0; }
-            public String endpointUrl() { return null; }
+    void anImplementationCanModelReadingAlone() {
+        Reading reader = new Reading() {
             public List<Types.Marketplace> marketplaces() { return List.of(); }
             public Types.Marketplace marketplace(long id) { return null; }
             public List<Types.Market> markets(long id) { return List.of(); }
+            public List<String> symbols(long id) { return List.of(); }
             public List<Types.Session> sessions(long id) { return List.of(); }
+            public List<Types.Session> sessions(long id, List<Long> s) { return List.of(); }
             public Types.Session session(long id) { return null; }
             public List<Types.Order> orders(long id) { return List.of(); }
-            public List<Types.Holding> holdings(long id) { return List.of(); }
-            public Types.Holding holding(long id) { return null; }
-            public List<Types.ClientConnection> connections(long id) { return List.of(); }
-            public List<Types.ClientConnection> connections(long id, List<Long> s) { return List.of(); }
-            public List<String> symbols(long id) { return List.of(); }
-            public List<Types.Session> sessions(long id, List<Long> s) { return List.of(); }
             public List<Types.Order> orders(long id, List<Long> s) { return List.of(); }
             public List<Types.Order> orders(long id, String symbol) { return List.of(); }
             public List<Types.Order> trades(long id, String symbol) { return List.of(); }
+            public List<Types.Holding> holdings(long id) { return List.of(); }
             public List<Types.Holding> holdings(long id, List<Long> s) { return List.of(); }
+            public Types.Holding holding(long id) { return null; }
             public String downloadHoldings(long id) { return ""; }
             public String downloadHoldings(long id, List<Long> s) { return ""; }
             public List<Types.Allotment> allotments(long id, long allocationId) { return List.of(); }
             public List<Types.Person> users() { return List.of(); }
+            public List<Types.ClientConnection> connections(long id) { return List.of(); }
+            public List<Types.ClientConnection> connections(long id, List<Long> s) { return List.of(); }
             public Snapshot<List<Types.Order>> activeOrdersV1(long id) { return null; }
             public Snapshot<List<Types.Order>> recentTradesV1(long id, int size) { return null; }
             public Snapshot<List<Types.Order>> recentTradesV1(long id) { return null; }
-            public Types.Order submitLimit(long m, long k, String s, long u, long p) { return null; }
-            public Types.Order submitCancel(long m, long k, long o) { return null; }
-            public Types.Order submitMarket(long m, long k, String s, long u) { return null; }
-            public void listen(long id, BlockingQueue<Object> queue) { }
-            public MarketView observe(long id) { return null; }
-            public void reconnect() { }
-            public void close() { }
         };
 
-        assertThatThrownBy(() -> readOnly.openSession(1))
-                .isInstanceOf(UnsupportedOperationException.class)
-                .hasMessageContaining("openSession")
-                .hasMessageContaining(readOnly.getClass().getName());
+        assertThat(reader.markets(1)).isEmpty();
+        assertThat(reader)
+                .as("a reader is not a manager, and the type is where that is said")
+                .isNotInstanceOf(Management.class)
+                .isNotInstanceOf(Flexemarkets.class);
     }
 }

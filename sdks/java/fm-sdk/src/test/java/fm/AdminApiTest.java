@@ -512,6 +512,12 @@ class AdminApiTest {
             public String downloadHoldings(long id, List<Long> s) { return ""; }
             public List<Types.Allotment> allotments(long id, long allocationId) { return List.of(); }
             public List<Types.Person> users() { return List.of(); }
+            public Types.Session openSession(long id) { return null; }
+            public Types.Session pauseSession(long id) { return null; }
+            public Types.Session closeSession(long id) { return null; }
+            public Types.Marketplace createMarketplaceFromJson(String json) { return null; }
+            public List<Types.Holding> allocate(long id, List<Types.Holding> h) { return List.of(); }
+            public List<Types.Holding> uploadHoldings(long id, java.nio.file.Path csv) { return List.of(); }
             public Snapshot<List<Types.Order>> activeOrdersV1(long id) { return null; }
             public Snapshot<List<Types.Order>> recentTradesV1(long id, int size) { return null; }
             public Snapshot<List<Types.Order>> recentTradesV1(long id) { return null; }
