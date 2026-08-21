@@ -524,6 +524,17 @@ class ManagementApiTest {
             public List<Types.Holding> holdings(long id) { return List.of(); }
             public Types.Holding holding(long id) { return null; }
             public List<Types.ClientConnection> connections(long id) { return List.of(); }
+            public List<Types.ClientConnection> connections(long id, List<Long> s) { return List.of(); }
+            public List<String> symbols(long id) { return List.of(); }
+            public List<Types.Session> sessions(long id, List<Long> s) { return List.of(); }
+            public List<Types.Order> orders(long id, List<Long> s) { return List.of(); }
+            public List<Types.Order> orders(long id, String symbol) { return List.of(); }
+            public List<Types.Order> trades(long id, String symbol) { return List.of(); }
+            public List<Types.Holding> holdings(long id, List<Long> s) { return List.of(); }
+            public String downloadHoldings(long id) { return ""; }
+            public String downloadHoldings(long id, List<Long> s) { return ""; }
+            public List<Types.Allotment> allotments(long id, long allocationId) { return List.of(); }
+            public List<Types.Person> users() { return List.of(); }
             public Snapshot<List<Types.Order>> activeOrdersV1(long id) { return null; }
             public Snapshot<List<Types.Order>> recentTradesV1(long id, int size) { return null; }
             public Snapshot<List<Types.Order>> recentTradesV1(long id) { return null; }

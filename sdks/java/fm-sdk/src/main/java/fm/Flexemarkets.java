@@ -34,7 +34,7 @@ import fm.Types.Token;
  * should copy it. This holds for every implementation, including test fakes, so
  * a mutation bug surfaces in a unit test rather than against a live server.
  */
-public interface Flexemarkets extends Identity, AutoCloseable {
+public interface Flexemarkets extends Identity, Reading, AutoCloseable {
 
     /**
      * Connect and authenticate. The caller owns the result and must close it.
@@ -97,97 +97,6 @@ public interface Flexemarkets extends Identity, AutoCloseable {
 
         return new HttpFlexemarkets(properties);
     }
-
-    // --- reading ------------------------------------------------------------
-
-    List<Marketplace> marketplaces();
-
-    Marketplace marketplace(long marketplaceId);
-
-    List<Market> markets(long marketplaceId);
-
-    /** The marketplace's market symbols. */
-    default List<String> symbols(long marketplaceId) {
-        throw unsupported("symbols");
-    }
-
-    List<Session> sessions(long marketplaceId);
-
-    /** Particular sessions by id, rather than the marketplace's whole history. */
-    default List<Session> sessions(long marketplaceId, List<Long> sessionIds) {
-        throw unsupported("sessions(marketplaceId, sessionIds)");
-    }
-
-    /** The current session, or null when the marketplace has never opened one. */
-    Session session(long marketplaceId);
-
-    List<Order> orders(long marketplaceId);
-
-    /**
-     * Orders from particular sessions, rather than the current one.
-     *
-     * <p>Answered by a different route from {@link #orders(long)} -- the
-     * current-session collection cannot be filtered -- so a study reading a
-     * finished run's orders needs this one. Both Python and TypeScript have
-     * had it since the management surface landed; Java had not.
-     */
-    default List<Order> orders(long marketplaceId, List<Long> sessionIds) {
-        throw unsupported("orders(marketplaceId, sessionIds)");
-    }
-
-    /**
-     * Orders in one market, by symbol.
-     *
-     * <p>The symbol-keyed route answers without the symbol on each order,
-     * because the query already fixed it; it is filled in before returning.
-     * Unlike {@link #trades(long, String)} the ids are left alone -- an order
-     * has its own id, and only a trade carries it in {@code original}.
-     */
-    default List<Order> orders(long marketplaceId, String symbol) {
-        throw unsupported("orders(marketplaceId, symbol)");
-    }
-
-    List<Holding> holdings(long marketplaceId);
-
-    /**
-     * Holdings as they stood in particular sessions, rather than now.
-     *
-     * <p>What a settlement report reads: a finished run's positions are a
-     * property of its session, and {@link #holdings(long)} only ever answers
-     * for the current one. Defaulted so implementations that only follow live
-     * state need not answer for history.
-     */
-    default List<Holding> holdings(long marketplaceId, List<Long> sessionIds) {
-        throw unsupported("holdings(marketplaceId, sessionIds)");
-    }
-
-    /** The caller's own holding in {@code marketplaceId}. */
-    Holding holding(long marketplaceId);
-
-    List<ClientConnection> connections(long marketplaceId);
-
-    /**
-     * Connections attached during particular sessions.
-     *
-     * <p>Who was present in a given run, which is not the same question as who
-     * is attached now. An empty or null filter means the latter.
-     */
-    default List<ClientConnection> connections(long marketplaceId, List<Long> sessionIds) {
-        throw unsupported("connections(marketplaceId, sessionIds)");
-    }
-
-    /**
-     * Resting orders, with the sequence number they were correct as of.
-     *
-     * <p>The sequence lets a caller reconcile this snapshot against the deltas
-     * arriving on the event stream, applying only those newer than the
-     * snapshot.
-     */
-    Snapshot<List<Order>> activeOrdersV1(long marketplaceId);
-
-    Snapshot<List<Order>> recentTradesV1(long marketplaceId, int size);
-
-    Snapshot<List<Order>> recentTradesV1(long marketplaceId);
 
     // --- writing ------------------------------------------------------------
 
@@ -256,16 +165,6 @@ public interface Flexemarkets extends Identity, AutoCloseable {
         throw unsupported("closeSession");
     }
 
-    /** Everyone in the caller's account. */
-    default List<Person> users() {
-        throw unsupported("users");
-    }
-
-    /** The opening positions of one allocation. */
-    default List<Allotment> allotments(long marketplaceId, long allocationId) {
-        throw unsupported("allotments");
-    }
-
     /**
      * Create a marketplace from its JSON definition, returning what was made.
      *
@@ -298,31 +197,6 @@ public interface Flexemarkets extends Identity, AutoCloseable {
      */
     default List<Holding> allocate(long marketplaceId, List<Holding> holdings) {
         throw unsupported("allocate");
-    }
-
-    /** The holdings CSV, verbatim, as the server renders it. */
-    default String downloadHoldings(long marketplaceId) {
-        throw unsupported("downloadHoldings");
-    }
-
-    /**
-     * The same CSV for particular sessions — a finished run's export, rather
-     * than the current one's.
-     */
-    default String downloadHoldings(long marketplaceId, List<Long> sessionIds) {
-        throw unsupported("downloadHoldings(marketplaceId, sessionIds)");
-    }
-
-    /**
-     * Trades in one market, most recent first.
-     *
-     * <p>Answered by a symbol-keyed route, so the orders come back without the
-     * symbol on them and with the trade id in {@code original}; both are filled
-     * in before returning, which is what makes the result usable as a trade
-     * list rather than a set of half-populated orders.
-     */
-    default List<Order> trades(long marketplaceId, String symbol) {
-        throw unsupported("trades");
     }
 
     /**
