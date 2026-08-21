@@ -37,11 +37,14 @@
 #
 # A release must also be recorded in git before it is uploaded. The registries
 # are append-only but git is not append-only in the same way: a tag can be
-# added later, so the omission is quiet and stays quiet. 0.0.7 through 0.0.12
-# all shipped untagged, and the commit each was built from had to be recovered
-# afterwards by reading `chore:` messages and diffing poms. The Release
-# workflow cannot make this mistake -- it is triggered by the tag -- so this
-# check exists for the local `make publish` path, which is how those six went
+# added later, so the omission is quiet and stays quiet. That is not
+# hypothetical: 0.0.7 through 0.0.12 shipped untagged and the commit each was
+# built from had to be recovered afterwards by reading `chore:` messages and
+# diffing poms. Those tags have since been back-filled -- every published
+# version has one, so the history is whole and this paragraph is a record of
+# why the check exists rather than a description of the present. The Release
+# workflow cannot make the mistake, being triggered by the tag, so this check
+# exists for the local `make publish` path, which is how those six went
 # out.
 #
 # Usage: scripts/check-publish.sh [all|npm|pypi|java|spi]
@@ -202,7 +205,7 @@ check_release_tag() {
 
     if ! git -C "$ROOT" rev-parse -q --verify "refs/tags/$tag" >/dev/null 2>&1; then
         fail "$tag" "no such tag"
-        hints+=("git: tag the release commit first — git tag -a $tag -m \"$what $version\" && git push origin $tag. fm-sdk 0.0.7 through 0.0.12 and fm-spi 0.0.7 through 0.0.11 all shipped without one, and which commit built them had to be reconstructed afterwards from release messages and pom diffs.")
+        hints+=("git: tag the release commit first — git tag -a $tag -m \"$what $version\" && git push origin $tag. fm-sdk 0.0.7 through 0.0.12 once shipped without one and had to be reconstructed afterwards from release messages and pom diffs; they are tagged now, and this check is what keeps that true.")
         return
     fi
 
