@@ -518,8 +518,26 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     public Order submitMarket(long marketplaceId, long marketId, String side, long units) {
-        return submitLimit(marketplaceId, marketId, side, units,
-                           marketableLimit(market(marketplaceId, marketId), side));
+        var limit = submitLimit(marketplaceId, marketId, side, units,
+                                marketableLimit(market(marketplaceId, marketId), side));
+
+        // Unconditional, and safe when the order filled completely: the exchange
+        // consumes a CANCEL by itself when no units remain (Exchange's javadoc
+        // says so). Asking first would cost a round trip to learn something the
+        // cancel handles anyway, and would race the book between the two calls.
+        // It targets the submitted id because CANCEL identifies its target by
+        // original id, which is what survives a split.
+        try {
+            submitCancel(marketplaceId, marketId, limit.id());
+        } catch (Exceptions.FlexemarketsException e) {
+            // The order is placed. Saying only "cancel failed" would invite a
+            // caller to retry the whole thing and trade twice.
+            throw new ApiException(
+                    "Order " + limit.id() + " was placed but its remainder could not be"
+                    + " cancelled; it may still be resting. Do not resubmit -- cancel it.", e);
+        }
+
+        return limit;
     }
 
     /** The market by id, from the marketplace's own list. */

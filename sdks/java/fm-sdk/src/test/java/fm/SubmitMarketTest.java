@@ -113,7 +113,6 @@ class SubmitMarketTest {
             fm.submitMarket(1L, 11L, Order.SIDE_BUY, 5L);
         }
 
-        assertThat(submitted).hasSize(1);
         assertThat(submitted.get(0))
                 .contains("\"price\":185")
                 .doesNotContain(String.valueOf(Long.MAX_VALUE));
@@ -126,7 +125,6 @@ class SubmitMarketTest {
             fm.submitMarket(1L, 11L, Order.SIDE_SELL, 5L);
         }
 
-        assertThat(submitted).hasSize(1);
         assertThat(submitted.get(0)).contains("\"price\":110");
     }
 
@@ -138,6 +136,41 @@ class SubmitMarketTest {
         }
 
         assertThat(submitted.get(0)).contains("\"type\":\"LIMIT\"");
+    }
+
+    /**
+     * Immediate or cancel: the remainder does not rest.
+     *
+     * <p>Without the cancel, a market order that did not fill leaves a bid at
+     * the market's maximum — the best price in the book, standing, for anyone
+     * to take. That is the opposite of what the caller asked for.
+     */
+    @Test
+    void whateverDoesNotFillIsCancelled() throws Exception {
+        try (Flexemarkets fm = connect()) {
+            fm.submitMarket(1L, 11L, Order.SIDE_BUY, 5L);
+        }
+
+        assertThat(submitted).hasSize(2);
+        assertThat(submitted.get(1))
+                .contains("\"type\":\"CANCEL\"")
+                .contains("\"original\":42");
+    }
+
+    /**
+     * The cancel is sent even when nothing can be resting.
+     *
+     * <p>The exchange consumes a cancel by itself when no units remain, so this
+     * is harmless — and cheaper than a round trip to ask, which would race the
+     * book between the answer and the cancel.
+     */
+    @Test
+    void theCancelIsUnconditional() throws Exception {
+        try (Flexemarkets fm = connect()) {
+            fm.submitMarket(1L, 11L, Order.SIDE_SELL, 5L);
+        }
+
+        assertThat(submitted).as("submit then cancel, always").hasSize(2);
     }
 
     @Test

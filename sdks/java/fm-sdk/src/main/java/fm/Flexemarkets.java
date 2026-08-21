@@ -277,11 +277,19 @@ public interface Flexemarkets extends AutoCloseable {
      * priceMinimum} happened to be zero. Nothing called it and no test reached
      * the wire, so it stayed that way.
      *
-     * <p><b>The remainder rests.</b> Units that do not fill stay in the book at
-     * that extreme price — a bid at the market's maximum, or an offer at its
-     * minimum — where anyone may take them. This is a marketable limit, not
-     * immediate-or-cancel. A caller who wants the remainder gone should
-     * {@link #submitCancel} it.
+     * <p><b>Immediate or cancel.</b> Whatever does not fill at once is
+     * cancelled. Without that a market order leaves a bid at the market's
+     * maximum, or an offer at its minimum, resting where anyone may take it —
+     * which is not what "market order" means to the person who sent it.
+     *
+     * <p>So this is two calls, and the second is unconditional: the exchange
+     * consumes a cancel by itself when no units remain, so a complete fill
+     * costs a harmless round trip rather than an inspection that would race the
+     * book. If the cancel fails the order is still placed, and this throws
+     * saying so — do not resubmit, or you will trade twice.
+     *
+     * <p>Returns the limit order as submitted. What it filled is a property of
+     * the book afterwards, not of this value.
      */
     Order submitMarket(long marketplaceId, long marketId, String side, long units);
 
