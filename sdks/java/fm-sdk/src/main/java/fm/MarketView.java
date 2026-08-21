@@ -1,5 +1,7 @@
 package fm;
 
+import fm.internal.DefaultMarketView;
+
 import java.util.List;
 import java.util.function.Consumer;
 

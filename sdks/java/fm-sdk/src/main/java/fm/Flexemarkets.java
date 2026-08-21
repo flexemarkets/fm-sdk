@@ -1,5 +1,7 @@
 package fm;
 
+import fm.internal.HttpFlexemarkets;
+
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
@@ -61,8 +63,7 @@ public interface Flexemarkets
         if (null != provider) {
             return provider.connect(credential, resolved, clientDescription);
         }
-        return new HttpFlexemarkets(
-                HttpFlexemarkets.loadProperties(credential, endpoint, clientDescription));
+        return HttpFlexemarkets.open(credential, endpoint, clientDescription, false, null);
     }
 
     /**
@@ -89,16 +90,8 @@ public interface Flexemarkets
             return provider.connect(credential, resolved, clientDescription);
         }
 
-        var properties = HttpFlexemarkets.loadProperties(credential, endpoint, clientDescription);
-
-        if (capture) {
-            properties.setProperty("capture", "true");
-        }
-        if (null != impersonateAccount && !impersonateAccount.isBlank()) {
-            properties.setProperty("impersonate-account", impersonateAccount);
-        }
-
-        return new HttpFlexemarkets(properties);
+        return HttpFlexemarkets.open(credential, endpoint, clientDescription,
+                                     capture, impersonateAccount);
     }
 
     /** Releases the connection. Overridden to drop {@code AutoCloseable}'s checked exception. */

@@ -1,4 +1,25 @@
-package fm;
+package fm.internal;
+
+import fm.Flexemarkets;
+import fm.GapEvent;
+import fm.Holding;
+import fm.Market;
+import fm.MarketView;
+import fm.Marketplace;
+import fm.MarketplaceTrades;
+import fm.Order;
+import fm.OrderBook;
+import fm.OrderBooks;
+import fm.OrdersUpdate;
+import fm.ReconnectEvent;
+import fm.Reconnected;
+import fm.Session;
+import fm.Side;
+import fm.Snapshot;
+import fm.Subscription;
+import fm.Trades;
+import fm.WsException;
+import fm.WsTransportError;
 
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -80,7 +101,7 @@ public class DefaultMarketView implements MarketView {
      */
     private long lastAppliedSeq;
 
-    DefaultMarketView(Flexemarkets flexemarkets, long marketplaceId, List<Market> markets) {
+    public DefaultMarketView(Flexemarkets flexemarkets, long marketplaceId, List<Market> markets) {
         this.flexemarkets = flexemarkets;
         this.marketplaceId = marketplaceId;
         this.markets = List.copyOf(markets);

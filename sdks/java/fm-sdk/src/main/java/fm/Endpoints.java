@@ -24,7 +24,7 @@ import java.util.regex.Pattern;
 public final class Endpoints {
 
     /** Where the API is served. The website is on the apex; this is not it. */
-    static final String DEFAULT_HOST = "https://api.flexemarkets.com";
+    public static final String DEFAULT_HOST = "https://api.flexemarkets.com";
 
     private static final Pattern MARKETPLACE_ID = Pattern.compile("^\\d+$");
 

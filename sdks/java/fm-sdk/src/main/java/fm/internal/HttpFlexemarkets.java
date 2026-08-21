@@ -1,4 +1,35 @@
-package fm;
+package fm.internal;
+
+import fm.Account;
+import fm.AccountNameConflictException;
+import fm.Allotment;
+import fm.ApiException;
+import fm.ApiRoot;
+import fm.Approval;
+import fm.Assets;
+import fm.AuthenticationException;
+import fm.ClientConnection;
+import fm.ConflictException;
+import fm.ConflictFailure;
+import fm.Endpoints;
+import fm.Flexemarkets;
+import fm.FlexemarketsException;
+import fm.Holding;
+import fm.HttpException;
+import fm.ManagerOtpBundle;
+import fm.Market;
+import fm.MarketView;
+import fm.Marketplace;
+import fm.Order;
+import fm.OrderType;
+import fm.Person;
+import fm.PersonHasMarketplaceDataException;
+import fm.Session;
+import fm.Side;
+import fm.Snapshot;
+import fm.Subscription;
+import fm.TickGrid;
+import fm.Token;
 
 import java.io.IOException;
 import java.net.URI;
@@ -26,6 +57,30 @@ import tools.jackson.databind.json.JsonMapper;
 
 
 public class HttpFlexemarkets implements Flexemarkets {
+
+    /**
+     * The HTTP connection, built from the arguments {@link Flexemarkets#connect}
+     * takes.
+     *
+     * <p>A factory rather than a public constructor: this class is the
+     * implementation, and the only thing outside {@code fm.internal} that
+     * should be able to say is "make me one from these". Properties are its own
+     * business.
+     */
+    public static Flexemarkets open(String credential, String endpoint,
+                                    String clientDescription, boolean capture,
+                                    String impersonateAccount) throws IOException {
+        var properties = loadProperties(credential, endpoint, clientDescription);
+
+        if (capture) {
+            properties.setProperty("capture", "true");
+        }
+        if (null != impersonateAccount && !impersonateAccount.isBlank()) {
+            properties.setProperty("impersonate-account", impersonateAccount);
+        }
+
+        return new HttpFlexemarkets(properties);
+    }
     private static final String FM_SDK_CLIENT = "fm-sdk-java/0.1.0";
 
     // Jackson 3 mappers are immutable and built, not configured after the fact.

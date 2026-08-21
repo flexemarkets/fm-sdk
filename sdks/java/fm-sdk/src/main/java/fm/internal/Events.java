@@ -1,4 +1,19 @@
-package fm;
+package fm.internal;
+
+import fm.ApiException;
+import fm.Flexemarkets;
+import fm.FlexemarketsException;
+import fm.Holding;
+import fm.MarketView;
+import fm.Order;
+import fm.OrdersUpdate;
+import fm.Reconnected;
+import fm.Session;
+import fm.Snapshot;
+import fm.Subscription;
+import fm.Version;
+import fm.WsException;
+import fm.WsTransportError;
 
 import java.net.URI;
 import java.net.http.HttpClient;

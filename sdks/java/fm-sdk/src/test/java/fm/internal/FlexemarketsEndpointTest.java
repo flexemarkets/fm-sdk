@@ -1,4 +1,6 @@
-package fm;
+package fm.internal;
+
+import fm.Flexemarkets;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

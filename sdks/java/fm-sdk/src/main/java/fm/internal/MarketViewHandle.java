@@ -1,4 +1,16 @@
-package fm;
+package fm.internal;
+
+import fm.Flexemarkets;
+import fm.GapEvent;
+import fm.Holding;
+import fm.Market;
+import fm.MarketView;
+import fm.Order;
+import fm.OrderBook;
+import fm.ReconnectEvent;
+import fm.Session;
+import fm.Side;
+import fm.Subscription;
 
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
