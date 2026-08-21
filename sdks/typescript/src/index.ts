@@ -30,6 +30,8 @@ export {
   orderedSecurities,
   holdingUnits,
   priceRound,
+  unitRound,
+  tickRound,
   getLink,
 } from "./types.js";
 

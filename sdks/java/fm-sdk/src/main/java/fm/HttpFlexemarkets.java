@@ -551,15 +551,9 @@ public class HttpFlexemarkets implements Flexemarkets {
      * and there is one legal price.
      */
     static long marketableLimit(Market market, Side side) {
-        if (Side.BUY != side) {
-            return market.priceMinimum();
-        }
-        if (market.priceTick() <= 0) {
-            return market.priceMinimum();
-        }
-
-        long range = market.priceMaximum() - market.priceMinimum();
-        return market.priceMinimum() + (range / market.priceTick()) * market.priceTick();
+        // The highest legal price is what priceRound gives for the ceiling, so
+        // this is the grid rule rather than a fourth copy of it.
+        return Side.BUY == side ? market.priceRound(market.priceMaximum()) : market.priceMinimum();
     }
 
     // --- management ---------------------------------------------------------

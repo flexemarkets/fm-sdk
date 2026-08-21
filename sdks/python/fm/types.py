@@ -105,6 +105,31 @@ class Holding:
         return [s.units for s in self.securities]
 
 
+def tick_round(value: int, minimum: int, maximum: int, tick: int) -> int:
+    """A value moved down onto a bounded tick grid.
+
+    The server applies this rule twice, to price and to units, spelling it the
+    same way both times: a value must lie within its bounds and satisfy
+    ``(value - minimum) % tick``. So the grid is anchored at the *minimum*, not
+    at zero -- this used to subtract ``value % tick``, right whenever the floor
+    happens to be a multiple of the tick and wrong for the rest in a way that
+    yields a plausible number rather than an error.
+
+    The ceiling is the highest legal tick rather than ``maximum`` itself:
+    clamping to the maximum lands off the grid when the range is not a whole
+    number of ticks, which is the case this exists for.
+
+    A tick of zero marks a fixed dimension -- the bounds are equal and there is
+    one legal value. It used to raise ZeroDivisionError.
+    """
+    if tick <= 0:
+        return min(max(value, minimum), maximum)
+
+    highest = minimum + ((maximum - minimum) // tick) * tick
+    rounded = minimum + ((value - minimum) // tick) * tick
+    return min(max(rounded, minimum), highest)
+
+
 @dataclass
 class Market:
     id: int = 0
@@ -121,29 +146,17 @@ class Market:
     unit_tick: int = 0
 
     def price_round(self, price: int) -> int:
-        """*price* moved down to the nearest price this market will accept.
+        """*price* moved down to the nearest price this market will accept."""
+        return tick_round(price, self.price_minimum, self.price_maximum, self.price_tick)
 
-        Ticks are anchored at ``price_minimum``, not at zero: the server tests
-        ``(price - price_minimum) % price_tick``. This subtracted
-        ``price % price_tick``, which is right only when the floor happens to
-        be a multiple of the tick -- with a floor of 110 and a tick of 25 the
-        legal prices are 110/135/160/185, and rounding 137 gave 125.
+    def unit_round(self, units: int) -> int:
+        """*units* moved down to the nearest size this market will accept.
 
-        A tick of zero marks a fixed dimension, where the bounds are equal and
-        there is one legal price; that used to divide by zero.
+        The counterpart to :meth:`price_round`, which did not exist even though
+        the server checks units on exactly the same terms and refuses with
+        "units is not on a tic".
         """
-        if self.price_tick <= 0:
-            return min(max(price, self.price_minimum), self.price_maximum)
-
-        # The ceiling is the highest legal tick, not price_maximum: clamping to
-        # the maximum lands off the grid when the range is not a whole number
-        # of ticks, which is the case this exists for.
-        span = self.price_maximum - self.price_minimum
-        highest = self.price_minimum + (span // self.price_tick) * self.price_tick
-
-        steps = (price - self.price_minimum) // self.price_tick
-        rounded = self.price_minimum + steps * self.price_tick
-        return min(max(rounded, self.price_minimum), highest)
+        return tick_round(units, self.unit_minimum, self.unit_maximum, self.unit_tick)
 
 
 @dataclass

@@ -18,35 +18,49 @@ public record Market(
     long unitTick) {
 
     /**
-     * {@code price} moved down to the nearest price this market will accept.
+     * A value moved down onto a bounded tick grid.
      *
-     * <p>Ticks are anchored at {@link #priceMinimum}, not at zero: the server
-     * tests {@code (price - priceMinimum) % priceTick}. This subtracted
-     * {@code price % priceTick}, which anchors at zero and is only right when
-     * the floor happens to be a multiple of the tick. With a floor of 110 and a
-     * tick of 25 the legal prices are 110/135/160/185, and rounding 137 gave
-     * 125 — inside the bounds, off the tick, and refused by the server with
-     * "price is not on a tic".
+     * <p>The server applies this rule twice, to price and to units, and spells
+     * it the same way both times: a value must lie within its bounds and
+     * satisfy {@code (value - minimum) % tick}. So the grid is anchored at the
+     * <em>minimum</em>, not at zero, and this used to subtract
+     * {@code value % tick} — right whenever the floor happens to be a multiple
+     * of the tick, and wrong for the rest in a way that yields a plausible
+     * number rather than an error. With a floor of 110 and a tick of 25 the
+     * legal values are 110/135/160/185, and rounding 137 gave 125.
      *
-     * <p>A tick of zero marks a fixed dimension, where the bounds are equal and
-     * there is one legal price. That used to divide by zero.
+     * <p>The ceiling is the highest legal tick rather than {@code maximum}
+     * itself: clamping to the maximum lands off the grid whenever the range is
+     * not a whole number of ticks, which is the case this exists for.
      *
-     * <p>The same rule as {@code HttpFlexemarkets.marketableLimit}, which is
-     * where it was got right first; this is the copy that was not.
+     * <p>A tick of zero marks a fixed dimension — the two bounds are equal and
+     * there is one legal value. It used to divide by zero.
      */
-    public long priceRound(long price) {
-        if (priceTick <= 0) {
-            return Math.min(Math.max(price, priceMinimum), priceMaximum);
+    static long tickRound(long value, long minimum, long maximum, long tick) {
+        if (tick <= 0) {
+            return Math.min(Math.max(value, minimum), maximum);
         }
 
-        // The ceiling has to be the highest legal tick, not priceMaximum:
-        // clamping to the maximum itself lands off the grid whenever the range
-        // is not a whole number of ticks, which is the very case this exists
-        // for. With 110/199/25 that returned 199 for anything above 185.
-        long highest = priceMinimum + ((priceMaximum - priceMinimum) / priceTick) * priceTick;
-
-        long steps = Math.floorDiv(price - priceMinimum, priceTick);
-        long rounded = priceMinimum + steps * priceTick;
-        return Math.min(Math.max(rounded, priceMinimum), highest);
+        long highest = minimum + ((maximum - minimum) / tick) * tick;
+        long rounded = minimum + Math.floorDiv(value - minimum, tick) * tick;
+        return Math.min(Math.max(rounded, minimum), highest);
     }
+
+    /** {@code price} moved down to the nearest price this market will accept. */
+    public long priceRound(long price) {
+        return tickRound(price, priceMinimum, priceMaximum, priceTick);
+    }
+
+    /**
+     * {@code units} moved down to the nearest size this market will accept.
+     *
+     * <p>The counterpart to {@link #priceRound}, which did not exist even
+     * though the server checks units on exactly the same terms and refuses
+     * with "units is not on a tic". A caller rounding a price and passing raw
+     * units had half a guard.
+     */
+    public long unitRound(long units) {
+        return tickRound(units, unitMinimum, unitMaximum, unitTick);
+    }
+
 }
