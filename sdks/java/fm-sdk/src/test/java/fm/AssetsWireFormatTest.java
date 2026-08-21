@@ -10,7 +10,7 @@ import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * What {@link Types.Assets} puts on the wire, in both directions.
+ * What {@link Assets} puts on the wire, in both directions.
  *
  * <p>The server reads a participant's opening positions from {@code grants} and
  * writes them there too. The Java component is called {@code securities} so it
@@ -34,9 +34,9 @@ class AssetsWireFormatTest {
             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
             .build();
 
-    private static Types.Assets assets() {
-        return new Types.Assets(null, "alice", 10_000,
-                List.of(new Types.Security(10L, 50L, 50L, 0L, true, true)));
+    private static Assets assets() {
+        return new Assets(null, "alice", 10_000,
+                List.of(new Security(10L, 50L, 50L, 0L, true, true)));
     }
 
     @Test
@@ -52,7 +52,7 @@ class AssetsWireFormatTest {
     @Test
     void positionsAreReadFromGrants() {
         var parsed = mapper.readValue(
-                "{\"cash\":10000,\"grants\":[{\"marketId\":10,\"units\":50}]}", Types.Assets.class);
+                "{\"cash\":10000,\"grants\":[{\"marketId\":10,\"units\":50}]}", Assets.class);
 
         assertThat(parsed.cash()).isEqualTo(10_000L);
         assertThat(parsed.securities()).singleElement()
@@ -67,7 +67,7 @@ class AssetsWireFormatTest {
     @Test
     void positionsSpelledSecuritiesStillParse() {
         var parsed = mapper.readValue(
-                "{\"cash\":10000,\"securities\":[{\"marketId\":10,\"units\":50}]}", Types.Assets.class);
+                "{\"cash\":10000,\"securities\":[{\"marketId\":10,\"units\":50}]}", Assets.class);
 
         assertThat(parsed.securities()).singleElement()
                 .satisfies(s -> assertThat(s.units()).isEqualTo(50L));
@@ -85,9 +85,9 @@ class AssetsWireFormatTest {
     @Test
     void aShortAllowanceIsReadUnderEitherName() {
         var viaShortUnits = mapper.readValue(
-                "{\"marketId\":10,\"units\":5,\"shortUnits\":50}", Types.Security.class);
+                "{\"marketId\":10,\"units\":5,\"shortUnits\":50}", Security.class);
         var viaInitial = mapper.readValue(
-                "{\"marketId\":10,\"units\":5,\"initialShortUnits\":50}", Types.Security.class);
+                "{\"marketId\":10,\"units\":5,\"initialShortUnits\":50}", Security.class);
 
         assertThat(viaShortUnits.shortUnits()).isEqualTo(50L);
         assertThat(viaInitial.shortUnits()).isEqualTo(50L);
@@ -96,7 +96,7 @@ class AssetsWireFormatTest {
     /** Absent means none, not null -- callers do arithmetic on this. */
     @Test
     void anAbsentShortAllowanceIsZero() {
-        var parsed = mapper.readValue("{\"marketId\":10,\"units\":5}", Types.Security.class);
+        var parsed = mapper.readValue("{\"marketId\":10,\"units\":5}", Security.class);
 
         assertThat(parsed.shortUnits()).isZero();
     }
@@ -104,7 +104,7 @@ class AssetsWireFormatTest {
     /** Requests carry "shortUnits", which is the name /allocations reads. */
     @Test
     void aShortAllowanceIsWrittenAsShortUnits() {
-        var json = mapper.writeValueAsString(new Types.Security(10L, 5L, 55L, 50L, true, true));
+        var json = mapper.writeValueAsString(new Security(10L, 5L, 55L, 50L, true, true));
 
         assertThat(json).contains("\"shortUnits\":50");
     }
@@ -113,9 +113,9 @@ class AssetsWireFormatTest {
     @Test
     void allotmentAcceptsCapitalOrAssets() {
         var viaCapital = mapper.readValue(
-                "{\"ownerId\":8,\"capital\":{\"cash\":10000}}", Types.Allotment.class);
+                "{\"ownerId\":8,\"capital\":{\"cash\":10000}}", Allotment.class);
         var viaAssets = mapper.readValue(
-                "{\"ownerId\":8,\"assets\":{\"cash\":10000}}", Types.Allotment.class);
+                "{\"ownerId\":8,\"assets\":{\"cash\":10000}}", Allotment.class);
 
         assertThat(viaCapital.assets().cash()).isEqualTo(10_000L);
         assertThat(viaAssets.assets().cash()).isEqualTo(10_000L);

@@ -10,8 +10,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
-import fm.Types.Market;
-import fm.Types.Order;
 
 public class Trades {
     private final Market market;

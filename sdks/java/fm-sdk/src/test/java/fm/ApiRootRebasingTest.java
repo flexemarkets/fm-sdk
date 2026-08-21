@@ -127,7 +127,7 @@ class ApiRootRebasingTest {
     @Test
     void aReadThroughALinkStaysOnTheHostThatWasDialled() throws Exception {
         try (Flexemarkets fm = Flexemarkets.connect(TOKEN, endpoint(), "rebase-test")) {
-            assertThat(fm.markets(1L)).extracting(Types.Market::symbol).containsExactly("STK");
+            assertThat(fm.markets(1L)).extracting(Market::symbol).containsExactly("STK");
         }
 
         assertThat(originRequests).contains("GET /api/marketplaces/1/markets");
@@ -173,9 +173,9 @@ class ApiRootRebasingTest {
         assertThat(reported).isEmpty();
     }
 
-    private static Types.ApiRoot rootNaming(String origin) {
-        return new Types.ApiRoot(Map.of(
-                "marketplaces", new Types.ApiRoot.LinkObject(origin + "/api/marketplaces")));
+    private static ApiRoot rootNaming(String origin) {
+        return new ApiRoot(Map.of(
+                "marketplaces", new ApiRoot.LinkObject(origin + "/api/marketplaces")));
     }
 
     private static String onStandardError(Runnable action) {

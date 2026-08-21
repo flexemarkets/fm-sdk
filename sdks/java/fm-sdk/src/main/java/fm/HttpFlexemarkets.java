@@ -28,19 +28,6 @@ import fm.Exceptions.ApiException;
 import fm.Exceptions.AuthenticationException;
 import fm.Exceptions.ConflictException;
 import fm.Exceptions.HttpException;
-import fm.Types.Account;
-import fm.Types.Allotment;
-import fm.Types.ApiRoot;
-import fm.Types.ClientConnection;
-import fm.Types.ConflictFailure;
-import fm.Types.Holding;
-import fm.Types.Market;
-import fm.Types.ManagerOtpBundle;
-import fm.Types.Marketplace;
-import fm.Types.Order;
-import fm.Types.Person;
-import fm.Types.Session;
-import fm.Types.Token;
 
 public class HttpFlexemarkets implements Flexemarkets {
     private static final String FM_SDK_CLIENT = "fm-sdk-java/0.1.0";
@@ -67,7 +54,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     private static final TypeReference<List<Account>>        ACCOUNTS_TYPE     = new TypeReference<>() {};
     private static final TypeReference<Account>              ACCOUNT_TYPE      = new TypeReference<>() {};
     private static final TypeReference<Person>               PERSON_TYPE       = new TypeReference<>() {};
-    private static final TypeReference<Types.Approval>       APPROVAL_TYPE     = new TypeReference<>() {};
+    private static final TypeReference<Approval>       APPROVAL_TYPE     = new TypeReference<>() {};
     private static final TypeReference<ManagerOtpBundle>     OTP_BUNDLE_TYPE   = new TypeReference<>() {};
     private static final TypeReference<List<String>>         SYMBOLS_TYPE      = new TypeReference<>() {};
     private static final TypeReference<List<Person>>         PERSONS_TYPE      = new TypeReference<>() {};
@@ -649,7 +636,7 @@ public class HttpFlexemarkets implements Flexemarkets {
      */
 
     private static Allotment _toAllotment(long marketplaceId, Holding holding) {
-        var assets = new Types.Assets(null, holding.name(), holding.cash(), holding.securities());
+        var assets = new Assets(null, holding.name(), holding.cash(), holding.securities());
         return new Allotment(null, null, marketplaceId, holding.ownerId(), holding.name(), assets);
     }
 

@@ -223,7 +223,7 @@ class ManagementApiTest {
 
     @Test
     void usersReadsTheJsonRouteRatherThanTheHalOne() throws Exception {
-        List<Types.Person> users;
+        List<Person> users;
         try (Flexemarkets fm = connect()) {
             users = fm.users();
         }
@@ -235,7 +235,7 @@ class ManagementApiTest {
 
     @Test
     void allotmentsAreReadFromTheV1RouteForOneAllocation() throws Exception {
-        List<Types.Allotment> allotments;
+        List<Allotment> allotments;
         try (Flexemarkets fm = connect()) {
             allotments = fm.allotments(1, 42);
         }
@@ -259,8 +259,8 @@ class ManagementApiTest {
      */
     @Test
     void allocateSendsPositionsAsGrants() throws Exception {
-        var holding = new Types.Holding(1, 0, 0, 8, "alice", 10000, 10000,
-                List.of(new Types.Security(10L, 50L, 50L, 0L, true, true)));
+        var holding = new Holding(1, 0, 0, 8, "alice", 10000, 10000,
+                List.of(new Security(10L, 50L, 50L, 0L, true, true)));
 
         try (Flexemarkets fm = connect()) {
             fm.allocate(1, List.of(holding));
@@ -276,9 +276,9 @@ class ManagementApiTest {
 
     @Test
     void allocateReturnsWhatTheServerCreated() throws Exception {
-        var holding = new Types.Holding(1, 0, 0, 8, "alice", 10000, 10000, List.of());
+        var holding = new Holding(1, 0, 0, 8, "alice", 10000, 10000, List.of());
 
-        List<Types.Holding> created;
+        List<Holding> created;
         try (Flexemarkets fm = connect()) {
             created = fm.allocate(1, List.of(holding));
         }
@@ -299,7 +299,7 @@ class ManagementApiTest {
 
     @Test
     void aMarketplaceIsCreatedFromItsJsonDefinition() throws Exception {
-        Types.Marketplace created;
+        Marketplace created;
         try (Flexemarkets fm = connect()) {
             created = fm.createMarketplaceFromJson(
                     "{\"name\":\"simple-dividend\",\"markets\":[{\"symbol\":\"STK\"}]}");
@@ -333,7 +333,7 @@ class ManagementApiTest {
      */
     @Test
     void holdingsCanBeReadForParticularSessions() throws Exception {
-        List<Types.Holding> holdings;
+        List<Holding> holdings;
         try (Flexemarkets fm = connect()) {
             holdings = fm.holdings(1, List.of(300L, 301L));
         }
@@ -389,7 +389,7 @@ class ManagementApiTest {
      */
     @Test
     void aConnectionCarriesItsSession() throws Exception {
-        List<Types.ClientConnection> connections;
+        List<ClientConnection> connections;
         try (Flexemarkets fm = connect()) {
             connections = fm.connections(1, List.of(300L));
         }
@@ -405,7 +405,7 @@ class ManagementApiTest {
      */
     @Test
     void tradesCarryTheirIdAndSymbol() throws Exception {
-        List<Types.Order> trades;
+        List<Order> trades;
         try (Flexemarkets fm = connect()) {
             trades = fm.trades(1, "STK");
         }
@@ -424,7 +424,7 @@ class ManagementApiTest {
      */
     @Test
     void ordersCanBeReadForParticularSessions() throws Exception {
-        List<Types.Order> orders;
+        List<Order> orders;
         try (Flexemarkets fm = connect()) {
             orders = fm.orders(1, List.of(300L));
         }
@@ -443,7 +443,7 @@ class ManagementApiTest {
      */
     @Test
     void symbolOrdersKeepTheirOwnId() throws Exception {
-        List<Types.Order> orders;
+        List<Order> orders;
         try (Flexemarkets fm = connect()) {
             orders = fm.orders(1, "STK");
         }
@@ -484,7 +484,7 @@ class ManagementApiTest {
         var csv = dir.resolve("holdings.csv");
         Files.writeString(csv, "owner,cash\nalice,10000\n");
 
-        List<Types.Holding> created;
+        List<Holding> created;
         try (Flexemarkets fm = connect()) {
             created = fm.uploadHoldings(1, csv);
         }
@@ -515,29 +515,29 @@ class ManagementApiTest {
     @Test
     void anImplementationCanModelReadingAlone() {
         Reading reader = new Reading() {
-            public List<Types.Marketplace> marketplaces() { return List.of(); }
-            public Types.Marketplace marketplace(long id) { return null; }
-            public List<Types.Market> markets(long id) { return List.of(); }
+            public List<Marketplace> marketplaces() { return List.of(); }
+            public Marketplace marketplace(long id) { return null; }
+            public List<Market> markets(long id) { return List.of(); }
             public List<String> symbols(long id) { return List.of(); }
-            public List<Types.Session> sessions(long id) { return List.of(); }
-            public List<Types.Session> sessions(long id, List<Long> s) { return List.of(); }
-            public Types.Session session(long id) { return null; }
-            public List<Types.Order> orders(long id) { return List.of(); }
-            public List<Types.Order> orders(long id, List<Long> s) { return List.of(); }
-            public List<Types.Order> orders(long id, String symbol) { return List.of(); }
-            public List<Types.Order> trades(long id, String symbol) { return List.of(); }
-            public List<Types.Holding> holdings(long id) { return List.of(); }
-            public List<Types.Holding> holdings(long id, List<Long> s) { return List.of(); }
-            public Types.Holding holding(long id) { return null; }
+            public List<Session> sessions(long id) { return List.of(); }
+            public List<Session> sessions(long id, List<Long> s) { return List.of(); }
+            public Session session(long id) { return null; }
+            public List<Order> orders(long id) { return List.of(); }
+            public List<Order> orders(long id, List<Long> s) { return List.of(); }
+            public List<Order> orders(long id, String symbol) { return List.of(); }
+            public List<Order> trades(long id, String symbol) { return List.of(); }
+            public List<Holding> holdings(long id) { return List.of(); }
+            public List<Holding> holdings(long id, List<Long> s) { return List.of(); }
+            public Holding holding(long id) { return null; }
             public String downloadHoldings(long id) { return ""; }
             public String downloadHoldings(long id, List<Long> s) { return ""; }
-            public List<Types.Allotment> allotments(long id, long allocationId) { return List.of(); }
-            public List<Types.Person> users() { return List.of(); }
-            public List<Types.ClientConnection> connections(long id) { return List.of(); }
-            public List<Types.ClientConnection> connections(long id, List<Long> s) { return List.of(); }
-            public Snapshot<List<Types.Order>> activeOrders(long id) { return null; }
-            public Snapshot<List<Types.Order>> recentTrades(long id, int size) { return null; }
-            public Snapshot<List<Types.Order>> recentTrades(long id) { return null; }
+            public List<Allotment> allotments(long id, long allocationId) { return List.of(); }
+            public List<Person> users() { return List.of(); }
+            public List<ClientConnection> connections(long id) { return List.of(); }
+            public List<ClientConnection> connections(long id, List<Long> s) { return List.of(); }
+            public Snapshot<List<Order>> activeOrders(long id) { return null; }
+            public Snapshot<List<Order>> recentTrades(long id, int size) { return null; }
+            public Snapshot<List<Order>> recentTrades(long id) { return null; }
         };
 
         assertThat(reader.markets(1)).isEmpty();

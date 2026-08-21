@@ -1,6 +1,5 @@
 package fm;
 
-import fm.Types.Order;
 
 /**
  * Trading in a marketplace: submitting orders and cancelling them.

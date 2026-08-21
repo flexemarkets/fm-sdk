@@ -10,10 +10,6 @@ import java.util.function.Consumer;
 
 import fm.Events.WsException;
 import fm.Events.WsTransportError;
-import fm.Types.Holding;
-import fm.Types.Market;
-import fm.Types.Order;
-import fm.Types.Session;
 
 /**
  * Skeleton {@link MarketView} that wraps an existing
@@ -127,8 +123,8 @@ public class DefaultMarketView implements MarketView {
      * via a server-side publish lock.
      */
     private void _seedFromSnapshot() {
-        Snapshot<List<Types.Order>> orders = flexemarkets.activeOrders(marketplaceId);
-        Snapshot<List<Types.Order>> trades = flexemarkets.recentTrades(marketplaceId);
+        Snapshot<List<Order>> orders = flexemarkets.activeOrders(marketplaceId);
+        Snapshot<List<Order>> trades = flexemarkets.recentTrades(marketplaceId);
 
         // Clear before reseeding so a resync (Phase 2b) doesn't
         // double-add against existing price levels. Initial seed
@@ -141,10 +137,10 @@ public class DefaultMarketView implements MarketView {
         // deltas use. Trades snapshot feeds the tape via the same
         // update() entrypoint.
         if (!orders.body().isEmpty()) {
-            this.orderBooks.update(orders.body().toArray(new Types.Order[0]));
+            this.orderBooks.update(orders.body().toArray(new Order[0]));
         }
         if (!trades.body().isEmpty()) {
-            this.trades.update(trades.body().toArray(new Types.Order[0]));
+            this.trades.update(trades.body().toArray(new Order[0]));
         }
 
         // Use the orders snapshot's seq as the watermark — orders and

@@ -201,7 +201,7 @@ class AdminApiTest {
      */
     @Test
     void signupNamesTheOwnersCredentialsTheWayTheServerReadsThem() throws Exception {
-        Types.Token created;
+        Token created;
         try (Flexemarkets fm = connect()) {
             created = fm.signup("acme", "owner@new", "s3cret", "Ada", "Lovelace");
         }
@@ -229,8 +229,8 @@ class AdminApiTest {
 
     @Test
     void accountsAreListedAndApproved() throws Exception {
-        List<Types.Account> all;
-        Types.Account approved;
+        List<Account> all;
+        Account approved;
         try (Flexemarkets fm = connect()) {
             all = fm.accounts();
             approved = fm.approveAccount("acme");
@@ -246,7 +246,7 @@ class AdminApiTest {
 
     @Test
     void aUserIsCreatedWithTheRolesGiven() throws Exception {
-        Types.Person created;
+        Person created;
         try (Flexemarkets fm = connect()) {
             created = fm.createUser("alice@lab.edu", "pw", "Alice", "Anderson", "ROLE_MANAGER");
         }
@@ -301,8 +301,8 @@ class AdminApiTest {
 
     @Test
     void aMarketplaceAndAMarketAreCreated() throws Exception {
-        Types.Marketplace marketplace;
-        Types.Market market;
+        Marketplace marketplace;
+        Market market;
         try (Flexemarkets fm = connect()) {
             marketplace = fm.createMarketplace("course", "class 2");
             market = fm.createMarket(5, "STK", "Stock", 0, 10_000, 1, false);
@@ -467,7 +467,7 @@ class AdminApiTest {
 
     @Test
     void otpBundlesAreMintedForTheUsersAsked() throws Exception {
-        Types.ManagerOtpBundle bundle;
+        ManagerOtpBundle bundle;
         try (Flexemarkets fm = connect()) {
             bundle = fm.managerOtpBundle(List.of(1L, 2L));
         }
@@ -496,9 +496,9 @@ class AdminApiTest {
     @Test
     void aTradingClientIsNotAnAdministrator() {
         Writing trader = new Writing() {
-            public Types.Order submitLimit(long m, long k, Side s, long u, long p) { return null; }
-            public Types.Order submitCancel(long m, long k, long o) { return null; }
-            public Types.Order submitMarket(long m, long k, Side s, long u) { return null; }
+            public Order submitLimit(long m, long k, Side s, long u, long p) { return null; }
+            public Order submitCancel(long m, long k, long o) { return null; }
+            public Order submitMarket(long m, long k, Side s, long u) { return null; }
         };
 
         assertThat(trader.submitCancel(1, 1, 1)).isNull();

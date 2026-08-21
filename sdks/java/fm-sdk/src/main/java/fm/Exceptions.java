@@ -43,14 +43,14 @@ public class Exceptions {
     public sealed static class ConflictException extends FlexemarketsException
         permits AccountNameConflictException {
 
-        private final Types.ConflictFailure failure;
+        private final ConflictFailure failure;
 
-        public ConflictException(String message, Types.ConflictFailure failure) {
+        public ConflictException(String message, ConflictFailure failure) {
             super(message);
             this.failure = failure;
         }
 
-        public Types.ConflictFailure failure() { return failure; }
+        public ConflictFailure failure() { return failure; }
     }
 
     /**
@@ -75,7 +75,7 @@ public class Exceptions {
         public AccountNameConflictException(String requestedName, String suggestedName) {
             super("Account name '%s' is taken%s".formatted(requestedName,
                     suggestedName == null ? "" : "; server suggests '%s'".formatted(suggestedName)),
-                  new Types.ConflictFailure(null, null, null, null, suggestedName));
+                  new ConflictFailure(null, null, null, null, suggestedName));
             this.requestedName = requestedName;
             this.suggestedName = suggestedName;
         }

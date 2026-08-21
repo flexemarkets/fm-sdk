@@ -3,9 +3,6 @@ package fm;
 import java.nio.file.Path;
 import java.util.List;
 
-import fm.Types.Holding;
-import fm.Types.Marketplace;
-import fm.Types.Session;
 
 /**
  * Running an experiment, as opposed to trading in one: stage the opening

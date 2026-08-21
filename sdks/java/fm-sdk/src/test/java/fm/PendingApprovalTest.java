@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
  * An account nobody has ruled on yet.
  *
  * <p>The server sends {@code "approval": null} for a freshly signed-up
- * account, and {@link Types.Account#approval()} was a primitive {@code
+ * account, and {@link Account#approval()} was a primitive {@code
  * boolean}. Jackson cannot map null into one, so it refused the response --
  * and because the refusal happened while <em>reading</em>, two calls broke in
  * ways that did not look like a type problem:
@@ -35,7 +35,7 @@ class PendingApprovalTest {
         var json = """
             {"id":7,"name":"pending-account","approval":null}""";
 
-        var account = MAPPER.readValue(json, Types.Account.class);
+        var account = MAPPER.readValue(json, Account.class);
 
         assertThat(account.name()).isEqualTo("pending-account");
         assertThat(account.approval()).isNull();
@@ -44,9 +44,9 @@ class PendingApprovalTest {
 
     @Test
     void undecidedIsNotTheSameAsRefused() {
-        var pending  = MAPPER.readValue("{\"id\":1,\"approval\":null}", Types.Account.class);
-        var refused  = MAPPER.readValue("{\"id\":2,\"approval\":false}", Types.Account.class);
-        var approved = MAPPER.readValue("{\"id\":3,\"approval\":true}", Types.Account.class);
+        var pending  = MAPPER.readValue("{\"id\":1,\"approval\":null}", Account.class);
+        var refused  = MAPPER.readValue("{\"id\":2,\"approval\":false}", Account.class);
+        var approved = MAPPER.readValue("{\"id\":3,\"approval\":true}", Account.class);
 
         // The distinction the primitive could not hold: all three are
         // different, and only the last is approved.
@@ -67,7 +67,7 @@ class PendingApprovalTest {
              {"id":3,"name":"also-approved","approval":true}]""";
 
         assertThatCode(() -> {
-            var accounts = MAPPER.readValue(json, Types.Account[].class);
+            var accounts = MAPPER.readValue(json, Account[].class);
 
             assertThat(accounts).hasSize(3);
             assertThat(accounts[1].approval()).isNull();
@@ -77,7 +77,7 @@ class PendingApprovalTest {
     /** An absent field, not merely a null one, reads the same way. */
     @Test
     void anAbsentApprovalIsAlsoUndecided() {
-        var account = MAPPER.readValue("{\"id\":9,\"name\":\"quiet\"}", Types.Account.class);
+        var account = MAPPER.readValue("{\"id\":9,\"name\":\"quiet\"}", Account.class);
 
         assertThat(account.approval()).isNull();
         assertThat(account.isApproved()).isFalse();

@@ -1,8 +1,5 @@
 package fm;
 
-import fm.Types.Account;
-import fm.Types.Person;
-import fm.Types.Token;
 
 /**
  * Who a connection is, and where it points.

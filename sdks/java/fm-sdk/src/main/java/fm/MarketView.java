@@ -3,10 +3,6 @@ package fm;
 import java.util.List;
 import java.util.function.Consumer;
 
-import fm.Types.Holding;
-import fm.Types.Market;
-import fm.Types.Order;
-import fm.Types.Session;
 
 /**
  * Always-current view of a single marketplace, hiding the transport
@@ -44,7 +40,7 @@ public interface MarketView extends AutoCloseable {
      * commit to it for good, and callers only ever want "a view over this".
      */
     static MarketView over(Flexemarkets flexemarkets, long marketplaceId,
-                           java.util.List<Types.Market> markets) {
+                           java.util.List<Market> markets) {
         return new DefaultMarketView(flexemarkets, marketplaceId, markets);
     }
 

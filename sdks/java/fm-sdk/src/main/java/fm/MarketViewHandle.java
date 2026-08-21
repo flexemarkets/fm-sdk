@@ -4,10 +4,6 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 
-import fm.Types.Holding;
-import fm.Types.Market;
-import fm.Types.Order;
-import fm.Types.Session;
 
 /**
  * Reader-side handle on a refcounted {@link DefaultMarketView}.

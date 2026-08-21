@@ -5,17 +5,6 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 
-import fm.Types.Account;
-import fm.Types.Allotment;
-import fm.Types.ClientConnection;
-import fm.Types.Holding;
-import fm.Types.ManagerOtpBundle;
-import fm.Types.Market;
-import fm.Types.Marketplace;
-import fm.Types.Order;
-import fm.Types.Person;
-import fm.Types.Session;
-import fm.Types.Token;
 
 /**
  * A connection to Flexemarkets.

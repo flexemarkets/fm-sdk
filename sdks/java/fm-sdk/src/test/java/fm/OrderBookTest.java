@@ -4,8 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 
-import fm.Types.Market;
-import fm.Types.Order;
 
 /**
  * The client-side book, reconstructed from the ORDERS-UPDATE stream.

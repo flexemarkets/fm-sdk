@@ -7,7 +7,6 @@ import tools.jackson.databind.json.JsonMapper;
 
 import org.junit.jupiter.api.Test;
 
-import fm.Types.ApiRoot;
 
 /**
  * The API root's link envelope is named {@code links} in Java and {@code _links}

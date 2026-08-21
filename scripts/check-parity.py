@@ -28,7 +28,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-JAVA = ROOT / "sdks/java/fm-sdk/src/main/java/fm/Types.java"
+# The package, not one file: E11 split the Types holder class into a record per
+# file, so there is no longer a single place the shapes live.
+JAVA = ROOT / "sdks/java/fm-sdk/src/main/java/fm"
 PYTHON = ROOT / "sdks/python/fm/types.py"
 TYPESCRIPT = ROOT / "sdks/typescript/src/types.ts"
 
@@ -65,9 +67,9 @@ def _components(body: str) -> list[str]:
     return parts
 
 
-def java_types(path: Path) -> dict[str, tuple[list[str], set[str]]]:
+def java_types(directory: Path) -> dict[str, tuple[list[str], set[str]]]:
     """Record name -> (all components, components excluded from the wire)."""
-    source = path.read_text()
+    source = "\n".join(p.read_text() for p in sorted(directory.glob("*.java")))
 
     # Strip block comments before looking for components. A record's component
     # list is a natural place to explain a field, and prose there was read as
@@ -80,7 +82,7 @@ def java_types(path: Path) -> dict[str, tuple[list[str], set[str]]]:
     source = re.sub(r"/\*.*?\*/", " ", source, flags=re.S)
     types: dict[str, tuple[list[str], set[str]]] = {}
 
-    for match in re.finditer(r"public record (\w+)\(", source):
+    for match in re.finditer(r"^public record (\w+)\(", source, re.M):
         open_paren = source.index("(", match.start())
         depth, cursor = 0, open_paren
         while True:
@@ -255,7 +257,7 @@ def typescript_methods(path: Path) -> set[str]:
 
 
 def check_methods(verbose: bool) -> list[str]:
-    java = java_methods(JAVA.parent)
+    java = java_methods(JAVA)
     python = python_methods(PYTHON.parent / "client.py")
     typescript = typescript_methods(TYPESCRIPT.parent / "client.ts")
 

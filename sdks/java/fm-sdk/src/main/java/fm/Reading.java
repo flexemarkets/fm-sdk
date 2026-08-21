@@ -2,14 +2,6 @@ package fm;
 
 import java.util.List;
 
-import fm.Types.Allotment;
-import fm.Types.ClientConnection;
-import fm.Types.Holding;
-import fm.Types.Market;
-import fm.Types.Marketplace;
-import fm.Types.Order;
-import fm.Types.Person;
-import fm.Types.Session;
 
 /**
  * Everything a connection can be asked, and nothing it can change.
