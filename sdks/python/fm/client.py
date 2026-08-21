@@ -34,6 +34,7 @@ from .exceptions import (
     AuthenticationError,
     AuthorizationError,
     ConfigurationError,
+    ConflictError,
     ConnectionFailedError,
     InvalidArgumentError,
     PersonHasMarketplaceDataError,
@@ -472,6 +473,8 @@ def _check_response(response: httpx.Response) -> None:
         raise AuthenticationError(response.text)
     if status == 403:
         raise AuthorizationError(response.text)
+    if status == 409:
+        raise ConflictError(response.text)
     if status >= 500:
         raise ConnectionFailedError(response.text)
     response.raise_for_status()
