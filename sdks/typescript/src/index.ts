@@ -41,6 +41,9 @@ export {
   InvalidArgumentError,
   ConnectionFailedError,
   ConfigurationError,
+  ConflictError,
+  AccountNameConflictError,
+  PersonHasMarketplaceDataError,
 } from "./client.js";
 export type { FlexemarketsOptions } from "./client.js";
 

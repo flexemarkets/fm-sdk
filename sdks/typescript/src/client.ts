@@ -54,6 +54,41 @@ export class InvalidArgumentError extends FlexemarketsError {}
 export class ConnectionFailedError extends FlexemarketsError {}
 export class ConfigurationError extends FlexemarketsError {}
 
+/** A 409. The Java and Python SDKs have raised this since the admin surface landed. */
+export class ConflictError extends FlexemarketsError {}
+
+/**
+ * An account name was taken, and the server proposed another.
+ *
+ * A subclass of {@link ConflictError} rather than a sibling, so a caller that
+ * handles conflicts generally still catches this one. The suggestion is worth
+ * surfacing rather than retrying blindly: it is the name the account would end
+ * up known by.
+ */
+export class AccountNameConflictError extends ConflictError {
+  constructor(
+    message: string,
+    readonly requestedName: string,
+    readonly suggestedName: string | null,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * A user could not be deleted because they still own marketplace data —
+ * orders or allotments. Deleting them would orphan it, so the server refuses;
+ * the caller has to decide what happens to the data first.
+ */
+export class PersonHasMarketplaceDataError extends ConflictError {
+  constructor(
+    message: string,
+    readonly userId: number,
+  ) {
+    super(message);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // JSON → type helpers
 // ---------------------------------------------------------------------------
@@ -491,8 +526,19 @@ function checkResponse(response: Response, body: string): void {
   if (status === 400) throw new InvalidArgumentError(body);
   if (status === 401) throw new AuthenticationError(body);
   if (status === 403) throw new AuthorizationError(body);
+  if (status === 409) throw new ConflictError(body);
   if (status >= 500) throw new ConnectionFailedError(body);
   throw new FlexemarketsError(`HTTP ${status}: ${body}`);
+}
+
+/** The server's proposed alternative name, when a 409 body carries one. */
+function suggestedNameIn(body: string): string | null {
+  try {
+    const parsed = JSON.parse(body) as { suggestedName?: string };
+    return parsed.suggestedName ?? null;
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -720,14 +766,30 @@ export class Flexemarkets {
     lastName?: string | null,
   ): Promise<Token> {
     const url = uri(this._apiRoot, "accounts");
-    const data = await this._post(url, {
-      accountName,
-      ownerEmail: email,
-      ownerPassword: password,
-      firstName: firstName ?? null,
-      lastName: lastName ?? null,
-    });
-    return parseToken(data);
+    try {
+      const data = await this._post(url, {
+        accountName,
+        ownerEmail: email,
+        ownerPassword: password,
+        firstName: firstName ?? null,
+        lastName: lastName ?? null,
+      });
+      return parseToken(data);
+    } catch (e) {
+      // A taken name, with the server's proposed alternative. Raised as its
+      // own type so a caller can offer the suggestion rather than parsing it
+      // back out of a generic conflict.
+      if (e instanceof ConflictError) {
+        const suggested = suggestedNameIn(e.message);
+        throw new AccountNameConflictError(
+          `Account name '${accountName}' is taken` +
+            (suggested === null ? "" : `; server suggests '${suggested}'`),
+          accountName,
+          suggested,
+        );
+      }
+      throw e;
+    }
   }
 
   /** Approve an account by name, returning it as it now stands. */
@@ -785,7 +847,20 @@ export class Flexemarkets {
 
   /** Delete a user. Destructive. */
   async deleteUser(userId: number): Promise<void> {
-    await this._delete(uriId(this._apiRoot, "users", userId));
+    try {
+      await this._delete(uriId(this._apiRoot, "users", userId));
+    } catch (e) {
+      // The user still owns orders or allotments. Deleting them would orphan
+      // it, so the server refuses and the caller has to decide what happens to
+      // the data first.
+      if (e instanceof ConflictError) {
+        throw new PersonHasMarketplaceDataError(
+          `User ${userId} has marketplace data and cannot be deleted.`,
+          userId,
+        );
+      }
+      throw e;
+    }
   }
 
   /** Create an empty marketplace. See also {@link createMarketplaceFromJson}. */
