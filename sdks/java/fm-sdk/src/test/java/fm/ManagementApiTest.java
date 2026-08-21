@@ -354,21 +354,28 @@ class ManagementApiTest {
     }
 
     /**
-     * The filter is spelled {@code sessionIds} here and {@code sessions} on the
-     * holdings download. Getting it wrong is not an error -- it is an
-     * unfiltered answer that looks right until someone checks the totals.
+     * Sessions and connections are never filtered server-side, and the SDK no
+     * longer pretends otherwise.
+     *
+     * <p>This test used to assert the opposite: that {@code sessions(1, ids)}
+     * put {@code ?sessionIds=300,301} on the wire. It did -- and the server
+     * ignored it. {@code GET /marketplaces/{id}/sessions} and
+     * {@code /connections} accept only {@code format}, so the answer was the
+     * whole history looking like a filtered one. Asserting the request without
+     * asserting the response is how a defect becomes a requirement.
      */
     @Test
-    void sessionsAndConnectionsFilterOnSessionIds() throws Exception {
+    void sessionsAndConnectionsAreNeverFilteredOnTheWire() throws Exception {
         try (Flexemarkets fm = connect()) {
-            fm.sessions(1, List.of(300L, 301L));
-            fm.connections(1, List.of(300L));
+            fm.sessions(1);
+            fm.connections(1);
         }
 
+        assertThat(requests).noneSatisfy(r -> assertThat(r).contains("sessionIds="));
         assertThat(requests).anySatisfy(r -> assertThat(r)
-                .contains("/api/marketplaces/1/sessions?sessionIds=300,301"));
+                .contains("/api/marketplaces/1/sessions?format="));
         assertThat(requests).anySatisfy(r -> assertThat(r)
-                .contains("/api/marketplaces/1/connections?sessionIds=300"));
+                .contains("/api/marketplaces/1/connections?format="));
     }
 
     /** The holdings download spells it {@code sessions}. */
@@ -391,7 +398,7 @@ class ManagementApiTest {
     void aConnectionCarriesItsSession() throws Exception {
         List<ClientConnection> connections;
         try (Flexemarkets fm = connect()) {
-            connections = fm.connections(1, List.of(300L));
+            connections = fm.connections(1);
         }
 
         assertThat(connections).singleElement()
@@ -457,14 +464,11 @@ class ManagementApiTest {
 
     /** An empty filter means "now", and asks for no filter at all. */
     @Test
-    void emptyFiltersFallBackToTheUnfilteredRoutes() throws Exception {
+    void anEmptyFilterFallsBackToTheUnfilteredRoute() throws Exception {
         try (Flexemarkets fm = connect()) {
-            fm.sessions(1, List.of());
-            fm.connections(1, List.of());
             fm.downloadHoldings(1, List.of());
         }
 
-        assertThat(requests).noneSatisfy(r -> assertThat(r).contains("sessionIds="));
         assertThat(requests).noneSatisfy(r -> assertThat(r).contains("?sessions="));
     }
 

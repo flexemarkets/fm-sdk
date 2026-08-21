@@ -213,17 +213,21 @@ def test_allocate_sends_the_short_allowance(fm):
     assert '"shortUnits": 50' in body or '"shortUnits":50' in body
 
 
-def test_sessions_and_connections_filter_on_session_ids(fm):
-    """The filter is spelled ``sessionIds`` here and ``sessions`` on the
-    holdings download. Getting it wrong is not an error -- it is an unfiltered
-    answer that looks right until someone checks the totals.
-    """
-    fm.sessions(1, [300, 301])
-    fm.connections(1, [300])
+def test_sessions_and_connections_are_never_filtered_on_the_wire(fm):
+    """The SDK no longer pretends these filter.
 
-    paths = [p for _, p in requests]
-    assert any("/sessions?sessionIds=300,301" in p for p in paths)
-    assert any("/connections?sessionIds=300" in p for p in paths)
+    This asserted the opposite: that sessions(1, ids) put ?sessionIds= on the
+    wire. It did -- and the server ignored it. GET /marketplaces/{id}/sessions
+    and /connections accept only ``format``, so the answer was the whole
+    history looking like a filtered one. Asserting the request without
+    asserting the response is how a defect becomes a requirement.
+    """
+    fm.sessions(1)
+    fm.connections(1)
+
+    assert not any("sessionIds=" in r for _, r in requests)
+    assert any("/api/marketplaces/1/sessions?format=" in r for _, r in requests)
+    assert any("/api/marketplaces/1/connections?format=" in r for _, r in requests)
 
 
 def test_the_holdings_download_filters_on_sessions(fm):
@@ -237,7 +241,7 @@ def test_a_connection_carries_its_session(fm):
     was present in a run. The field was absent until 0.0.11, so every connection
     read as belonging to none.
     """
-    connections = fm.connections(1, [300])
+    connections = fm.connections(1)
 
     assert len(connections) == 1
     assert connections[0].session_id == 300
@@ -256,14 +260,11 @@ def test_trades_carry_their_id_and_symbol(fm):
     assert any("symbol=STK" in p for _, p in requests)
 
 
-def test_empty_filters_fall_back_to_the_unfiltered_routes(fm):
+def test_an_empty_filter_falls_back_to_the_unfiltered_route(fm):
     """An empty filter means "now", and asks for no filter at all."""
-    fm.sessions(1, [])
-    fm.connections(1, [])
     fm.download_holdings(1, [])
 
     paths = [p for _, p in requests]
-    assert not any("sessionIds=" in p for p in paths)
     assert not any("?sessions=" in p for p in paths)
 
 

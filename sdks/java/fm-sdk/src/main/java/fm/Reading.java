@@ -30,10 +30,19 @@ public interface Reading {
     /** The marketplace's market symbols. */
     List<String> symbols(long marketplaceId);
 
+    /**
+     * The marketplace's sessions.
+     *
+     * <p>All of them: there is no server-side filter. {@code GET
+     * /marketplaces/{id}/sessions} takes only {@code format}, so an overload
+     * accepting session ids existed here and was silently ignored — it
+     * returned the whole history and looked like it had filtered.
+     *
+     * <p>Filter the result. fm-ui, fm-manager and capm all already do, and a
+     * marketplace's session list is small enough that reading it whole costs
+     * less than the confusion did.
+     */
     List<Session> sessions(long marketplaceId);
-
-    /** Particular sessions by id, rather than the marketplace's whole history. */
-    List<Session> sessions(long marketplaceId, List<Long> sessionIds);
 
     /** The current session, or null when the marketplace has never opened one. */
     Session session(long marketplaceId);
@@ -98,15 +107,17 @@ public interface Reading {
     /** Everyone in the caller's account. */
     List<Person> users();
 
-    List<ClientConnection> connections(long marketplaceId);
-
     /**
-     * Connections attached during particular sessions.
+     * Who is attached to the marketplace.
      *
-     * <p>Who was present in a given run, which is not the same question as who
-     * is attached now. An empty or null filter means the latter.
+     * <p>All of them, for the reason {@link #sessions} gives: {@code GET
+     * /marketplaces/{id}/connections} takes only {@code format}, so the
+     * by-session overload that used to sit here filtered nothing.
+     *
+     * <p>A connection carries the session it belonged to, so "who was present
+     * in that run" is a filter on the result.
      */
-    List<ClientConnection> connections(long marketplaceId, List<Long> sessionIds);
+    List<ClientConnection> connections(long marketplaceId);
 
     /**
      * Resting orders, with the sequence number they were correct as of.

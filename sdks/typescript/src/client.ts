@@ -1025,30 +1025,20 @@ export class Flexemarkets {
 
   // -- sessions --------------------------------------------------------------
 
-  async sessions(
-    marketplaceId: number,
-    sessionIds?: number[] | null,
-  ): Promise<Session[]> {
-    let url: string;
-    if (sessionIds && sessionIds.length > 0) {
-      url = uriIdSegmentParam(
-        this._apiRoot,
-        "marketplaces",
-        marketplaceId,
-        "sessions",
-        `${sessionIdsParam(sessionIds)}&format=application/json`,
-      );
-    } else {
-      url = uriIdSegmentParam(
-        this._apiRoot,
-        "marketplaces",
-        marketplaceId,
-        "sessions",
-        "format=application/json",
-      );
-    }
-    const data = await this._get(url);
-    return (data as unknown as JsonObject[]).map(parseSession);
+  /**
+   * The marketplace's sessions — all of them.
+   *
+   * There is no server-side filter. `GET /marketplaces/{id}/sessions` takes
+   * only `format`, so the `sessionIds` argument this used to accept was
+   * silently ignored: it returned the whole history and looked like it had
+   * filtered. Filter the result; fm-ui already does.
+   */
+  async sessions(marketplaceId: number): Promise<Session[]> {
+    const url = uriIdSegmentParam(
+      this._apiRoot, "marketplaces", marketplaceId, "sessions",
+      "format=application/json",
+    );
+    return ((await this._get(url)) as unknown as JsonObject[]).map(parseSession);
   }
 
   async session(marketplaceId: number): Promise<Session> {
@@ -1264,24 +1254,19 @@ export class Flexemarkets {
 
   // -- connections -----------------------------------------------------------
 
-  async connections(
-    marketplaceId: number,
-    sessionIds?: number[] | null,
-  ): Promise<ClientConnection[]> {
-    // Canonical path is /marketplaces/{id}/connections ("/agents" is the
-    // retained pre-FM-4 alias); format=application/json yields a plain list
-    // (vs the HAL _embedded form).
-    const sid = sessionIdsParam(sessionIds ?? null);
-    const param = sid ? `${sid}&format=application/json` : "format=application/json";
+  /**
+   * Who is attached to the marketplace — all of them.
+   *
+   * No server-side filter, for the reason {@link sessions} gives. A connection
+   * carries the session it belonged to, so "who was present in that run" is a
+   * filter on the result.
+   */
+  async connections(marketplaceId: number): Promise<ClientConnection[]> {
     const url = uriIdSegmentParam(
-      this._apiRoot,
-      "marketplaces",
-      marketplaceId,
-      "connections",
-      param,
+      this._apiRoot, "marketplaces", marketplaceId, "connections",
+      "format=application/json",
     );
-    const data = await this._get(url);
-    return (data as unknown as JsonObject[]).map(parseConnection);
+    return ((await this._get(url)) as unknown as JsonObject[]).map(parseConnection);
   }
 
   // -- management ------------------------------------------------------------

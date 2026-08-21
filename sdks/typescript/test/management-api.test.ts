@@ -322,17 +322,27 @@ test("a short allowance is read under either name and sent as shortUnits", async
  * download. Getting it wrong is not an error -- it is an unfiltered answer that
  * looks right until someone checks the totals.
  */
-test("sessions and connections filter on sessionIds", async () => {
+/**
+ * The SDK no longer pretends these filter.
+ *
+ * This asserted the opposite: that `sessions(1, ids)` put `?sessionIds=` on the
+ * wire. It did — and the server ignored it. `GET /marketplaces/{id}/sessions`
+ * and `/connections` accept only `format`, so the answer was the whole history
+ * looking like a filtered one. Asserting the request without asserting the
+ * response is how a defect becomes a requirement.
+ */
+test("sessions and connections are never filtered on the wire", async () => {
   const fm = await connect();
   try {
-    await fm.sessions(1, [300, 301]);
-    await fm.connections(1, [300]);
+    await fm.sessions(1);
+    await fm.connections(1);
   } finally {
     fm.close();
   }
 
-  assert.ok(requests.some((r) => r.includes("/sessions?sessionIds=300,301")));
-  assert.ok(requests.some((r) => r.includes("/connections?sessionIds=300")));
+  assert.ok(!requests.some((r) => r.includes("sessionIds=")));
+  assert.ok(requests.some((r) => r.includes("/api/marketplaces/1/sessions?format=")));
+  assert.ok(requests.some((r) => r.includes("/api/marketplaces/1/connections?format=")));
 });
 
 test("the holdings download filters on sessions", async () => {
@@ -354,7 +364,7 @@ test("the holdings download filters on sessions", async () => {
 test("a connection carries its session", async () => {
   const fm = await connect();
   try {
-    const connections = await fm.connections(1, [300]);
+    const connections = await fm.connections(1);
     assert.equal(connections.length, 1);
     assert.equal(connections[0]!.sessionId, 300);
   } finally {
@@ -385,9 +395,7 @@ test("trades carry their id and symbol", async () => {
 test("empty filters fall back to the unfiltered routes", async () => {
   const fm = await connect();
   try {
-    await fm.sessions(1, []);
-    await fm.connections(1, []);
-    await fm.downloadHoldings(1, []);
+        await fm.downloadHoldings(1, []);
   } finally {
     fm.close();
   }

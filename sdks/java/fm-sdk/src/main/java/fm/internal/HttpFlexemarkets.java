@@ -318,25 +318,7 @@ public class HttpFlexemarkets implements Flexemarkets {
      * differently on this route than on the holdings download, and using the
      * wrong one is not an error -- it is an unfiltered answer.
      */
-    @Override
-    public List<Session> sessions(long marketplaceId, List<Long> sessionIds) {
-        if (sessionIds == null || sessionIds.isEmpty()) {
-            return sessions(marketplaceId);
-        }
-        return get(uriIdSegmentParam(apiRoot, "marketplaces", marketplaceId, "sessions",
-                        "sessionIds=" + _ids(sessionIds) + "&format=application/json"),
-                   SESSIONS_TYPE);
-    }
 
-    @Override
-    public List<ClientConnection> connections(long marketplaceId, List<Long> sessionIds) {
-        if (sessionIds == null || sessionIds.isEmpty()) {
-            return connections(marketplaceId);
-        }
-        return get(uriIdSegmentParam(apiRoot, "marketplaces", marketplaceId, "connections",
-                        "sessionIds=" + _ids(sessionIds) + "&format=application/json"),
-                   CONNECTIONS_TYPE);
-    }
 
     /** {@code sessions=} here, unlike the two routes above. */
     @Override

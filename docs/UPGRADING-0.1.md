@@ -180,7 +180,7 @@ code keeps working.
 works — but compare with `==`, never `is`: `"BUY" is Side.BUY` is `False`.
 
 **`connect_with_token` is gone.** Use `connect(token, endpoint, description)`.
-See [token authentication](#6-token-authentication-never-worked) — this is a
+See [token authentication](#7-token-authentication-never-worked) — this is a
 deletion rather than a rename, because what it did never worked.
 
 `create_market` takes the unit grid it used to hardcode:
@@ -314,7 +314,36 @@ and never thrown, so a handler for it caught nothing and `httpx.HTTPStatusError`
 escaped instead. If you were catching `httpx.HTTPStatusError` for 409s, catch
 `ConflictError`.
 
-### 6. Token authentication never worked
+### 6. `sessions` and `connections` no longer take a session filter
+
+They never filtered. `GET /marketplaces/{id}/sessions` and
+`/marketplaces/{id}/connections` accept only `format` — the server has no
+parameter for it — so the SDKs put `?sessionIds=` on the wire and got the whole
+history back, looking filtered.
+
+```java
+// before — the argument was ignored, silently
+fm.sessions(1744, List.of(300L, 301L));      // returned all 672
+fm.connections(1744, List.of(300L));         // returned all 49
+
+// after — read them and filter
+fm.sessions(1744).stream().filter(s -> wanted.contains(s.id())).toList();
+```
+
+A connection carries the session it belonged to, so "who was present in that
+run" is a filter on the result.
+
+**Most call sites need no change**, because most already filter client-side:
+fm-ui fetches `/sessions` and `/connections` unfiltered and narrows in the
+component, fm-manager's `_sessions` filters in a stream, and capm carries a
+comment explaining that a marketplace's session list is small enough to read
+whole. Only code that passed the ids and trusted the answer is affected — and
+that code was getting the wrong answer.
+
+**`holdings` and `downloadHoldings` are unaffected.** Those routes do take
+`sessions=` and genuinely filter; only these two invented one.
+
+### 7. Token authentication never worked
 
 **Python and TypeScript only.** Connecting with a token instead of a password
 has failed since each SDK was written. Both POSTed `/tokens` with the bearer
@@ -379,6 +408,8 @@ are least likely to cover:
 - [ ] Every `createMarket` call passes a price grid, and passes a unit grid if
       the market is not 1/100/1.
 - [ ] No remaining `connect_with_token`.
+- [ ] Every `sessions(...)` and `connections(...)` call passes one argument, and
+      anything that relied on the filter now narrows the result itself.
 
 ## Pinning
 

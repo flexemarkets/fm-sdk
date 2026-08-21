@@ -964,21 +964,20 @@ class Flexemarkets:
 
     # -- sessions ----------------------------------------------------------
 
-    def sessions(
-        self, marketplace_id: int, session_ids: list[int] | None = None,
-    ) -> list[Session]:
-        if session_ids:
-            url = _uri_id_segment_param(
-                self._api_root, "marketplaces", marketplace_id, "sessions",
-                f"{_session_ids_param(session_ids)}&format=application/json",
-            )
-        else:
-            url = _uri_id_segment_param(
-                self._api_root, "marketplaces", marketplace_id, "sessions",
-                "format=application/json",
-            )
-        data = self._get(url).json()
-        return [_parse_session(s) for s in data]
+    def sessions(self, marketplace_id: int) -> list[Session]:
+        """The marketplace's sessions -- all of them.
+
+        There is no server-side filter. ``GET /marketplaces/{id}/sessions``
+        takes only ``format``, so the ``session_ids`` argument this used to
+        accept was silently ignored: it returned the whole history and looked
+        like it had filtered. Filter the result; fm-ui, fm-manager and capm all
+        already do.
+        """
+        url = _uri_id_segment_param(
+            self._api_root, "marketplaces", marketplace_id, "sessions",
+            "format=application/json",
+        )
+        return [_parse_session(s) for s in self._get(url).json()]
 
     def session(self, marketplace_id: int) -> Session:
         url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "currentSession")
@@ -1263,21 +1262,18 @@ class Flexemarkets:
 
     # -- connections -------------------------------------------------------
 
-    def connections(
-        self,
-        marketplace_id: int,
-        session_ids: list[int] | None = None,
-    ) -> list[ClientConnection]:
-        # Canonical path is /marketplaces/{id}/connections ("/agents" is the
-        # retained pre-FM-4 alias); format=application/json yields a plain list
-        # (vs the HAL _embedded form).
-        sid = _session_ids_param(session_ids)
-        param = f"{sid}&format=application/json" if sid else "format=application/json"
+    def connections(self, marketplace_id: int) -> list[ClientConnection]:
+        """Who is attached to the marketplace -- all of them.
+
+        No server-side filter, for the reason :meth:`sessions` gives. A
+        connection carries the session it belonged to, so "who was present in
+        that run" is a filter on the result.
+        """
         url = _uri_id_segment_param(
-            self._api_root, "marketplaces", marketplace_id, "connections", param,
+            self._api_root, "marketplaces", marketplace_id, "connections",
+            "format=application/json",
         )
-        data = self._get(url).json()
-        return [_parse_connection(c) for c in data]
+        return [_parse_connection(c) for c in self._get(url).json()]
 
     # -- events / WebSocket ------------------------------------------------
 
