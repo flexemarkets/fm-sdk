@@ -46,11 +46,19 @@ public interface Administration {
     /** Approve an account by name, returning it as it now stands. */
     Account approveAccount(String accountName);
 
-    /** One account by id. */
-    Account account(long accountId);
+    /**
+     * One account by id.
+     *
+     * <p>Named {@code accountById} rather than overloading {@code account()},
+     * which answers a different question — who this connection is signed in as.
+     * Two methods a character apart meaning "me" and "whoever you name" is the
+     * kind of distinction a reader has to hold in their head, and both Python
+     * and TypeScript had already renamed around it.
+     */
+    Account accountById(long accountId);
 
-    /** One user by id. */
-    Person user(long userId);
+    /** One user by id. See {@link #accountById} on the name. */
+    Person userById(long userId);
 
     /** The marketplace's private-trader identifiers. */
     List<String> identifiers(long marketplaceId);

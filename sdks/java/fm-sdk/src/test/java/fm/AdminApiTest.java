@@ -335,8 +335,8 @@ class AdminApiTest {
     @Test
     void singleAccountsUsersAndIdentifiersAreReadById() throws Exception {
         try (Flexemarkets fm = connect()) {
-            assertThat(fm.account(2).name()).isEqualTo("acme");
-            assertThat(fm.user(42).email()).isEqualTo("alice@lab.edu");
+            assertThat(fm.accountById(2).name()).isEqualTo("acme");
+            assertThat(fm.userById(42).email()).isEqualTo("alice@lab.edu");
             assertThat(fm.identifiers(1)).containsExactly("t1", "t2");
         }
 

@@ -392,12 +392,12 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     @Override
-    public Account account(long accountId) {
+    public Account accountById(long accountId) {
         return get(uriId(apiRoot, "accounts", accountId), ACCOUNT_TYPE);
     }
 
     @Override
-    public Person user(long userId) {
+    public Person userById(long userId) {
         return get(uriId(apiRoot, "users", userId), PERSON_TYPE);
     }
 
