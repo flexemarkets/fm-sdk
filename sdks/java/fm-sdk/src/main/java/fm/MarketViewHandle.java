@@ -92,7 +92,7 @@ class MarketViewHandle implements MarketView {
         return sub;
     }
 
-    @Override public Order submitLimit(long marketId, String side, long units, long price) {
+    @Override public Order submitLimit(long marketId, Side side, long units, long price) {
         _check();
         return shared.submitLimit(marketId, side, units, price);
     }

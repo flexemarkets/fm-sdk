@@ -115,7 +115,7 @@ public interface MarketView extends AutoCloseable {
     /**
      * Submit a limit order on this marketplace.
      */
-    Order submitLimit(long marketId, String side, long units, long price);
+    Order submitLimit(long marketId, Side side, long units, long price);
 
     /**
      * Cancel a previously-submitted order.

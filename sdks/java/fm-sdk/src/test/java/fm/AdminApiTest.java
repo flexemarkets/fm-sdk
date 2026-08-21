@@ -496,9 +496,9 @@ class AdminApiTest {
     @Test
     void aTradingClientIsNotAnAdministrator() {
         Writing trader = new Writing() {
-            public Types.Order submitLimit(long m, long k, String s, long u, long p) { return null; }
+            public Types.Order submitLimit(long m, long k, Side s, long u, long p) { return null; }
             public Types.Order submitCancel(long m, long k, long o) { return null; }
-            public Types.Order submitMarket(long m, long k, String s, long u) { return null; }
+            public Types.Order submitMarket(long m, long k, Side s, long u) { return null; }
         };
 
         assertThat(trader.submitCancel(1, 1, 1)).isNull();

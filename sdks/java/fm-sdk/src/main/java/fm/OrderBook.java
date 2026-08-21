@@ -108,12 +108,12 @@ public class OrderBook {
         initialized = false;
     }
 
-    private void add(String side, long price, long units) {
+    private void add(Side side, long price, long units) {
         var levels = priceLevels(side);
         levels.merge(price, units, Long::sum);
     }
 
-    private void remove(String side, long price, long units) {
+    private void remove(Side side, long price, long units) {
         var levels = priceLevels(side);
         var current = levels.getOrDefault(price, 0L);
         var updated = current - units;
@@ -124,7 +124,7 @@ public class OrderBook {
         }
     }
 
-    private TreeMap<Long, Long> priceLevels(String side) {
-        return isBuy(side) ? buys : sells;
+    private TreeMap<Long, Long> priceLevels(Side side) {
+        return Side.BUY == side ? buys : sells;
     }
 }

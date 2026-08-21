@@ -219,7 +219,7 @@ public class DefaultMarketView implements MarketView {
     }
 
     @Override
-    public Order submitLimit(long marketId, String side, long units, long price) {
+    public Order submitLimit(long marketId, Side side, long units, long price) {
         _ensureOpen();
         return flexemarkets.submitLimit(marketplaceId, marketId, side, units, price);
     }

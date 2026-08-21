@@ -154,8 +154,8 @@ public class Types {
         long original,
         long supplier,
         Long consumer,
-        String type,
-        String side,
+        OrderType type,
+        Side side,
         long units,
         long price,
         @JsonIgnore
@@ -168,10 +168,6 @@ public class Types {
         String ownerTarget,
         String clientDescription) {
 
-        public static final String TYPE_LIMIT  = "LIMIT";
-        public static final String TYPE_CANCEL = "CANCEL";
-        public static final String SIDE_BUY  = "BUY";
-        public static final String SIDE_SELL = "SELL";
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

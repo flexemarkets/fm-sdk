@@ -110,7 +110,7 @@ class SubmitMarketTest {
     @Test
     void aBuyBidsTheHighestLegalPrice() throws Exception {
         try (Flexemarkets fm = connect()) {
-            fm.submitMarket(1L, 11L, Order.SIDE_BUY, 5L);
+            fm.submitMarket(1L, 11L, Side.BUY, 5L);
         }
 
         assertThat(submitted.get(0))
@@ -122,7 +122,7 @@ class SubmitMarketTest {
     @Test
     void aSellOffersTheLowestLegalPrice() throws Exception {
         try (Flexemarkets fm = connect()) {
-            fm.submitMarket(1L, 11L, Order.SIDE_SELL, 5L);
+            fm.submitMarket(1L, 11L, Side.SELL, 5L);
         }
 
         assertThat(submitted.get(0)).contains("\"price\":110");
@@ -132,7 +132,7 @@ class SubmitMarketTest {
     @Test
     void itIsSubmittedAsALimit() throws Exception {
         try (Flexemarkets fm = connect()) {
-            fm.submitMarket(1L, 11L, Order.SIDE_BUY, 5L);
+            fm.submitMarket(1L, 11L, Side.BUY, 5L);
         }
 
         assertThat(submitted.get(0)).contains("\"type\":\"LIMIT\"");
@@ -148,7 +148,7 @@ class SubmitMarketTest {
     @Test
     void whateverDoesNotFillIsCancelled() throws Exception {
         try (Flexemarkets fm = connect()) {
-            fm.submitMarket(1L, 11L, Order.SIDE_BUY, 5L);
+            fm.submitMarket(1L, 11L, Side.BUY, 5L);
         }
 
         assertThat(submitted).hasSize(2);
@@ -167,7 +167,7 @@ class SubmitMarketTest {
     @Test
     void theCancelIsUnconditional() throws Exception {
         try (Flexemarkets fm = connect()) {
-            fm.submitMarket(1L, 11L, Order.SIDE_SELL, 5L);
+            fm.submitMarket(1L, 11L, Side.SELL, 5L);
         }
 
         assertThat(submitted).as("submit then cancel, always").hasSize(2);
@@ -177,7 +177,7 @@ class SubmitMarketTest {
     void anUnknownMarketSaysSoRatherThanGuessingAPrice() throws Exception {
         try (Flexemarkets fm = connect()) {
             org.assertj.core.api.Assertions
-                    .assertThatThrownBy(() -> fm.submitMarket(1L, 99L, Order.SIDE_BUY, 5L))
+                    .assertThatThrownBy(() -> fm.submitMarket(1L, 99L, Side.BUY, 5L))
                     .isInstanceOf(Exceptions.ApiException.class)
                     .hasMessageContaining("99");
         }
@@ -193,7 +193,7 @@ class SubmitMarketTest {
 
     @Test
     void theTopOfTheRangeIsUsedWhenItIsOnATick() {
-        assertThat(HttpFlexemarkets.marketableLimit(market(100, 200, 25), Order.SIDE_BUY))
+        assertThat(HttpFlexemarkets.marketableLimit(market(100, 200, 25), Side.BUY))
                 .isEqualTo(200L);
     }
 
@@ -205,16 +205,16 @@ class SubmitMarketTest {
      */
     @Test
     void aRangeThatIsNotAWholeNumberOfTicksRoundsDownToOne() {
-        assertThat(HttpFlexemarkets.marketableLimit(market(110, 199, 25), Order.SIDE_BUY))
+        assertThat(HttpFlexemarkets.marketableLimit(market(110, 199, 25), Side.BUY))
                 .isEqualTo(185L);
     }
 
     /** A tick of zero marks a fixed dimension: one legal price, both bounds equal. */
     @Test
     void aFixedPriceMarketHasOnlyItsFloor() {
-        assertThat(HttpFlexemarkets.marketableLimit(market(150, 150, 0), Order.SIDE_BUY))
+        assertThat(HttpFlexemarkets.marketableLimit(market(150, 150, 0), Side.BUY))
                 .isEqualTo(150L);
-        assertThat(HttpFlexemarkets.marketableLimit(market(150, 150, 0), Order.SIDE_SELL))
+        assertThat(HttpFlexemarkets.marketableLimit(market(150, 150, 0), Side.SELL))
                 .isEqualTo(150L);
     }
 }

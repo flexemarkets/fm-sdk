@@ -16,7 +16,7 @@ import fm.Types.Order;
  */
 public interface Writing {
 
-    Order submitLimit(long marketplaceId, long marketId, String side, long units, long price);
+    Order submitLimit(long marketplaceId, long marketId, Side side, long units, long price);
 
     Order submitCancel(long marketplaceId, long marketId, long originalId);
 
@@ -44,5 +44,5 @@ public interface Writing {
      * <p>Returns the limit order as submitted. What it filled is a property of
      * the book afterwards, not of this value.
      */
-    Order submitMarket(long marketplaceId, long marketId, String side, long units);
+    Order submitMarket(long marketplaceId, long marketId, Side side, long units);
 }

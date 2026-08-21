@@ -26,27 +26,19 @@ public class OrderUtils {
     }
 
     public static boolean isCancel(Order order) {
-        return Order.TYPE_CANCEL.equalsIgnoreCase(order.type());
+        return OrderType.CANCEL == order.type();
     }
 
     public static boolean isLimit(Order order) {
-        return Order.TYPE_LIMIT.equalsIgnoreCase(order.type());
+        return OrderType.LIMIT == order.type();
     }
 
     public static boolean isBuy(Order order) {
-        return Order.SIDE_BUY.equalsIgnoreCase(order.side());
+        return Side.BUY == order.side();
     }
 
     public static boolean isSell(Order order) {
-        return Order.SIDE_SELL.equalsIgnoreCase(order.side());
-    }
-
-    public static boolean isBuy(String side) {
-        return Order.SIDE_BUY.equalsIgnoreCase(side);
-    }
-
-    public static String contra(String side) {
-        return Order.SIDE_BUY.equalsIgnoreCase(side) ? Order.SIDE_SELL : Order.SIDE_BUY;
+        return Side.SELL == order.side();
     }
 
     public static boolean isSymbol(String symbol, Order order) {
@@ -115,7 +107,7 @@ public class OrderUtils {
     private static boolean isCancelled(Order[] orders, Order order) {
         var consumer = findOrder(orders, order.consumer());
         if (consumer != null) {
-            return !order.type().equalsIgnoreCase(consumer.type());
+            return order.type() != consumer.type();
         }
         return false;
     }

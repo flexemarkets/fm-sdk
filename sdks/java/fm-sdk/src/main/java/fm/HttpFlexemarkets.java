@@ -491,11 +491,11 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     private record ManagerOtpRequest(List<Long> userIds) {}
 
-    public Order submitLimit(long marketplaceId, long marketId, String side, long units, long price) {
+    public Order submitLimit(long marketplaceId, long marketId, Side side, long units, long price) {
         var order = Map.of(
             "marketplaceId", marketplaceId,
             "marketId",      marketId,
-            "type",          Order.TYPE_LIMIT,
+            "type",          OrderType.LIMIT,
             "side",          side,
             "units",         units,
             "price",         price,
@@ -508,7 +508,7 @@ public class HttpFlexemarkets implements Flexemarkets {
         var order = Map.of(
             "marketplaceId",    marketplaceId,
             "marketId",         marketId,
-            "type",             Order.TYPE_CANCEL,
+            "type",             OrderType.CANCEL,
             "id",               originalId,
             "original",         originalId,
             "supplier",         originalId,
@@ -517,7 +517,7 @@ public class HttpFlexemarkets implements Flexemarkets {
         return post(uri(apiRoot, "orders"), order, ORDER_TYPE);
     }
 
-    public Order submitMarket(long marketplaceId, long marketId, String side, long units) {
+    public Order submitMarket(long marketplaceId, long marketId, Side side, long units) {
         var limit = submitLimit(marketplaceId, marketId, side, units,
                                 marketableLimit(market(marketplaceId, marketId), side));
 
@@ -567,8 +567,8 @@ public class HttpFlexemarkets implements Flexemarkets {
      * A tick of zero marks a fixed dimension, where the two bounds are equal
      * and there is one legal price.
      */
-    static long marketableLimit(Market market, String side) {
-        if (!Order.SIDE_BUY.equalsIgnoreCase(side)) {
+    static long marketableLimit(Market market, Side side) {
+        if (Side.BUY != side) {
             return market.priceMinimum();
         }
         if (market.priceTick() <= 0) {
