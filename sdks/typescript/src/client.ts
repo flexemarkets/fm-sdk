@@ -8,7 +8,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { toOrderType, toSide } from "./types.js";
+import { orderedSecurities, toOrderType, toSide } from "./types.js";
 import type {
   Account,
   Allotment,
@@ -225,7 +225,7 @@ function parseAllotment(data: JsonObject): Allotment {
       id: (assetsRaw.id as number) ?? null,
       name: (assetsRaw.name as string) ?? null,
       cash: (assetsRaw.cash as number) ?? 0,
-      securities: securitiesRaw.map(parseSecurity),
+      securities: orderedSecurities(securitiesRaw.map(parseSecurity)),
     };
   }
   return {
@@ -297,7 +297,7 @@ export function parseHolding(data: JsonObject): Holding {
     name: (data.name as string) ?? null,
     cash: (data.cash as number) ?? 0,
     availableCash: (data.availableCash as number) ?? 0,
-    securities: securitiesRaw.map(parseSecurity),
+    securities: orderedSecurities(securitiesRaw.map(parseSecurity)),
   };
 }
 

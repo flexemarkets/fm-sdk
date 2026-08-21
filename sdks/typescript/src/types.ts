@@ -82,16 +82,30 @@ export interface Holding {
   securities: Security[];
 }
 
-export function getSecurity(holding: Holding, marketId: number): Security {
-  const s = holding.securities.find((s) => s.marketId === marketId);
-  if (!s) throw new Error(`Security for market ID ${marketId} not found.`);
-  return s;
+/**
+ * The position in one market, or null if the holder has none.
+ *
+ * Was a throw. Having no position in a market is ordinary — it is what every
+ * holding looks like before the first allocation — so asking is a question, not
+ * a mistake, and an Error said the caller had erred when they had only asked.
+ */
+export function getSecurity(holding: Holding, marketId: number): Security | null {
+  return holding.securities.find((s) => s.marketId === marketId) ?? null;
+}
+
+/**
+ * Positions in market order, never null.
+ *
+ * Applied where a Holding is built, so `securities` is already ordered by the
+ * time a caller sees it — reading it and reading `holdingUnits` cannot disagree,
+ * and two holdings of the same positions compare the same way.
+ */
+export function orderedSecurities(securities: Security[] | null | undefined): Security[] {
+  return [...(securities ?? [])].sort((a, b) => a.marketId - b.marketId);
 }
 
 export function holdingUnits(holding: Holding): number[] {
-  return [...holding.securities]
-    .sort((a, b) => a.marketId - b.marketId)
-    .map((s) => s.units);
+  return holding.securities.map((s) => s.units);
 }
 
 export interface Market {

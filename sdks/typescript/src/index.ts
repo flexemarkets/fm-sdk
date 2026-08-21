@@ -27,6 +27,7 @@ export {
   SESSION_STATE_PAUSED,
   SESSION_STATE_CLOSED,
   getSecurity,
+  orderedSecurities,
   holdingUnits,
   priceRound,
   getLink,
