@@ -10,6 +10,7 @@ import re
 import threading
 from dataclasses import dataclass
 from pathlib import Path
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Optional
 
 from .snapshot import NO_SEQ, Snapshot
@@ -1221,8 +1222,31 @@ class Flexemarkets:
         :class:`~fm.events.WsException`.
 
         This mirrors the Java ``Flexemarkets.listen()`` method.
+
+        One per connection: a second call replaces the first. For streams that
+        coexist, use :meth:`subscribe`.
         """
         self._event_listener = self._connect_events(marketplace_id, event_queue)
+
+    def subscribe(
+        self, marketplace_id: int, event_queue: queue.Queue[object]
+    ) -> Callable[[], None]:
+        """Open an *independent* event subscription, delivering onto
+        *event_queue* until the returned unsubscribe callable is invoked.
+
+        Unlike :meth:`listen`, several of these coexist: each has its own
+        stream and its own lifetime. That is what lets more than one
+        :class:`~fm.market_view.MarketView` live in one connection without
+        trampling each other -- the mechanism was already here for exactly
+        that, as the private ``_connect_events``, but a caller who wanted a
+        second stream of their own had no way to ask for one.
+
+        Returns a callable rather than an object with ``close()``, matching
+        what ``MarketView``'s ``on_*`` handlers already return here. Java
+        returns a ``Subscription``; both names describe the same lifetime.
+        """
+        listener = self._connect_events(marketplace_id, event_queue)
+        return listener.close
 
     def _connect_events(
         self, marketplace_id: int, event_queue: queue.Queue[object]
