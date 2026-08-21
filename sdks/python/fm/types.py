@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .enums import OrderType, Side
+
 from dataclasses import dataclass, field
 
 
@@ -136,8 +138,8 @@ class Order:
     original: int = 0
     supplier: int = 0
     consumer: int | None = None
-    type: str | None = None
-    side: str | None = None
+    type: "OrderType | None" = None
+    side: "Side | None" = None
     units: int = 0
     price: int = 0
     owner_id: int | None = None
@@ -150,10 +152,6 @@ class Order:
     created_date: str | None = None
     last_modified_date: str | None = None
 
-    TYPE_LIMIT = "LIMIT"
-    TYPE_CANCEL = "CANCEL"
-    SIDE_BUY = "BUY"
-    SIDE_SELL = "SELL"
 
 
 @dataclass

@@ -41,6 +41,7 @@ from .exceptions import (
     InvalidArgumentError,
     PersonHasMarketplaceDataError,
 )
+from .enums import OrderType, Side
 from .types import (
     Account,
     Allotment,
@@ -186,8 +187,8 @@ def _parse_order(data: dict[str, Any]) -> Order:
         original=data.get("original", 0),
         supplier=data.get("supplier", 0),
         consumer=data.get("consumer"),
-        type=data.get("type"),
-        side=data.get("side"),
+        type=OrderType.of(data.get("type")),
+        side=Side.of(data.get("side")),
         units=data.get("units", 0),
         price=data.get("price", 0),
         owner_id=data.get("ownerId"),
@@ -287,7 +288,7 @@ def _marketable_limit(market: Market, side: str) -> int:
     the last tick at or below ``price_maximum``. A tick of zero marks a fixed
     dimension, where the two bounds are equal and there is one legal price.
     """
-    if side is None or side.upper() != "BUY" or market.price_tick <= 0:
+    if Side.of(side) is not Side.BUY or market.price_tick <= 0:
         return market.price_minimum
 
     span = market.price_maximum - market.price_minimum
@@ -1018,7 +1019,7 @@ class Flexemarkets:
         resp = self._post(url, {
             "marketplaceId": marketplace_id,
             "marketId": market_id,
-            "type": Order.TYPE_LIMIT,
+            "type": OrderType.LIMIT,
             "side": side,
             "units": units,
             "price": price,
@@ -1076,7 +1077,7 @@ class Flexemarkets:
         resp = self._post(url, {
             "marketplaceId": marketplace_id,
             "marketId": market_id,
-            "type": Order.TYPE_CANCEL,
+            "type": OrderType.CANCEL,
             "id": original_id,
             "original": original_id,
             "supplier": original_id,

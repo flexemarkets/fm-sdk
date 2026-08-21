@@ -5,27 +5,30 @@ Port of fm.net.TypesUtilities order-related helpers.
 
 from __future__ import annotations
 
+from .enums import OrderType, Side
 from .types import Order
 
 
 def is_cancel(order: Order) -> bool:
-    return order.type is not None and order.type.upper() == Order.TYPE_CANCEL
+    return OrderType.of(order.type) is OrderType.CANCEL
 
 
 def is_limit(order: Order) -> bool:
-    return order.type is not None and order.type.upper() == Order.TYPE_LIMIT
+    return OrderType.of(order.type) is OrderType.LIMIT
 
 
-def is_buy(side: str) -> bool:
-    return side.upper() == Order.SIDE_BUY
+def is_buy(side: "Side | None") -> bool:
+    return Side.of(side) is Side.BUY
 
 
 def is_sell(side: str) -> bool:
-    return side.upper() == Order.SIDE_SELL
+    return Side.of(side) is Side.SELL
 
 
-def contra(side: str) -> str:
-    return Order.SIDE_SELL if is_buy(side) else Order.SIDE_BUY
+def contra(side: "Side") -> "Side":
+    """Kept as a function as well as :meth:`Side.contra`, because callers hold
+    a side and read left-to-right: ``contra(quote_side)``."""
+    return Side.of(side).contra()
 
 
 def is_available(order: Order) -> bool:

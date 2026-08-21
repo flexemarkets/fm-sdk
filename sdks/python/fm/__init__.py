@@ -1,6 +1,7 @@
 """Flexemarkets Python SDK."""
 
 from .client import Flexemarkets
+from .enums import OrderType, Side
 from .events import EventListener, NO_SEQ, OrdersUpdate, WsException, WsTransportError
 from .snapshot import Snapshot
 from .exceptions import (
@@ -36,6 +37,9 @@ from .types import (
 
 __all__ = [
     "Flexemarkets",
+    # side and order type
+    "Side",
+    "OrderType",
     # types
     "Account",
     "Allotment",
