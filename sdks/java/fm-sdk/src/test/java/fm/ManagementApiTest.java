@@ -535,9 +535,9 @@ class ManagementApiTest {
             public List<Types.Person> users() { return List.of(); }
             public List<Types.ClientConnection> connections(long id) { return List.of(); }
             public List<Types.ClientConnection> connections(long id, List<Long> s) { return List.of(); }
-            public Snapshot<List<Types.Order>> activeOrdersV1(long id) { return null; }
-            public Snapshot<List<Types.Order>> recentTradesV1(long id, int size) { return null; }
-            public Snapshot<List<Types.Order>> recentTradesV1(long id) { return null; }
+            public Snapshot<List<Types.Order>> activeOrders(long id) { return null; }
+            public Snapshot<List<Types.Order>> recentTrades(long id, int size) { return null; }
+            public Snapshot<List<Types.Order>> recentTrades(long id) { return null; }
         };
 
         assertThat(reader.markets(1)).isEmpty();

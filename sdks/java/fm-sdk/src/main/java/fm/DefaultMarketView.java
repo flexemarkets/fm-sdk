@@ -127,8 +127,8 @@ public class DefaultMarketView implements MarketView {
      * via a server-side publish lock.
      */
     private void _seedFromSnapshot() {
-        Snapshot<List<Types.Order>> orders = flexemarkets.activeOrdersV1(marketplaceId);
-        Snapshot<List<Types.Order>> trades = flexemarkets.recentTradesV1(marketplaceId);
+        Snapshot<List<Types.Order>> orders = flexemarkets.activeOrders(marketplaceId);
+        Snapshot<List<Types.Order>> trades = flexemarkets.recentTrades(marketplaceId);
 
         // Clear before reseeding so a resync (Phase 2b) doesn't
         // double-add against existing price levels. Initial seed

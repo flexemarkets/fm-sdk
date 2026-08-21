@@ -123,9 +123,9 @@ public interface Reading {
      * arriving on the event stream, applying only those newer than the
      * snapshot.
      */
-    Snapshot<List<Order>> activeOrdersV1(long marketplaceId);
+    Snapshot<List<Order>> activeOrders(long marketplaceId);
 
-    Snapshot<List<Order>> recentTradesV1(long marketplaceId, int size);
+    Snapshot<List<Order>> recentTrades(long marketplaceId, int size);
 
-    Snapshot<List<Order>> recentTradesV1(long marketplaceId);
+    Snapshot<List<Order>> recentTrades(long marketplaceId);
 }

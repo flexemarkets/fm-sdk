@@ -194,24 +194,24 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     /**
-     * V1 active-orders snapshot: every resting limit order on the
+     * The active-orders snapshot: every resting limit order on the
      * marketplace's current session, plus the {@code x-fm-as-of-seq}
      * sequence the snapshot was read at. Used by {@link MarketView}
-     * for Phase 2a snapshot seeding — clients apply WS deltas whose
+     * for snapshot seeding — clients apply WS deltas whose
      * seq is greater than the returned value and skip those whose
      * seq is less than or equal.
      */
-    public Snapshot<List<Order>> activeOrdersV1(long marketplaceId) {
+    public Snapshot<List<Order>> activeOrders(long marketplaceId) {
         var url = server(endpointUrl()) + "/v1/marketplaces/" + marketplaceId + "/orders/active";
         return _unwrapOrders(getSnapshot(url, ORDERS_COLLECTION_TYPE));
     }
 
     /**
-     * V1 recent-trades snapshot for seeding the trade-history tape.
+     * The recent-trades snapshot, for seeding the trade-history tape.
      * Same {@code x-fm-as-of-seq} contract as
-     * {@link #activeOrdersV1(long)}.
+     * {@link #activeOrders(long)}.
      */
-    public Snapshot<List<Order>> recentTradesV1(long marketplaceId, int size) {
+    public Snapshot<List<Order>> recentTrades(long marketplaceId, int size) {
         var url = server(endpointUrl()) + "/v1/marketplaces/" + marketplaceId
                 + "/orders/recent-trades?size=" + size;
         return _unwrapOrders(getSnapshot(url, ORDERS_COLLECTION_TYPE));
@@ -245,8 +245,8 @@ public class HttpFlexemarkets implements Flexemarkets {
     private static final TypeReference<HateoasCollection<Order>> ORDERS_COLLECTION_TYPE = new TypeReference<>() {};
 
     /** Sensible default — the server caps at 5000 and defaults to 1000. */
-    public Snapshot<List<Order>> recentTradesV1(long marketplaceId) {
-        return recentTradesV1(marketplaceId, 1000);
+    public Snapshot<List<Order>> recentTrades(long marketplaceId) {
+        return recentTrades(marketplaceId, 1000);
     }
 
     public List<Holding> holdings(long marketplaceId) {
