@@ -45,7 +45,6 @@ export {
   AccountNameConflictError,
   PersonHasMarketplaceDataError,
 } from "./client.js";
-export type { FlexemarketsOptions } from "./client.js";
 
 // Order utils
 export {

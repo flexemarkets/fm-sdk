@@ -545,12 +545,6 @@ function suggestedNameIn(body: string): string | null {
 // Flexemarkets client
 // ---------------------------------------------------------------------------
 
-export interface FlexemarketsOptions {
-  credential?: string;
-  endpoint?: string;
-  clientDescription?: string;
-}
-
 export class Flexemarkets {
   private readonly _clientDescription: string;
   private readonly _endpoint: string;
