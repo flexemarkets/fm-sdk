@@ -53,6 +53,23 @@ public class OrderUtils {
         return symbol == null || symbol.equalsIgnoreCase(order.symbol());
     }
 
+    /**
+     * Whether the order is one somebody submitted, rather than one the exchange
+     * produced by splitting or matching it.
+     *
+     * <p>A submitted order is its own original and its own supplier; a split or
+     * a trade carries the id of the order it came from. A cancel counts as a
+     * submission — somebody sent it — even though it names the order it cancels.
+     *
+     * <p>Python and TypeScript have had this since the order utilities landed;
+     * Java had not, so a Java caller filtering a session's orders down to what
+     * participants actually did had to spell the identity check out by hand.
+     */
+    public static boolean isSubmit(Order order) {
+        return isCancel(order)
+            || (order.id() == order.original() && order.id() == order.supplier());
+    }
+
     public static Order findOrder(Order[] orders, Long id) {
         if (id == null) return null;
         for (var order : orders) {
