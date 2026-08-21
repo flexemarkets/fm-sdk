@@ -150,6 +150,146 @@ def camel(name: str) -> str:
     return head + "".join(word.capitalize() for word in tail)
 
 
+# --- method surface ---------------------------------------------------------
+#
+# The type check above compares what crosses the wire. It says nothing about
+# what a caller can call, which is where the three SDKs actually drifted: by
+# 0.1.0 Java had submitMarket and subscribe that neither other SDK had, Python
+# had is_manager and has_role that Java did not, and TypeScript had neither
+# isManager nor a typed conflict. Five gaps, none of which the field check
+# could see.
+
+# Flexemarkets itself as well as the roles: since the A1 split it declares only
+# connect() and close(), but those are surface too -- and reading the roles
+# alone reported both as Python/TypeScript-only, which is the check being wrong
+# about the SDKs rather than the other way round.
+JAVA_SURFACE = [
+    "Flexemarkets.java",
+    "Identity.java", "Reading.java", "Writing.java",
+    "Management.java", "Administration.java", "Streaming.java",
+]
+
+# Differences that are intended. Each needs a reason, so that adding one is a
+# decision someone wrote down rather than a way to silence the check.
+METHOD_EXEMPTIONS: dict[str, str] = {
+    "connectWithToken":
+        "Python-only. Java and TypeScript take a token as connect()'s credential "
+        "argument, so this may be redundant rather than missing; the decision is "
+        "open, and until it is made this records that nobody has forgotten it.",
+}
+
+
+def java_methods(directory: Path) -> set[str]:
+    """Public methods declared on the role interfaces.
+
+    The roles, not Flexemarkets: since the split it declares only close(), and
+    reading it alone would report the surface as empty -- a check that passes
+    because it looked in the wrong place is worse than no check.
+    """
+    names: set[str] = set()
+
+    for role in JAVA_SURFACE:
+        source = (directory / role).read_text()
+        source = re.sub(r"/\*.*?\*/", " ", source, flags=re.S)
+        for line in source.splitlines():
+            if "private" in line:
+                continue
+            # Exactly four spaces: a member of the interface. Statements inside
+            # the body of a default method or the static connect() are indented
+            # further, which is what separates a declaration from a call without
+            # having to guess from the return type. Filtering on the type
+            # instead is what I tried first, and skipping lines beginning
+            # "String " quietly dropped accountName, endpointUrl and
+            # downloadHoldings -- the check reporting the SDKs wrong when it was
+            # the one that was.
+            match = re.match(
+                r"^    (?:default\s+|static\s+)?[\w<>,\[\]\.\s]+?\s+(\w+)\s*\(", line)
+            # `for (` and `if (` at member indentation are statements in a
+            # single-expression body; `new HttpFlexemarkets(` is a constructor
+            # call. None of them is a declaration.
+            if match and match.group(1) not in ("for", "if", "while", "catch",
+                                                "switch", "HttpFlexemarkets"):
+                names.add(match.group(1))
+
+    return names
+
+
+def python_methods(path: Path) -> set[str]:
+    """Public methods and properties on the Flexemarkets class."""
+    names: set[str] = set()
+    inside = False
+
+    for line in path.read_text().splitlines():
+        if re.match(r"class Flexemarkets\b", line):
+            inside = True
+            continue
+        if inside and line and not line.startswith((" ", "\t")):
+            break
+        if not inside:
+            continue
+        match = re.match(r"    def ([a-z][a-z0-9_]*)\s*\(", line)
+        if match:
+            names.add(camel(match.group(1)))
+
+    return names
+
+
+def typescript_methods(path: Path) -> set[str]:
+    """Public methods and getters on the Flexemarkets class."""
+    names: set[str] = set()
+    inside = False
+
+    for line in path.read_text().splitlines():
+        if re.match(r"export class Flexemarkets\b", line):
+            inside = True
+            continue
+        if inside and re.match(r"^\}", line):
+            break
+        if not inside:
+            continue
+        match = re.match(r"  (?:static\s+|async\s+|get\s+)*([a-zA-Z][a-zA-Z0-9]*)\s*\(", line)
+        if match and match.group(1) not in ("constructor", "if", "for", "while", "catch"):
+            names.add(match.group(1))
+
+    return names
+
+
+def check_methods(verbose: bool) -> list[str]:
+    java = java_methods(JAVA.parent)
+    python = python_methods(PYTHON.parent / "client.py")
+    typescript = typescript_methods(TYPESCRIPT.parent / "client.ts")
+
+    if not (java and python and typescript):
+        return ["method parity: a parser found nothing; it is broken, not the SDKs"]
+
+    problems: list[str] = []
+    for name in sorted(java | python | typescript):
+        if name in METHOD_EXEMPTIONS:
+            continue
+        missing = [
+            language
+            for language, names in (
+                ("java", java), ("python", python), ("typescript", typescript))
+            if name not in names
+        ]
+        if missing:
+            present = [
+                language
+                for language, names in (
+                    ("java", java), ("python", python), ("typescript", typescript))
+                if name in names
+            ]
+            problems.append(
+                f"{name}() is in {', '.join(present)} but missing from {', '.join(missing)}"
+            )
+
+    if verbose:
+        print(f"\n  method surface: java {len(java)}, python {len(python)}, "
+              f"typescript {len(typescript)}")
+
+    return problems
+
+
 def main() -> int:
     verbose = "--verbose" in sys.argv
 
@@ -222,7 +362,21 @@ def main() -> int:
         )
         return 1
 
-    print(f"parity ok: {len(shared)} shared types agree on their wire fields")
+    method_problems = check_methods(verbose)
+    if method_problems:
+        print(f"\nparity: the SDKs disagree about {len(method_problems)} method(s):\n",
+              file=sys.stderr)
+        for problem in method_problems:
+            print(f"  - {problem}", file=sys.stderr)
+        print(
+            "\nA method added to one SDK is a method the other two are missing. If a "
+            "difference is intended, record it in METHOD_EXEMPTIONS with the reason.",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"parity ok: {len(shared)} shared types agree on their wire fields, "
+          f"and the three method surfaces agree")
     return 0
 
 
