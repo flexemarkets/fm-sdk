@@ -35,6 +35,13 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        if self.path == "/api/tokens/refresh":
+            self._send({
+                "token": TOKEN,
+                "person": {"id": 7, "accountId": 1, "email": "dev@dev"},
+                "account": {"id": 1, "name": "dev"},
+            })
+            return
         if self.path == "/api":
             self._send({"_links": {}})
         else:

@@ -58,6 +58,14 @@ async function withClient(
     }
 
     const port = (req.socket.localPort ?? 0);
+    if (req.url === "/api/tokens/refresh") {
+      send({
+          token: TOKEN,
+          person: { id: 7, accountId: 1, email: "dev@dev" },
+          account: { id: 1, name: "dev" },
+        });
+      return;
+    }
     if (req.url === "/api") {
       send({ _links: {
         marketplaces: { href: `http://127.0.0.1:${port}/api/marketplaces` },

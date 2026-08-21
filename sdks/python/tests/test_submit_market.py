@@ -47,6 +47,13 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        if self.path == "/api/tokens/refresh":
+            self._send({
+                "token": TOKEN,
+                "person": {"id": 7, "accountId": 1, "email": "dev@dev"},
+                "account": {"id": 1, "name": "dev"},
+            })
+            return
         if self.path == "/api":
             base = f"http://127.0.0.1:{self.server.server_address[1]}/api"
             self._send({"_links": {

@@ -1553,19 +1553,23 @@ async function signIn(
 ): Promise<Token> {
   const tok = config.token ?? "";
   if (tok && isValidToken(tok)) {
-    const authUrl = `${baseUrl}/tokens`;
-    const resp = await fetch(authUrl, {
-      method: "POST",
+    // A caller who already holds a token has no account/email/password to
+    // present, so signing in is not available: POSTing /tokens with blanks is
+    // rejected -- the server answers 400 MESSAGE_NOT_READABLE for an empty
+    // password, which is what this used to send. Refreshing the token both
+    // validates it and returns the account and person behind it.
+    //
+    // This is the third time. fm-lib-net carried the branch, an earlier rewrite
+    // dropped it, and the Java SDK restored it with a test. This SDK and the
+    // Python one never had it, so token auth returned 400 in both from the day
+    // it was written.
+    const resp = await fetch(`${baseUrl}/tokens/refresh`, {
+      method: "GET",
       headers: {
         Authorization: `Bearer ${tok}`,
-        "Content-Type": "application/json",
         Accept: "application/json",
         "User-Agent": FM_NETWORK_CLIENT,
       },
-      body: JSON.stringify({
-        username: `${config.account ?? ""}|${config.email ?? ""}`,
-        password: "",
-      }),
     });
     const body = await resp.text();
     if (resp.status === 401) {

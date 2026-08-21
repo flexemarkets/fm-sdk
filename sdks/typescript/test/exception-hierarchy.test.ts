@@ -37,6 +37,15 @@ function conflictingServer(): http.Server {
       }));
       return;
     }
+    if (req.method === "GET" && req.url === "/api/tokens/refresh") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        token: TOKEN,
+        person: { id: 7, accountId: 1, email: "dev@dev" },
+        account: { id: 1, name: "dev" },
+      }));
+      return;
+    }
     if (req.method === "GET" && req.url === "/api") {
       const base = `http://127.0.0.1:${(req.socket.localPort ?? 0)}/api`;
       res.writeHead(200, { "Content-Type": "application/json" });

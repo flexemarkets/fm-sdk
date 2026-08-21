@@ -429,9 +429,8 @@ def _resolve_endpoint(endpoint: str) -> dict[str, str]:
     """
     if endpoint.isdigit():
         return {"endpoint": _marketplace_endpoint(endpoint)}
-    path = Path(endpoint)
-    if path.is_file():
-        return _load_properties_file(path)
+    if _is_file(endpoint):
+        return _load_properties_file(Path(endpoint))
     return {"endpoint": endpoint}
 
 
@@ -445,10 +444,27 @@ def _ids_param(ids: list[int]) -> str:
     return ",".join(str(i) for i in ids)
 
 
+def _is_file(candidate: str | Path) -> bool:
+    """Whether *candidate* names an existing file, for a string of any shape.
+
+    ``Path.is_file()`` returns False for a path that does not exist, but
+    *propagates* other OS errors -- and a real JWT is 468 characters, which is
+    longer than a filename may be, so probing one raises
+    ``OSError: File name too long``. Java's ``Files.isRegularFile`` and Node's
+    ``existsSync`` both answer False for the same input; only Python threw, so
+    ``connect(token)`` crashed before it reached the network. The test tokens
+    were short enough to fit a filename, which is why nothing caught it.
+    """
+    try:
+        return Path(candidate).is_file()
+    except OSError:
+        return False
+
+
 def _load_properties_file(path: Path) -> dict[str, str]:
     """Load a Java-style .properties file."""
     props: dict[str, str] = {}
-    if not path.is_file():
+    if not _is_file(path):
         return props
     with open(path) as f:
         for line in f:
@@ -545,9 +561,8 @@ class Flexemarkets:
         config = _load_config()
 
         if credential is not None:
-            path = Path(credential)
-            if path.is_file():
-                config.update(_load_properties_file(path))
+            if _is_file(credential):
+                config.update(_load_properties_file(Path(credential)))
             elif _is_valid_token(credential):
                 config["token"] = credential
             else:
@@ -603,23 +618,6 @@ class Flexemarkets:
     ) -> Flexemarkets:
         return cls(
             credential=credential,
-            endpoint=endpoint,
-            client_description=client_description,
-        )
-
-    @classmethod
-    def connect_with_token(
-        cls,
-        account: str,
-        email: str,
-        token: str,
-        endpoint: str,
-        client_description: str | None = None,
-    ) -> Flexemarkets:
-        return cls(
-            account=account,
-            email=email,
-            token=token,
             endpoint=endpoint,
             client_description=client_description,
         )
@@ -721,11 +719,19 @@ class Flexemarkets:
     def _sign_in(self, config: dict[str, str]) -> Token:
         tok = config.get("token", "")
         if tok and _is_valid_token(tok):
-            # Token-based auth — exchange token for full Token object
-            auth_url = _server(self._endpoint) + "/tokens"
-            resp = self._http.post(
-                auth_url,
-                json={"username": f"{config.get('account', '')}|{config.get('email', '')}", "password": ""},
+            # A caller who already holds a token has no account/email/password
+            # to present, so signing in is not available: POSTing /tokens with
+            # blanks is rejected -- the server answers 400 MESSAGE_NOT_READABLE
+            # for an empty password, which is what this used to send. Refreshing
+            # the token both validates it and returns the account and person
+            # behind it.
+            #
+            # This is the third time. fm-lib-net carried the branch, an earlier
+            # rewrite dropped it, and the Java SDK restored it with a test. This
+            # SDK and the TypeScript one never had it, so token auth returned
+            # 400 in both from the day it was written.
+            resp = self._http.get(
+                _server(self._endpoint) + "/tokens/refresh",
                 headers={
                     "Authorization": f"Bearer {tok}",
                     "Accept": "application/json",

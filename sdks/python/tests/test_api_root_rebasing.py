@@ -111,6 +111,13 @@ class OriginHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        if self.path == "/api/tokens/refresh":
+            self._send({
+                "token": TOKEN,
+                "person": {"id": 7, "accountId": 1, "email": "dev@dev"},
+                "account": {"id": 1, "name": "dev"},
+            })
+            return
         origin_requests.append(f"GET {self.path}")
         if self.path == "/api":
             # Every link names the decoy, which is what a server behind a

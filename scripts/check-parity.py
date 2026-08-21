@@ -173,12 +173,12 @@ JAVA_SURFACE = [
 
 # Differences that are intended. Each needs a reason, so that adding one is a
 # decision someone wrote down rather than a way to silence the check.
-METHOD_EXEMPTIONS: dict[str, str] = {
-    "connectWithToken":
-        "Python-only. Java and TypeScript take a token as connect()'s credential "
-        "argument, so this may be redundant rather than missing; the decision is "
-        "open, and until it is made this records that nobody has forgotten it.",
-}
+# Empty, and worth keeping that way. The one entry this started with was
+# connectWithToken, a Python-only factory that looked like a naming question and
+# turned out to be a second spelling of a route that never worked: both it and
+# connect(token) POSTed /tokens with an empty password, which fm-server answers
+# 400. Deleting it was the fix, not an exemption.
+METHOD_EXEMPTIONS: dict[str, str] = {}
 
 
 def java_methods(directory: Path) -> set[str]:
