@@ -187,8 +187,8 @@ export class DefaultMarketView implements MarketView {
    * Phase 2b (gap recovery + ID-based dedup) closes the window.
    */
   private async _seedFromSnapshot(): Promise<void> {
-    const orders = await this._flexemarkets.activeOrdersV1(this.marketplaceId);
-    const trades = await this._flexemarkets.recentTradesV1(this.marketplaceId);
+    const orders = await this._flexemarkets.activeOrders(this.marketplaceId);
+    const trades = await this._flexemarkets.recentTrades(this.marketplaceId);
 
     // Clear before reseeding so a resync (Phase 2b) doesn't double-add
     // against existing price levels. Initial seed hits empty books so

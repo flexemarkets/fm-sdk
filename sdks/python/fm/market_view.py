@@ -135,8 +135,8 @@ class MarketView:
         (Phase 2b) — initial seed hits empty aggregators so the
         clear() is a no-op there.
         """
-        orders = self._flexemarkets.active_orders_v1(self.marketplace_id)
-        trades = self._flexemarkets.recent_trades_v1(self.marketplace_id)
+        orders = self._flexemarkets.active_orders(self.marketplace_id)
+        trades = self._flexemarkets.recent_trades(self.marketplace_id)
 
         # Clear before reseeding so a resync doesn't double-add
         # against existing price levels.

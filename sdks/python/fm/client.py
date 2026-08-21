@@ -1084,8 +1084,8 @@ class Flexemarkets:
         })
         return _parse_order(resp.json())
 
-    def active_orders_v1(self, marketplace_id: int) -> "Snapshot[list[Order]]":
-        """V1 active-orders snapshot: every resting limit order on the
+    def active_orders(self, marketplace_id: int) -> "Snapshot[list[Order]]":
+        """The active-orders snapshot: every resting limit order on the
         marketplace's current session, plus the ``x-fm-as-of-seq``
         sequence the snapshot was read at. Used by
         :class:`~fm.market_view.MarketView` Phase 2a seeding —
@@ -1098,10 +1098,10 @@ class Flexemarkets:
         orders_raw = body.get("_embedded", {}).get("orderDtoes", [])
         return Snapshot(body=[_parse_order(o) for o in orders_raw], as_of_seq=as_of_seq)
 
-    def recent_trades_v1(self, marketplace_id: int, size: int = 1000) -> "Snapshot[list[Order]]":
-        """V1 recent-trades snapshot for seeding the trade-history
+    def recent_trades(self, marketplace_id: int, size: int = 1000) -> "Snapshot[list[Order]]":
+        """The recent-trades snapshot, for seeding the trade-history
         tape. Same ``x-fm-as-of-seq`` contract as
-        :meth:`active_orders_v1`. Server caps at 5000; default is
+        :meth:`active_orders`. Server caps at 5000; default is
         1000.
         """
         url = f"{_server(self._endpoint)}/v1/marketplaces/{marketplace_id}/orders/recent-trades?size={size}"
