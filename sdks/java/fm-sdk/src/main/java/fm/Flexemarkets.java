@@ -33,8 +33,22 @@ import fm.Types.Token;
  * <p><b>Returned collections are immutable.</b> Callers who need to modify one
  * should copy it. This holds for every implementation, including test fakes, so
  * a mutation bug surfaces in a unit test rather than against a live server.
+ *
+ * <p><b>A composition, not a list.</b> Everything this can do belongs to one of
+ * {@link Identity}, {@link Reading}, {@link Writing}, {@link Management},
+ * {@link Administration} or {@link Streaming}, and every one of those methods
+ * is abstract. So holding this type means all of it works — which is what it
+ * did not mean before, when half the interface was a default that threw and a
+ * caller had no way to tell which half.
+ *
+ * <p>Declare the narrowest role that does the job. A settlement report takes
+ * {@code Reading}; a study takes {@code Reading} and {@code Management}; only
+ * something that genuinely needs everything takes {@code Flexemarkets}. The
+ * signature then says what the code can do to a live marketplace, and a fake
+ * only has to model the roles it is standing in for.
  */
-public interface Flexemarkets extends Identity, Reading, Writing, Management, AutoCloseable {
+public interface Flexemarkets
+        extends Identity, Reading, Writing, Management, Administration, Streaming, AutoCloseable {
 
     /**
      * Connect and authenticate. The caller owns the result and must close it.
@@ -97,155 +111,6 @@ public interface Flexemarkets extends Identity, Reading, Writing, Management, Au
 
         return new HttpFlexemarkets(properties);
     }
-
-    // --- administration -----------------------------------------------------
-
-    /*
-     * Creating accounts and users, approving them, deleting them, and minting
-     * one-time passcodes. This is fm-server's administrative surface, and it
-     * is here because fm-robots' manager -- the tool that runs a course -- is
-     * built on it and had no way off fm-lib-net otherwise.
-     *
-     * Several of these are destructive and one issues credentials. They need
-     * an admin or manager and the server answers 401/403 otherwise, which is
-     * the only guard: possessing the method is not possessing the right.
-     */
-
-    /**
-     * Register a new account and its owner, returning the owner's token.
-     *
-     * <p>Account names are unique. A clash raises {@link
-     * fm.Exceptions.ConflictException}, whose {@code failure().suggestedName()}
-     * carries the server's proposed alternative -- worth surfacing rather than
-     * retrying blindly, since the suggestion is what the user will be known as.
-     */
-    default Token signup(String accountName, String email, String password) {
-        throw unsupported("signup");
-    }
-
-    default Token signup(String accountName, String email, String password,
-                         String firstName, String lastName) {
-        throw unsupported("signup");
-    }
-
-    /** Approve an account by name, returning it as it now stands. */
-    default Account approveAccount(String accountName) {
-        throw unsupported("approveAccount");
-    }
-
-    /** One account by id. */
-    default Account account(long accountId) {
-        throw unsupported("account(accountId)");
-    }
-
-    /** One user by id. */
-    default Person user(long userId) {
-        throw unsupported("user(userId)");
-    }
-
-    /** The marketplace's private-trader identifiers. */
-    default List<String> identifiers(long marketplaceId) {
-        throw unsupported("identifiers");
-    }
-
-    /** Delete the caller's own account. Destructive, and not undoable. */
-    default void deleteMyAccount() {
-        throw unsupported("deleteMyAccount");
-    }
-
-    /** Every account on the server. Admin-only. */
-    default List<Account> accounts() {
-        throw unsupported("accounts");
-    }
-
-    /** Delete an account. Destructive, and takes its users with it. */
-    default void deleteAccount(long accountId) {
-        throw unsupported("deleteAccount");
-    }
-
-    /** Create a user in the caller's account. Roles are optional. */
-    default Person createUser(String email, String password, String firstName,
-                              String lastName, String... roles) {
-        throw unsupported("createUser");
-    }
-
-    /** Delete a user. Destructive. */
-    default void deleteUser(long userId) {
-        throw unsupported("deleteUser");
-    }
-
-    /** Create an empty marketplace. See also {@link #createMarketplaceFromJson}. */
-    default Marketplace createMarketplace(String name, String description) {
-        throw unsupported("createMarketplace");
-    }
-
-    /** Delete a marketplace, and with it its sessions and their history. */
-    default void deleteMarketplace(long marketplaceId) {
-        throw unsupported("deleteMarketplace");
-    }
-
-    /**
-     * Add a market to a marketplace.
-     *
-     * <p>Unit bounds are not parameters: they are fixed at 1/100/1, matching
-     * fm-lib-net's call. A study that needs other bounds builds its
-     * marketplace from JSON, where every field is stated.
-     */
-    default Market createMarket(long marketplaceId, String symbol, String name,
-                                long priceMinimum, long priceMaximum, long priceTick,
-                                boolean privateMarket) {
-        throw unsupported("createMarket");
-    }
-
-    /**
-     * Mint one-time passcodes for the given users.
-     *
-     * <p>These are credentials. They are how a classroom signs in without
-     * passwords being handed around, and they should be treated like
-     * passwords: not logged, not persisted, and delivered to the person they
-     * belong to.
-     */
-    default ManagerOtpBundle managerOtpBundle(List<Long> userIds) {
-        throw unsupported("managerOtpBundle");
-    }
-
-    private UnsupportedOperationException unsupported(String operation) {
-        return new UnsupportedOperationException(
-                getClass().getName() + " does not support " + operation + "(...)");
-    }
-
-    // --- events -------------------------------------------------------------
-
-    /**
-     * Subscribe to the marketplace's event stream, delivering onto {@code queue}.
-     *
-     * <p>The queue is the caller's: its capacity is the caller's back-pressure
-     * policy.
-     */
-    void listen(long marketplaceId, BlockingQueue<Object> queue);
-
-    /**
-     * Open an <em>independent</em> event subscription, delivering onto
-     * {@code queue} until the returned {@link Subscription} is closed.
-     *
-     * <p>Unlike {@link #listen}, several of these coexist: each has its own
-     * stream and its own lifetime. That is what lets more than one
-     * {@link MarketView} live in one connection without trampling each other.
-     *
-     * <p>Defaulted rather than abstract so that existing implementations --
-     * test fakes especially -- keep compiling. An implementation that cannot
-     * multiplex says so here instead of pretending, and a {@link MarketView}
-     * over it will fail loudly rather than silently sharing one stream.
-     */
-    default Subscription subscribe(long marketplaceId, BlockingQueue<Object> queue) {
-        throw new UnsupportedOperationException(
-                getClass().getName() + " does not support independent subscriptions");
-    }
-
-    /** A maintained view of the order books, kept current from the event stream. */
-    MarketView observe(long marketplaceId);
-
-    void reconnect() throws InterruptedException;
 
     /** Releases the connection. Overridden to drop {@code AutoCloseable}'s checked exception. */
     @Override

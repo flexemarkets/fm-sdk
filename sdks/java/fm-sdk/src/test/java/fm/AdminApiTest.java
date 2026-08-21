@@ -480,61 +480,30 @@ class AdminApiTest {
         assertThat(bodyOf("POST /api/otp/manager")).contains("\"userIds\":[1,2]");
     }
 
-    /** An implementation that cannot administer says so rather than pretending. */
+    /**
+     * What the roles buy: a trading client is not an administrator, and the
+     * type is where that is said.
+     *
+     * <p>This used to build a fake implementing the whole interface and assert
+     * that deleteAccount and managerOtpBundle threw at runtime, because they
+     * were defaults. There are none now. Something that only trades implements
+     * {@link Writing}, the compiler refuses the administrative call, and no
+     * test can reach the exception that used to be worth asserting.
+     *
+     * <p>Three methods, where the old fake needed sixty. That is the same fact
+     * from the other side: a fake now models what it stands in for.
+     */
     @Test
-    void anImplementationWithoutAdministrationRefuses() {
-        var readOnly = new Flexemarkets() {
-            public Types.Account account() { return null; }
-            public long accountId() { return 0; }
-            public String accountName() { return null; }
-            public Types.Person user() { return null; }
-            public long userId() { return 0; }
-            public Types.Token token() { return null; }
-            public long endpointMarketplaceId() { return 0; }
-            public String endpointUrl() { return null; }
-            public List<Types.Marketplace> marketplaces() { return List.of(); }
-            public Types.Marketplace marketplace(long id) { return null; }
-            public List<Types.Market> markets(long id) { return List.of(); }
-            public List<Types.Session> sessions(long id) { return List.of(); }
-            public Types.Session session(long id) { return null; }
-            public List<Types.Order> orders(long id) { return List.of(); }
-            public List<Types.Holding> holdings(long id) { return List.of(); }
-            public Types.Holding holding(long id) { return null; }
-            public List<Types.ClientConnection> connections(long id) { return List.of(); }
-            public List<Types.ClientConnection> connections(long id, List<Long> s) { return List.of(); }
-            public List<String> symbols(long id) { return List.of(); }
-            public List<Types.Session> sessions(long id, List<Long> s) { return List.of(); }
-            public List<Types.Order> orders(long id, List<Long> s) { return List.of(); }
-            public List<Types.Order> orders(long id, String symbol) { return List.of(); }
-            public List<Types.Order> trades(long id, String symbol) { return List.of(); }
-            public List<Types.Holding> holdings(long id, List<Long> s) { return List.of(); }
-            public String downloadHoldings(long id) { return ""; }
-            public String downloadHoldings(long id, List<Long> s) { return ""; }
-            public List<Types.Allotment> allotments(long id, long allocationId) { return List.of(); }
-            public List<Types.Person> users() { return List.of(); }
-            public Types.Session openSession(long id) { return null; }
-            public Types.Session pauseSession(long id) { return null; }
-            public Types.Session closeSession(long id) { return null; }
-            public Types.Marketplace createMarketplaceFromJson(String json) { return null; }
-            public List<Types.Holding> allocate(long id, List<Types.Holding> h) { return List.of(); }
-            public List<Types.Holding> uploadHoldings(long id, java.nio.file.Path csv) { return List.of(); }
-            public Snapshot<List<Types.Order>> activeOrdersV1(long id) { return null; }
-            public Snapshot<List<Types.Order>> recentTradesV1(long id, int size) { return null; }
-            public Snapshot<List<Types.Order>> recentTradesV1(long id) { return null; }
-            public Types.Order submitLimit(long a, long b, String c, long d, long e) { return null; }
-            public Types.Order submitCancel(long a, long b, long c) { return null; }
-            public Types.Order submitMarket(long a, long b, String c, long d) { return null; }
-            public void listen(long id, java.util.concurrent.BlockingQueue<Object> q) {}
-            public MarketView observe(long id) { return null; }
-            public void reconnect() {}
-            public void close() {}
+    void aTradingClientIsNotAnAdministrator() {
+        Writing trader = new Writing() {
+            public Types.Order submitLimit(long m, long k, String s, long u, long p) { return null; }
+            public Types.Order submitCancel(long m, long k, long o) { return null; }
+            public Types.Order submitMarket(long m, long k, String s, long u) { return null; }
         };
 
-        assertThatThrownBy(() -> readOnly.deleteAccount(1))
-                .isInstanceOf(UnsupportedOperationException.class)
-                .hasMessageContaining("deleteAccount");
-        assertThatThrownBy(() -> readOnly.managerOtpBundle(List.of(1L)))
-                .isInstanceOf(UnsupportedOperationException.class)
-                .hasMessageContaining("managerOtpBundle");
+        assertThat(trader.submitCancel(1, 1, 1)).isNull();
+        assertThat(trader)
+                .isNotInstanceOf(Administration.class)
+                .isNotInstanceOf(Flexemarkets.class);
     }
 }
