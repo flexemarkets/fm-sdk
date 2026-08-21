@@ -37,6 +37,7 @@ from .exceptions import (
     ConfigurationError,
     ConflictError,
     ConnectionFailedError,
+    FlexemarketsError,
     InvalidArgumentError,
     PersonHasMarketplaceDataError,
 )
@@ -275,6 +276,22 @@ def _http_origin(url: str | None) -> str | None:
         return None
     path_start = url.find("/", end + 3)
     return url if path_start < 0 else url[:path_start]
+
+
+def _marketable_limit(market: Market, side: str) -> int:
+    """The most aggressive price this market will accept on *side*.
+
+    Ticks are anchored at ``price_minimum``, not at zero -- the server tests
+    ``(price - price_minimum) % price_tick`` -- so the top of the range is only
+    legal when the range is a whole number of ticks. The highest legal price is
+    the last tick at or below ``price_maximum``. A tick of zero marks a fixed
+    dimension, where the two bounds are equal and there is one legal price.
+    """
+    if side is None or side.upper() != "BUY" or market.price_tick <= 0:
+        return market.price_minimum
+
+    span = market.price_maximum - market.price_minimum
+    return market.price_minimum + (span // market.price_tick) * market.price_tick
 
 
 def _rebase_api_root(root: ApiRoot, endpoint: str) -> ApiRoot:
@@ -1008,6 +1025,49 @@ class Flexemarkets:
             "clientDescription": self._client_description,
         })
         return _parse_order(resp.json())
+
+    def submit_market(
+        self, marketplace_id: int, market_id: int, side: str, units: int,
+    ) -> Order:
+        """Cross the book: buy at the highest price this market allows, sell at
+        the lowest. Immediate or cancel -- whatever does not fill is cancelled.
+
+        There is no market order on the server. Its type switch falls through to
+        ``LIMIT``, so every submission is bounds-checked against the market and
+        must sit on a tick -- which is why this asks the marketplace for the
+        market first, and costs a round trip :meth:`submit_limit` does not.
+
+        The cancel is unconditional: the exchange consumes a cancel by itself
+        when no units remain, so a complete fill costs a harmless round trip
+        rather than an inspection that would race the book. Without it, a market
+        order that did not fill would rest at the market's extreme -- the best
+        price in the book, standing, for anyone to take.
+
+        Returns the limit order as submitted. What it filled is a property of
+        the book afterwards, not of this value.
+        """
+        price = _marketable_limit(self._market(marketplace_id, market_id), side)
+        limit = self.submit_limit(marketplace_id, market_id, side, units, price)
+
+        try:
+            self.submit_cancel(marketplace_id, market_id, limit.id)
+        except FlexemarketsError as e:
+            # The order is placed. Reporting only "cancel failed" would invite a
+            # caller to retry the whole thing and trade twice.
+            raise FlexemarketsError(
+                f"Order {limit.id} was placed but its remainder could not be "
+                f"cancelled; it may still be resting. Do not resubmit -- cancel it."
+            ) from e
+
+        return limit
+
+    def _market(self, marketplace_id: int, market_id: int) -> Market:
+        for candidate in self.markets(marketplace_id):
+            if candidate.id == market_id:
+                return candidate
+        raise InvalidArgumentError(
+            f"Market {market_id} is not in marketplace {marketplace_id}"
+        )
 
     def submit_cancel(
         self, marketplace_id: int, market_id: int, original_id: int,
