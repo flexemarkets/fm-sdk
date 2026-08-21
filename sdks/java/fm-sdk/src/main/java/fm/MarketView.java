@@ -22,14 +22,16 @@ import fm.Types.Session;
  * readers — and the underlying resources are released when the last
  * caller closes.
  *
- * <p><b>Phase 1 scope:</b> This interface defines the API surface.
- * The reference implementation is a skeleton that wraps the existing
- * {@code Flexemarkets.listen(...)} queue and dispatches events into
- * the existing {@link OrderBooks}/{@link MarketplaceTrades}
- * aggregators. <em>No reconciliation is wired yet</em> — REST-seed,
- * sequence-gap recovery, and per-identity sharing land in Phase 2.
- * Robots that don't need consistency-guaranteed startup state can
- * already use this; those that do should wait for Phase 2.
+ * <p><b>What it guarantees.</b> The books are seeded from a REST
+ * snapshot and then kept current from the event stream, applying only
+ * deltas newer than the snapshot they were seeded with. A gap in the
+ * sequence is recovered by re-seeding rather than by carrying on with
+ * a book that has a hole in it, and a dropped transport is
+ * reconnected and re-seeded. Both are observable —
+ * {@link #onGap(java.util.function.Consumer)} and
+ * {@link #onReconnect(java.util.function.Consumer)} — so a caller who
+ * wants to know that its view went stale can be told rather than
+ * having to infer it.
  */
 public interface MarketView extends AutoCloseable {
 
