@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import queue
 import re
@@ -64,6 +65,8 @@ def _read_version() -> str:
 
 _FM_NETWORK_CLIENT = f"fm-sdk-python/{_read_version()}"
 _DEFAULT_ENDPOINT = "https://api.flexemarkets.com"
+
+log = logging.getLogger(__name__)
 
 _BCRYPT_RE = re.compile(r"^\$2[abxy]?\$\d{2}\$[./A-Za-z0-9]{53}$")
 _JWT_RE = re.compile(r"^[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+$")
@@ -253,6 +256,70 @@ def _parse_api_root(data: dict[str, Any]) -> ApiRoot:
         elif isinstance(value, str):
             links[name] = value
     return ApiRoot(links=links)
+
+
+def _http_origin(url: str | None) -> str | None:
+    """The ``scheme://host:port`` of an absolute http(s) URL, else ``None``.
+
+    A relative href already resolves against the origin it was fetched from,
+    and a scheme that is not HTTP is not ours to rewrite.
+    """
+    if not url:
+        return None
+    end = url.find("://")
+    if end < 0:
+        return None
+    if url[:end].lower() not in ("http", "https"):
+        return None
+    path_start = url.find("/", end + 3)
+    return url if path_start < 0 else url[:path_start]
+
+
+def _rebase_api_root(root: ApiRoot, endpoint: str) -> ApiRoot:
+    """Point the API root's links back at the host that was dialled.
+
+    The server builds these hrefs from the request it believes it received,
+    and behind a proxy that belief can be wrong: an origin reached over a
+    plaintext leg reports ``http://`` even though the caller arrived on
+    ``https://``. Every call that goes through a link -- which is most of them
+    -- then leaves on plain HTTP and meets the edge's redirect. A GET survives
+    it. A POST does not: a 301 is followed as a GET with the body dropped, so
+    placing an order or opening a session fails with nothing placed and
+    nothing pointing at the scheme.
+
+    Only the origin is replaced. The path, query and any URI template are the
+    server's to choose; where it is reachable is not, and the token in hand
+    was issued by the origin dialled, not by whatever the links name.
+    """
+    origin = _http_origin(endpoint)
+    if origin is None:
+        return root
+
+    rebased: dict[str, str] = {}
+    moved: list[str] = []
+    for name, href in root.links.items():
+        named = _http_origin(href)
+        if named is None or named == origin:
+            rebased[name] = href
+            continue
+        if named not in moved:
+            moved.append(named)
+        rebased[name] = origin + href[len(named):]
+
+    if moved:
+        # Said out loud, because the rewrite would otherwise hide a deployment
+        # that is genuinely misconfigured -- and a silent correction here is
+        # how it stays misconfigured. The SDK keeps working; the operator
+        # still gets told where to look.
+        log.warning(
+            "The API root names %s but this client dialled %s; rewriting %d link origin(s) "
+            "to match. The server is behind a proxy that is not forwarding the request "
+            "scheme, so its links are wrong. Fix it at the edge -- this rewrite only keeps "
+            "calls working.",
+            ", ".join(moved), origin, len(moved),
+        )
+
+    return ApiRoot(links=rebased)
 
 
 # ---------------------------------------------------------------------------
@@ -669,8 +736,9 @@ class Flexemarkets:
         return _parse_token(resp.json())
 
     def _fetch_api_root(self) -> ApiRoot:
-        resp = self._get(_server(self._endpoint))
-        return _parse_api_root(resp.json())
+        url = _server(self._endpoint)
+        resp = self._get(url)
+        return _rebase_api_root(_parse_api_root(resp.json()), url)
 
     # ======================================================================
     # REST APIs

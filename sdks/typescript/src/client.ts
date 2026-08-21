@@ -285,6 +285,71 @@ function parseApiRoot(data: JsonObject): ApiRoot {
   return { links };
 }
 
+/**
+ * The `scheme://host:port` of an absolute http(s) URL, else undefined.
+ *
+ * A relative href already resolves against the origin it was fetched from,
+ * and a scheme that is not HTTP is not ours to rewrite.
+ */
+function httpOrigin(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  const end = url.indexOf("://");
+  if (end < 0) return undefined;
+  const scheme = url.substring(0, end).toLowerCase();
+  if (scheme !== "http" && scheme !== "https") return undefined;
+  const pathStart = url.indexOf("/", end + 3);
+  return pathStart < 0 ? url : url.substring(0, pathStart);
+}
+
+/**
+ * Point the API root's links back at the host that was dialled.
+ *
+ * The server builds these hrefs from the request it believes it received, and
+ * behind a proxy that belief can be wrong: an origin reached over a plaintext
+ * leg reports `http://` even though the caller arrived on `https://`. Every
+ * call that goes through a link — which is most of them — then leaves on plain
+ * HTTP and meets the edge's redirect. A GET survives it. A POST does not: a
+ * 301 is followed as a GET with the body dropped, so placing an order or
+ * opening a session fails with nothing placed and nothing pointing at the
+ * scheme.
+ *
+ * Only the origin is replaced. The path, query and any URI template are the
+ * server's to choose; where it is reachable is not, and the token in hand was
+ * issued by the origin dialled, not by whatever the links name.
+ */
+export function rebaseApiRoot(root: ApiRoot, endpoint: string): ApiRoot {
+  const origin = httpOrigin(endpoint);
+  if (!origin) return root;
+
+  const links: Record<string, string> = {};
+  const moved: string[] = [];
+
+  for (const [name, href] of Object.entries(root.links)) {
+    const named = httpOrigin(href);
+    if (!named || named === origin) {
+      links[name] = href;
+      continue;
+    }
+    if (!moved.includes(named)) moved.push(named);
+    links[name] = origin + href.substring(named.length);
+  }
+
+  if (moved.length > 0) {
+    // Said out loud, because the rewrite would otherwise hide a deployment
+    // that is genuinely misconfigured — and a silent correction here is how it
+    // stays misconfigured. The SDK keeps working; the operator still gets told
+    // where to look.
+    console.warn(
+      `[fm-sdk] The API root names ${moved.join(", ")} but this client dialled ${origin}; ` +
+        `rewriting ${moved.length} link origin(s) to match. The server is behind a proxy ` +
+        `that is not forwarding the request scheme, so its links are wrong. Fix it at the ` +
+        `edge — this rewrite only keeps calls working.`,
+    );
+  }
+
+  return { links };
+}
+
 // ---------------------------------------------------------------------------
 // HATEOAS link resolution
 // ---------------------------------------------------------------------------
@@ -795,7 +860,7 @@ export class Flexemarkets {
 
   private async _fetchApiRoot(): Promise<ApiRoot> {
     const data = await this._get(this._baseUrl);
-    return parseApiRoot(data);
+    return rebaseApiRoot(parseApiRoot(data), this._baseUrl);
   }
 
   // ======================================================================

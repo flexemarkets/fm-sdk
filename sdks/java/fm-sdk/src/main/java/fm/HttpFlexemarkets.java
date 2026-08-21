@@ -10,6 +10,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Base64;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -1213,7 +1216,103 @@ public class HttpFlexemarkets implements Flexemarkets {
         var request = request(url, "application/json")
             .GET()
             .build();
-        return send(request, API_ROOT_TYPE);
+        return rebase(send(request, API_ROOT_TYPE), url);
+    }
+
+    /**
+     * Point the API root's links back at the host that was dialled.
+     *
+     * <p>The server builds these hrefs from the request it believes it
+     * received, and behind an edge that belief can be wrong: production on
+     * {@code api.adhocmarkets.com} answers {@code GET /api} with links spelled
+     * {@code http://}, while the same application on
+     * {@code api.flexemarkets.com} spells them {@code https://}. Every call
+     * that goes through a link — which is most of them — then leaves on plain
+     * HTTP and meets the edge's 301. A GET survives it. A POST does not: the
+     * JDK follows a 301 by re-sending as GET with the body dropped, so placing
+     * an order or opening a session fails as a 401 with no order placed and
+     * nothing pointing at the scheme.
+     *
+     * <p>Only the origin is replaced. The path, query and any URI template are
+     * the server's to choose; where it is reachable is not, and the token in
+     * hand was issued by the origin dialled, not by whatever the links name.
+     */
+    static ApiRoot rebase(ApiRoot apiRoot, String endpoint) {
+        if (null == apiRoot || null == apiRoot.links()) {
+            return apiRoot;
+        }
+
+        String origin = httpOrigin(endpoint);
+        if (null == origin) {
+            return apiRoot;
+        }
+
+        var rebased = new LinkedHashMap<String, ApiRoot.LinkObject>();
+        var moved = new LinkedHashSet<String>();
+
+        apiRoot.links().forEach((name, link) -> {
+            if (null == link) {
+                rebased.put(name, null);
+                return;
+            }
+
+            String named = httpOrigin(link.href());
+            if (null != named && !named.equals(origin)) {
+                moved.add(named);
+            }
+            rebased.put(name, new ApiRoot.LinkObject(rebase(link.href(), origin)));
+        });
+
+        if (!moved.isEmpty()) {
+            // Said out loud, because the rewrite would otherwise hide a
+            // deployment that is genuinely misconfigured -- and a silent
+            // correction here is how it stays misconfigured. The SDK keeps
+            // working; the operator still gets told where to look.
+            System.err.println("[fm-sdk] The API root names " + String.join(", ", moved)
+                + " but this client dialled " + origin + "; rewriting " + moved.size()
+                + " link origin(s) to match.");
+            System.err.println("[fm-sdk] The server is behind a proxy that is not forwarding the"
+                + " request scheme, so its links are wrong. Fix it at the edge -- this rewrite only"
+                + " keeps calls working.");
+        }
+
+        return new ApiRoot(Collections.unmodifiableMap(rebased));
+    }
+
+    /**
+     * An absolute HTTP href moved to {@code origin}; anything else left alone.
+     *
+     * <p>A relative href already resolves against the origin it was fetched
+     * from, and a non-HTTP one is not ours to rewrite. Neither is the shape
+     * this exists to correct.
+     */
+    private static String rebase(String href, String origin) {
+        String named = httpOrigin(href);
+        return null == named || named.equals(origin) ? href : origin + href.substring(named.length());
+    }
+
+    /**
+     * The {@code scheme://host:port} of an absolute {@code http}/{@code https}
+     * URL, or null for anything else — a relative href, or a scheme the SDK has
+     * no business rewriting.
+     */
+    private static String httpOrigin(String url) {
+        if (null == url) {
+            return null;
+        }
+
+        int end = url.indexOf("://");
+        if (end < 0) {
+            return null;
+        }
+
+        String scheme = url.substring(0, end);
+        if (!scheme.equalsIgnoreCase("http") && !scheme.equalsIgnoreCase("https")) {
+            return null;
+        }
+
+        int pathStart = url.indexOf('/', end + 3);
+        return pathStart < 0 ? url : url.substring(0, pathStart);
     }
 
     private String clientDescription() {
