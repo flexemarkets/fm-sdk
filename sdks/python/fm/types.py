@@ -77,14 +77,30 @@ class Holding:
     available_cash: int = 0
     securities: list[Security] = field(default_factory=list)
 
-    def get_security(self, market_id: int) -> Security:
+    def __post_init__(self) -> None:
+        """Positions are never None and always in market order.
+
+        They used to arrive in whatever order the server listed them, while
+        ``units()`` sorted on the way out -- so two reads of the same holding
+        disagreed about order, and two holdings of the same positions compared
+        unequal. Normalising once here means the question cannot be got wrong.
+        """
+        self.securities = sorted(self.securities or [], key=lambda s: s.market_id)
+
+    def security(self, market_id: int) -> Security | None:
+        """The position in one market, or ``None`` if the holder has none.
+
+        Was ``get_security``, which raised ValueError. Having no position in a
+        market is ordinary -- it is what every holding looks like before the
+        first allocation -- so asking is a question, not a mistake.
+        """
         for s in self.securities:
             if s.market_id == market_id:
                 return s
-        raise ValueError(f"Security for market ID {market_id} not found.")
+        return None
 
     def units(self) -> list[int]:
-        return [s.units for s in sorted(self.securities, key=lambda s: s.market_id)]
+        return [s.units for s in self.securities]
 
 
 @dataclass
