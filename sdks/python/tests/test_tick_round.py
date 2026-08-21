@@ -144,3 +144,15 @@ def test_every_rounded_value_would_be_accepted_by_the_server():
             rounded = tick_round(value, minimum, maximum, tick)
             assert _server_would_accept(rounded, minimum, maximum, tick), \
                 f"grid [{minimum},{maximum}]/{tick} rounded {value} to {rounded}"
+
+
+def test_a_grid_rounds_on_its_own():
+    """TickGrid carries the same rule, so a caller holding a grid does not
+    have to hold a market too."""
+    from fm.types import TickGrid
+
+    units = TickGrid(10, 500, 10)
+
+    assert units.round(37) == 30
+    assert units.round(1) == 10
+    assert TickGrid.units().round(1_000) == 100

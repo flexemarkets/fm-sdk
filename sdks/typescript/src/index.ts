@@ -12,6 +12,7 @@ export type {
   Session,
   Order,
   ClientConnection,
+  TickGrid,
   Version,
   ApiRoot,
   ConflictFailure,
@@ -32,6 +33,8 @@ export {
   priceRound,
   unitRound,
   tickRound,
+  gridRound,
+  unitGrid,
   getLink,
 } from "./types.js";
 

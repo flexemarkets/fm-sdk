@@ -124,6 +124,34 @@ export interface Market {
 }
 
 /**
+ * The legal values for one dimension of a market: a range, and a step.
+ *
+ * A market has two of these, and the server enforces both the same way — a
+ * value must lie within the bounds and satisfy `(value - minimum) % tick`.
+ * Naming the pair is what stops `createMarket` taking six adjacent numbers,
+ * where transposing the price tick and the unit minimum would post cleanly and
+ * produce a market nobody could trade in.
+ *
+ * A `tick` of zero marks a fixed dimension: the bounds are equal and there is
+ * one legal value.
+ */
+export interface TickGrid {
+  minimum: number;
+  maximum: number;
+  tick: number;
+}
+
+/** The usual unit dimension: whole units, one to a hundred. */
+export function unitGrid(): TickGrid {
+  return { minimum: 1, maximum: 100, tick: 1 };
+}
+
+/** `value` moved down onto `grid`, clamped to it. */
+export function gridRound(grid: TickGrid, value: number): number {
+  return tickRound(value, grid.minimum, grid.maximum, grid.tick);
+}
+
+/**
  * A value moved down onto a bounded tick grid.
  *
  * The server applies this rule twice, to price and to units, spelling it the

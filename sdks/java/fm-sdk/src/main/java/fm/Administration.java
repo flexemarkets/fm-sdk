@@ -82,13 +82,15 @@ public interface Administration {
     /**
      * Add a market to a marketplace.
      *
-     * <p>Unit bounds are not parameters: they are fixed at 1/100/1, matching
-     * fm-lib-net's call. A study that needs other bounds builds its
-     * marketplace from JSON, where every field is stated.
+     * <p>Both dimensions are the caller's. Unit bounds used to be fixed at
+     * 1/100/1 with no way to say otherwise, and the javadoc sent anyone
+     * needing other sizes off to build the whole marketplace from JSON — for a
+     * market whose price grid this same call would happily set. The server
+     * enforces the two identically, so the API offers them identically;
+     * {@link TickGrid#units()} is the old default for callers who wanted it.
      */
     Market createMarket(long marketplaceId, String symbol, String name,
-                        long priceMinimum, long priceMaximum, long priceTick,
-                        boolean privateMarket);
+                        TickGrid price, TickGrid units, boolean privateMarket);
 
     /**
      * Mint one-time passcodes for the given users.

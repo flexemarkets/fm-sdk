@@ -305,7 +305,8 @@ class AdminApiTest {
         Market market;
         try (Flexemarkets fm = connect()) {
             marketplace = fm.createMarketplace("course", "class 2");
-            market = fm.createMarket(5, "STK", "Stock", 0, 10_000, 1, false);
+            market = fm.createMarket(5, "STK", "Stock",
+                    new TickGrid(0, 10_000, 1), TickGrid.units(), false);
         }
 
         assertThat(marketplace.id()).isEqualTo(5L);
@@ -313,13 +314,42 @@ class AdminApiTest {
 
         assertThat(bodyOf("POST /api/marketplaces")).contains("\"description\":\"class 2\"");
 
-        // Unit bounds are not parameters; they are sent fixed, and a market
-        // created without them would reject every order as out of range.
         var marketBody = bodyOf("POST /api/marketplaces/5/markets");
+        assertThat(marketBody).contains("\"priceMinimum\":0");
+        assertThat(marketBody).contains("\"priceMaximum\":10000");
         assertThat(marketBody).contains("\"unitMinimum\":1");
         assertThat(marketBody).contains("\"unitMaximum\":100");
         assertThat(marketBody).contains("\"unitTick\":1");
-        assertThat(marketBody).contains("\"priceMaximum\":10000");
+    }
+
+    /**
+     * The defect: unit bounds were fixed at 1/100/1 with no way to say
+     * otherwise, on a call that set the price grid three arguments earlier.
+     * The server enforces the two identically -- an order is refused for
+     * "units is not on a tic" exactly as for a price -- so a market needing
+     * lots of ten could not be made here at all.
+     */
+    @Test
+    void unitBoundsAreTheCallersToo() throws Exception {
+        try (Flexemarkets fm = connect()) {
+            fm.createMarket(5, "STK", "Stock",
+                    new TickGrid(100, 200, 25), new TickGrid(10, 500, 10), false);
+        }
+
+        var body = bodyOf("POST /api/marketplaces/5/markets");
+        assertThat(body).contains("\"unitMinimum\":10");
+        assertThat(body).contains("\"unitMaximum\":500");
+        assertThat(body).contains("\"unitTick\":10");
+    }
+
+    /** Both grids round by the rule the server checks. */
+    @Test
+    void aGridRoundsOnItsOwn() {
+        var units = new TickGrid(10, 500, 10);
+
+        assertThat(units.round(37)).isEqualTo(30L);
+        assertThat(units.round(1)).isEqualTo(10L);
+        assertThat(TickGrid.units().round(1_000)).isEqualTo(100L);
     }
 
     @Test

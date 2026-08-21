@@ -31,6 +31,7 @@ from .types import (
     Person,
     Security,
     Session,
+    TickGrid,
     Token,
     Version,
 )
@@ -53,6 +54,7 @@ __all__ = [
     "Person",
     "Security",
     "Session",
+    "TickGrid",
     "Token",
     "Version",
     # orderbook & trades

@@ -457,11 +457,12 @@ test("deletes use the DELETE verb", async () => {
   assert.ok(requests.some((r) => r === "DELETE /api/users/42"), requests.join(", "));
 });
 
-/** Unit bounds are sent fixed; a market without them rejects every order. */
-test("createMarket sends the fixed unit bounds", async () => {
+/** Omitting the unit grid keeps the old fixed default; a market without unit
+ *  bounds rejects every order. */
+test("createMarket defaults the unit grid when it is not given", async () => {
   const fm = await connect();
   try {
-    await fm.createMarket(1, "STK", "Stock", 0, 10000, 1, false);
+    await fm.createMarket(1, "STK", "Stock", { minimum: 0, maximum: 10000, tick: 1 });
   } finally {
     fm.close();
   }
@@ -470,6 +471,28 @@ test("createMarket sends the fixed unit bounds", async () => {
   assert.ok(body.includes('"unitMinimum":1'));
   assert.ok(body.includes('"unitMaximum":100'));
   assert.ok(body.includes('"unitTick":1'));
+});
+
+/**
+ * The defect: unit bounds were fixed at 1/100/1 with no way to say otherwise,
+ * on a call that set the price grid three arguments earlier. The server
+ * enforces the two identically, so a market needing lots of ten could not be
+ * made here at all.
+ */
+test("unit bounds are the caller's too", async () => {
+  const fm = await connect();
+  try {
+    await fm.createMarket(1, "STK", "Stock",
+      { minimum: 100, maximum: 200, tick: 25 },
+      { minimum: 10, maximum: 500, tick: 10 });
+  } finally {
+    fm.close();
+  }
+
+  const body = bodies.get("POST /api/marketplaces/1/markets")!;
+  assert.ok(body.includes('"unitMinimum":10'), body);
+  assert.ok(body.includes('"unitMaximum":500'));
+  assert.ok(body.includes('"unitTick":10'));
 });
 
 test("otp bundles are minted for the users asked", async () => {

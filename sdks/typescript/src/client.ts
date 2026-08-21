@@ -8,7 +8,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { orderedSecurities, toOrderType, toSide } from "./types.js";
+import { orderedSecurities, toOrderType, toSide, unitGrid } from "./types.js";
 import { toInstant } from "./timestamps.js";
 import type {
   Account,
@@ -24,6 +24,7 @@ import type {
   Person,
   Security,
   Session,
+  TickGrid,
   Token,
 } from "./types.js";
 import { EventListener, NO_SEQ, type EventCallback } from "./stomp.js";
@@ -896,29 +897,30 @@ export class Flexemarkets {
   /**
    * Add a market to a marketplace.
    *
-   * Unit bounds are not parameters: they are fixed at 1/100/1, as the other
-   * SDKs send them. A marketplace needing other bounds is built from JSON,
-   * where every field is stated.
+   * Both dimensions are the caller's. Unit bounds used to be fixed at 1/100/1
+   * with no way to say otherwise, on a call that set the price grid three
+   * arguments earlier — and the server enforces the two identically, refusing
+   * an order for "units is not on a tic" exactly as for a price. Omitting
+   * `units` keeps the old default.
    */
   async createMarket(
     marketplaceId: number,
     symbol: string,
     name: string,
-    priceMinimum: number,
-    priceMaximum: number,
-    priceTick: number,
-    privateMarket: boolean,
+    price: TickGrid,
+    units: TickGrid = unitGrid(),
+    privateMarket = false,
   ): Promise<Market> {
     const url = uriIdSegment(this._apiRoot, "marketplaces", marketplaceId, "markets");
     return parseMarket(await this._post(url, {
       symbol,
       name,
-      priceMinimum,
-      priceMaximum,
-      priceTick,
-      unitMinimum: 1,
-      unitMaximum: 100,
-      unitTick: 1,
+      priceMinimum: price.minimum,
+      priceMaximum: price.maximum,
+      priceTick: price.tick,
+      unitMinimum: units.minimum,
+      unitMaximum: units.maximum,
+      unitTick: units.tick,
       privateMarket,
     }));
   }

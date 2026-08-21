@@ -131,6 +131,34 @@ def tick_round(value: int, minimum: int, maximum: int, tick: int) -> int:
 
 
 @dataclass
+class TickGrid:
+    """The legal values for one dimension of a market: a range, and a step.
+
+    A market has two of these, and the server enforces both the same way -- a
+    value must lie within the bounds and satisfy ``(value - minimum) % tick``.
+    Naming the pair is what stops ``create_market`` taking six adjacent
+    integers, where transposing the price tick and the unit minimum would post
+    cleanly and produce a market nobody could trade in.
+
+    A ``tick`` of zero marks a fixed dimension: the bounds are equal and there
+    is one legal value.
+    """
+
+    minimum: int = 0
+    maximum: int = 0
+    tick: int = 0
+
+    @staticmethod
+    def units() -> "TickGrid":
+        """The usual unit dimension: whole units, one to a hundred."""
+        return TickGrid(1, 100, 1)
+
+    def round(self, value: int) -> int:
+        """*value* moved down onto this grid, clamped to it."""
+        return tick_round(value, self.minimum, self.maximum, self.tick)
+
+
+@dataclass
 class Market:
     id: int = 0
     marketplace_id: int = 0

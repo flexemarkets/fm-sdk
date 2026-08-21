@@ -438,11 +438,12 @@ public class HttpFlexemarkets implements Flexemarkets {
     /** Unit bounds are fixed at 1/100/1, as fm-lib-net sends them. */
     @Override
     public Market createMarket(long marketplaceId, String symbol, String name,
-                               long priceMinimum, long priceMaximum, long priceTick,
-                               boolean privateMarket) {
+                               TickGrid price, TickGrid units, boolean privateMarket) {
         return post(uriIdSegment(apiRoot, "marketplaces", marketplaceId, "markets"),
-                    new CreateMarket(symbol, name, priceMinimum, priceMaximum, priceTick,
-                                     1, 100, 1, privateMarket),
+                    new CreateMarket(symbol, name,
+                                     price.minimum(), price.maximum(), price.tick(),
+                                     units.minimum(), units.maximum(), units.tick(),
+                                     privateMarket),
                     MARKET_TYPE);
     }
 

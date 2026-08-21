@@ -58,6 +58,7 @@ from .types import (
     Person,
     Security,
     Session,
+    TickGrid,
     Token,
 )
 
@@ -934,21 +935,29 @@ class Flexemarkets:
         marketplace_id: int,
         symbol: str,
         name: str,
-        price_min: int,
-        price_max: int,
-        price_tick: int,
+        price: TickGrid,
+        units: TickGrid | None = None,
         private_market: bool = False,
     ) -> Market:
+        """Add a market to a marketplace.
+
+        Both dimensions are the caller's. Unit bounds used to be fixed at
+        1/100/1 with no way to say otherwise, on a call that set the price grid
+        three arguments earlier -- and the server enforces the two identically,
+        refusing an order for "units is not on a tic" exactly as for a price.
+        Omitting *units* keeps the old default.
+        """
+        units = units if units is not None else TickGrid.units()
         url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "markets")
         resp = self._post(url, {
             "symbol": symbol,
             "name": name,
-            "priceMinimum": price_min,
-            "priceMaximum": price_max,
-            "priceTick": price_tick,
-            "unitMinimum": 1,
-            "unitMaximum": 100,
-            "unitTick": 1,
+            "priceMinimum": price.minimum,
+            "priceMaximum": price.maximum,
+            "priceTick": price.tick,
+            "unitMinimum": units.minimum,
+            "unitMaximum": units.maximum,
+            "unitTick": units.tick,
             "privateMarket": private_market,
         })
         return _parse_market(resp.json())
