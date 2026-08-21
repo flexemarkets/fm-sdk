@@ -261,6 +261,28 @@ public interface Flexemarkets extends AutoCloseable {
 
     Order submitCancel(long marketplaceId, long marketId, long originalId);
 
+    /**
+     * Cross the book: buy at the highest price this market allows, sell at the
+     * lowest.
+     *
+     * <p>There is no market order on the server. Its type switch falls through
+     * to {@code LIMIT}, so every submission is bounds-checked against the
+     * market and must sit on a tick — which is why this asks the marketplace
+     * for the market first, and costs a round trip that {@link #submitLimit}
+     * does not.
+     *
+     * <p>It used to send {@code Long.MAX_VALUE} for a buy and {@code 0} for a
+     * sell, prices no real market accepts. Every buy was refused with "price
+     * above market maximum", and a sell survived only where {@code
+     * priceMinimum} happened to be zero. Nothing called it and no test reached
+     * the wire, so it stayed that way.
+     *
+     * <p><b>The remainder rests.</b> Units that do not fill stay in the book at
+     * that extreme price — a bid at the market's maximum, or an offer at its
+     * minimum — where anyone may take them. This is a marketable limit, not
+     * immediate-or-cancel. A caller who wants the remainder gone should
+     * {@link #submitCancel} it.
+     */
     Order submitMarket(long marketplaceId, long marketId, String side, long units);
 
     // --- management ---------------------------------------------------------

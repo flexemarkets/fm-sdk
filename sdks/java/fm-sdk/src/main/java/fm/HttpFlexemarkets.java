@@ -518,16 +518,47 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     public Order submitMarket(long marketplaceId, long marketId, String side, long units) {
-        var order = Map.of(
-            "marketplaceId", marketplaceId,
-            "marketId",      marketId,
-            "type",          Order.TYPE_LIMIT,
-            "side",          side,
-            "units",         units,
-            "price",         Order.SIDE_BUY.equals(side) ? Long.MAX_VALUE : 0L,
-            "clientDescription", clientDescription()
-        );
-        return post(uri(apiRoot, "orders"), order, ORDER_TYPE);
+        return submitLimit(marketplaceId, marketId, side, units,
+                           marketableLimit(market(marketplaceId, marketId), side));
+    }
+
+    /** The market by id, from the marketplace's own list. */
+    private Market market(long marketplaceId, long marketId) {
+        for (var market : markets(marketplaceId)) {
+            if (marketId == market.id()) {
+                return market;
+            }
+        }
+        throw new ApiException(
+                "Market " + marketId + " is not in marketplace " + marketplaceId);
+    }
+
+    /**
+     * The most aggressive price this market will accept on {@code side}.
+     *
+     * <p>The server has no market order: {@code OrderDtoConverter}'s type switch
+     * falls through to {@code LIMIT}, so every submission is bounds-checked
+     * against the market and must sit on a tick. A buy therefore crosses the
+     * book by bidding the highest legal price, and a sell by offering the
+     * lowest.
+     *
+     * <p>Ticks are anchored at {@code priceMinimum}, not at zero -- the server
+     * tests {@code (price - priceMinimum) % priceTick} -- so the top of the
+     * range is only legal when the range is a whole number of ticks. The
+     * highest legal price is the last tick at or below {@code priceMaximum}.
+     * A tick of zero marks a fixed dimension, where the two bounds are equal
+     * and there is one legal price.
+     */
+    static long marketableLimit(Market market, String side) {
+        if (!Order.SIDE_BUY.equalsIgnoreCase(side)) {
+            return market.priceMinimum();
+        }
+        if (market.priceTick() <= 0) {
+            return market.priceMinimum();
+        }
+
+        long range = market.priceMaximum() - market.priceMinimum();
+        return market.priceMinimum() + (range / market.priceTick()) * market.priceTick();
     }
 
     // --- management ---------------------------------------------------------
