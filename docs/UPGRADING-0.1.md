@@ -64,6 +64,30 @@ Exceptions: `FlexemarketsException`, `AuthenticationException`,
 `ApiRoot.LinkObject` and `ManagerOtpBundle.Entry` remain nested — they are
 parts of their enclosing type. Reference them as `ApiRoot.LinkObject`.
 
+Three event records left the STOMP client, which was never meant to be API:
+
+| Find | Replace |
+|---|---|
+| `import fm.Events.WsException;` | `import fm.WsException;` |
+| `import fm.Events.WsTransportError;` | `import fm.WsTransportError;` |
+| `import fm.Events.Reconnected;` | `import fm.Reconnected;` |
+| `Events.WsException` | `WsException` |
+
+### The implementation is no longer importable
+
+`fm.HttpFlexemarkets` and `fm.Events` moved to `fm.internal`, along with
+`DefaultMarketView` and `MarketViewHandle`. They were public by accident of
+sharing a package with the interface they implement — `HttpFlexemarkets` was a
+public class nobody could construct.
+
+Nothing should be importing them. If something does, it is reaching past the
+contract: `Flexemarkets.connect` builds the client and `MarketView.over` builds
+the view, and those are the supported ways to get one. Do not import from
+`fm.internal` to restore the old code — that is the same reach with a longer
+name.
+
+`Endpoints.DEFAULT_HOST` is now public, if what you wanted was the default host.
+
 ### Renames
 
 | Find | Replace |
@@ -74,6 +98,20 @@ parts of their enclosing type. Reference them as `ApiRoot.LinkObject`.
 | `.user(someId)` | `.userById(someId)` |
 | `.getSecurity(` | `.security(` |
 | `.getSecurities()` | `.securities()` |
+
+`createMarket` takes the unit grid it used to hardcode:
+
+```java
+// before — unit bounds fixed at 1/100/1, with no way to say otherwise
+fm.createMarket(5, "STK", "Stock", 0, 10_000, 1, false);
+
+// after — both dimensions, named so they cannot be transposed
+fm.createMarket(5, "STK", "Stock",
+                new TickGrid(0, 10_000, 1), TickGrid.units(), false);
+```
+
+`TickGrid.units()` is the old default. Python and TypeScript default the unit
+grid when it is omitted; Java requires both, having no default arguments.
 
 **`account()` and `user()` with no argument are unchanged** — they answer who
 the connection is signed in as. Only the single-argument forms were renamed, so
@@ -141,6 +179,21 @@ code keeps working.
 `Side` and `OrderType` are importable from `fm`. Passing a plain `"BUY"` still
 works — but compare with `==`, never `is`: `"BUY" is Side.BUY` is `False`.
 
+**`connect_with_token` is gone.** Use `connect(token, endpoint, description)`.
+See [token authentication](#6-token-authentication-never-worked) — this is a
+deletion rather than a rename, because what it did never worked.
+
+`create_market` takes the unit grid it used to hardcode:
+
+```python
+# before
+fm.create_market(5, "STK", "Stock", 0, 10_000, 1)
+
+# after — units default to TickGrid.units() when omitted
+fm.create_market(5, "STK", "Stock", TickGrid(0, 10_000, 1))
+fm.create_market(5, "STK", "Stock", TickGrid(0, 10_000, 1), TickGrid(10, 500, 10))
+```
+
 ---
 
 ## TypeScript
@@ -157,6 +210,17 @@ works — but compare with `==`, never `is`: `"BUY" is Side.BUY` is `False`.
 
 `Side` and `OrderType` are literal unions with same-named const objects, so
 `"BUY"` and `Side.BUY` are interchangeable.
+
+`createMarket` takes the unit grid it used to hardcode; omit it for the old
+default:
+
+```ts
+// before
+await fm.createMarket(5, "STK", "Stock", 0, 10_000, 1, false);
+
+// after
+await fm.createMarket(5, "STK", "Stock", { minimum: 0, maximum: 10_000, tick: 1 });
+```
 
 ---
 
@@ -250,6 +314,31 @@ and never thrown, so a handler for it caught nothing and `httpx.HTTPStatusError`
 escaped instead. If you were catching `httpx.HTTPStatusError` for 409s, catch
 `ConflictError`.
 
+### 6. Token authentication never worked
+
+**Python and TypeScript only.** Connecting with a token instead of a password
+has failed since each SDK was written. Both POSTed `/tokens` with the bearer
+header and a body carrying an empty password, and fm-server answers that
+`400 MESSAGE_NOT_READABLE`. Both now use `GET /tokens/refresh`, which is what
+the Java SDK has always used.
+
+Two consequences for a migrating codebase:
+
+- **Remove any workaround.** Anything that fetched a token by hand, or fell
+  back to a password because "the token path doesn't work", can go.
+- **`connect_with_token` is deleted, not renamed.** It was a second spelling of
+  the same broken request. Use `connect(token, endpoint, description)`.
+
+Python had a second defect behind the first: a real JWT is around 470
+characters, and `Path.is_file()` raises `OSError: File name too long` rather
+than returning `False`, so `connect(token, ...)` raised before reaching the
+network. If you have a `try`/`except OSError` around a connect call, it is now
+dead code.
+
+If your tests stub the transport, they will not have caught any of this — every
+fake in this SDK asserted the broken request, because that is what the SDK
+sent. Check test fakes answer `GET /api/tokens/refresh`.
+
 ---
 
 ## Verification
@@ -283,6 +372,13 @@ are least likely to cover:
 - [ ] Any `.account(` / `.user(` call with an argument renamed, and any without
       one left alone.
 - [ ] Test fakes either narrowed to a role or completed.
+- [ ] Test fakes that stand in for the server answer `GET /api/tokens/refresh`,
+      not `POST /api/tokens`, for token auth.
+- [ ] No import of `fm.HttpFlexemarkets`, `fm.Events`, or anything under
+      `fm.internal`.
+- [ ] Every `createMarket` call passes a price grid, and passes a unit grid if
+      the market is not 1/100/1.
+- [ ] No remaining `connect_with_token`.
 
 ## Pinning
 
