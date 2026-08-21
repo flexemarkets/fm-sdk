@@ -326,6 +326,24 @@ function parseApiRoot(data: JsonObject): ApiRoot {
 }
 
 /**
+ * The most aggressive price this market will accept on `side`.
+ *
+ * Ticks are anchored at `priceMinimum`, not at zero — the server tests
+ * `(price - priceMinimum) % priceTick` — so the top of the range is only legal
+ * when the range is a whole number of ticks. The highest legal price is the
+ * last tick at or below `priceMaximum`. A tick of zero marks a fixed dimension,
+ * where the two bounds are equal and there is one legal price.
+ */
+export function marketableLimit(market: Market, side: string): number {
+  if (side?.toUpperCase() !== "BUY" || market.priceTick <= 0) {
+    return market.priceMinimum;
+  }
+
+  const span = market.priceMaximum - market.priceMinimum;
+  return market.priceMinimum + Math.floor(span / market.priceTick) * market.priceTick;
+}
+
+/**
  * The `scheme://host:port` of an absolute http(s) URL, else undefined.
  *
  * A relative href already resolves against the origin it was fetched from,
@@ -1059,6 +1077,58 @@ export class Flexemarkets {
       clientDescription: this._clientDescription,
     });
     return parseOrder(data);
+  }
+
+  /**
+   * Cross the book: buy at the highest price this market allows, sell at the
+   * lowest. Immediate or cancel — whatever does not fill is cancelled.
+   *
+   * There is no market order on the server. Its type switch falls through to
+   * `LIMIT`, so every submission is bounds-checked against the market and must
+   * sit on a tick — which is why this asks the marketplace for the market
+   * first, and costs a round trip {@link submitLimit} does not.
+   *
+   * The cancel is unconditional: the exchange consumes a cancel by itself when
+   * no units remain, so a complete fill costs a harmless round trip rather than
+   * an inspection that would race the book. Without it, a market order that did
+   * not fill would rest at the market's extreme — the best price in the book,
+   * standing, for anyone to take.
+   *
+   * Returns the limit order as submitted. What it filled is a property of the
+   * book afterwards, not of this value.
+   */
+  async submitMarket(
+    marketplaceId: number,
+    marketId: number,
+    side: string,
+    units: number,
+  ): Promise<Order> {
+    const market = await this._market(marketplaceId, marketId);
+    const limit = await this.submitLimit(
+      marketplaceId, marketId, side, units, marketableLimit(market, side),
+    );
+
+    try {
+      await this.submitCancel(marketplaceId, marketId, limit.id);
+    } catch (e) {
+      // The order is placed. Reporting only "cancel failed" would invite a
+      // caller to retry the whole thing and trade twice.
+      throw new FlexemarketsError(
+        `Order ${limit.id} was placed but its remainder could not be cancelled; ` +
+          `it may still be resting. Do not resubmit — cancel it. (${String(e)})`,
+      );
+    }
+
+    return limit;
+  }
+
+  private async _market(marketplaceId: number, marketId: number): Promise<Market> {
+    for (const candidate of await this.markets(marketplaceId)) {
+      if (candidate.id === marketId) return candidate;
+    }
+    throw new InvalidArgumentError(
+      `Market ${marketId} is not in marketplace ${marketplaceId}`,
+    );
   }
 
   async submitCancel(
