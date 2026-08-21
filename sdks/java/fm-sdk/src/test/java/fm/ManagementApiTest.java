@@ -320,7 +320,7 @@ class ManagementApiTest {
     void malformedMarketplaceJsonFailsBeforeAnyRequest() throws Exception {
         try (Flexemarkets fm = connect()) {
             assertThatThrownBy(() -> fm.createMarketplaceFromJson("{not json"))
-                    .isInstanceOf(Exceptions.ApiException.class)
+                    .isInstanceOf(ApiException.class)
                     .hasMessageContaining("not valid JSON");
         }
 

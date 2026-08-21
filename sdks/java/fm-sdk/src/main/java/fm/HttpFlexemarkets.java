@@ -24,10 +24,6 @@ import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
-import fm.Exceptions.ApiException;
-import fm.Exceptions.AuthenticationException;
-import fm.Exceptions.ConflictException;
-import fm.Exceptions.HttpException;
 
 public class HttpFlexemarkets implements Flexemarkets {
     private static final String FM_SDK_CLIENT = "fm-sdk-java/0.1.0";
@@ -366,7 +362,7 @@ public class HttpFlexemarkets implements Flexemarkets {
             // its own type so a caller can offer the suggestion rather than
             // parsing it back out of a generic conflict.
             var failure = e.failure();
-            throw new Exceptions.AccountNameConflictException(
+            throw new AccountNameConflictException(
                     accountName, failure == null ? null : failure.suggestedName());
         }
     }
@@ -424,7 +420,7 @@ public class HttpFlexemarkets implements Flexemarkets {
             // The user still owns orders or allotments. Deleting them would
             // orphan it, so the server refuses and the caller has to decide
             // what happens to the data first.
-            throw new Exceptions.PersonHasMarketplaceDataException(userId, e.getMessage());
+            throw new PersonHasMarketplaceDataException(userId, e.getMessage());
         }
     }
 
@@ -516,7 +512,7 @@ public class HttpFlexemarkets implements Flexemarkets {
         // original id, which is what survives a split.
         try {
             submitCancel(marketplaceId, marketId, limit.id());
-        } catch (Exceptions.FlexemarketsException e) {
+        } catch (FlexemarketsException e) {
             // The order is placed. Saying only "cancel failed" would invite a
             // caller to retry the whole thing and trade twice.
             throw new ApiException(
@@ -981,16 +977,16 @@ public class HttpFlexemarkets implements Flexemarkets {
                 return new Snapshot<>(body, asOfSeq);
             }
             if (statusCode == 401) {
-                throw new Exceptions.AuthenticationException("Authentication failed: " + response.body());
+                throw new AuthenticationException("Authentication failed: " + response.body());
             }
-            throw new Exceptions.HttpException(statusCode, response.body());
-        } catch (Exceptions.FlexemarketsException e) {
+            throw new HttpException(statusCode, response.body());
+        } catch (FlexemarketsException e) {
             throw e;
         } catch (IOException e) {
-            throw new Exceptions.ApiException("Snapshot request failed", e);
+            throw new ApiException("Snapshot request failed", e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new Exceptions.ApiException("Snapshot request interrupted", e);
+            throw new ApiException("Snapshot request interrupted", e);
         }
     }
 
@@ -1055,7 +1051,7 @@ public class HttpFlexemarkets implements Flexemarkets {
                 throw new AuthenticationException("Authentication failed: " + response.body());
             }
             throw new HttpException(statusCode, response.body());
-        } catch (Exceptions.FlexemarketsException e) {
+        } catch (FlexemarketsException e) {
             throw e;
         } catch (IOException e) {
             throw new ApiException("HTTP request failed", e);
@@ -1117,7 +1113,7 @@ public class HttpFlexemarkets implements Flexemarkets {
             }
 
             throw new HttpException(statusCode, response.body());
-        } catch (Exceptions.FlexemarketsException e) {
+        } catch (FlexemarketsException e) {
             throw e;
         } catch (JacksonException e) {
             // The call succeeded and its answer is unreadable, which is a
@@ -1161,7 +1157,7 @@ public class HttpFlexemarkets implements Flexemarkets {
             }
 
             throw new HttpException(statusCode, response.body());
-        } catch (Exceptions.FlexemarketsException e) {
+        } catch (FlexemarketsException e) {
             throw e;
         } catch (IOException e) {
             throw new ApiException("HTTP request failed", e);
@@ -1227,7 +1223,7 @@ public class HttpFlexemarkets implements Flexemarkets {
                 throw new HttpException(response.statusCode(), response.body());
             }
             return MAPPER.readValue(response.body(), TOKEN_TYPE);
-        } catch (Exceptions.FlexemarketsException e) {
+        } catch (FlexemarketsException e) {
             throw e;
         } catch (IOException e) {
             throw new ApiException("Sign-in request failed", e);

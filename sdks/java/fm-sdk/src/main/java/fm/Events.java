@@ -111,7 +111,7 @@ public class Events implements Subscription {
             sendStompConnect();
 
             if (!connectedLatch.await(10, TimeUnit.SECONDS)) {
-                throw new Exceptions.ApiException("STOMP CONNECTED frame not received within timeout");
+                throw new ApiException("STOMP CONNECTED frame not received within timeout");
             }
 
             // fm-server publishes broadcasts on the V0 destination paths
@@ -125,10 +125,10 @@ public class Events implements Subscription {
             subscribe("/user/queue/marketplaces/" + marketplaceId);
             subscribe("/topic/marketplaces/" + marketplaceId);
             subscribe("/app" + API_VERSION_PREFIX + "/marketplaces/" + marketplaceId);
-        } catch (Exceptions.FlexemarketsException e) {
+        } catch (FlexemarketsException e) {
             throw e;
         } catch (Exception e) {
-            throw new Exceptions.ApiException("WebSocket connection failed", e);
+            throw new ApiException("WebSocket connection failed", e);
         }
     }
 

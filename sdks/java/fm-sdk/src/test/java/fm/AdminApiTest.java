@@ -365,9 +365,9 @@ class AdminApiTest {
 
         try (Flexemarkets fm = connect()) {
             assertThatThrownBy(() -> fm.signup("acme", "owner@new", "s3cret"))
-                    .isInstanceOf(Exceptions.AccountNameConflictException.class)
+                    .isInstanceOf(AccountNameConflictException.class)
                     .satisfies(e -> {
-                        var conflictException = (Exceptions.AccountNameConflictException) e;
+                        var conflictException = (AccountNameConflictException) e;
                         assertThat(conflictException.requestedName()).isEqualTo("acme");
                         assertThat(conflictException.suggestedName()).isEqualTo("acme-2");
                     });
@@ -388,8 +388,8 @@ class AdminApiTest {
 
         try (Flexemarkets fm = connect()) {
             assertThatThrownBy(() -> fm.signup("acme", "owner@new", "s3cret"))
-                    .isInstanceOf(Exceptions.ConflictException.class)
-                    .satisfies(e -> assertThat(((Exceptions.ConflictException) e).failure().suggestedName())
+                    .isInstanceOf(ConflictException.class)
+                    .satisfies(e -> assertThat(((ConflictException) e).failure().suggestedName())
                             .as("the general handler reads the same suggestion as the specific one")
                             .isEqualTo("acme-2"));
         }
@@ -402,9 +402,9 @@ class AdminApiTest {
 
         try (Flexemarkets fm = connect()) {
             assertThatThrownBy(() -> fm.deleteUser(42))
-                    .isInstanceOf(Exceptions.PersonHasMarketplaceDataException.class)
+                    .isInstanceOf(PersonHasMarketplaceDataException.class)
                     .satisfies(e -> assertThat(
-                            ((Exceptions.PersonHasMarketplaceDataException) e).userId()).isEqualTo(42L));
+                            ((PersonHasMarketplaceDataException) e).userId()).isEqualTo(42L));
         }
     }
 

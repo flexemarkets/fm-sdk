@@ -176,7 +176,7 @@ class SubmitMarketTest {
         try (Flexemarkets fm = connect()) {
             org.assertj.core.api.Assertions
                     .assertThatThrownBy(() -> fm.submitMarket(1L, 99L, Side.BUY, 5L))
-                    .isInstanceOf(Exceptions.ApiException.class)
+                    .isInstanceOf(ApiException.class)
                     .hasMessageContaining("99");
         }
 
