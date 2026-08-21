@@ -123,11 +123,31 @@ export interface Market {
   unitTick: number;
 }
 
+/**
+ * `price` moved down to the nearest price this market will accept.
+ *
+ * Ticks are anchored at `priceMinimum`, not at zero: the server tests
+ * `(price - priceMinimum) % priceTick`. This subtracted `price % priceTick`,
+ * right only when the floor happens to be a multiple of the tick — with a floor
+ * of 110 and a tick of 25 the legal prices are 110/135/160/185, and rounding
+ * 137 gave 125.
+ *
+ * A tick of zero marks a fixed dimension, where the bounds are equal and there
+ * is one legal price; that used to return NaN.
+ */
 export function priceRound(market: Market, price: number): number {
-  return Math.min(
-    Math.max(price - (price % market.priceTick), market.priceMinimum),
-    market.priceMaximum,
-  );
+  if (market.priceTick <= 0) {
+    return Math.min(Math.max(price, market.priceMinimum), market.priceMaximum);
+  }
+
+  // The ceiling is the highest legal tick, not priceMaximum: clamping to the
+  // maximum lands off the grid when the range is not a whole number of ticks.
+  const span = market.priceMaximum - market.priceMinimum;
+  const highest = market.priceMinimum + Math.floor(span / market.priceTick) * market.priceTick;
+
+  const steps = Math.floor((price - market.priceMinimum) / market.priceTick);
+  const rounded = market.priceMinimum + steps * market.priceTick;
+  return Math.min(Math.max(rounded, market.priceMinimum), highest);
 }
 
 export interface Marketplace {

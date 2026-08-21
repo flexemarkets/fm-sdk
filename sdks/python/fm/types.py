@@ -121,7 +121,29 @@ class Market:
     unit_tick: int = 0
 
     def price_round(self, price: int) -> int:
-        return min(max(price - price % self.price_tick, self.price_minimum), self.price_maximum)
+        """*price* moved down to the nearest price this market will accept.
+
+        Ticks are anchored at ``price_minimum``, not at zero: the server tests
+        ``(price - price_minimum) % price_tick``. This subtracted
+        ``price % price_tick``, which is right only when the floor happens to
+        be a multiple of the tick -- with a floor of 110 and a tick of 25 the
+        legal prices are 110/135/160/185, and rounding 137 gave 125.
+
+        A tick of zero marks a fixed dimension, where the bounds are equal and
+        there is one legal price; that used to divide by zero.
+        """
+        if self.price_tick <= 0:
+            return min(max(price, self.price_minimum), self.price_maximum)
+
+        # The ceiling is the highest legal tick, not price_maximum: clamping to
+        # the maximum lands off the grid when the range is not a whole number
+        # of ticks, which is the case this exists for.
+        span = self.price_maximum - self.price_minimum
+        highest = self.price_minimum + (span // self.price_tick) * self.price_tick
+
+        steps = (price - self.price_minimum) // self.price_tick
+        rounded = self.price_minimum + steps * self.price_tick
+        return min(max(rounded, self.price_minimum), highest)
 
 
 @dataclass
