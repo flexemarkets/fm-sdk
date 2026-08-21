@@ -72,15 +72,6 @@ public class Events implements Subscription {
             new java.util.concurrent.atomic.AtomicBoolean();
     private final AtomicInteger subscriptionId = new AtomicInteger(0);
 
-    public record WsTransportError(Throwable failure) {}
-
-    /**
-     * The stream is back. Emitted once this has re-established itself after a
-     * {@link WsTransportError}; a consumer's state is stale until it reseeds.
-     */
-    public record Reconnected(long marketplaceId) {}
-    public record WsException(String message, Throwable failure) {}
-
     Events(String wsUrl, String bearerToken, long marketplaceId, String clientDescription,
            ObjectMapper mapper, BlockingQueue<Object> queue) {
         this.wsUrl = wsUrl;

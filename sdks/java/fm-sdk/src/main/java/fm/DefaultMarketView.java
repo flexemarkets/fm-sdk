@@ -8,8 +8,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
-import fm.Events.WsException;
-import fm.Events.WsTransportError;
 
 /**
  * Skeleton {@link MarketView} that wraps an existing
@@ -255,7 +253,7 @@ public class DefaultMarketView implements MarketView {
                     // The subscription restores itself; nothing to do but say so.
                     System.err.println("[MarketView] WS transport error on marketplace "
                             + marketplaceId + ": " + error.failure().getMessage());
-                } else if (event instanceof Events.Reconnected) {
+                } else if (event instanceof Reconnected) {
                     _reseedAfterReconnect();
                 } else if (event instanceof WsException ex) {
                     // STOMP ERROR / parse failure. Logged for
