@@ -884,11 +884,6 @@ export class Flexemarkets {
   }
 
   /** Create an empty marketplace. See also {@link createMarketplaceFromJson}. */
-  async createMarketplace(name: string, description: string): Promise<Marketplace> {
-    const url = uri(this._apiRoot, "marketplaces");
-    return parseMarketplace(await this._post(url, { name, description }));
-  }
-
   /** Delete a marketplace, and with it its sessions and their history. */
   async deleteMarketplace(marketplaceId: number): Promise<void> {
     await this._delete(uriId(this._apiRoot, "marketplaces", marketplaceId));

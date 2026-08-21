@@ -461,11 +461,6 @@ public class HttpFlexemarkets implements Flexemarkets {
         }
     }
 
-    @Override
-    public Marketplace createMarketplace(String name, String description) {
-        return post(uri(apiRoot, "marketplaces"),
-                    new CreateMarketplace(name, description), MARKETPLACE_TYPE);
-    }
 
     @Override
     public void deleteMarketplace(long marketplaceId) {
@@ -503,7 +498,6 @@ public class HttpFlexemarkets implements Flexemarkets {
     private record CreateUser(String email, String password, String firstName,
                               String lastName, String[] roles) {}
 
-    private record CreateMarketplace(String name, String description) {}
 
     private record CreateMarket(String symbol, String name,
                                 long priceMinimum, long priceMaximum, long priceTick,

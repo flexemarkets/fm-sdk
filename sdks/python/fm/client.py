@@ -886,11 +886,6 @@ class Flexemarkets:
         url = _uri_id(self._api_root, "marketplaces", marketplace_id)
         return _parse_marketplace(self._get(url).json())
 
-    def create_marketplace(self, name: str, description: str) -> Marketplace:
-        url = _uri(self._api_root, "marketplaces")
-        resp = self._post(url, {"name": name, "description": description})
-        return _parse_marketplace(resp.json())
-
     def create_marketplace_from_json(self, definition: str) -> Marketplace:
         """Create a marketplace from its JSON definition, returning what was made.
 

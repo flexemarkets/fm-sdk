@@ -73,10 +73,16 @@ public interface Administration {
     /** Delete a user. Destructive. */
     void deleteUser(long userId);
 
-    /** Create an empty marketplace. See also {@link Management#createMarketplaceFromJson}. */
-    Marketplace createMarketplace(String name, String description);
-
-    /** Delete a marketplace, and with it its sessions and their history. */
+    /**
+     * Delete a marketplace, and with it its sessions and their history.
+     *
+     * <p>There is no {@code createMarketplace(name, description)} to pair with
+     * this. It existed and could not succeed: the server requires at least one
+     * market -- {@code MARKETPLACE_INVALID: At least one market is required} --
+     * and that method sent only a name and a description, so every call was a
+     * 400. Use {@link Management#createMarketplaceFromJson}, which is what the
+     * studies have always used.
+     */
     void deleteMarketplace(long marketplaceId);
 
     /**

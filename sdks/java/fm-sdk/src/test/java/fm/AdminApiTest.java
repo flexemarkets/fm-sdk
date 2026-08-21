@@ -299,20 +299,27 @@ class AdminApiTest {
 
     // --- marketplaces -------------------------------------------------------
 
+    /**
+     * A market is added to a marketplace that already exists.
+     *
+     * <p>This used to create the marketplace here too, with
+     * {@code createMarketplace("course", "class 2")}, and assert the POST
+     * carried the description. It did -- and the server answered
+     * {@code MARKETPLACE_INVALID: At least one market is required}, because
+     * that method sent no markets and there is no way to give it any. The test
+     * asserted the request and never the response, so it passed for as long as
+     * the method existed. Marketplaces are made with
+     * createMarketplaceFromJson, which is what every study already used.
+     */
     @Test
-    void aMarketplaceAndAMarketAreCreated() throws Exception {
-        Marketplace marketplace;
+    void aMarketIsAddedToAMarketplace() throws Exception {
         Market market;
         try (Flexemarkets fm = connect()) {
-            marketplace = fm.createMarketplace("course", "class 2");
             market = fm.createMarket(5, "STK", "Stock",
                     new TickGrid(0, 10_000, 1), TickGrid.units(), false);
         }
 
-        assertThat(marketplace.id()).isEqualTo(5L);
         assertThat(market.symbol()).isEqualTo("STK");
-
-        assertThat(bodyOf("POST /api/marketplaces")).contains("\"description\":\"class 2\"");
 
         var marketBody = bodyOf("POST /api/marketplaces/5/markets");
         assertThat(marketBody).contains("\"priceMinimum\":0");

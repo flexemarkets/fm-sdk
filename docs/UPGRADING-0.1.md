@@ -368,6 +368,42 @@ If your tests stub the transport, they will not have caught any of this — ever
 fake in this SDK asserted the broken request, because that is what the SDK
 sent. Check test fakes answer `GET /api/tokens/refresh`.
 
+### 8. `createMarketplace` is gone; it could never have worked
+
+`createMarketplace(name, description)` sent exactly that, and the server
+requires at least one market:
+
+```
+MARKETPLACE_INVALID: At least one market is required to create a marketplace
+```
+
+So every call was a 400, in all three SDKs, for as long as the method existed.
+Use `createMarketplaceFromJson`, which is the path every study already takes —
+the javadoc there reads like a preference for keeping definitions as files, and
+was in fact describing the only thing that worked.
+
+```java
+// before — always 400
+var mp = fm.createMarketplace("course", "class 2");
+
+// after
+var mp = fm.createMarketplaceFromJson("""
+    {"name":"course","description":"class 2","configuration":"",
+     "markets":[{"symbol":"STK","name":"Stock","description":"",
+                 "priceMinimum":100,"priceMaximum":200,"priceTick":25,
+                 "unitMinimum":1,"unitMaximum":100,"unitTick":1,
+                 "privateMarket":false}]}
+    """);
+```
+
+`createMarket` still adds a market to a marketplace that exists, and is
+unaffected.
+
+**fm-robots has sixteen call sites**, all in `api-validator` —
+`MarketplaceValidator` (5) and `SessionValidator` (1) plus their helpers. They
+have never succeeded, so whatever those suites were reporting was not what they
+meant to report.
+
 ---
 
 ## Verification
@@ -408,6 +444,8 @@ are least likely to cover:
 - [ ] Every `createMarket` call passes a price grid, and passes a unit grid if
       the market is not 1/100/1.
 - [ ] No remaining `connect_with_token`.
+- [ ] No remaining `createMarketplace(name, description)`; marketplaces are
+      made with `createMarketplaceFromJson`.
 - [ ] Every `sessions(...)` and `connections(...)` call passes one argument, and
       anything that relied on the filter now narrows the result itself.
 
