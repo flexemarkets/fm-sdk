@@ -395,6 +395,23 @@ class AdminApiTest {
         }
     }
 
+    /**
+     * And is catchable as a conflict, because that is what the server answered.
+     *
+     * <p>It extended FlexemarketsException directly until 0.1.0, which left the
+     * three SDKs disagreeing: Python and TypeScript both made it a conflict.
+     */
+    @Test
+    void aUserWhoOwnsDataIsCatchableAsAConflict() throws Exception {
+        conflict = true;
+
+        try (Flexemarkets fm = connect()) {
+            assertThatThrownBy(() -> fm.deleteUser(42))
+                    .isInstanceOf(ConflictException.class)
+                    .isInstanceOf(PersonHasMarketplaceDataException.class);
+        }
+    }
+
     /** Deleting a user who still owns data is refused, and says whose. */
     @Test
     void deletingAUserWhoOwnsDataIsRefused() throws Exception {

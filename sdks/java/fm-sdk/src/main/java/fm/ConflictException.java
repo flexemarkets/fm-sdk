@@ -1,7 +1,7 @@
 package fm;
 
 public sealed class ConflictException extends FlexemarketsException
-    permits AccountNameConflictException {
+    permits AccountNameConflictException, PersonHasMarketplaceDataException {
 
     private final ConflictFailure failure;
 
