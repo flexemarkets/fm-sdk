@@ -8,8 +8,8 @@ export interface Person {
   email: string | null;
   roles: string[];
   accountOwner: boolean;
-  createdDate: string | null;
-  lastModifiedDate: string | null;
+  createdDate: Date | null;
+  lastModifiedDate: Date | null;
 }
 
 export interface Account {
@@ -19,8 +19,8 @@ export interface Account {
   owner: Person | null;
   approval: boolean;
   approvalDescription: string | null;
-  createdDate: string | null;
-  lastModifiedDate: string | null;
+  createdDate: Date | null;
+  lastModifiedDate: Date | null;
 }
 
 export interface Token {
@@ -150,8 +150,8 @@ export interface Session {
   state: string | null;
   name: string | null;
   description: string | null;
-  openDate: string | null;
-  closeDate: string | null;
+  openDate: Date | null;
+  closeDate: Date | null;
 }
 
 /**
@@ -223,16 +223,16 @@ export interface Order {
   marketId: number;
   ownerTarget: string | null;
   clientDescription: string | null;
-  createdDate: string | null;
-  lastModifiedDate: string | null;
+  createdDate: Date | null;
+  lastModifiedDate: Date | null;
 }
 
 export interface ClientConnection {
   marketplaceId: number;
   connectionId: number;
   ownerId: number;
-  established: string | null;
-  terminated: string | null;
+  established: Date | null;
+  terminated: Date | null;
   description: string | null;
   /**
    * The session the connection was attached during, or null when the
@@ -258,7 +258,7 @@ export interface ManagerOtpEntry {
  * logged.
  */
 export interface ManagerOtpBundle {
-  expiresAt: string | null;
+  expiresAt: Date | null;
   otps: ManagerOtpEntry[];
 }
 

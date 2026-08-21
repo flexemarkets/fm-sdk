@@ -6,6 +6,7 @@
  */
 
 import WebSocket from "ws";
+import { toInstant } from "./timestamps.js";
 import type { Holding, Order, Session, Version } from "./types.js";
 
 const HEARTBEAT_MS = 30_000;
@@ -195,8 +196,8 @@ function parseSession(data: Record<string, unknown>): Session {
     state: (data.state as string) ?? null,
     name: (data.name as string) ?? null,
     description: (data.description as string) ?? null,
-    openDate: (data.openDate as string) ?? null,
-    closeDate: (data.closeDate as string) ?? null,
+    openDate: toInstant(data.openDate as string),
+    closeDate: toInstant(data.closeDate as string),
   };
 }
 

@@ -47,6 +47,8 @@ export {
   PersonHasMarketplaceDataError,
 } from "./client.js";
 
+export { toInstant } from "./timestamps.js";
+
 // Order utils
 export {
   isCancel,

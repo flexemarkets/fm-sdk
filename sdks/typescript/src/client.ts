@@ -9,6 +9,7 @@ import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { orderedSecurities, toOrderType, toSide } from "./types.js";
+import { toInstant } from "./timestamps.js";
 import type {
   Account,
   Allotment,
@@ -111,8 +112,8 @@ function parsePerson(data: JsonObject | null | undefined): Person | null {
     email: (data.email as string) ?? null,
     roles: (data.roles as string[]) ?? [],
     accountOwner: (data.accountOwner as boolean) ?? false,
-    createdDate: (data.createdDate as string) ?? null,
-    lastModifiedDate: (data.lastModifiedDate as string) ?? null,
+    createdDate: toInstant(data.createdDate as string),
+    lastModifiedDate: toInstant(data.lastModifiedDate as string),
   };
 }
 
@@ -125,8 +126,8 @@ function parseAccount(data: JsonObject | null | undefined): Account | null {
     owner: parsePerson(data.owner as JsonObject),
     approval: (data.approval as boolean) ?? false,
     approvalDescription: (data.approvalDescription as string) ?? null,
-    createdDate: (data.createdDate as string) ?? null,
-    lastModifiedDate: (data.lastModifiedDate as string) ?? null,
+    createdDate: toInstant(data.createdDate as string),
+    lastModifiedDate: toInstant(data.lastModifiedDate as string),
   };
 }
 
@@ -186,8 +187,8 @@ function parseSession(data: JsonObject): Session {
     state: (data.state as string) ?? null,
     name: (data.name as string) ?? null,
     description: (data.description as string) ?? null,
-    openDate: (data.openDate as string) ?? null,
-    closeDate: (data.closeDate as string) ?? null,
+    openDate: toInstant(data.openDate as string),
+    closeDate: toInstant(data.closeDate as string),
   };
 }
 
@@ -208,8 +209,8 @@ export function parseOrder(data: JsonObject): Order {
     marketId: (data.marketId as number) ?? 0,
     ownerTarget: (data.ownerTarget as string) ?? null,
     clientDescription: (data.clientDescription as string) ?? null,
-    createdDate: (data.createdDate as string) ?? null,
-    lastModifiedDate: (data.lastModifiedDate as string) ?? null,
+    createdDate: toInstant(data.createdDate as string),
+    lastModifiedDate: toInstant(data.lastModifiedDate as string),
   };
 }
 
@@ -306,8 +307,8 @@ function parseConnection(data: JsonObject): ClientConnection {
     marketplaceId: (data.marketplaceId as number) ?? 0,
     connectionId: (data.id as number) ?? (data.connectionId as number) ?? 0,
     ownerId: (data.ownerId as number) ?? 0,
-    established: (data.established as string) ?? null,
-    terminated: (data.terminated as string) ?? null,
+    established: toInstant(data.established as string),
+    terminated: toInstant(data.terminated as string),
     description: (data.description as string) ?? null,
     sessionId: (data.sessionId as number) ?? null,
   };
@@ -932,7 +933,7 @@ export class Flexemarkets {
     const url = `${server(this._endpoint)}/otp/manager`;
     const data = await this._post(url, { userIds });
     return {
-      expiresAt: (data.expiresAt as string) ?? null,
+      expiresAt: toInstant(data.expiresAt as string),
       otps: ((data.otps as JsonObject[]) ?? []).map((o) => ({
         userId: (o.userId as number) ?? 0,
         email: (o.email as string) ?? null,

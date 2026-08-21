@@ -476,7 +476,7 @@ test("otp bundles are minted for the users asked", async () => {
   const fm = await connect();
   try {
     const bundle = await fm.managerOtpBundle([1, 2]);
-    assert.equal(bundle.expiresAt, "2026-08-15T18:00:00Z");
+    assert.equal(bundle.expiresAt?.toISOString(), "2026-08-15T18:00:00.000Z");
     assert.equal(bundle.otps.length, 1);
     assert.equal(bundle.otps[0]!.otp, "123456");
   } finally {
