@@ -18,14 +18,14 @@ export type {
 } from "./types.js";
 
 export {
+  Side,
+  OrderType,
+  toSide,
+  toOrderType,
   SESSION_STATE_INIT,
   SESSION_STATE_OPEN,
   SESSION_STATE_PAUSED,
   SESSION_STATE_CLOSED,
-  ORDER_TYPE_LIMIT,
-  ORDER_TYPE_CANCEL,
-  ORDER_SIDE_BUY,
-  ORDER_SIDE_SELL,
   getSecurity,
   holdingUnits,
   priceRound,

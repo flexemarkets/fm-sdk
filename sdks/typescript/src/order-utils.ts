@@ -4,32 +4,30 @@
  * Port of fm.order_utils (Python) / fm.OrderUtils (Java).
  */
 
-import {
-  Order,
-  ORDER_TYPE_CANCEL,
-  ORDER_TYPE_LIMIT,
-  ORDER_SIDE_BUY,
-  ORDER_SIDE_SELL,
-} from "./types.js";
+import { Order, toOrderType, toSide, type Side } from "./types.js";
 
 export function isCancel(order: Order): boolean {
-  return order.type?.toUpperCase() === ORDER_TYPE_CANCEL;
+  return toOrderType(order.type) === "CANCEL";
 }
 
 export function isLimit(order: Order): boolean {
-  return order.type?.toUpperCase() === ORDER_TYPE_LIMIT;
+  return toOrderType(order.type) === "LIMIT";
 }
 
-export function isBuy(side: string): boolean {
-  return side.toUpperCase() === ORDER_SIDE_BUY;
+// These take `string` rather than `Side` on purpose: they are the lenient
+// door. A caller holding a value off the wire, or out of a config file, can
+// ask without narrowing it first -- which is what the old toUpperCase()
+// comparison allowed and what removing it would quietly take away.
+export function isBuy(side: string | null | undefined): boolean {
+  return toSide(side) === "BUY";
 }
 
-export function isSell(side: string): boolean {
-  return side.toUpperCase() === ORDER_SIDE_SELL;
+export function isSell(side: string | null | undefined): boolean {
+  return toSide(side) === "SELL";
 }
 
-export function contra(side: string): string {
-  return isBuy(side) ? ORDER_SIDE_SELL : ORDER_SIDE_BUY;
+export function contra(side: string): Side {
+  return isBuy(side) ? "SELL" : "BUY";
 }
 
 /** Order is resting on the book (consumer is null). */

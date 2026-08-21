@@ -8,6 +8,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { toOrderType, toSide } from "./types.js";
 import type {
   Account,
   Allotment,
@@ -196,8 +197,8 @@ export function parseOrder(data: JsonObject): Order {
     original: (data.original as number) ?? 0,
     supplier: (data.supplier as number) ?? 0,
     consumer: (data.consumer as number | null) ?? null,
-    type: (data.type as string) ?? null,
-    side: (data.side as string) ?? null,
+    type: toOrderType(data.type as string),
+    side: toSide(data.side as string),
     units: (data.units as number) ?? 0,
     price: (data.price as number) ?? 0,
     ownerId: (data.ownerId as number) ?? null,

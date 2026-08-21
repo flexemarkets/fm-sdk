@@ -140,18 +140,66 @@ export interface Session {
   closeDate: string | null;
 }
 
-export const ORDER_TYPE_LIMIT = "LIMIT";
-export const ORDER_TYPE_CANCEL = "CANCEL";
-export const ORDER_SIDE_BUY = "BUY";
-export const ORDER_SIDE_SELL = "SELL";
+/**
+ * Which way an order goes.
+ *
+ * A literal union rather than a TypeScript `enum`: the values stay ordinary
+ * strings, so they serialise with no encoder, compare equal to the wire
+ * spelling, and a caller who was passing `"BUY"` keeps working. A TS `enum`
+ * would be a nominal type and would break every one of those.
+ *
+ * The invalid case still cannot be written -- `"BYU"` is a type error -- which
+ * is what the old `ORDER_SIDE_BUY` constant could only suggest.
+ */
+export type Side = "BUY" | "SELL";
+
+/** The members, for callers who prefer a name to a literal. */
+export const Side = {
+  BUY: "BUY",
+  SELL: "SELL",
+} as const satisfies Record<string, Side>;
+
+/**
+ * What an order is: a bid or offer, or the withdrawal of one.
+ *
+ * There is no `MARKET`. The server's type switch shares its default with
+ * `LIMIT`, so a market order is a limit at the extreme legal price and
+ * `submitMarket` sends `LIMIT`; naming a member the exchange does not have
+ * would suggest otherwise.
+ */
+export type OrderType = "LIMIT" | "CANCEL";
+
+export const OrderType = {
+  LIMIT: "LIMIT",
+  CANCEL: "CANCEL",
+} as const satisfies Record<string, OrderType>;
+
+/**
+ * The side a response names, or null if it names none or one this version does
+ * not know.
+ *
+ * Deliberately lenient, and case-insensitive as the old comparisons were.
+ * Refusing an unrecognised value would cost the caller a whole response -- an
+ * order list, a holdings snapshot -- over one field they may not read.
+ */
+export function toSide(value: string | null | undefined): Side | null {
+  const upper = value?.trim().toUpperCase();
+  return upper === "BUY" || upper === "SELL" ? upper : null;
+}
+
+/** Lenient for the same reason; the server has emitted `"MARKET"`. */
+export function toOrderType(value: string | null | undefined): OrderType | null {
+  const upper = value?.trim().toUpperCase();
+  return upper === "LIMIT" || upper === "CANCEL" ? upper : null;
+}
 
 export interface Order {
   id: number;
   original: number;
   supplier: number;
   consumer: number | null;
-  type: string | null;
-  side: string | null;
+  type: OrderType | null;
+  side: Side | null;
   units: number;
   price: number;
   ownerId: number | null;
