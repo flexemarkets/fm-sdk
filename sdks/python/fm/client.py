@@ -773,10 +773,6 @@ class Flexemarkets:
         data = self._get(url).json()
         return [_parse_account(a) for a in data]
 
-    def account_by_id(self, account_id: int) -> Account:
-        url = _uri_id(self._api_root, "accounts", account_id)
-        return _parse_account(self._get(url).json())  # type: ignore[return-value]
-
     def signup(
         self,
         account_name: str,
@@ -847,10 +843,6 @@ class Flexemarkets:
         url = _uri(self._api_root, "usersJson")
         data = self._get(url).json()
         return [_parse_person(u) for u in data]  # type: ignore[misc]
-
-    def user_by_id(self, user_id: int) -> Person:
-        url = _uri_id(self._api_root, "users", user_id)
-        return _parse_person(self._get(url).json())  # type: ignore[return-value]
 
     def create_user(
         self,
