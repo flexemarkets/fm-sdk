@@ -374,6 +374,27 @@ class AdminApiTest {
         }
     }
 
+    /**
+     * A caller who handles conflicts generally catches this one too.
+     *
+     * <p>The javadoc on {@code AccountNameConflictException} claimed as much
+     * while the class extended {@code FlexemarketsException} directly, so
+     * {@code catch (ConflictException)} let through exactly the conflict the
+     * SDK went to the trouble of describing.
+     */
+    @Test
+    void aTakenAccountNameIsCatchableAsAConflict() throws Exception {
+        conflict = true;
+
+        try (Flexemarkets fm = connect()) {
+            assertThatThrownBy(() -> fm.signup("acme", "owner@new", "s3cret"))
+                    .isInstanceOf(Exceptions.ConflictException.class)
+                    .satisfies(e -> assertThat(((Exceptions.ConflictException) e).failure().suggestedName())
+                            .as("the general handler reads the same suggestion as the specific one")
+                            .isEqualTo("acme-2"));
+        }
+    }
+
     /** Deleting a user who still owns data is refused, and says whose. */
     @Test
     void deletingAUserWhoOwnsDataIsRefused() throws Exception {
