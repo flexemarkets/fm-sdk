@@ -489,6 +489,7 @@ class AdminApiTest {
             public String accountName() { return null; }
             public Types.Person user() { return null; }
             public long userId() { return 0; }
+            public Types.Token token() { return null; }
             public long endpointMarketplaceId() { return 0; }
             public String endpointUrl() { return null; }
             public List<Types.Marketplace> marketplaces() { return List.of(); }
