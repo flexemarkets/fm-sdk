@@ -181,9 +181,25 @@ check-publish-spi:
 # Version management
 # ---------------------------------------------------------------------------
 
+# MAVEN_V exists because the three ecosystems disagree about how to spell "not
+# released yet", and only Maven has a word for it.
+#
+# PEP 440 has no SNAPSHOT: 0.0.13-SNAPSHOT is rejected outright, and hatchling
+# fails the build reading VERSION. Its spelling is 0.0.13.dev0 -- which npm does
+# not reject but silently rewrites to 0.0.1-3.dev0, a different version. The one
+# string all three take verbatim is 0.0.13-dev0, and Maven reads that as an
+# ordinary fixed version rather than a snapshot.
+#
+# So: V is the shared version, and MAVEN_V overrides it for the poms alone when
+# the two must differ. Omit it and everything moves together as before, which is
+# what a real release does -- this is for the window in between.
+#
+#   make set-version V=0.0.13-dev0 MAVEN_V=0.0.13-SNAPSHOT
+MAVEN_V ?= $(V)
+
 set-version:
 ifndef V
-	$(error Usage: make set-version V=x.y.z)
+	$(error Usage: make set-version V=x.y.z [MAVEN_V=x.y.z-SNAPSHOT])
 endif
 	@echo "$(V)" > VERSION
 	@# TypeScript
@@ -191,11 +207,11 @@ endif
 	@# Java (parent + children inherit). fm-spi's own <version> is not touched
 	@# here -- it is a contract on its own line, see set-spi-version. Its parent
 	@# reference is, so it keeps building against this parent.
-	sed -i 's|<version>[^<]*</version><!-- fm-version -->|<version>$(V)</version><!-- fm-version -->|g' \
+	sed -i 's|<version>[^<]*</version><!-- fm-version -->|<version>$(MAVEN_V)</version><!-- fm-version -->|g' \
 		sdks/java/pom.xml sdks/java/fm-sdk/pom.xml sdks/java/fm-spi/pom.xml sdks/java/examples/ticker/pom.xml
 	@# MCP server
 	sed -i 's|^version = ".*"|version = "$(V)"|' mcp-server/pyproject.toml
-	@echo "Version set to $(V)"
+	@echo "Version set to $(V) (Maven: $(MAVEN_V))"
 	@echo "fm-spi stays at $$(make -s spi-version) — use set-spi-version to move it"
 
 # The SPI is a contract, not a client: two interfaces and a version constant,
