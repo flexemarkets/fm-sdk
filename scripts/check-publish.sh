@@ -75,6 +75,10 @@ SPI_VERSION="$(grep -o '<version>[^<]*</version><!-- spi-version -->' \
 
 problems=0
 hints=()
+# Registries that already hold this version. Not necessarily an error: a
+# release that failed part-way leaves some published and some not, and every
+# registry here is append-only, so finishing it is the only way forward.
+done_registries=()
 
 fail() { printf '  \033[31mFAIL\033[0m  %-22s %s\n' "$1" "$2"; problems=$((problems + 1)); }
 pass() { printf '  \033[32m ok \033[0m  %-22s %s\n' "$1" "$2"; }
@@ -258,6 +262,7 @@ check_npm_version() {
     if curl -fsS --max-time 20 "https://registry.npmjs.org/$name" 2>/dev/null \
          | python3 -c "import json,sys;sys.exit(0 if '$VERSION' in json.load(sys.stdin)['versions'] else 1)" 2>/dev/null; then
         fail "npm $VERSION" "already published — a version cannot be replaced"
+        done_registries+=("npm")
     else
         pass "npm $VERSION" "not yet published"
     fi
@@ -267,6 +272,7 @@ check_pypi_version() {
     if curl -fsS --max-time 20 "https://pypi.org/pypi/fm-sdk/json" 2>/dev/null \
          | python3 -c "import json,sys;sys.exit(0 if '$VERSION' in json.load(sys.stdin)['releases'] else 1)" 2>/dev/null; then
         fail "pypi $VERSION" "already published — a version cannot be replaced"
+        done_registries+=("pypi")
     else
         pass "pypi $VERSION" "not yet published"
     fi
@@ -321,6 +327,7 @@ check_java_version() {
              "https://repo1.maven.org/maven2/com/flexemarkets/$name/maven-metadata.xml" 2>/dev/null \
              | grep -q "<version>$want</version>"; then
             fail "central $name $want" "already published — Central is immutable"
+            [[ "$name" == "fm-sdk" ]] && done_registries+=("java")
         else
             pass "central $name $want" "not yet published"
         fi
@@ -368,6 +375,32 @@ wants java && check_java_version
 wants spi  && check_spi_version
 
 echo ""
+
+# A part-way release is a state to finish, not a mistake to puzzle over.
+#
+# 0.1.0 published to npm and PyPI and then failed on the Java build. Re-running
+# `make publish` reported npm as already taken, which reads like the whole
+# release having failed -- and the append-only registries mean the only way
+# forward was the one target still outstanding. Nothing said which.
+if (( ${#done_registries[@]} )) && [[ "$TARGET" == "all" ]]; then
+    remaining=()
+    for t in typescript:npm python:pypi java:java; do
+        target="${t%%:*}"; registry="${t##*:}"
+        grep -qx "$registry" <<< "$(printf '%s\n' "${done_registries[@]}")" \
+            || remaining+=("make publish-$target")
+    done
+    echo "This version is already on: ${done_registries[*]}"
+    if (( ${#remaining[@]} )); then
+        echo "A release stopped part-way. Those uploads cannot be undone or repeated,"
+        echo "so finish the rest rather than starting over:"
+        printf '  %s\n' "${remaining[@]}"
+        echo "Each carries its own gate, so they are safe to run on their own."
+    else
+        echo "Every registry has it. This release is complete."
+    fi
+    echo ""
+fi
+
 if (( problems )); then
     echo "REFUSING: $problems check(s) failed."
     echo ""
