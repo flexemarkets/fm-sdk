@@ -61,8 +61,13 @@ Exceptions: `FlexemarketsException`, `AuthenticationException`,
 `HttpException`, `ConflictException`, `AccountNameConflictException`,
 `PersonHasMarketplaceDataException`, `ApiException`.
 
-`ApiRoot.LinkObject` and `ManagerOtpBundle.Entry` remain nested — they are
-parts of their enclosing type. Reference them as `ApiRoot.LinkObject`.
+`ManagerOtpBundle.Entry` remains nested — it is part of its enclosing type.
+
+Two of those seventeen do **not** become `fm.X`: `ApiRoot` (with its nested
+`LinkObject`) and `Approval` moved to `fm.internal` instead, and the answer is
+to delete the import rather than repoint it. See
+[Types that moved to `fm.internal`](#types-that-moved-to-fminternal) before
+applying the table above to either.
 
 Three event records left the STOMP client, which was never meant to be API:
 
@@ -82,18 +87,27 @@ rename identically.
 
 ### Types that moved to `fm.internal`
 
-Five public types no caller could reach — nothing on `Flexemarkets`, the roles
-or `MarketView` returned or accepted any of them:
+Two public types no caller could reach — nothing on `Flexemarkets`, the roles
+or `MarketView` returns or accepts either:
 
 | type | was |
 |---|---|
 | `ApiRoot`, `ApiRoot.LinkObject` | HAL plumbing, read once at connect |
 | `Approval` | `approveAccount` returns `Account`, not this |
-| `Version` | the WebSocket protocol handshake |
-| `MarketplaceTrades`, `OrderBooks` | aggregators behind `MarketView` |
 
-If you import one, you were reaching past the contract. `MarketView` is the
-supported way to a maintained order book.
+If you import one, you were reaching past the contract.
+
+**`OrderBooks`, `MarketplaceTrades` and `Version` are unchanged.** A draft of
+this guide listed them here; that was wrong and it never shipped that way.
+`new OrderBooks(markets)` is a supported thing to write — `fm-robots` does it
+in four places — and `Version` arrives on your event queue, so you need to be
+able to name it. They are still `fm.OrderBooks`, `fm.MarketplaceTrades` and
+`fm.Version`. No import changes.
+
+`MarketView` remains the easier way to a maintained order book: it keeps the
+books and the trade history for you, and `observe(marketplaceId)` is one call.
+Building the aggregators yourself stays supported for code that wants to drive
+the event queue directly.
 
 ### The implementation is no longer importable
 
@@ -225,6 +239,19 @@ fm.create_market(5, "STK", "Stock", TickGrid(0, 10_000, 1))
 fm.create_market(5, "STK", "Stock", TickGrid(0, 10_000, 1), TickGrid(10, 500, 10))
 ```
 
+### No longer exported from `fm`
+
+| import | do this instead |
+|---|---|
+| `from fm import ApiRoot` | nothing — HAL is private (`fm._hal`) and is going away |
+| `from fm import EventListener` | `listen()` returns a callable that stops it |
+| `from fm import MarketViewHandle` | `fm.observe(marketplace_id)` returns one |
+
+These matched Java, where the same three are unreachable. Nothing in a public
+signature mentions them.
+
+`Version`, `OrderBooks` and `MarketplaceTrades` are still exported.
+
 ---
 
 ## TypeScript
@@ -241,6 +268,17 @@ fm.create_market(5, "STK", "Stock", TickGrid(0, 10_000, 1), TickGrid(10, 500, 10
 
 `Side` and `OrderType` are literal unions with same-named const objects, so
 `"BUY"` and `Side.BUY` are interchangeable.
+
+### No longer exported from the package entry point
+
+| import | do this instead |
+|---|---|
+| `ApiRoot` | nothing — HAL is private (`src/hal.ts`) and is going away |
+| `getLink` | it had no callers in any SDK; `root.links[name]` was always the body |
+| `EventListener` | `listen()` returns a function that stops it |
+| `DefaultMarketView`, `MarketViewHandle` | `fm.observe(marketplaceId)` returns one |
+
+`Version`, `OrderBooks` and `MarketplaceTrades` are still exported.
 
 `createMarket` takes the unit grid it used to hardcode; omit it for the old
 default:
