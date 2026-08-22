@@ -1,0 +1,24 @@
+{
+  "type": "ClientConnection",
+  "why": "sessionId is null when the marketplace has never opened a session, and that is not the same as zero.",
+  "payload": {
+    "marketplaceId": 3050,
+    "connectionId": 991,
+    "ownerId": 7,
+    "established": "2026-08-21T09:05:00",
+    "terminated": null,
+    "description": "fm-ui/4.2.0",
+    "sessionId": null
+  },
+  "expect": {
+    "marketplaceId": 3050,
+    "connectionId": 991,
+    "ownerId": 7,
+    "established": {
+      "epochMilli": 1787303100000
+    },
+    "terminated": null,
+    "description": "fm-ui/4.2.0",
+    "sessionId": null
+  }
+}

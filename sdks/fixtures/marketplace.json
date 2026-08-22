@@ -1,0 +1,34 @@
+{
+  "type": "Marketplace",
+  "why": "Nested markets, which is where a list parser is easiest to get wrong: an absent list must be empty, not null.",
+  "payload": {
+    "id": 3050,
+    "name": "Dev",
+    "description": "developer marketplace",
+    "markets": [
+      {
+        "id": 11,
+        "marketplaceId": 3050,
+        "symbol": "STK",
+        "priceMinimum": 110,
+        "priceMaximum": 199,
+        "priceTick": 25,
+        "unitMinimum": 1,
+        "unitMaximum": 100,
+        "unitTick": 1
+      }
+    ]
+  },
+  "expect": {
+    "id": 3050,
+    "name": "Dev",
+    "description": "developer marketplace",
+    "markets": [
+      {
+        "id": 11,
+        "symbol": "STK",
+        "priceTick": 25
+      }
+    ]
+  }
+}

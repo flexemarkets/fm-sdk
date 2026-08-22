@@ -1,0 +1,23 @@
+{
+  "type": "Account",
+  "why": "approval is a Boolean on the server: null until somebody decides. Python and TypeScript both read it as false -- a suspended account -- until 781b5ee.",
+  "payload": {
+    "id": 6600,
+    "name": "acme",
+    "description": "Acme Trading",
+    "approval": null,
+    "approvalDescription": null,
+    "createdDate": "2026-08-21T08:00:00",
+    "lastModifiedDate": "2026-08-21T08:00:00"
+  },
+  "expect": {
+    "id": 6600,
+    "name": "acme",
+    "description": "Acme Trading",
+    "approval": null,
+    "approvalDescription": null,
+    "createdDate": {
+      "epochMilli": 1787299200000
+    }
+  }
+}

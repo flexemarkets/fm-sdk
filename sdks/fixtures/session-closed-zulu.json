@@ -1,0 +1,22 @@
+{
+  "type": "Session",
+  "why": "The other timestamp shape. Some routes carry an explicit Z; both must land on the same instant.",
+  "payload": {
+    "marketplaceId": 3050,
+    "id": 40,
+    "state": "CLOSED",
+    "openDate": "2026-08-20T09:00:00Z",
+    "closeDate": "2026-08-20T17:30:00Z"
+  },
+  "expect": {
+    "marketplaceId": 3050,
+    "id": 40,
+    "state": "CLOSED",
+    "openDate": {
+      "epochMilli": 1787216400000
+    },
+    "closeDate": {
+      "epochMilli": 1787247000000
+    }
+  }
+}

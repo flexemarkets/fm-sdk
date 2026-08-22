@@ -1,0 +1,33 @@
+{
+  "type": "Person",
+  "why": "Roles is a list of strings and must never be null -- callers ask whether it contains a role.",
+  "payload": {
+    "id": 7,
+    "accountId": 1,
+    "firstName": "Dev",
+    "lastName": "Eloper",
+    "email": "dev@dev",
+    "roles": [
+      "ROLE_USER",
+      "ROLE_MANAGER"
+    ],
+    "accountOwner": true,
+    "createdDate": "2026-01-04T11:00:00",
+    "lastModifiedDate": "2026-08-01T11:00:00"
+  },
+  "expect": {
+    "id": 7,
+    "accountId": 1,
+    "firstName": "Dev",
+    "lastName": "Eloper",
+    "email": "dev@dev",
+    "roles": [
+      "ROLE_USER",
+      "ROLE_MANAGER"
+    ],
+    "accountOwner": true,
+    "createdDate": {
+      "epochMilli": 1767524400000
+    }
+  }
+}

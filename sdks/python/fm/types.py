@@ -30,6 +30,8 @@ class Account:
     owner: Person | None = None
     approval: bool | None = None
     approval_description: str | None = None
+    created_date: "datetime | None" = None
+    last_modified_date: "datetime | None" = None
 
     def is_approved(self) -> bool:
         """Approved, treating "not yet decided" as not approved.
@@ -39,8 +41,6 @@ class Account:
         a pending account and a suspended one for every caller at once.
         """
         return self.approval is True
-    created_date: "datetime | None" = None
-    last_modified_date: "datetime | None" = None
 
 
 @dataclass

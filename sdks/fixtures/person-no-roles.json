@@ -1,0 +1,15 @@
+{
+  "type": "Person",
+  "why": "The server omits roles for a user who has none. An absent list is empty, so has_role can be asked without a null check.",
+  "payload": {
+    "id": 8,
+    "accountId": 1,
+    "email": "new@dev"
+  },
+  "expect": {
+    "id": 8,
+    "accountId": 1,
+    "email": "new@dev",
+    "roles": []
+  }
+}

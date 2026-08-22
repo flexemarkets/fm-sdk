@@ -1,0 +1,18 @@
+{
+  "type": "Order",
+  "why": "A value the SDK does not know parses to null rather than throwing. A server that adds a side should not stop an old client reading the orders it does understand.",
+  "payload": {
+    "id": 8803,
+    "type": "SWAP",
+    "side": "SIDEWAYS",
+    "units": 1,
+    "price": 100
+  },
+  "expect": {
+    "id": 8803,
+    "type": null,
+    "side": null,
+    "units": 1,
+    "price": 100
+  }
+}

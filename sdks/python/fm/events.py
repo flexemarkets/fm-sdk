@@ -207,17 +207,8 @@ def _parse_version(data: Any) -> Version:
 
 
 def _parse_session(data: dict[str, Any]) -> Session:
-    return Session(
-        marketplace_id=data.get("marketplaceId", 0),
-        allocation_id=data.get("allocationId", 0),
-        id=data.get("id", 0),
-        original=data.get("original", 0),
-        state=data.get("state"),
-        name=data.get("name"),
-        description=data.get("description"),
-        open_date=data.get("openDate"),
-        close_date=data.get("closeDate"),
-    )
+    from .client import _parse_session as _client_parse_session
+    return _client_parse_session(data)
 
 
 def _parse_session_list(data: Any) -> list[Session]:

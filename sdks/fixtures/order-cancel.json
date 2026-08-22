@@ -1,0 +1,31 @@
+{
+  "type": "Order",
+  "why": "A cancel carries no side. The field must survive as null rather than defaulting to BUY, which would read as a live buy order.",
+  "payload": {
+    "id": 8802,
+    "original": 8801,
+    "supplier": 8801,
+    "consumer": null,
+    "type": "CANCEL",
+    "side": null,
+    "units": 5,
+    "price": 185,
+    "marketplaceId": 3050,
+    "sessionId": 41,
+    "marketId": 11,
+    "createdDate": "2026-08-21T09:16:00",
+    "lastModifiedDate": "2026-08-21T09:16:00"
+  },
+  "expect": {
+    "id": 8802,
+    "original": 8801,
+    "type": "CANCEL",
+    "side": null,
+    "units": 5,
+    "price": 185,
+    "consumer": null,
+    "createdDate": {
+      "epochMilli": 1787303760000
+    }
+  }
+}

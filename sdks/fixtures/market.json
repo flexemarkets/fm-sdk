@@ -1,0 +1,32 @@
+{
+  "type": "Market",
+  "why": "Both tick grids. Transposing a price bound and a unit bound produces a market that posts cleanly and cannot be traded in.",
+  "payload": {
+    "id": 11,
+    "marketplaceId": 3050,
+    "name": "Stock",
+    "description": "ordinary shares",
+    "symbol": "STK",
+    "privateMarket": false,
+    "priceMinimum": 110,
+    "priceMaximum": 199,
+    "priceTick": 25,
+    "unitMinimum": 1,
+    "unitMaximum": 100,
+    "unitTick": 1
+  },
+  "expect": {
+    "id": 11,
+    "marketplaceId": 3050,
+    "name": "Stock",
+    "description": "ordinary shares",
+    "symbol": "STK",
+    "privateMarket": false,
+    "priceMinimum": 110,
+    "priceMaximum": 199,
+    "priceTick": 25,
+    "unitMinimum": 1,
+    "unitMaximum": 100,
+    "unitTick": 1
+  }
+}

@@ -23,6 +23,12 @@ public record Person(
         id           = Objects.requireNonNullElse(id, 0L);
         accountId    = Objects.requireNonNullElse(accountId, 0L);
         accountOwner = Objects.requireNonNullElse(accountOwner, Boolean.FALSE);
+        // A user with no roles: the server omits the field rather than sending
+        // []. The other three defaults were here and this one was not, so
+        // `for (var r : person.roles())` threw where Python and TypeScript
+        // iterated an empty list. Identity.hasRole guards against the null,
+        // which is a use site defending what construction should have settled.
+        roles        = Objects.requireNonNullElse(roles, new String[0]);
     }
 
     /**

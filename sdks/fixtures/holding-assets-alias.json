@@ -1,0 +1,58 @@
+{
+  "type": "Holding",
+  "why": "Positions arrive as `securities` on one route and `assets` on another, and short units as `shortUnits` or `initialShortUnits`. Out of market order on purpose: a holding sorts them.",
+  "payload": {
+    "marketplaceId": 3050,
+    "sessionId": 41,
+    "allocationId": 12,
+    "ownerId": 7,
+    "name": "dev",
+    "cash": 500000,
+    "availableCash": 412000,
+    "assets": [
+      {
+        "marketId": 22,
+        "units": 3,
+        "availableUnits": 3,
+        "initialShortUnits": 0,
+        "canBuy": true,
+        "canSell": true
+      },
+      {
+        "marketId": 11,
+        "units": 10,
+        "availableUnits": 8,
+        "initialShortUnits": 5,
+        "canBuy": true,
+        "canSell": false
+      }
+    ]
+  },
+  "expect": {
+    "marketplaceId": 3050,
+    "sessionId": 41,
+    "allocationId": 12,
+    "ownerId": 7,
+    "name": "dev",
+    "cash": 500000,
+    "availableCash": 412000,
+    "securities": [
+      {
+        "marketId": 11,
+        "units": 10,
+        "availableUnits": 8,
+        "shortUnits": 5,
+        "canBuy": true,
+        "canSell": false
+      },
+      {
+        "marketId": 22,
+        "units": 3,
+        "availableUnits": 3,
+        "shortUnits": 0,
+        "canBuy": true,
+        "canSell": true
+      }
+    ]
+  }
+}

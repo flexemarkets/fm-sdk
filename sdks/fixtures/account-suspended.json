@@ -1,0 +1,16 @@
+{
+  "type": "Account",
+  "why": "The state that pending was being confused with. These two fixtures are only meaningful as a pair.",
+  "payload": {
+    "id": 6601,
+    "name": "wile-e",
+    "approval": false,
+    "approvalDescription": "payment reversed"
+  },
+  "expect": {
+    "id": 6601,
+    "name": "wile-e",
+    "approval": false,
+    "approvalDescription": "payment reversed"
+  }
+}

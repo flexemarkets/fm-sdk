@@ -1,0 +1,46 @@
+{
+  "type": "Order",
+  "why": "The ordinary case, with the timestamps fm-server actually sends: a LocalDateTime serialises with no zone and means UTC. Reading it as local time is off by the offset and correct on a UTC machine, which is the worst way for a bug to behave.",
+  "payload": {
+    "id": 8801,
+    "original": 8801,
+    "supplier": 8801,
+    "consumer": null,
+    "type": "LIMIT",
+    "side": "BUY",
+    "units": 5,
+    "price": 185,
+    "ownerId": 7,
+    "marketplaceId": 3050,
+    "sessionId": 41,
+    "symbol": "STK",
+    "marketId": 11,
+    "ownerTarget": null,
+    "clientDescription": "taker/1.4",
+    "createdDate": "2026-08-21T09:15:00",
+    "lastModifiedDate": "2026-08-21T09:15:30"
+  },
+  "expect": {
+    "id": 8801,
+    "original": 8801,
+    "supplier": 8801,
+    "consumer": null,
+    "type": "LIMIT",
+    "side": "BUY",
+    "units": 5,
+    "price": 185,
+    "ownerId": 7,
+    "marketplaceId": 3050,
+    "sessionId": 41,
+    "symbol": "STK",
+    "marketId": 11,
+    "ownerTarget": null,
+    "clientDescription": "taker/1.4",
+    "createdDate": {
+      "epochMilli": 1787303700000
+    },
+    "lastModifiedDate": {
+      "epochMilli": 1787303730000
+    }
+  }
+}

@@ -203,7 +203,7 @@ function parseVersion(data: unknown): Version {
   return { version: typeof data === "number" ? data : 0 };
 }
 
-function parseSession(data: Record<string, unknown>): Session {
+export function parseSession(data: Record<string, unknown>): Session {
   return {
     marketplaceId: (data.marketplaceId as number) ?? 0,
     allocationId: (data.allocationId as number) ?? 0,

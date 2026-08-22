@@ -129,7 +129,7 @@ export class PersonHasMarketplaceDataError extends ConflictError {
 
 type JsonObject = Record<string, unknown>;
 
-function parsePerson(data: JsonObject | null | undefined): Person | null {
+export function parsePerson(data: JsonObject | null | undefined): Person | null {
   if (!data) return null;
   return {
     id: (data.id as number) ?? 0,
@@ -158,7 +158,7 @@ export function parseAccount(data: JsonObject | null | undefined): Account | nul
   };
 }
 
-function parseToken(data: JsonObject): Token {
+export function parseToken(data: JsonObject): Token {
   return {
     requestUrl: (data.requestUrl as string) ?? null,
     person: parsePerson(data.person as JsonObject),
@@ -167,7 +167,7 @@ function parseToken(data: JsonObject): Token {
   };
 }
 
-function parseSecurity(data: JsonObject): Security {
+export function parseSecurity(data: JsonObject): Security {
   return {
     marketId: (data.marketId as number) ?? 0,
     units: (data.units as number) ?? 0,
@@ -179,7 +179,7 @@ function parseSecurity(data: JsonObject): Security {
   };
 }
 
-function parseMarket(data: JsonObject): Market {
+export function parseMarket(data: JsonObject): Market {
   return {
     id: (data.id as number) ?? 0,
     marketplaceId: (data.marketplaceId as number) ?? 0,
@@ -196,7 +196,7 @@ function parseMarket(data: JsonObject): Market {
   };
 }
 
-function parseMarketplace(data: JsonObject): Marketplace {
+export function parseMarketplace(data: JsonObject): Marketplace {
   return {
     id: (data.id as number) ?? 0,
     name: (data.name as string) ?? null,
@@ -205,7 +205,7 @@ function parseMarketplace(data: JsonObject): Marketplace {
   };
 }
 
-function parseSession(data: JsonObject): Session {
+export function parseSession(data: JsonObject): Session {
   return {
     marketplaceId: (data.marketplaceId as number) ?? 0,
     allocationId: (data.allocationId as number) ?? 0,
@@ -329,7 +329,7 @@ export function parseHolding(data: JsonObject): Holding {
   };
 }
 
-function parseConnection(data: JsonObject): ClientConnection {
+export function parseConnection(data: JsonObject): ClientConnection {
   return {
     marketplaceId: (data.marketplaceId as number) ?? 0,
     connectionId: (data.id as number) ?? (data.connectionId as number) ?? 0,

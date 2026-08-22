@@ -87,7 +87,11 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     // Jackson 3 mappers are immutable and built, not configured after the fact.
     // java.time support is in databind now, so there is no module to register.
-    private static final ObjectMapper MAPPER = JsonMapper.builder()
+    //
+    // Package-private rather than private so WireFixturesTest reads the wire
+    // with the mapper the SDK actually uses. A test that builds its own
+    // lookalike passes while the real one is misconfigured.
+    static final ObjectMapper MAPPER = JsonMapper.builder()
         .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
         .build();
 

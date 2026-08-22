@@ -1,0 +1,17 @@
+{
+  "type": "Order",
+  "why": "consumer > 0 means consumed, 0 means split, null means available -- three states in one number, so the zero must not collapse to null.",
+  "payload": {
+    "id": 8804,
+    "consumer": 0,
+    "type": "LIMIT",
+    "side": "SELL",
+    "units": 2,
+    "price": 110
+  },
+  "expect": {
+    "id": 8804,
+    "consumer": 0,
+    "side": "SELL"
+  }
+}

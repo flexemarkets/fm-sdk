@@ -1,0 +1,28 @@
+{
+  "type": "Session",
+  "why": "Timestamps again, on the type that has two parsers: fm-server sends sessions over REST and over the WebSocket, and both paths must produce the same Session.",
+  "payload": {
+    "marketplaceId": 3050,
+    "allocationId": 12,
+    "id": 41,
+    "original": 41,
+    "state": "OPEN",
+    "name": "Round 3",
+    "description": "third trading round",
+    "openDate": "2026-08-21T09:00:00",
+    "closeDate": null
+  },
+  "expect": {
+    "marketplaceId": 3050,
+    "allocationId": 12,
+    "id": 41,
+    "original": 41,
+    "state": "OPEN",
+    "name": "Round 3",
+    "description": "third trading round",
+    "openDate": {
+      "epochMilli": 1787302800000
+    },
+    "closeDate": null
+  }
+}
