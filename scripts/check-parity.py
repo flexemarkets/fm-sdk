@@ -342,6 +342,81 @@ def typescript_methods(path: Path) -> dict[str, int]:
     return names
 
 
+# --- failure types ----------------------------------------------------------
+#
+# What a caller can catch. Java mapped two statuses to types and let the rest
+# fall through to HttpException, while Python and TypeScript mapped four -- so
+# `catch (AuthorizationError)` was expressible in two SDKs and not the third,
+# and neither the field check nor the method check could see it: an exception
+# is thrown, never returned, so it appears in no signature.
+
+FAILURE_EXEMPTIONS: dict[str, str] = {}
+
+
+def _failure_concept(name: str) -> str:
+    """The concept behind a type name, with the language's suffix removed.
+
+    Java spells them Exception and Python and TypeScript spell them Error.
+    That much is idiom and not worth flagging; what matters is whether the
+    same set of things can be caught in each.
+    """
+    for suffix in ("Exception", "Error"):
+        if name.endswith(suffix) and name != suffix:
+            return name[: -len(suffix)]
+    return name
+
+
+def java_failures(directory: Path) -> set[str]:
+    """Thrown types: classes, not records.
+
+    WsException is a record delivered on the event queue and never thrown, so
+    the file name alone is not enough to go on -- which is the naming problem
+    this check exists beside.
+    """
+    concepts = set()
+    for path in sorted(directory.rglob("*.java")):
+        source = re.sub(r"/\*.*?\*/", " ", path.read_text(), flags=re.S)
+        if re.search(r"^public (?:final |sealed |abstract )?class \w+", source, re.M):
+            if re.search(r"extends \w*(Exception|Error|RuntimeException)", source):
+                concepts.add(_failure_concept(path.stem))
+    return concepts
+
+
+def python_failures(path: Path) -> set[str]:
+    return {_failure_concept(m) for m in re.findall(r"^class (\w+)\(", path.read_text(), re.M)}
+
+
+def typescript_failures(path: Path) -> set[str]:
+    return {_failure_concept(m) for m in
+            re.findall(r"^export class (\w+) extends \w*(?:Error)\b", path.read_text(), re.M)}
+
+
+def check_failures(verbose: bool) -> list[str]:
+    java = java_failures(JAVA)
+    python = python_failures(PYTHON.parent / "exceptions.py")
+    typescript = typescript_failures(TYPESCRIPT.parent / "client.ts")
+
+    if not (java and python and typescript):
+        return ["failure parity: a parser found nothing; it is broken, not the SDKs"]
+
+    problems = []
+    for concept in sorted(java | python | typescript):
+        if concept in FAILURE_EXEMPTIONS:
+            continue
+        missing = [lang for lang, names in (("java", java), ("python", python),
+                                            ("typescript", typescript)) if concept not in names]
+        if missing:
+            present = [lang for lang, names in (("java", java), ("python", python),
+                                                ("typescript", typescript)) if concept in names]
+            problems.append(
+                f"{concept} is catchable in {', '.join(present)} but not in {', '.join(missing)}")
+
+    if verbose:
+        print(f"  failure types:  java {len(java)}, python {len(python)}, "
+              f"typescript {len(typescript)}")
+    return problems
+
+
 def check_methods(verbose: bool) -> list[str]:
     java = java_methods(JAVA)
     python = python_methods(PYTHON.parent / "client.py")
@@ -477,8 +552,22 @@ def main() -> int:
         )
         return 1
 
+    failure_problems = check_failures(verbose)
+    if failure_problems:
+        print(f"\nparity: the SDKs disagree about {len(failure_problems)} failure type(s):\n",
+              file=sys.stderr)
+        for problem in failure_problems:
+            print(f"  - {problem}", file=sys.stderr)
+        print(
+            "\nA failure a caller can catch in one SDK and not another is a caller writing "
+            "different code for the same server response. If a difference is intended, record "
+            "it in FAILURE_EXEMPTIONS with the reason.",
+            file=sys.stderr,
+        )
+        return 1
+
     print(f"parity ok: {len(shared)} shared types agree on their wire fields, "
-          f"and the three method surfaces agree")
+          f"the three method surfaces agree, and the same failures are catchable in each")
     return 0
 
 

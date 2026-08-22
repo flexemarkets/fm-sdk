@@ -36,7 +36,9 @@ from .exceptions import (
     AuthenticationError,
     AuthorizationError,
     ConfigurationError,
+    HttpError,
     ConflictError,
+    ApiError,
     ConnectionFailedError,
     FlexemarketsError,
     InvalidArgumentError,
@@ -374,7 +376,7 @@ def _process_template(href: str) -> str:
 def _uri(root: ApiRoot, link_name: str) -> str:
     href = root.get_link(link_name)
     if href is None:
-        raise ValueError(f"Link '{link_name}' not found in API root.")
+        raise ApiError(f"Link '{link_name}' not found in API root.")
     return _process_template(href)
 
 
@@ -530,7 +532,9 @@ def _check_response(response: httpx.Response) -> None:
         raise ConflictError(response.text)
     if status >= 500:
         raise ConnectionFailedError(response.text)
-    response.raise_for_status()
+    # Anything else, typed rather than left to httpx: a caller catching
+    # FlexemarketsError should not have httpx.HTTPStatusError escape past it.
+    raise HttpError(status, response.text)
 
 
 def _check_conflict_account(response: httpx.Response, account_name: str) -> None:

@@ -43,6 +43,30 @@ class PersonHasMarketplaceDataError(ConflictError):
     """
 
 
+class HttpError(FlexemarketsError):
+    """A response the SDK has no better name for, carrying its status and body.
+
+    The fallback. A status with a meaning worth acting on gets its own type --
+    :class:`AuthenticationError`, :class:`ConflictError` -- and this is what is
+    left, so a caller can read the status rather than parse a message.
+    """
+
+    def __init__(self, status_code: int, body: str):
+        super().__init__(f"HTTP {status_code}: {body}")
+        self.status_code = status_code
+        self.body = body
+
+
+class ApiError(FlexemarketsError):
+    """The call could not be completed: the transport failed, or the response
+    was not something the SDK could read.
+
+    Distinct from :class:`HttpError`, which means the server answered and the
+    answer was an error. This means there was no usable answer at all -- a
+    malformed body, or a link the API root does not carry.
+    """
+
+
 class ConnectionFailedError(FlexemarketsError):
     """Raised on 5xx server errors."""
 

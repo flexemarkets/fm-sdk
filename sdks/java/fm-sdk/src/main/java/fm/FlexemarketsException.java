@@ -12,7 +12,9 @@ package fm;
  * <p>Was a nested class inside a holder called Exceptions until 0.1.0.
  */
 public sealed class FlexemarketsException extends RuntimeException
-    permits AuthenticationException, HttpException, ConflictException, ApiException {
+    permits AuthenticationException, AuthorizationException, InvalidArgumentException,
+            ConnectionFailedException, ConfigurationException,
+            HttpException, ConflictException, ApiException {
 
     protected FlexemarketsException(String message) {
         super(message);

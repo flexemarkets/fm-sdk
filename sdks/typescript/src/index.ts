@@ -48,6 +48,8 @@ export {
   ConnectionFailedError,
   ConfigurationError,
   ConflictError,
+  HttpError,
+  ApiError,
   AccountNameConflictError,
   PersonHasMarketplaceDataError,
 } from "./client.js";

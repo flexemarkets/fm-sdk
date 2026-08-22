@@ -6,12 +6,14 @@ from .events import EventListener, NO_SEQ, OrdersUpdate, WsException, WsTranspor
 from .snapshot import Snapshot
 from .exceptions import (
     AccountNameConflictError,
+    ApiError,
     AuthenticationError,
     AuthorizationError,
     ConfigurationError,
     ConflictError,
     ConnectionFailedError,
     FlexemarketsError,
+    HttpError,
     InvalidArgumentError,
     PersonHasMarketplaceDataError,
 )
@@ -82,6 +84,8 @@ __all__ = [
     "AuthorizationError",
     "InvalidArgumentError",
     "AccountNameConflictError",
+    "ApiError",
+    "HttpError",
     "PersonHasMarketplaceDataError",
     "ConflictError",
     "ConnectionFailedError",

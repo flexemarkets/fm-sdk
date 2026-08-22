@@ -62,6 +62,32 @@ export class InvalidArgumentError extends FlexemarketsError {}
 export class ConnectionFailedError extends FlexemarketsError {}
 export class ConfigurationError extends FlexemarketsError {}
 
+/**
+ * A response the SDK has no better name for, carrying its status and body.
+ *
+ * The fallback. A status with a meaning worth acting on gets its own type —
+ * {@link AuthenticationError}, {@link ConflictError} — and this is what is
+ * left, so a caller can read the status rather than parse a message.
+ */
+export class HttpError extends FlexemarketsError {
+  constructor(
+    readonly statusCode: number,
+    readonly body: string,
+  ) {
+    super(`HTTP ${statusCode}: ${body}`);
+  }
+}
+
+/**
+ * The call could not be completed: the transport failed, or the response was
+ * not something the SDK could read.
+ *
+ * Distinct from {@link HttpError}, which means the server answered and the
+ * answer was an error. This means there was no usable answer at all — a
+ * malformed body, or a link the API root does not carry.
+ */
+export class ApiError extends FlexemarketsError {}
+
 /** A 409. The Java and Python SDKs have raised this since the admin surface landed. */
 export class ConflictError extends FlexemarketsError {}
 
@@ -438,7 +464,7 @@ function processTemplate(href: string): string {
 
 function uri(root: ApiRoot, linkName: string): string {
   const href = root.links[linkName];
-  if (href === undefined) throw new Error(`Link '${linkName}' not found in API root.`);
+  if (href === undefined) throw new ApiError(`Link '${linkName}' not found in API root.`);
   return processTemplate(href);
 }
 
@@ -570,7 +596,7 @@ function checkResponse(response: Response, body: string): void {
   if (status === 403) throw new AuthorizationError(body);
   if (status === 409) throw new ConflictError(body);
   if (status >= 500) throw new ConnectionFailedError(body);
-  throw new FlexemarketsError(`HTTP ${status}: ${body}`);
+  throw new HttpError(status, body);
 }
 
 /** The server's proposed alternative name, when a 409 body carries one. */

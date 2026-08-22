@@ -6,6 +6,10 @@ import fm.Allotment;
 import fm.ApiException;
 import fm.Assets;
 import fm.AuthenticationException;
+import fm.AuthorizationException;
+import fm.ConfigurationException;
+import fm.ConnectionFailedException;
+import fm.InvalidArgumentException;
 import fm.ClientConnection;
 import fm.ConflictException;
 import fm.ConflictFailure;
@@ -1012,10 +1016,7 @@ public class HttpFlexemarkets implements Flexemarkets {
                         .orElse(Snapshot.NO_SEQ);
                 return new Snapshot<>(body, asOfSeq);
             }
-            if (statusCode == 401) {
-                throw new AuthenticationException("Authentication failed: " + response.body());
-            }
-            throw new HttpException(statusCode, response.body());
+            throw failureFor(statusCode, response.body());
         } catch (FlexemarketsException e) {
             throw e;
         } catch (IOException e) {
@@ -1083,10 +1084,7 @@ public class HttpFlexemarkets implements Flexemarkets {
             if (statusCode >= 200 && statusCode < 300) {
                 return response.body();
             }
-            if (statusCode == 401) {
-                throw new AuthenticationException("Authentication failed: " + response.body());
-            }
-            throw new HttpException(statusCode, response.body());
+            throw failureFor(statusCode, response.body());
         } catch (FlexemarketsException e) {
             throw e;
         } catch (IOException e) {
@@ -1139,16 +1137,7 @@ public class HttpFlexemarkets implements Flexemarkets {
                 return MAPPER.readValue(response.body(), type);
             }
 
-            if (statusCode == 401) {
-                throw new AuthenticationException("Authentication failed: " + response.body());
-            }
-
-            if (statusCode == 409) {
-                var failure = tryParseConflict(response.body());
-                throw new ConflictException("Conflict: " + response.body(), failure);
-            }
-
-            throw new HttpException(statusCode, response.body());
+            throw failureFor(statusCode, response.body());
         } catch (FlexemarketsException e) {
             throw e;
         } catch (JacksonException e) {
@@ -1183,16 +1172,7 @@ public class HttpFlexemarkets implements Flexemarkets {
                 return;
             }
 
-            if (statusCode == 401) {
-                throw new AuthenticationException("Authentication failed: " + response.body());
-            }
-
-            if (statusCode == 409) {
-                var failure = tryParseConflict(response.body());
-                throw new ConflictException("Conflict: " + response.body(), failure);
-            }
-
-            throw new HttpException(statusCode, response.body());
+            throw failureFor(statusCode, response.body());
         } catch (FlexemarketsException e) {
             throw e;
         } catch (IOException e) {
@@ -1252,11 +1232,8 @@ public class HttpFlexemarkets implements Flexemarkets {
 
         try {
             var response = exchange(request);
-            if (response.statusCode() == 401) {
-                throw new AuthenticationException("Authentication failed.");
-            }
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new HttpException(response.statusCode(), response.body());
+                throw failureFor(response.statusCode(), response.body());
             }
             return MAPPER.readValue(response.body(), TOKEN_TYPE);
         } catch (FlexemarketsException e) {
@@ -1435,6 +1412,30 @@ public class HttpFlexemarkets implements Flexemarkets {
         if (endpoint == null) throw new NullPointerException("Endpoint is null.");
         var segments = endpoint.split("/");
         return Long.parseLong(segments[segments.length - 1]);
+    }
+
+
+    /**
+     * The exception a non-2xx response deserves.
+     *
+     * <p>One place, because this mapping was written out four times and the
+     * copies had drifted: two of them handled 409 and two did not, so whether a
+     * conflict arrived as ConflictException or as a bare HttpException
+     * depended on which method you called.
+     *
+     * <p>A status with a meaning a caller can act on gets its own type. What is
+     * left is HttpException, carrying the status so a caller can still ask.
+     */
+    private static FlexemarketsException failureFor(int statusCode, String body) {
+        return switch (statusCode) {
+            case 400 -> new InvalidArgumentException("Invalid request: " + body);
+            case 401 -> new AuthenticationException("Authentication failed: " + body);
+            case 403 -> new AuthorizationException("Not permitted: " + body);
+            case 409 -> new ConflictException("Conflict: " + body, tryParseConflict(body));
+            default -> statusCode >= 500
+                    ? new ConnectionFailedException("Server error " + statusCode + ": " + body)
+                    : new HttpException(statusCode, body);
+        };
     }
 
     private static ConflictFailure tryParseConflict(String body) {

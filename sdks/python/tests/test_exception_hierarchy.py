@@ -18,6 +18,7 @@ import pytest
 from fm.client import _check_response
 from fm.exceptions import (
     AccountNameConflictError,
+    HttpError,
     ConflictError,
     FlexemarketsError,
     PersonHasMarketplaceDataError,
@@ -48,9 +49,19 @@ def test_a_plain_409_raises_a_conflict_rather_than_httpx_s_own_error() -> None:
         _check_response(response)
 
 
-def test_a_404_still_falls_through_to_httpx() -> None:
-    """Only 409 is claimed here; nothing else changed shape."""
+def test_any_other_status_is_a_typed_http_error() -> None:
+    """Nothing escapes the family.
+
+    A 404 used to fall through to ``response.raise_for_status()`` and surface as
+    ``httpx.HTTPStatusError`` -- so a caller catching ``FlexemarketsError``, the
+    documented way to catch everything this SDK raises, had httpx's own
+    exception go past them. Java has always had HttpException for this.
+    """
     response = httpx.Response(404, text="Not found", request=httpx.Request("GET", "http://x/api"))
 
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(HttpError) as caught:
         _check_response(response)
+
+    assert caught.value.status_code == 404
+    assert caught.value.body == "Not found"
+    assert isinstance(caught.value, FlexemarketsError)
