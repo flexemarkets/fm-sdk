@@ -80,6 +80,7 @@ export { Trades, MarketplaceTrades } from "./trades.js";
 export type {
   StompFrame,
   StreamDropped,
+  Reconnected,
   FrameUnreadable,
   FmEvent,
   EventCallback,

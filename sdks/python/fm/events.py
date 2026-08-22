@@ -112,6 +112,21 @@ class FrameUnreadable:
     exception: BaseException
 
 
+@dataclass
+class Reconnected:
+    """The stream is back.
+
+    Put on the queue once the transport has re-established itself after a
+    :class:`StreamDropped`. A consumer's state is stale until it reseeds:
+    whatever happened while the socket was down was not delivered.
+
+    Carries the marketplace because one client can hold several
+    subscriptions, and "we are back" does not say which view to reseed.
+    """
+
+    marketplace_id: int
+
+
 # Sentinel for "no seq header" — see OrdersUpdate.seq docstring.
 NO_SEQ = -1
 
@@ -257,6 +272,7 @@ class EventListener:
         self._thread: threading.Thread | None = None
         self._closed = False
         self._subscription_counter = 0
+        self._reconnecting = threading.Lock()
 
     # -- public API --------------------------------------------------------
 
@@ -272,6 +288,35 @@ class EventListener:
             daemon=True,
         )
         self._thread.start()
+
+    def _on_stream_dropped(self, exc: BaseException) -> None:
+        """React to a dropped stream by restoring it, off the receive thread.
+
+        The receive loop is dead by the time this runs and reconnect() sleeps
+        between attempts, so the work goes to its own thread. On success a
+        :class:`Reconnected` goes onto the queue so consumers know their state
+        needs reseeding -- matching Java, where the subscription has always
+        restored itself rather than leaving the caller to notice.
+
+        The lock is what makes a burst of errors from a dying socket one
+        outage instead of five reconnects; Java uses compareAndSet on a flag
+        for the same reason.
+        """
+        if self._closed:
+            return
+        self._queue.put(StreamDropped(exception=exc))
+        if not self._reconnecting.acquire(blocking=False):
+            return
+
+        def _restore() -> None:
+            try:
+                self.reconnect()
+                if not self._closed:
+                    self._queue.put(Reconnected(marketplace_id=self._marketplace_id))
+            finally:
+                self._reconnecting.release()
+
+        threading.Thread(target=_restore, name="fm-ws-reconnect", daemon=True).start()
 
     def reconnect(self) -> None:
         """Reconnect after a transport error.  Blocks until connected."""
@@ -398,5 +443,4 @@ class EventListener:
                 # Ignore RECEIPT, CONNECTED, heartbeats, etc.
 
         except Exception as exc:
-            if not self._closed:
-                self._queue.put(StreamDropped(exception=exc))
+            self._on_stream_dropped(exc)

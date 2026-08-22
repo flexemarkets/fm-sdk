@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Callable, Optional
 
 log = logging.getLogger(__name__)
 
-from .events import NO_SEQ, OrdersUpdate, FrameUnreadable, StreamDropped
+from .events import NO_SEQ, OrdersUpdate, FrameUnreadable, Reconnected, StreamDropped
 from .orderbook import OrderBook, OrderBooks
 from .trades import MarketplaceTrades
 from .types import Holding, Market, Order, Session
@@ -314,7 +314,16 @@ class MarketView:
                 continue
 
             if isinstance(event, StreamDropped):
-                self._handle_transport_error()
+                # The subscription restores itself; nothing to do but say so.
+                log.warning(
+                    "WS transport error on marketplace %d: %s",
+                    self.marketplace_id,
+                    event.exception,
+                )
+                continue
+
+            if isinstance(event, Reconnected):
+                self._reseed_after_reconnect()
                 continue
 
             if isinstance(event, FrameUnreadable):
@@ -387,23 +396,21 @@ class MarketView:
         if event.seq != NO_SEQ:
             self._last_applied_seq = event.seq
 
-    def _handle_transport_error(self) -> None:
-        """Phase 2c auto-reconnect. On a :class:`StreamDropped`,
-        reconnect the underlying WS and re-seed from the V1 snapshot
-        — reconnect is just the largest possible gap, so 2b's
-        :meth:`_seed_from_snapshot` (clear + REST snapshot + reapply
-        + seq watermark) handles state convergence. One reconnect
-        attempt; if it fails the view is left stale and the
-        dispatcher continues; caller's next access sees the
-        last-applied state. More sophisticated backoff/retry can
-        layer on later.
+    def _reseed_after_reconnect(self) -> None:
+        """Re-seed once the transport is back.
+
+        Reconnecting is not this layer's job -- :class:`~fm.events.Reconnected`
+        only arrives because the listener already restored the subscription.
+        Reseeding is: a reconnect is the largest possible sequence gap, so
+        :meth:`_seed_from_snapshot` (clear + REST snapshot + reapply + seq
+        watermark) is what converges the state, exactly as it does for a small
+        one.
+
+        If the reseed fails the view is left stale and the dispatcher
+        continues; the caller's next access sees the last-applied state, and
+        the ReconnectEvent says so.
         """
-        log.warning(
-            "WS transport error on marketplace %d; reconnecting",
-            self.marketplace_id,
-        )
         try:
-            self._events.reconnect()
             self._seed_from_snapshot()
             outcome = ReconnectEvent(
                 marketplace_id=self.marketplace_id, success=True, reason=None

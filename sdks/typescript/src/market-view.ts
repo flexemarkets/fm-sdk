@@ -13,7 +13,7 @@
 import type { Flexemarkets } from "./client.js";
 import { OrderBook, OrderBooks } from "./orderbook.js";
 import { MarketplaceTrades } from "./trades.js";
-import { NO_SEQ, type EventListener, type FmEvent, type OrdersUpdate, type FrameUnreadable, type StreamDropped } from "./stomp.js";
+import { NO_SEQ, type EventListener, type FmEvent, type OrdersUpdate, type FrameUnreadable, type Reconnected, type StreamDropped } from "./stomp.js";
 import type { Holding, Market, Order, Session } from "./types.js";
 
 /**
@@ -349,11 +349,18 @@ export class DefaultMarketView implements MarketView {
       for (const h of this._holdingHandlers) h(event);
       return;
     }
-    if (_isTransportError(event)) {
-      this._handleTransportError();
+    if (_isStreamDropped(event)) {
+      // The subscription restores itself; nothing to do but say so.
+      console.warn(
+        `[MarketView] WS transport error on marketplace ${this.marketplaceId}: ${event.exception.message}`,
+      );
       return;
     }
-    if (_isWsException(event)) {
+    if (_isReconnected(event)) {
+      this._reseedAfterReconnect();
+      return;
+    }
+    if (_isFrameUnreadable(event)) {
       // STOMP ERROR / parse failure. Logged for visibility;
       // reconnecting won't help with a malformed frame, so we leave
       // the view as-is.
@@ -366,24 +373,22 @@ export class DefaultMarketView implements MarketView {
   }
 
   /**
-   * Phase 2c auto-reconnect. On a StreamDropped, reconnect the
-   * underlying WS and re-seed from the V1 snapshot — reconnect is
-   * just the largest possible gap, so 2b's _seedFromSnapshot()
-   * (clear + REST snapshot + reapply + seq watermark) handles state
-   * convergence. One reconnect attempt; if it fails the view is left
+   * Re-seed once the transport is back.
+   *
+   * Reconnecting is not this layer's job -- a `Reconnected` only arrives
+   * because the listener already restored the subscription. Reseeding is: a
+   * reconnect is the largest possible sequence gap, so _seedFromSnapshot()
+   * (clear + REST snapshot + reapply + seq watermark) is what converges the
+   * state, exactly as it does for a small one. If it fails the view is left
    * stale until the caller close()s and observe()s again.
    */
-  private _handleTransportError(): void {
+  private _reseedAfterReconnect(): void {
     if (this._resyncInFlight) return; // already handling
-    console.warn(
-      `[MarketView] WS transport error on marketplace ${this.marketplaceId}; reconnecting`,
-    );
     this._resyncInFlight = true;
     this._seedComplete = false;
     void (async () => {
       let outcome: ReconnectEvent;
       try {
-        if (this._events !== null) await this._events.reconnect();
         await this._seedFromSnapshot();
         outcome = { marketplaceId: this.marketplaceId, success: true, reason: null };
       } catch (err) {
@@ -452,12 +457,16 @@ function _isHolding(event: FmEvent): event is Holding {
   return typeof event === "object" && event !== null && "securities" in event;
 }
 
-function _isTransportError(event: FmEvent): event is StreamDropped {
-  return typeof event === "object" && event !== null && (event as StreamDropped).kind === "transport-error";
+function _isStreamDropped(event: FmEvent): event is StreamDropped {
+  return typeof event === "object" && event !== null && (event as StreamDropped).kind === "stream-dropped";
 }
 
-function _isWsException(event: FmEvent): event is FrameUnreadable {
-  return typeof event === "object" && event !== null && (event as FrameUnreadable).kind === "ws-exception";
+function _isReconnected(event: FmEvent): event is Reconnected {
+  return typeof event === "object" && event !== null && (event as Reconnected).kind === "reconnected";
+}
+
+function _isFrameUnreadable(event: FmEvent): event is FrameUnreadable {
+  return typeof event === "object" && event !== null && (event as FrameUnreadable).kind === "frame-unreadable";
 }
 
 /**

@@ -86,12 +86,27 @@ export function decodeFrame(raw: string): StompFrame {
 // ---------------------------------------------------------------------------
 
 export interface StreamDropped {
-  kind: "transport-error";
+  kind: "stream-dropped";
   exception: Error;
 }
 
+/**
+ * The stream is back.
+ *
+ * Delivered once the transport has re-established itself after a
+ * `StreamDropped`. A consumer's state is stale until it reseeds: whatever
+ * happened while the socket was down was not delivered.
+ *
+ * Carries the marketplace because one client can hold several subscriptions,
+ * and "we are back" does not say which view to reseed.
+ */
+export interface Reconnected {
+  kind: "reconnected";
+  marketplaceId: number;
+}
+
 export interface FrameUnreadable {
-  kind: "ws-exception";
+  kind: "frame-unreadable";
   command: string;
   headers: Record<string, string>;
   body: string;
@@ -125,6 +140,7 @@ export type FmEvent =
   | Holding
   | OrdersUpdate
   | StreamDropped
+  | Reconnected
   | FrameUnreadable;
 
 export type EventCallback = (event: FmEvent) => void;
@@ -234,6 +250,7 @@ export class EventListener {
   private _ws: WebSocket | null = null;
   private _closed = false;
   private _subscriptionCounter = 0;
+  private _reconnecting = false;
 
   constructor(
     wsUrl: string,
@@ -282,6 +299,34 @@ export class EventListener {
         }
       });
     });
+  }
+
+  /**
+   * React to a dropped stream by restoring it.
+   *
+   * On success a `Reconnected` is delivered so consumers know their state
+   * needs reseeding -- matching Java, where the subscription has always
+   * restored itself rather than leaving the caller to notice.
+   *
+   * The flag is what makes a burst of errors from a dying socket one outage
+   * instead of five reconnects; Java uses compareAndSet for the same reason.
+   */
+  _onStreamDropped(exception: Error): void {
+    if (this._closed) return;
+    this._callback({ kind: "stream-dropped", exception });
+    if (this._reconnecting) return;
+    this._reconnecting = true;
+
+    void (async () => {
+      try {
+        await this.reconnect();
+        if (!this._closed) {
+          this._callback({ kind: "reconnected", marketplaceId: this._marketplaceId });
+        }
+      } finally {
+        this._reconnecting = false;
+      }
+    })();
   }
 
   async reconnect(): Promise<void> {
@@ -388,7 +433,7 @@ export class EventListener {
         }
       } else if (frame.command === "ERROR") {
         this._callback({
-          kind: "ws-exception",
+          kind: "frame-unreadable",
           command: frame.command,
           headers: frame.headers,
           body: frame.body,
@@ -398,21 +443,11 @@ export class EventListener {
     });
 
     this._ws!.on("close", () => {
-      if (!this._closed) {
-        this._callback({
-          kind: "transport-error",
-          exception: new Error("WebSocket connection closed"),
-        });
-      }
+      this._onStreamDropped(new Error("WebSocket connection closed"));
     });
 
     this._ws!.on("error", (err) => {
-      if (!this._closed) {
-        this._callback({
-          kind: "transport-error",
-          exception: err,
-        });
-      }
+      this._onStreamDropped(err);
     });
   }
 }

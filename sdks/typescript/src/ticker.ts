@@ -8,7 +8,7 @@
 import { Flexemarkets } from "./client.js";
 import { OrderBooks } from "./orderbook.js";
 import { MarketplaceTrades } from "./trades.js";
-import type { FmEvent } from "./stomp.js";
+import type { FmEvent, StreamDropped } from "./stomp.js";
 import type { Session } from "./types.js";
 import type { OrdersUpdate } from "./stomp.js";
 import { SESSION_STATE_CLOSED } from "./types.js";
@@ -82,8 +82,8 @@ function isSession(event: FmEvent): event is Session {
   );
 }
 
-function isTransportError(event: FmEvent): event is { kind: "transport-error"; exception: Error } {
-  return typeof event === "object" && "kind" in event && event.kind === "transport-error";
+function isStreamDropped(event: FmEvent): event is StreamDropped {
+  return typeof event === "object" && "kind" in event && event.kind === "stream-dropped";
 }
 
 async function main(): Promise<void> {
@@ -129,7 +129,7 @@ async function main(): Promise<void> {
           fm.close();
           process.exit(0);
         }
-      } else if (isTransportError(event)) {
+      } else if (isStreamDropped(event)) {
         process.stderr.write(`\nConnection lost: ${event.exception.message}\n`);
         fm.reconnect();
       }
