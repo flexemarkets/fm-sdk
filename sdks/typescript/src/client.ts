@@ -315,6 +315,22 @@ function parseConnection(data: JsonObject): ClientConnection {
   };
 }
 
+/**
+ * The orders inside a HAL envelope.
+ *
+ * The server embeds them under `orders`. It was `orderDtoes` — Spring HATEOAS
+ * pluralising `OrderDto` — and every SDK still read that name long after the
+ * server stopped sending it, so `activeOrders` and `recentTrades` returned an
+ * empty array always. `MarketView` seeds from `activeOrders`, so its books were
+ * never seeded; they filled from live deltas and looked plausible.
+ *
+ * Both names are accepted, so an older server still works.
+ */
+function embeddedOrders(data: JsonObject): JsonObject[] {
+  const embedded = (data as { _embedded?: { orders?: JsonObject[]; orderDtoes?: JsonObject[] } })._embedded;
+  return embedded?.orders ?? embedded?.orderDtoes ?? [];
+}
+
 function parseApiRoot(data: JsonObject): ApiRoot {
   const linksRaw = (data._links as Record<string, unknown>) ?? {};
   const links: Record<string, string> = {};
@@ -1149,7 +1165,7 @@ export class Flexemarkets {
     const baseRest = this._baseUrl;
     const url = `${baseRest}/v1/marketplaces/${marketplaceId}/orders/active`;
     const { data, asOfSeq } = await this._getSnapshot(url);
-    const orders = ((data as unknown as { _embedded?: { orderDtoes?: JsonObject[] } })._embedded?.orderDtoes ?? []).map(parseOrder);
+    const orders = embeddedOrders(data).map(parseOrder);
     return { body: orders, asOfSeq };
   }
 
@@ -1161,7 +1177,7 @@ export class Flexemarkets {
   async recentTrades(marketplaceId: number, size = 1000): Promise<Snapshot<Order[]>> {
     const url = `${this._baseUrl}/v1/marketplaces/${marketplaceId}/orders/recent-trades?size=${size}`;
     const { data, asOfSeq } = await this._getSnapshot(url);
-    const orders = ((data as unknown as { _embedded?: { orderDtoes?: JsonObject[] } })._embedded?.orderDtoes ?? []).map(parseOrder);
+    const orders = embeddedOrders(data).map(parseOrder);
     return { body: orders, asOfSeq };
   }
 

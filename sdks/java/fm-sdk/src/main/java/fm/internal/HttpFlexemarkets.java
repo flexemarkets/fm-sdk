@@ -276,7 +276,19 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     private static class Embedded<T> {
-        @com.fasterxml.jackson.annotation.JsonProperty("orderDtoes")
+        /**
+         * The server embeds these under "orders".
+         *
+         * <p>It was "orderDtoes" -- Spring HATEOAS pluralising OrderDto -- and
+         * every SDK still read that name long after the server stopped sending
+         * it, so activeOrders and recentTrades returned an empty list always.
+         * MarketView seeds from activeOrders, so its books were never seeded;
+         * they filled from live deltas and looked plausible.
+         *
+         * <p>The alias keeps an older server working.
+         */
+        @com.fasterxml.jackson.annotation.JsonProperty("orders")
+        @com.fasterxml.jackson.annotation.JsonAlias("orderDtoes")
         List<T> orderDtoes;
     }
 

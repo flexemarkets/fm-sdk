@@ -281,6 +281,22 @@ def _http_origin(url: str | None) -> str | None:
     return url if path_start < 0 else url[:path_start]
 
 
+def _embedded_orders(body: dict[str, Any]) -> list[dict[str, Any]]:
+    """The orders inside a HAL envelope.
+
+    The server embeds them under ``orders``. It was ``orderDtoes`` -- Spring
+    HATEOAS pluralising ``OrderDto`` -- and every SDK still read that name long
+    after the server stopped sending it, so ``active_orders`` and
+    ``recent_trades`` returned an empty list always. ``MarketView`` seeds from
+    ``active_orders``, so its books were never seeded; they filled from live
+    deltas and looked plausible.
+
+    Both names are accepted, so an older server still works.
+    """
+    embedded = body.get("_embedded") or {}
+    return embedded.get("orders") or embedded.get("orderDtoes") or []
+
+
 def _marketable_limit(market: Market, side: str) -> int:
     """The most aggressive price this market will accept on *side*.
 
@@ -1098,7 +1114,7 @@ class Flexemarkets:
         """
         url = f"{_server(self._endpoint)}/v1/marketplaces/{marketplace_id}/orders/active"
         body, as_of_seq = self._get_snapshot(url)
-        orders_raw = body.get("_embedded", {}).get("orderDtoes", [])
+        orders_raw = _embedded_orders(body)
         return Snapshot(body=[_parse_order(o) for o in orders_raw], as_of_seq=as_of_seq)
 
     def recent_trades(self, marketplace_id: int, size: int = 1000) -> "Snapshot[list[Order]]":
@@ -1109,7 +1125,7 @@ class Flexemarkets:
         """
         url = f"{_server(self._endpoint)}/v1/marketplaces/{marketplace_id}/orders/recent-trades?size={size}"
         body, as_of_seq = self._get_snapshot(url)
-        orders_raw = body.get("_embedded", {}).get("orderDtoes", [])
+        orders_raw = _embedded_orders(body)
         return Snapshot(body=[_parse_order(o) for o in orders_raw], as_of_seq=as_of_seq)
 
     def _get_snapshot(self, url: str) -> tuple[dict[str, Any], int]:
