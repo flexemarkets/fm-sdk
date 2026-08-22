@@ -31,13 +31,33 @@ public interface Administration {
      * fm.ConflictException}, whose {@code failure().suggestedName()}
      * carries the server's proposed alternative -- worth surfacing rather than
      * retrying blindly, since the suggestion is what the user will be known as.
+     *
+     * @param accountName the account to create; must not already exist
+     * @param email       the owner's email, which is also their sign-in name
+     * @param password    the owner's password
+     * @return a token for the new account's owner, already signed in
      */
     Token signup(String accountName, String email, String password);
 
+    /**
+     * Sign up, naming the owner.
+     *
+     * @param accountName the account to create; must not already exist
+     * @param email       the owner's email, which is also their sign-in name
+     * @param password    the owner's password
+     * @param firstName   the owner's given name
+     * @param lastName    the owner's family name
+     * @return a token for the new account's owner, already signed in
+     */
     Token signup(String accountName, String email, String password,
                  String firstName, String lastName);
 
-    /** Approve an account by name, returning it as it now stands. */
+    /**
+     * Approve an account by name, returning it as it now stands.
+     *
+     * @param accountName the account to approve
+     * @return the account, with {@link Account#isApproved()} now true
+     */
     Account approveAccount(String accountName);
 
     /**
@@ -48,29 +68,63 @@ public interface Administration {
      * Two methods a character apart meaning "me" and "whoever you name" is the
      * kind of distinction a reader has to hold in their head, and both Python
      * and TypeScript had already renamed around it.
+     *
+     * @param accountId the account's id
+     * @return the account
      */
     Account accountById(long accountId);
 
-    /** One user by id. See {@link #accountById} on the name. */
+    /**
+     * One user by id. See {@link #accountById} on the name.
+     *
+     * @param userId the user's id
+     * @return the user
+     */
     Person userById(long userId);
 
-    /** The marketplace's private-trader identifiers. */
+    /**
+     * The marketplace's private-trader identifiers.
+     *
+     * @param marketplaceId the marketplace
+     * @return the identifiers, empty when the marketplace has no private markets
+     */
     List<String> identifiers(long marketplaceId);
 
     /** Delete the caller's own account. Destructive, and not undoable. */
     void deleteMyAccount();
 
-    /** Every account on the server. Admin-only. */
+    /**
+     * Every account on the server. Admin-only.
+     *
+     * @return every account
+     */
     List<Account> accounts();
 
-    /** Delete an account. Destructive, and takes its users with it. */
+    /**
+     * Delete an account. Destructive, and takes its users with it.
+     *
+     * @param accountId the account to delete
+     */
     void deleteAccount(long accountId);
 
-    /** Create a user in the caller's account. Roles are optional. */
+    /**
+     * Create a user in the caller's account. Roles are optional.
+     *
+     * @param email     the user's email, which is also their sign-in name
+     * @param password  the user's initial password
+     * @param firstName the user's given name
+     * @param lastName  the user's family name
+     * @param roles     the roles to grant; none for an ordinary participant
+     * @return the user as created, with its server-assigned id
+     */
     Person createUser(String email, String password, String firstName,
                       String lastName, String... roles);
 
-    /** Delete a user. Destructive. */
+    /**
+     * Delete a user. Destructive.
+     *
+     * @param userId the user to delete
+     */
     void deleteUser(long userId);
 
     /**
@@ -82,6 +136,8 @@ public interface Administration {
      * and that method sent only a name and a description, so every call was a
      * 400. Use {@link Management#createMarketplaceFromJson}, which is what the
      * studies have always used.
+     *
+     * @param marketplaceId the marketplace to delete
      */
     void deleteMarketplace(long marketplaceId);
 
@@ -94,6 +150,14 @@ public interface Administration {
      * market whose price grid this same call would happily set. The server
      * enforces the two identically, so the API offers them identically;
      * {@link TickGrid#units()} is the old default for callers who wanted it.
+     *
+     * @param marketplaceId the marketplace to add the market to
+     * @param symbol        the market's ticker symbol, unique within the marketplace
+     * @param name          the market's display name
+     * @param price         the legal prices: bounds and tick
+     * @param units         the legal order sizes; {@link TickGrid#units()} for the usual 1/100/1
+     * @param privateMarket whether the market is restricted to named traders
+     * @return the market as created, with its server-assigned id
      */
     Market createMarket(long marketplaceId, String symbol, String name,
                         TickGrid price, TickGrid units, boolean privateMarket);
@@ -105,6 +169,9 @@ public interface Administration {
      * passwords being handed around, and they should be treated like
      * passwords: not logged, not persisted, and delivered to the person they
      * belong to.
+     *
+     * @param userIds the users to mint passcodes for
+     * @return the passcodes and the instant they expire
      */
     ManagerOtpBundle managerOtpBundle(List<Long> userIds);
 }
