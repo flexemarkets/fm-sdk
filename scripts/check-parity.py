@@ -69,7 +69,10 @@ def _components(body: str) -> list[str]:
 
 def java_types(directory: Path) -> dict[str, tuple[list[str], set[str]]]:
     """Record name -> (all components, components excluded from the wire)."""
-    source = "\n".join(p.read_text() for p in sorted(directory.glob("*.java")))
+    # rglob, not glob: a wire type may live in fm.internal -- ApiRoot, Approval
+    # and Version moved there when the public surface was trimmed, and scanning
+    # only the top package silently dropped three types from the comparison.
+    source = "\n".join(p.read_text() for p in sorted(directory.rglob("*.java")))
 
     # Strip block comments before looking for components. A record's component
     # list is a natural place to explain a field, and prose there was read as

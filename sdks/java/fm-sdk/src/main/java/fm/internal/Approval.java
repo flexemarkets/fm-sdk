@@ -1,4 +1,6 @@
-package fm;
+package fm.internal;
+
+import fm.Account;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 

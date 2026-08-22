@@ -1,4 +1,8 @@
-package fm;
+package fm.internal;
+
+import fm.Market;
+import fm.Order;
+import fm.Trades;
 
 import java.util.Collection;
 import java.util.Comparator;

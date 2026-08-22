@@ -1,4 +1,8 @@
-package fm;
+package fm.internal;
+
+import fm.Market;
+import fm.Order;
+import fm.OrderBook;
 
 import java.util.Collection;
 import java.util.List;

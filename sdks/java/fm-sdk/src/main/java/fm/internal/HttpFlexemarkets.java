@@ -4,8 +4,6 @@ import fm.Account;
 import fm.AccountNameConflictException;
 import fm.Allotment;
 import fm.ApiException;
-import fm.ApiRoot;
-import fm.Approval;
 import fm.Assets;
 import fm.AuthenticationException;
 import fm.ClientConnection;

@@ -1,4 +1,4 @@
-package fm;
+package fm.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

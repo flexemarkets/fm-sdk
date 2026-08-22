@@ -11,7 +11,6 @@ import fm.Reconnected;
 import fm.Session;
 import fm.Snapshot;
 import fm.Subscription;
-import fm.Version;
 import fm.WsException;
 import fm.WsTransportError;
 

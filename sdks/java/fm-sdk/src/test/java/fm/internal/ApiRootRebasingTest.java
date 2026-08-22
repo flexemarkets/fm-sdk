@@ -1,6 +1,5 @@
 package fm.internal;
 
-import fm.ApiRoot;
 import fm.Flexemarkets;
 import fm.Market;
 

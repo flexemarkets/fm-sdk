@@ -1,4 +1,4 @@
-package fm;
+package fm.internal;
 
 import java.util.Map;
 import java.util.Optional;
