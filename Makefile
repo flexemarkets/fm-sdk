@@ -9,6 +9,7 @@ VERSION := $(shell cat VERSION)
        install-python install-typescript install-java install-mcp \
        build-python build-typescript build-java \
        check-parity check-python check-typescript check-java check-mcp \
+       test-python test-typescript test-java \
        ticker-python ticker-typescript ticker-java \
        mcp-server \
        publish publish-python publish-typescript publish-java \
@@ -25,7 +26,8 @@ install: install-python install-typescript install-java install-mcp
 
 build: build-python build-typescript build-java
 
-check: check-parity check-python check-typescript check-java check-mcp
+check: check-parity check-python check-typescript check-java check-mcp \
+       test-python test-typescript test-java
 
 # The three SDKs are hand-written and every type is declared three times, so
 # nothing but this holds them to the same wire format. Runs first because it
@@ -51,7 +53,7 @@ clean:
 install-python:
 	$(PYTHON) -m venv $(PY_VENV)
 	$(VENV_PY) -m pip install --upgrade pip
-	$(VENV_PY) -m pip install -e sdks/python
+	$(VENV_PY) -m pip install -e "sdks/python[test]"
 
 build-python:
 	$(VENV_PY) -m py_compile sdks/python/fm/client.py
@@ -60,6 +62,9 @@ build-python:
 
 check-python:
 	$(VENV_PY) -c "import fm; print('python sdk ok')"
+
+test-python:
+	cd sdks/python && ../../$(VENV_PY) -m pytest -q
 
 ticker-python:
 	$(VENV_PY) sdks/python/ticker.py $(ARGS)
@@ -82,6 +87,12 @@ build-typescript:
 check-typescript:
 	cd sdks/typescript && npx tsc --noEmit
 
+# tsc --noEmit is not this. tsconfig's `include` is ["src"], so the typecheck
+# above never looks at test/, and tsx strips types without checking them --
+# a test can assert something the source contradicts and still pass.
+test-typescript:
+	cd sdks/typescript && npm test
+
 ticker-typescript:
 	cd sdks/typescript && npx tsx src/ticker.ts $(ARGS)
 
@@ -102,6 +113,9 @@ build-java:
 
 check-java:
 	cd sdks/java && mvn compile -q
+
+test-java:
+	cd sdks/java && mvn -o test
 
 ticker-java:
 	java --enable-preview -jar sdks/java/examples/ticker/target/fm-ticker-$(VERSION).jar $(ARGS)

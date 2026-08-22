@@ -521,17 +521,28 @@ A green compile is necessary and not sufficient. Run all of it.
 
 ```bash
 # 1. The SDK's own checks, from the fm-sdk checkout
-make check-parity          # types and method surfaces agree across the three SDKs
-make check                 # per-language build and tests
+make check-parity          # types, method surfaces and failure types agree
+make check                 # the above, plus every SDK's build and test suite
 
 # 2. Your codebase
-#    Java
+#    Java — the whole reactor, not one module
 mvn -o test
 #    Python
 python -m pytest
 #    TypeScript
 npm run check && npm test
 ```
+
+Two traps in that second block, both of which caught this repo during 0.1.0:
+
+- **`mvn -pl <module> test` is not enough.** Narrowing the reactor to the
+  module you are migrating skips the ones that consume it. A broken example
+  went unnoticed for a day that way.
+- **`tsc --noEmit` only covers what `tsconfig.json` includes.** If `include`
+  is `["src"]`, your tests are never typechecked, and `tsx`/`ts-node` strip
+  types without checking them — so a test can assert something the source
+  contradicts and pass. Check what your `include` actually covers before
+  trusting a green typecheck.
 
 Then confirm by inspection, because these are the ones tests in your codebase
 are least likely to cover:
@@ -557,6 +568,11 @@ are least likely to cover:
       made with `createMarketplaceFromJson`.
 - [ ] Every `sessions(...)` and `connections(...)` call passes one argument, and
       anything that relied on the filter now narrows the result itself.
+- [ ] No `fm.reconnect()` / `reconnect()` call driven by a `StreamDropped` —
+      the listener reconnects itself now, so that code reconnects twice.
+- [ ] Anything that reseeded on a `StreamDropped` now reseeds on `Reconnected`.
+- [ ] No `kind === "transport-error"` or `kind === "ws-exception"` left in
+      TypeScript.
 
 ## Pinning
 
