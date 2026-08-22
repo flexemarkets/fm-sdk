@@ -28,8 +28,17 @@ class Account:
     name: str | None = None
     description: str | None = None
     owner: Person | None = None
-    approval: bool = False
+    approval: bool | None = None
     approval_description: str | None = None
+
+    def is_approved(self) -> bool:
+        """Approved, treating "not yet decided" as not approved.
+
+        The third state is kept on the field and folded away here, at the point
+        of asking. Folding it in the parser would lose the difference between
+        a pending account and a suspended one for every caller at once.
+        """
+        return self.approval is True
     created_date: "datetime | None" = None
     last_modified_date: "datetime | None" = None
 

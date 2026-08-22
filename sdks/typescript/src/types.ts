@@ -17,7 +17,7 @@ export interface Account {
   name: string | null;
   description: string | null;
   owner: Person | null;
-  approval: boolean;
+  approval: boolean | null;
   approvalDescription: string | null;
   createdDate: Date | null;
   lastModifiedDate: Date | null;
@@ -102,6 +102,17 @@ export function getSecurity(holding: Holding, marketId: number): Security | null
  */
 export function orderedSecurities(securities: Security[] | null | undefined): Security[] {
   return [...(securities ?? [])].sort((a, b) => a.marketId - b.marketId);
+}
+
+/**
+ * Approved, treating "not yet decided" as not approved.
+ *
+ * The third state is kept on the field and folded away here, at the point of
+ * asking. Folding it in the parser would lose the difference between a pending
+ * account and a suspended one for every caller at once.
+ */
+export function isApproved(account: Account): boolean {
+  return account.approval === true;
 }
 
 export function holdingUnits(holding: Holding): number[] {

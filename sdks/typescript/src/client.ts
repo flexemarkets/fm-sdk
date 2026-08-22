@@ -144,14 +144,14 @@ function parsePerson(data: JsonObject | null | undefined): Person | null {
   };
 }
 
-function parseAccount(data: JsonObject | null | undefined): Account | null {
+export function parseAccount(data: JsonObject | null | undefined): Account | null {
   if (!data) return null;
   return {
     id: (data.id as number) ?? null,
     name: (data.name as string) ?? null,
     description: (data.description as string) ?? null,
     owner: parsePerson(data.owner as JsonObject),
-    approval: (data.approval as boolean) ?? false,
+    approval: (data.approval as boolean | null) ?? null,
     approvalDescription: (data.approvalDescription as string) ?? null,
     createdDate: toInstant(data.createdDate as string),
     lastModifiedDate: toInstant(data.lastModifiedDate as string),

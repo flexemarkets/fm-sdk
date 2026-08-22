@@ -117,7 +117,7 @@ def _parse_account(data: dict[str, Any] | None) -> Account | None:
         name=data.get("name"),
         description=data.get("description"),
         owner=_parse_person(data.get("owner")),
-        approval=data.get("approval", False),
+        approval=data.get("approval"),
         approval_description=data.get("approvalDescription"),
         created_date=_timestamp(data.get("createdDate")),
         last_modified_date=_timestamp(data.get("lastModifiedDate")),
