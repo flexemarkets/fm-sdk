@@ -43,7 +43,7 @@ class AdminApiTest {
     /** Roles the sign-in token reports; a test may change this before connecting. */
     private String roles = "[\"ROLE_MANAGER\"]";
 
-    /** When set, POST /api/accounts and DELETE /api/users/* answer 409. */
+    /** When set, POST /api/accounts and DELETE /api/v1/users/* answer 409. */
     private boolean conflict = false;
 
     @BeforeEach
@@ -86,7 +86,7 @@ class AdminApiTest {
                     "{\"account\":{\"id\":2,\"name\":\"acme\",\"approval\":true},\"approve\":true}");
         });
 
-        server.createContext("/api/users", exchange -> {
+        server.createContext("/api/v1/users", exchange -> {
             record(exchange);
             if ("DELETE".equals(exchange.getRequestMethod())) {
                 if (conflict) {
@@ -252,7 +252,7 @@ class AdminApiTest {
         }
 
         assertThat(created.id()).isEqualTo(42L);
-        var body = bodyOf("POST /api/users");
+        var body = bodyOf("POST /api/v1/users");
         assertThat(body).contains("\"email\":\"alice@lab.edu\"");
         assertThat(body).contains("\"roles\":[\"ROLE_MANAGER\"]");
     }
@@ -264,7 +264,7 @@ class AdminApiTest {
             fm.createUser("bob@lab.edu", "pw", "Bob", "Baker");
         }
 
-        assertThat(bodyOf("POST /api/users")).contains("\"roles\":[]");
+        assertThat(bodyOf("POST /api/v1/users")).contains("\"roles\":[]");
     }
 
     // --- deletion -----------------------------------------------------------
@@ -282,7 +282,7 @@ class AdminApiTest {
             fm.deleteMarketplace(5);
         }
 
-        assertThat(requests).contains("DELETE /api/users/42");
+        assertThat(requests).contains("DELETE /api/v1/users/42");
         assertThat(requests).contains("DELETE /api/accounts/2");
         assertThat(requests).contains("DELETE /api/marketplaces/5");
     }
@@ -294,7 +294,7 @@ class AdminApiTest {
             fm.deleteUser(42);
         }
 
-        assertThat(requests).contains("DELETE /api/users/42");
+        assertThat(requests).contains("DELETE /api/v1/users/42");
     }
 
     // --- marketplaces -------------------------------------------------------
@@ -378,7 +378,7 @@ class AdminApiTest {
         }
 
         assertThat(requests).contains("GET /api/accounts/2");
-        assertThat(requests).contains("GET /api/users/42");
+        assertThat(requests).contains("GET /api/v1/users/42");
     }
 
     /** Deleting your own account is its own route, not accounts/{yourId}. */

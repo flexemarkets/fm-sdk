@@ -77,7 +77,7 @@ class ManagementApiTest {
                     "[{\"ownerId\":8,\"name\":\"alice\",\"cash\":10000,\"sessionId\":300}]");
         });
 
-        server.createContext("/api/marketplaces/1/sessions", exchange -> {
+        server.createContext("/api/v1/marketplaces/1/sessions", exchange -> {
             record(exchange);
             respond(exchange, 200, "[{\"id\":300,\"state\":\"CLOSED\"}]");
         });
@@ -372,8 +372,10 @@ class ManagementApiTest {
         }
 
         assertThat(requests).noneSatisfy(r -> assertThat(r).contains("sessionIds="));
+        // sessions moved to V1, which needs no format= to avoid HAL; connections
+        // has no V1 equivalent with these semantics and stays on V0 for now.
         assertThat(requests).anySatisfy(r -> assertThat(r)
-                .contains("/api/marketplaces/1/sessions?format="));
+                .contains("/api/v1/marketplaces/1/sessions"));
         assertThat(requests).anySatisfy(r -> assertThat(r)
                 .contains("/api/marketplaces/1/connections?format="));
     }

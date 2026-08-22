@@ -76,7 +76,8 @@ before(async () => {
         });
       } else if (url === "/api/v1/marketplaces" && req.method === "POST") {
         send({ id: 77, name: "simple-dividend", markets: [] });
-      } else if (url.startsWith("/api/marketplaces/1/sessions")) {
+      } else if (url.startsWith("/api/v1/marketplaces/1/sessions")
+                 || url.startsWith("/api/marketplaces/1/sessions")) {
         send([{ id: 300, state: "CLOSED" }]);
       } else if (url.startsWith("/api/marketplaces/1/connections")) {
         send([{ id: 9, ownerId: 8, marketplaceId: 1, sessionId: 300 }]);
@@ -98,7 +99,7 @@ before(async () => {
       } else if (url.startsWith("/api/users/") && req.method === "DELETE") {
         res.writeHead(204);
         res.end();
-      } else if (url === "/api/users" && req.method === "POST") {
+      } else if ((url === "/api/v1/users" || url === "/api/users") && req.method === "POST") {
         send({ id: 42, accountId: 1, email: "alice@lab.edu" });
       } else if (url === "/api/usersJson") {
         send([{ id: 7, email: "dev@dev" }, { id: 8, email: "t1@dev" }]);
@@ -341,7 +342,9 @@ test("sessions and connections are never filtered on the wire", async () => {
   }
 
   assert.ok(!requests.some((r) => r.includes("sessionIds=")));
-  assert.ok(requests.some((r) => r.includes("/api/marketplaces/1/sessions?format=")));
+  // sessions moved to V1, which needs no format= to avoid HAL; connections has
+  // no V1 equivalent with these semantics and stays on V0 for now.
+  assert.ok(requests.some((r) => r.includes("/api/v1/marketplaces/1/sessions")));
   assert.ok(requests.some((r) => r.includes("/api/marketplaces/1/connections?format=")));
 });
 
@@ -446,7 +449,7 @@ test("a user is created with the roles given", async () => {
     fm.close();
   }
 
-  const body = bodies.get("POST /api/users")!;
+  const body = bodies.get("POST /api/v1/users")!;
   assert.ok(body.includes('"roles":["ROLE_MANAGER"]'));
 });
 

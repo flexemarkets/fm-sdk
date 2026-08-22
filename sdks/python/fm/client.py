@@ -373,6 +373,16 @@ def _process_template(href: str) -> str:
     return href
 
 
+def _v1(endpoint: str, path: str) -> str:
+    """A V1 route, addressed from the server rather than through a HAL link.
+
+    V1 is flat and versioned: the path is knowable without fetching the API
+    root first, which is the point of it. Every call that moves here loses a
+    HAL dependency as well as a version.
+    """
+    return f"{_server(endpoint)}/v1{path}"
+
+
 def _uri(root: ApiRoot, link_name: str) -> str:
     href = root.get_link(link_name)
     if href is None:
@@ -880,7 +890,7 @@ class Flexemarkets:
         last_name: str,
         *roles: str,
     ) -> Person:
-        url = _uri(self._api_root, "users")
+        url = _v1(self._endpoint, "/users")
         resp = self._post(url, {
             "email": email,
             "password": password,
@@ -982,16 +992,17 @@ class Flexemarkets:
     def sessions(self, marketplace_id: int) -> list[Session]:
         """The marketplace's sessions -- all of them.
 
-        There is no server-side filter. ``GET /marketplaces/{id}/sessions``
-        takes only ``format``, so the ``session_ids`` argument this used to
-        accept was silently ignored: it returned the whole history and looked
-        like it had filtered. Filter the result; fm-ui, fm-manager and capm all
-        already do.
+        There is no server-side filter. The route takes no session argument,
+        so the ``session_ids`` this used to accept was silently ignored: it
+        returned the whole history and looked like it had filtered. Filter the
+        result; fm-ui, fm-manager and capm all already do.
+
+        On ``GET /api/v1/marketplaces/{id}/sessions``, which answers with the
+        same fields as the V0 route it replaces -- verified against a running
+        server, not assumed -- and needs no ``format=application/json`` to
+        avoid HAL.
         """
-        url = _uri_id_segment_param(
-            self._api_root, "marketplaces", marketplace_id, "sessions",
-            "format=application/json",
-        )
+        url = _v1(self._endpoint, f"/marketplaces/{marketplace_id}/sessions")
         return [_parse_session(s) for s in self._get(url).json()]
 
     def session(self, marketplace_id: int) -> Session:
@@ -1009,7 +1020,8 @@ class Flexemarkets:
 
     def user_by_id(self, user_id: int) -> Person:
         """One user by id; see :meth:`account_by_id` for the name."""
-        return _parse_person(self._get(_uri_id(self._api_root, "users", user_id)).json())
+        url = _v1(self._endpoint, f"/users/{user_id}")
+        return _parse_person(self._get(url).json())
 
     def identifiers(self, marketplace_id: int) -> list[str]:
         url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "privateTraders")

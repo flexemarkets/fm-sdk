@@ -226,7 +226,9 @@ def test_sessions_and_connections_are_never_filtered_on_the_wire(fm):
     fm.connections(1)
 
     assert not any("sessionIds=" in r for _, r in requests)
-    assert any("/api/marketplaces/1/sessions?format=" in r for _, r in requests)
+    # sessions moved to V1, which needs no format= to avoid HAL; connections
+    # has no V1 equivalent with these semantics and stays on V0 for now.
+    assert any("/api/v1/marketplaces/1/sessions" in r for _, r in requests)
     assert any("/api/marketplaces/1/connections?format=" in r for _, r in requests)
 
 

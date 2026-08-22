@@ -462,6 +462,17 @@ function processTemplate(href: string): string {
   return idx >= 0 ? href.substring(0, idx) : href;
 }
 
+/**
+ * A V1 route, addressed from the server rather than through a HAL link.
+ *
+ * V1 is flat and versioned: the path is knowable without fetching the API root
+ * first, which is the point of it. Every call that moves here loses a HAL
+ * dependency as well as a version.
+ */
+function v1(endpoint: string, path: string): string {
+  return `${server(endpoint)}/v1${path}`;
+}
+
 function uri(root: ApiRoot, linkName: string): string {
   const href = root.links[linkName];
   if (href === undefined) throw new ApiError(`Link '${linkName}' not found in API root.`);
@@ -868,7 +879,7 @@ export class Flexemarkets {
 
   /** One user by id. */
   async userById(userId: number): Promise<Person> {
-    return parsePerson(await this._get(uriId(this._apiRoot, "users", userId))) as Person;
+    return parsePerson(await this._get(v1(this._endpoint, `/users/${userId}`))) as Person;
   }
 
   /** The marketplace's private-trader identifiers. */
@@ -902,7 +913,7 @@ export class Flexemarkets {
     lastName: string,
     roles: string[] = [],
   ): Promise<Person> {
-    const url = uri(this._apiRoot, "users");
+    const url = v1(this._endpoint, "/users");
     const data = await this._post(url, { email, password, firstName, lastName, roles });
     return parsePerson(data) as Person;
   }
@@ -1065,16 +1076,17 @@ export class Flexemarkets {
   /**
    * The marketplace's sessions — all of them.
    *
-   * There is no server-side filter. `GET /marketplaces/{id}/sessions` takes
-   * only `format`, so the `sessionIds` argument this used to accept was
-   * silently ignored: it returned the whole history and looked like it had
-   * filtered. Filter the result; fm-ui already does.
+   * There is no server-side filter. The route takes no session argument, so
+   * the `sessionIds` this used to accept was silently ignored: it returned the
+   * whole history and looked like it had filtered. Filter the result; fm-ui
+   * already does.
+   *
+   * On `GET /api/v1/marketplaces/{id}/sessions`, which answers with the same
+   * fields as the V0 route it replaces — verified against a running server,
+   * not assumed — and needs no `format=application/json` to avoid HAL.
    */
   async sessions(marketplaceId: number): Promise<Session[]> {
-    const url = uriIdSegmentParam(
-      this._apiRoot, "marketplaces", marketplaceId, "sessions",
-      "format=application/json",
-    );
+    const url = v1(this._endpoint, `/marketplaces/${marketplaceId}/sessions`);
     return ((await this._get(url)) as unknown as JsonObject[]).map(parseSession);
   }
 

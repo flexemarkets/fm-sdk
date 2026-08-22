@@ -226,7 +226,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     // nothing here the default could not do.
 
     public List<Session> sessions(long marketplaceId) {
-        return get(uriIdSegmentParam(apiRoot, "marketplaces", marketplaceId, "sessions", "format=application/json"), SESSIONS_TYPE);
+        return get(v1("/marketplaces/" + marketplaceId + "/sessions"), SESSIONS_TYPE);
     }
 
     public Session session(long marketplaceId) {
@@ -246,7 +246,7 @@ public class HttpFlexemarkets implements Flexemarkets {
      * seq is less than or equal.
      */
     public Snapshot<List<Order>> activeOrders(long marketplaceId) {
-        var url = server(endpointUrl()) + "/v1/marketplaces/" + marketplaceId + "/orders/active";
+        var url = v1("/marketplaces/" + marketplaceId + "/orders/active");
         return _unwrapOrders(getSnapshot(url, ORDERS_COLLECTION_TYPE));
     }
 
@@ -436,7 +436,7 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     @Override
     public Person userById(long userId) {
-        return get(uriId(apiRoot, "users", userId), PERSON_TYPE);
+        return get(v1("/users/" + userId), PERSON_TYPE);
     }
 
     @Override
@@ -462,7 +462,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     @Override
     public Person createUser(String email, String password, String firstName,
                              String lastName, String... roles) {
-        return post(uri(apiRoot, "users"),
+        return post(v1("/users"),
                     new CreateUser(email, password, firstName, lastName, roles),
                     PERSON_TYPE);
     }
@@ -470,7 +470,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     @Override
     public void deleteUser(long userId) {
         try {
-            delete(uriId(apiRoot, "users", userId));
+            delete(v1("/users/" + userId));
         } catch (ConflictException e) {
             // The user still owns orders or allotments. Deleting them would
             // orphan it, so the server refuses and the caller has to decide
@@ -646,7 +646,7 @@ public class HttpFlexemarkets implements Flexemarkets {
         } catch (JacksonException e) {
             throw new ApiException("Marketplace definition is not valid JSON", e);
         }
-        return post(server(endpointUrl()) + "/v1/marketplaces", definition, MARKETPLACE_TYPE);
+        return post(v1("/marketplaces"), definition, MARKETPLACE_TYPE);
     }
 
     @Override
@@ -1363,6 +1363,17 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     // --- HATEOAS URI builders ---
+
+    /**
+     * A V1 route, addressed from the server rather than through a HAL link.
+     *
+     * <p>V1 is flat and versioned: the path is knowable without fetching the
+     * API root first, which is the point of it. Every call that moves here
+     * loses a HAL dependency as well as a version.
+     */
+    private String v1(String path) {
+        return server(endpointUrl()) + "/v1" + path;
+    }
 
     static String uri(ApiRoot apiRoot, String linkName) {
         var href = apiRoot.getLink(linkName)
