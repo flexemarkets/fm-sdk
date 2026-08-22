@@ -115,4 +115,44 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!-- Matches the parent's release profile, so the plugin declared there
+             supplies the version and this only adds the skip. Declaring it
+             outside a profile leaves the version unresolvable on an ordinary
+             build. -->
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <!--
+                        The example is not published, and must not try.
+
+                        excludeArtifacts in the parent keeps it out of the bundle, and
+                        that worked: fm-ticker is still at 0.0.3 on Central. But
+                        extensions=true activates this plugin for every module in the
+                        reactor, so it still ran here, opened its own deployment, and
+                        failed, after fm-sdk 0.1.0 had already been published. The
+                        release was complete and the build exited 1.
+
+                        That is the failure mode the parent's own comment warns about
+                        for fm-spi 0.0.10: the obvious response to a red release is to
+                        run it again, and every registry here is append-only, so the
+                        second run cannot work and reports the version as already
+                        taken.
+
+                        skipPublishing stops the execution rather than emptying it.
+                    -->
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <configuration>
+                            <skipPublishing>true</skipPublishing>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
 </project>
