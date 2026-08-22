@@ -13,7 +13,7 @@
 import type { Flexemarkets } from "./client.js";
 import { OrderBook, OrderBooks } from "./orderbook.js";
 import { MarketplaceTrades } from "./trades.js";
-import { NO_SEQ, type EventListener, type FmEvent, type OrdersUpdate, type WsException, type WsTransportError } from "./stomp.js";
+import { NO_SEQ, type EventListener, type FmEvent, type OrdersUpdate, type FrameUnreadable, type StreamDropped } from "./stomp.js";
 import type { Holding, Market, Order, Session } from "./types.js";
 
 /**
@@ -37,7 +37,7 @@ export interface GapEvent {
 }
 
 /**
- * Fires when MarketView reacts to a WsTransportError — either after
+ * Fires when MarketView reacts to a StreamDropped — either after
  * the reconnect + resnapshot completes successfully, or after the
  * attempt has failed and the view is left stale.
  */
@@ -366,7 +366,7 @@ export class DefaultMarketView implements MarketView {
   }
 
   /**
-   * Phase 2c auto-reconnect. On a WsTransportError, reconnect the
+   * Phase 2c auto-reconnect. On a StreamDropped, reconnect the
    * underlying WS and re-seed from the V1 snapshot — reconnect is
    * just the largest possible gap, so 2b's _seedFromSnapshot()
    * (clear + REST snapshot + reapply + seq watermark) handles state
@@ -452,12 +452,12 @@ function _isHolding(event: FmEvent): event is Holding {
   return typeof event === "object" && event !== null && "securities" in event;
 }
 
-function _isTransportError(event: FmEvent): event is WsTransportError {
-  return typeof event === "object" && event !== null && (event as WsTransportError).kind === "transport-error";
+function _isTransportError(event: FmEvent): event is StreamDropped {
+  return typeof event === "object" && event !== null && (event as StreamDropped).kind === "transport-error";
 }
 
-function _isWsException(event: FmEvent): event is WsException {
-  return typeof event === "object" && event !== null && (event as WsException).kind === "ws-exception";
+function _isWsException(event: FmEvent): event is FrameUnreadable {
+  return typeof event === "object" && event !== null && (event as FrameUnreadable).kind === "ws-exception";
 }
 
 /**

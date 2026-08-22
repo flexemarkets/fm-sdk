@@ -13,14 +13,12 @@ import com.googlecode.lanterna.screen.TerminalScreen;
 import com.googlecode.lanterna.terminal.DefaultTerminalFactory;
 import com.googlecode.lanterna.terminal.Terminal;
 
-import fm.Events.WsTransportError;
+import fm.StreamDropped;
 import fm.Flexemarkets;
-import fm.MarketplaceTrades;
 import fm.OrderBook;
-import fm.OrderBooks;
 import fm.OrdersUpdate;
-import fm.Types.Holding;
-import fm.Types.Market;
+import fm.Holding;
+import fm.Market;
 import fm.Types.Session;
 
 public class Ticker {
@@ -105,7 +103,7 @@ public class Ticker {
                                 redraw = true;
                             }
                             case Holding ignored -> { }
-                            case WsTransportError ignored -> {
+                            case StreamDropped ignored -> {
                                 fm.reconnect();
                             }
                             default -> { }

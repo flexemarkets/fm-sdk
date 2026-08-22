@@ -100,12 +100,12 @@ def _decode_frame(raw: str) -> StompFrame:
 # ---------------------------------------------------------------------------
 
 @dataclass
-class WsTransportError:
+class StreamDropped:
     exception: BaseException
 
 
 @dataclass
-class WsException:
+class FrameUnreadable:
     command: str
     headers: dict[str, str]
     body: str
@@ -388,7 +388,7 @@ class EventListener:
                         self._queue.put(event)
                 elif frame.command == "ERROR":
                     self._queue.put(
-                        WsException(
+                        FrameUnreadable(
                             command=frame.command,
                             headers=frame.headers,
                             body=frame.body,
@@ -399,4 +399,4 @@ class EventListener:
 
         except Exception as exc:
             if not self._closed:
-                self._queue.put(WsTransportError(exception=exc))
+                self._queue.put(StreamDropped(exception=exc))

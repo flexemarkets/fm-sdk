@@ -11,8 +11,8 @@ import fm.Reconnected;
 import fm.Session;
 import fm.Snapshot;
 import fm.Subscription;
-import fm.WsException;
-import fm.WsTransportError;
+import fm.FrameUnreadable;
+import fm.StreamDropped;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -248,7 +248,7 @@ public class Events implements Subscription {
         }
 
         if ("ERROR".equals(command)) {
-            queue.offer(new WsException("STOMP ERROR: " + frame, null));
+            queue.offer(new FrameUnreadable("STOMP ERROR: " + frame, null));
             return;
         }
 
@@ -310,7 +310,7 @@ public class Events implements Subscription {
                 queue.offer(event);
             }
         } catch (Exception e) {
-            queue.offer(new WsException("Failed to parse STOMP message: " + messageType, e));
+            queue.offer(new FrameUnreadable("Failed to parse STOMP message: " + messageType, e));
         }
     }
 
@@ -357,7 +357,7 @@ public class Events implements Subscription {
         @Override
         public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
             if (!closed) {
-                queue.offer(new WsTransportError(
+                queue.offer(new StreamDropped(
                     new Exception("WebSocket closed: %d %s".formatted(statusCode, reason))));
                 _reconnectInBackground();
             }
@@ -366,7 +366,7 @@ public class Events implements Subscription {
 
         @Override
         public void onError(WebSocket webSocket, Throwable error) {
-            queue.offer(new WsTransportError(error));
+            queue.offer(new StreamDropped(error));
             _reconnectInBackground();
         }
     }

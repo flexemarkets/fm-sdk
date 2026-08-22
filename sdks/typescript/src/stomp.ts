@@ -85,12 +85,12 @@ export function decodeFrame(raw: string): StompFrame {
 // Error / transport event types
 // ---------------------------------------------------------------------------
 
-export interface WsTransportError {
+export interface StreamDropped {
   kind: "transport-error";
   exception: Error;
 }
 
-export interface WsException {
+export interface FrameUnreadable {
   kind: "ws-exception";
   command: string;
   headers: Record<string, string>;
@@ -124,8 +124,8 @@ export type FmEvent =
   | Session[]
   | Holding
   | OrdersUpdate
-  | WsTransportError
-  | WsException;
+  | StreamDropped
+  | FrameUnreadable;
 
 export type EventCallback = (event: FmEvent) => void;
 

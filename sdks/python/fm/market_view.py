@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Callable, Optional
 
 log = logging.getLogger(__name__)
 
-from .events import NO_SEQ, OrdersUpdate, WsException, WsTransportError
+from .events import NO_SEQ, OrdersUpdate, FrameUnreadable, StreamDropped
 from .orderbook import OrderBook, OrderBooks
 from .trades import MarketplaceTrades
 from .types import Holding, Market, Order, Session
@@ -52,7 +52,7 @@ class GapEvent:
 @dataclass(frozen=True)
 class ReconnectEvent:
     """Fires when :class:`MarketView` reacts to a
-    :class:`~fm.events.WsTransportError` — either after the reconnect
+    :class:`~fm.events.StreamDropped` — either after the reconnect
     + resnapshot completes successfully, or after the attempt has
     failed and the view is left stale.
     """
@@ -313,11 +313,11 @@ class MarketView:
                     h(event)
                 continue
 
-            if isinstance(event, WsTransportError):
+            if isinstance(event, StreamDropped):
                 self._handle_transport_error()
                 continue
 
-            if isinstance(event, WsException):
+            if isinstance(event, FrameUnreadable):
                 # STOMP ERROR / parse failure. Logged for visibility;
                 # reconnecting won't help with a malformed frame, so
                 # we leave the view as-is.
@@ -388,7 +388,7 @@ class MarketView:
             self._last_applied_seq = event.seq
 
     def _handle_transport_error(self) -> None:
-        """Phase 2c auto-reconnect. On a :class:`WsTransportError`,
+        """Phase 2c auto-reconnect. On a :class:`StreamDropped`,
         reconnect the underlying WS and re-seed from the V1 snapshot
         — reconnect is just the largest possible gap, so 2b's
         :meth:`_seed_from_snapshot` (clear + REST snapshot + reapply

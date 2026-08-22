@@ -1,7 +1,7 @@
 package fm;
 
 /**
- * Fires when {@link MarketView} reacts to a {@code WsTransportError} —
+ * Fires when {@link MarketView} reacts to a {@code StreamDropped} —
  * either after the reconnect + resnapshot completes successfully, or
  * after the reconnect attempt has failed and the view is left stale.
  *

@@ -12,7 +12,7 @@ from fm import (
     OrdersUpdate,
     Session,
     Holding,
-    WsTransportError,
+    StreamDropped,
 )
 
 TRADE_DISPLAY_COUNT = 5
@@ -106,7 +106,7 @@ def main() -> None:
                             break
                     case Holding():
                         pass
-                    case WsTransportError() as err:
+                    case StreamDropped() as err:
                         print(f"\nConnection lost: {err.exception}", file=sys.stderr)
                         fm.reconnect()
                     case _:

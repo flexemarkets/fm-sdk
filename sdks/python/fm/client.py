@@ -1306,8 +1306,8 @@ class Flexemarkets:
         Events are pushed onto *event_queue* as typed objects:
         :class:`~fm.types.Session`, :class:`~fm.types.Holding`,
         :class:`~fm.events.OrdersUpdate`, :class:`~fm.types.Version`,
-        :class:`~fm.events.WsTransportError`, or
-        :class:`~fm.events.WsException`.
+        :class:`~fm.events.StreamDropped`, or
+        :class:`~fm.events.FrameUnreadable`.
 
         This mirrors the Java ``Flexemarkets.listen()`` method.
 

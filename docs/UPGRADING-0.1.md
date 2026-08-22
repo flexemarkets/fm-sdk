@@ -68,10 +68,17 @@ Three event records left the STOMP client, which was never meant to be API:
 
 | Find | Replace |
 |---|---|
-| `import fm.Events.WsException;` | `import fm.WsException;` |
-| `import fm.Events.WsTransportError;` | `import fm.WsTransportError;` |
+| `import fm.Events.WsTransportError;` | `import fm.StreamDropped;` |
+| `import fm.Events.WsException;` | `import fm.FrameUnreadable;` |
 | `import fm.Events.Reconnected;` | `import fm.Reconnected;` |
-| `Events.WsException` | `WsException` |
+| `WsTransportError` | `StreamDropped` |
+| `WsException` | `FrameUnreadable` |
+
+The two renames are not cosmetic. Both are **records delivered on the event
+queue and never thrown**, and `Exception`/`Error` told a caller to `catch` what
+they have to `instanceof`. They read now as three things that can happen to a
+stream: `StreamDropped`, `Reconnected`, `FrameUnreadable`. Python and TypeScript
+rename identically.
 
 ### Types that moved to `fm.internal`
 

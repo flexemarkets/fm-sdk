@@ -2,7 +2,7 @@
 
 from .client import Flexemarkets
 from .enums import OrderType, Side
-from .events import EventListener, NO_SEQ, OrdersUpdate, WsException, WsTransportError
+from .events import EventListener, NO_SEQ, OrdersUpdate, FrameUnreadable, StreamDropped
 from .snapshot import Snapshot
 from .exceptions import (
     AccountNameConflictError,
@@ -72,8 +72,8 @@ __all__ = [
     "ReconnectEvent",
     # events
     "EventListener",
-    "WsTransportError",
-    "WsException",
+    "StreamDropped",
+    "FrameUnreadable",
     "OrdersUpdate",
     # snapshot
     "Snapshot",

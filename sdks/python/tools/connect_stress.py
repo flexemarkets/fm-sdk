@@ -52,12 +52,12 @@ from datetime import datetime, timezone
 
 from fm import Flexemarkets
 from fm.client import _server
-from fm.events import EventListener, OrdersUpdate, WsException, WsTransportError
+from fm.events import EventListener, OrdersUpdate, FrameUnreadable, StreamDropped
 from fm.types import Holding, Session, Version
 
 # Events that mean "the server has pushed us real session state".
 _STATE_TYPES = (Session, Holding, OrdersUpdate)
-_ERROR_TYPES = (WsException, WsTransportError)
+_ERROR_TYPES = (FrameUnreadable, StreamDropped)
 
 
 # ---------------------------------------------------------------------------

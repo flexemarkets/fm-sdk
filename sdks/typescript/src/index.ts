@@ -82,8 +82,8 @@ export { Trades, MarketplaceTrades } from "./trades.js";
 export { EventListener } from "./stomp.js";
 export type {
   StompFrame,
-  WsTransportError,
-  WsException,
+  StreamDropped,
+  FrameUnreadable,
   FmEvent,
   EventCallback,
 } from "./stomp.js";

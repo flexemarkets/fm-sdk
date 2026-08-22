@@ -16,8 +16,8 @@ import fm.Side;
 import fm.Snapshot;
 import fm.Subscription;
 import fm.Trades;
-import fm.WsException;
-import fm.WsTransportError;
+import fm.FrameUnreadable;
+import fm.StreamDropped;
 
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -55,7 +55,7 @@ import java.util.function.Consumer;
  *   <li>Per-{@code (marketplaceId, identity)} sharing — every
  *       {@code observe(...)} call returns a fresh view with its own
  *       WS connection. Sharing is a Phase 2 unlock.</li>
- *   <li>Reconnect handling — a {@link WsTransportError} from the
+ *   <li>Reconnect handling — a {@link StreamDropped} from the
  *       queue currently terminates the dispatcher with no automatic
  *       reconnect.</li>
  * </ul>
@@ -268,13 +268,13 @@ public class DefaultMarketView implements MarketView {
                 } else if (event instanceof Holding h) {
                     holding.set(h);
                     for (var hh : holdingHandlers) hh.accept(h);
-                } else if (event instanceof WsTransportError error) {
+                } else if (event instanceof StreamDropped error) {
                     // The subscription restores itself; nothing to do but say so.
                     System.err.println("[MarketView] WS transport error on marketplace "
                             + marketplaceId + ": " + error.failure().getMessage());
                 } else if (event instanceof Reconnected) {
                     _reseedAfterReconnect();
-                } else if (event instanceof WsException ex) {
+                } else if (event instanceof FrameUnreadable ex) {
                     // STOMP ERROR / parse failure. Logged for
                     // visibility; reconnecting won't help with a
                     // malformed frame, so we leave the view as-is.
