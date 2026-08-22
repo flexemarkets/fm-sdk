@@ -6,9 +6,10 @@ times, and nothing has been holding the copies together — a field added to one
 and forgotten in the others would ship, and the first person to find out would
 be a consumer whose deserialization quietly dropped it.
 
-They are, as it happens, in step today: of thirteen shared types, eleven agree
-exactly and the two that differ do so on purpose (see EXEMPTIONS). This exists
-so that stays true rather than staying true by luck.
+They are, as it happens, in step today: eighteen shared types agree exactly and
+EXEMPTIONS is empty. This exists so that stays true rather than staying true by
+luck -- and so that a type quietly dropping out of the comparison, which is the
+failure a check like this is worst at noticing, is itself a failure.
 
 What is compared is the **wire** format, not each language's surface. Java
 fields marked @JsonIgnore are client-side conveniences that never cross the
@@ -31,8 +32,24 @@ ROOT = Path(__file__).resolve().parent.parent
 # The package, not one file: E11 split the Types holder class into a record per
 # file, so there is no longer a single place the shapes live.
 JAVA = ROOT / "sdks/java/fm-sdk/src/main/java/fm"
-PYTHON = ROOT / "sdks/python/fm/types.py"
-TYPESCRIPT = ROOT / "sdks/typescript/src/types.ts"
+# The modules that declare the wire format, listed rather than globbed. The
+# event objects -- StreamDropped, GapEvent, OrdersUpdate -- are client-side and
+# deliberately shaped per language: Java carries a Throwable where Python and
+# TypeScript carry the STOMP command, headers and body. Scanning the whole
+# package pulls those in and reports eighteen differences that are all correct.
+PYTHON_PKG = ROOT / "sdks/python/fm"
+TYPESCRIPT_SRC = ROOT / "sdks/typescript/src"
+PYTHON = [PYTHON_PKG / "types.py", PYTHON_PKG / "_hal.py"]
+TYPESCRIPT = [TYPESCRIPT_SRC / "types.ts", TYPESCRIPT_SRC / "hal.ts"]
+
+# What a full run compares. A list of modules cannot notice a type that moves
+# out of one of them: ApiRoot went to the private _hal module and the run
+# dropped from eighteen shared types to seventeen and still printed ok. Java
+# had already taught this once -- three types moved to fm.internal and vanished
+# from the comparison -- and rglob fixed it there, which a wire/not-wire split
+# rules out here. So the count is the guard, and lowering it is an edit someone
+# has to make on purpose.
+EXPECTED_SHARED = 18
 
 # Divergences that are intended. Each needs a reason, so that adding one is a
 # decision someone wrote down rather than a way to silence the check.
@@ -112,40 +129,57 @@ def java_types(directory: Path) -> dict[str, tuple[list[str], set[str]]]:
     return types
 
 
-def python_types(path: Path) -> dict[str, list[str]]:
-    types: dict[str, list[str]] = {}
-    current: str | None = None
+def python_types(paths: list[Path]) -> dict[str, list[str]]:
+    """Only what @dataclass marks, across the wire modules.
 
-    for line in path.read_text().splitlines():
-        header = re.match(r"class (\w+)", line.strip())
-        if header and not line.startswith((" ", "\t")):
-            current = header.group(1)
-            types[current] = []
-            continue
-        if current is None:
-            continue
-        if line and not line.startswith((" ", "\t")):
-            current = None
-            continue
-        field = re.match(r"    ([a-z_][a-z0-9_]*)\s*:", line)
-        if field:
-            types[current].append(field.group(1))
+    The decorator, not the file, is what says "this is a shape the server
+    sends". Every wire type is a dataclass and nothing else in the package is,
+    so a helper added beside them cannot become a type the other two SDKs are
+    then reported as missing.
+    """
+    types: dict[str, list[str]] = {}
+
+    for path in paths:
+        current: str | None = None
+        decorated = False
+
+        for line in path.read_text().splitlines():
+            stripped = line.strip()
+            header = re.match(r"class (\w+)", stripped)
+            if header and not line.startswith((" ", "\t")):
+                current = header.group(1) if decorated else None
+                decorated = False
+                if current:
+                    types[current] = []
+                continue
+            if not line.startswith((" ", "\t")):
+                decorated = stripped.startswith("@dataclass")
+                if stripped:
+                    current = None
+                continue
+            if current is None:
+                continue
+            field = re.match(r"    ([a-z_][a-z0-9_]*)\s*:", line)
+            if field:
+                types[current].append(field.group(1))
 
     return types
 
 
-def typescript_types(path: Path) -> dict[str, list[str]]:
-    source = path.read_text()
+def typescript_types(paths: list[Path]) -> dict[str, list[str]]:
+    """Interfaces across the wire modules -- see python_types for the shape."""
     types: dict[str, list[str]] = {}
 
-    for match in re.finditer(r"export interface (\w+) \{", source):
-        end = source.index("\n}", match.start())
-        fields = []
-        for line in source[match.start() : end].splitlines()[1:]:
-            field = re.match(r"\s+([a-zA-Z_][a-zA-Z0-9_]*)\??\s*:", line)
-            if field:
-                fields.append(field.group(1))
-        types[match.group(1)] = fields
+    for path in paths:
+        source = path.read_text()
+        for match in re.finditer(r"export interface (\w+) \{", source):
+            end = source.index("\n}", match.start())
+            fields = []
+            for line in source[match.start() : end].splitlines()[1:]:
+                field = re.match(r"\s+([a-zA-Z_][a-zA-Z0-9_]*)\??\s*:", line)
+                if field:
+                    fields.append(field.group(1))
+            types[match.group(1)] = fields
 
     return types
 
@@ -393,8 +427,8 @@ def typescript_failures(path: Path) -> set[str]:
 
 def check_failures(verbose: bool) -> list[str]:
     java = java_failures(JAVA)
-    python = python_failures(PYTHON.parent / "exceptions.py")
-    typescript = typescript_failures(TYPESCRIPT.parent / "client.ts")
+    python = python_failures(PYTHON_PKG / "exceptions.py")
+    typescript = typescript_failures(TYPESCRIPT_SRC / "client.ts")
 
     if not (java and python and typescript):
         return ["failure parity: a parser found nothing; it is broken, not the SDKs"]
@@ -419,8 +453,8 @@ def check_failures(verbose: bool) -> list[str]:
 
 def check_methods(verbose: bool) -> list[str]:
     java = java_methods(JAVA)
-    python = python_methods(PYTHON.parent / "client.py")
-    typescript = typescript_methods(TYPESCRIPT.parent / "client.ts")
+    python = python_methods(PYTHON_PKG / "client.py")
+    typescript = typescript_methods(TYPESCRIPT_SRC / "client.ts")
 
     if not (java and python and typescript):
         return ["method parity: a parser found nothing; it is broken, not the SDKs"]
@@ -468,7 +502,7 @@ def check_methods(verbose: bool) -> list[str]:
 def main() -> int:
     verbose = "--verbose" in sys.argv
 
-    for path in (JAVA, PYTHON, TYPESCRIPT):
+    for path in (JAVA, *PYTHON, *TYPESCRIPT):
         if not path.exists():
             print(f"parity: cannot find {path}", file=sys.stderr)
             return 1
@@ -482,6 +516,15 @@ def main() -> int:
         # Guard the guard: a parser that silently matched nothing would report
         # perfect agreement forever.
         print("parity: no types found in all three SDKs; the parsers are broken",
+              file=sys.stderr)
+        return 1
+
+    if len(shared) < EXPECTED_SHARED:
+        # A type that stops being compared is worse than one that disagrees:
+        # nothing is reported and coverage quietly shrinks. See EXPECTED_SHARED.
+        print(f"parity: comparing {len(shared)} shared types, expected at least "
+              f"{EXPECTED_SHARED}; a type is no longer being read from all three "
+              f"SDKs. Check that it did not move out of a module listed above.",
               file=sys.stderr)
         return 1
 

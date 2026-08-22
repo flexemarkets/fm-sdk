@@ -45,10 +45,10 @@ from .exceptions import (
     PersonHasMarketplaceDataError,
 )
 from .enums import OrderType, Side
+from ._hal import ApiRoot
 from .types import (
     Account,
     Allotment,
-    ApiRoot,
     Approval,
     ClientConnection,
     Holding,

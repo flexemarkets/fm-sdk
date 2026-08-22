@@ -331,14 +331,6 @@ export interface Version {
   version: number;
 }
 
-export interface ApiRoot {
-  links: Record<string, string>;
-}
-
-export function getLink(root: ApiRoot, name: string): string | undefined {
-  return root.links[name];
-}
-
 export interface ConflictFailure {
   status: string | null;
   error: string | null;

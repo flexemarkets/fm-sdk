@@ -23,7 +23,6 @@ from .trades import MarketplaceTrades, Trades
 from .types import (
     Account,
     Allotment,
-    ApiRoot,
     Assets,
     ClientConnection,
     Holding,
@@ -46,7 +45,6 @@ __all__ = [
     # types
     "Account",
     "Allotment",
-    "ApiRoot",
     "Assets",
     "ClientConnection",
     "Holding",

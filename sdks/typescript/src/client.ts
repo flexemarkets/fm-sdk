@@ -13,7 +13,6 @@ import { toInstant } from "./timestamps.js";
 import type {
   Account,
   Allotment,
-  ApiRoot,
   Assets,
   ClientConnection,
   Holding,
@@ -28,6 +27,7 @@ import type {
   Token,
 } from "./types.js";
 import { EventListener, NO_SEQ, type EventCallback } from "./stomp.js";
+import type { ApiRoot } from "./hal.js";
 import {
   DefaultMarketView,
   MarketViewHandle,

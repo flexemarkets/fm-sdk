@@ -14,7 +14,6 @@ export type {
   ClientConnection,
   TickGrid,
   Version,
-  ApiRoot,
   ConflictFailure,
 } from "./types.js";
 
@@ -35,7 +34,6 @@ export {
   tickRound,
   gridRound,
   unitGrid,
-  getLink,
 } from "./types.js";
 
 // Client

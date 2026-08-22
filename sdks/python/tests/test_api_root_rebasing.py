@@ -21,7 +21,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
-from fm.client import ApiRoot, Flexemarkets, _rebase_api_root
+from fm._hal import ApiRoot
+from fm.client import Flexemarkets, _rebase_api_root
 
 TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl"
 

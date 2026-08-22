@@ -19,7 +19,7 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 
 import { Flexemarkets, rebaseApiRoot } from "../src/client.ts";
-import type { ApiRoot } from "../src/types.ts";
+import type { ApiRoot } from "../src/hal.ts";
 
 const TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl";
 

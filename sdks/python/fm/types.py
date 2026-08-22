@@ -295,14 +295,6 @@ class Version:
 
 
 @dataclass
-class ApiRoot:
-    links: dict[str, str] = field(default_factory=dict)
-
-    def get_link(self, name: str) -> str | None:
-        return self.links.get(name)
-
-
-@dataclass
 class ConflictFailure:
     status: str | None = None
     error: str | None = None
