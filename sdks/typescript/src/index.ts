@@ -77,7 +77,6 @@ export { OrderBook, OrderBooks } from "./orderbook.js";
 export { Trades, MarketplaceTrades } from "./trades.js";
 
 // Events
-export { EventListener } from "./stomp.js";
 export type {
   StompFrame,
   StreamDropped,
@@ -87,7 +86,6 @@ export type {
 } from "./stomp.js";
 
 // MarketView
-export { DefaultMarketView, MarketViewHandle } from "./market-view.js";
 export type { MarketView, Subscription, GapEvent, ReconnectEvent } from "./market-view.js";
 export type { Snapshot } from "./snapshot.js";
 export { NO_SEQ } from "./stomp.js";
