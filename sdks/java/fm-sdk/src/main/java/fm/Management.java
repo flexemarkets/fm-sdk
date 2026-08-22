@@ -23,11 +23,30 @@ import java.util.List;
  */
 public interface Management {
 
-    /** Opens the marketplace's session, returning it in its new state. */
+    /**
+     * Opens the marketplace's session, returning it in its new state.
+     *
+     * @param marketplaceId the marketplace whose session to open
+     * @return the session, now OPEN
+     */
     Session openSession(long marketplaceId);
 
+    /**
+     * Pauses the marketplace's session. A paused session can be re-opened, and
+     * re-opening it does not consume a staged allocation.
+     *
+     * @param marketplaceId the marketplace whose session to pause
+     * @return the session, now PAUSED
+     */
     Session pauseSession(long marketplaceId);
 
+    /**
+     * Closes the marketplace's session. Opening a <em>closed</em> session is
+     * what applies a staged allocation.
+     *
+     * @param marketplaceId the marketplace whose session to close
+     * @return the session, now CLOSED
+     */
     Session closeSession(long marketplaceId);
 
     /**
@@ -41,6 +60,9 @@ public interface Management {
      *
      * <p>The JSON is parsed before it is sent, so a malformed definition fails
      * locally rather than as a 400 from the server.
+     *
+     * @param json the marketplace definition, including at least one market
+     * @return the marketplace as created, with server-assigned ids throughout
      */
     Marketplace createMarketplaceFromJson(String json);
 
@@ -57,6 +79,10 @@ public interface Management {
      * <p>Takes {@link Holding}s because that is what a caller has -- the shape
      * it reads positions in and computes with. The allotment form the endpoint
      * wants is an encoding detail and is applied here.
+     *
+     * @param marketplaceId the marketplace to allocate in
+     * @param holdings      the opening positions, one per participant
+     * @return the positions as staged, read back from the server
      */
     List<Holding> allocate(long marketplaceId, List<Holding> holdings);
 
@@ -69,6 +95,10 @@ public interface Management {
      * <p>A {@link Path}: the file is the thing being uploaded. fm-lib-net's
      * equivalent takes a Spring {@code Resource}, which is exactly the sort of
      * dependency in a signature that this SDK exists to avoid.
+     *
+     * @param marketplaceId the marketplace to allocate in
+     * @param csv           the holdings file to upload
+     * @return the positions as staged, read back from the server
      */
     List<Holding> uploadHoldings(long marketplaceId, Path csv);
 }

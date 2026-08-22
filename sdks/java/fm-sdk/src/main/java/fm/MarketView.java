@@ -40,6 +40,11 @@ public interface MarketView extends AutoCloseable {
      * A factory rather than a public constructor so the implementing class
      * stays an implementation detail: naming it in the published API would
      * commit to it for good, and callers only ever want "a view over this".
+     *
+     * @param flexemarkets the connected client the view reads and writes through
+     * @param marketplaceId the marketplace to track
+     * @param markets     the marketplace's markets, as read once at observe-time
+     * @return a live view, already seeded and receiving updates
      */
     static MarketView over(Flexemarkets flexemarkets, long marketplaceId,
                            java.util.List<Market> markets) {
@@ -48,11 +53,15 @@ public interface MarketView extends AutoCloseable {
 
     /**
      * The marketplace this view tracks.
+     *
+     * @return the marketplace's id
      */
     long marketplaceId();
 
     /**
      * Markets in this marketplace, captured at observe-time.
+     *
+     * @return the markets, as captured when the view was opened
      */
     List<Market> markets();
 
@@ -60,25 +69,34 @@ public interface MarketView extends AutoCloseable {
      * Always-current order book for {@code marketId}. Reads are atomic;
      * a caller never sees a half-applied delta.
      *
-     * @return null if {@code marketId} isn't in this marketplace
+     * @param marketId the market to read
+     * @return that market's book, current as of this call, or null when
+     *         {@code marketId} is not in this marketplace
      */
     OrderBook orderBook(long marketId);
 
     /**
      * Most-recent session update observed. Null until the first
      * {@code SESSION-UPDATE} frame lands.
+     *
+     * @return the marketplace's session, or null before the first arrives
      */
     Session session();
 
     /**
      * The caller's holding for this marketplace. Null until the first
      * {@code HOLDING-UPDATE} frame lands.
+     *
+     * @return the caller's holding, or null before the first arrives
      */
     Holding holding();
 
     /**
      * Register a handler for session-state changes. Returns a
      * {@link Subscription} the caller closes to unregister.
+     *
+     * @param handler called with each new session state
+     * @return a handle that unsubscribes the handler
      */
     Subscription onSessionChange(Consumer<Session> handler);
 
@@ -86,11 +104,18 @@ public interface MarketView extends AutoCloseable {
      * Register a handler that fires whenever the order book for
      * {@code marketId} changes. The handler receives the post-update
      * book; multiple deltas in one batch coalesce to one callback.
+     *
+     * @param marketId the market to watch
+     * @param handler  called with that market's book after each change
+     * @return a handle that unsubscribes the handler
      */
     Subscription onOrderBookChange(long marketId, Consumer<OrderBook> handler);
 
     /**
      * Register a handler for the caller's holding changes.
+     *
+     * @param handler called with the holding after each change
+     * @return a handle that unsubscribes the handler
      */
     Subscription onHoldingChange(Consumer<Holding> handler);
 
@@ -99,6 +124,9 @@ public interface MarketView extends AutoCloseable {
      * gap in the ORDERS-UPDATE seq stream. Use this to wire your own
      * telemetry — by default the SDK logs the gap to stderr but
      * otherwise hides the recovery flow.
+     *
+     * @param handler called when a sequence gap is detected
+     * @return a handle that unsubscribes the handler
      */
     Subscription onGap(Consumer<GapEvent> handler);
 
@@ -107,16 +135,29 @@ public interface MarketView extends AutoCloseable {
      * transport error — either when the reconnect + resnapshot has
      * completed successfully, or when the attempt has failed and the
      * view is left stale.
+     *
+     * @param handler called after the stream is restored and the view reseeded
+     * @return a handle that unsubscribes the handler
      */
     Subscription onReconnect(Consumer<ReconnectEvent> handler);
 
     /**
      * Submit a limit order on this marketplace.
+     *
+     * @param marketId the market to trade in
+     * @param side     buy or sell
+     * @param units    the size, which must sit on the market's unit grid
+     * @param price    the limit, which must sit on the market's price grid
+     * @return the order as accepted, with its server-assigned id
      */
     Order submitLimit(long marketId, Side side, long units, long price);
 
     /**
      * Cancel a previously-submitted order.
+     *
+     * @param marketId   the market the original order is in
+     * @param originalId the id of the order to cancel
+     * @return the cancel order as accepted
      */
     Order submitCancel(long marketId, long originalId);
 
