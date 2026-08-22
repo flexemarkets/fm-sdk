@@ -19,7 +19,9 @@ import fm.OrderBook;
 import fm.OrdersUpdate;
 import fm.Holding;
 import fm.Market;
-import fm.Types.Session;
+import fm.Session;
+import fm.MarketplaceTrades;
+import fm.OrderBooks;
 
 public class Ticker {
     private static final int TRADE_DISPLAY_COUNT = 5;
