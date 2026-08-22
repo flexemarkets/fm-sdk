@@ -1207,7 +1207,15 @@ class Flexemarkets:
         data = self._get(url).json()
         return [_parse_holding(h) for h in data]
 
-    def holding(self, marketplace_id: int, user_id: int) -> Holding:
+    def holding(self, marketplace_id: int) -> Holding:
+        """The caller's own holding in *marketplace_id*.
+
+        Took a ``user_id`` it never used: the route is ``currentHolding``, which
+        is the caller's by definition, and the argument was accepted and
+        discarded. So every call site had to invent a value, and one that passed
+        somebody else's id got its own holding back and no indication of it.
+        Java and TypeScript always took the marketplace alone.
+        """
         url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "currentHolding")
         return _parse_holding(self._get(url).json())
 

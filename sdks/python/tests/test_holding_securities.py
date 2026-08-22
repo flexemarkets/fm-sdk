@@ -46,3 +46,21 @@ def test_units_follow_the_same_order():
     holding = Holding(securities=[_security(30, 3), _security(10, 1)])
 
     assert holding.units() == [1, 3]
+
+
+def test_holding_takes_the_marketplace_alone():
+    """It demanded a ``user_id`` it never used.
+
+    The route is ``currentHolding`` -- the caller's by definition -- so the
+    argument was accepted and discarded. Every call site had to invent a value,
+    and one that passed somebody else's id got its own holding back with no
+    indication of it. Java and TypeScript always took the marketplace alone;
+    the parity check compared method names only, so it read as agreement.
+    """
+    import inspect
+
+    from fm.client import Flexemarkets
+
+    params = list(inspect.signature(Flexemarkets.holding).parameters)
+
+    assert params == ["self", "marketplace_id"], params

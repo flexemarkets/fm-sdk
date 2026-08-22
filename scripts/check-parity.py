@@ -180,20 +180,97 @@ JAVA_SURFACE = [
 # 400. Deleting it was the fix, not an exemption.
 METHOD_EXEMPTIONS: dict[str, str] = {}
 
+# Methods whose *required*-argument count differs on purpose. Java has no
+# default arguments, so anything Python and TypeScript make optional is
+# mandatory there; that is idiom, not divergence. Everything else here is a
+# caller having to supply something the other SDKs do not ask for.
+ARITY_EXEMPTIONS: dict[str, str] = {
+    "connect":
+        "Python and TypeScript default every argument, so connect() reads "
+        "~/.fm on its own. Java cannot, and takes all three.",
+    "createMarket":
+        "The unit grid and privateMarket default in Python and TypeScript; "
+        "Java has no default arguments and takes all six.",
+}
 
-def java_methods(directory: Path) -> set[str]:
+
+def _signature(lines: list[str], start: int) -> str:
+    """The parameter text of a declaration, however many lines it spans.
+
+    Signatures wrap: Python and TypeScript both put one parameter per line once
+    there are more than two or three. Reading only the opening line reported a
+    required-argument count of zero for eleven of them -- the check confidently
+    wrong about the SDKs again, which is the failure mode this file keeps
+    finding new ways to hit.
+    """
+    text, depth = "", 0
+    for line in lines[start:]:
+        for char in line:
+            if char == "(":
+                depth += 1
+                if depth == 1:
+                    continue
+            elif char == ")":
+                depth -= 1
+                if depth == 0:
+                    return text
+            if depth >= 1:
+                text += char
+        text += " "
+    return text
+
+
+def _required(params: str, *, drop_self: bool = False) -> int:
+    """How many arguments a caller must supply.
+
+    Not the total: optional parameters and overloads are idiom, and differ
+    between languages on purpose. What matters is the floor -- if one SDK
+    demands an argument the others do not, a caller has to find something to
+    put there. Python's holding(marketplace_id, user_id) demanded a user_id it
+    never used, while Java and TypeScript took the marketplace alone, and a
+    name-only check called that parity.
+    """
+    depth, current, parts = 0, [], []
+    for char in params:
+        if char in "<([{":
+            depth += 1
+        elif char in ">)]}":
+            depth -= 1
+        if char == "," and depth == 0:
+            parts.append("".join(current)); current = []
+        else:
+            current.append(char)
+    parts.append("".join(current))
+
+    count = 0
+    for part in parts:
+        part = part.strip()
+        if not part or part in ("self", "cls", "*"):
+            continue
+        if drop_self and part.startswith("*"):
+            continue          # *args / keyword-only marker
+        if "=" in part or part.endswith("?") or "?:" in part:
+            continue          # has a default, or is optional
+        if "..." in part:
+            continue          # Java varargs: createUser(..., String... roles)
+        count += 1
+    return count
+
+
+def java_methods(directory: Path) -> dict[str, int]:
     """Public methods declared on the role interfaces.
 
     The roles, not Flexemarkets: since the split it declares only close(), and
     reading it alone would report the surface as empty -- a check that passes
     because it looked in the wrong place is worse than no check.
     """
-    names: set[str] = set()
+    names: dict[str, int] = {}
 
     for role in JAVA_SURFACE:
         source = (directory / role).read_text()
         source = re.sub(r"/\*.*?\*/", " ", source, flags=re.S)
-        for line in source.splitlines():
+        java_lines = source.splitlines()
+        for index, line in enumerate(java_lines):
             if "private" in line:
                 continue
             # Exactly four spaces: a member of the interface. Statements inside
@@ -211,17 +288,21 @@ def java_methods(directory: Path) -> set[str]:
             # call. None of them is a declaration.
             if match and match.group(1) not in ("for", "if", "while", "catch",
                                                 "switch", "HttpFlexemarkets"):
-                names.add(match.group(1))
+                name = match.group(1)
+                params = _signature(java_lines, index)
+                # Overloads: the smallest is what a caller must supply.
+                names[name] = min(names.get(name, 99), _required(params))
 
     return names
 
 
-def python_methods(path: Path) -> set[str]:
+def python_methods(path: Path) -> dict[str, int]:
     """Public methods and properties on the Flexemarkets class."""
-    names: set[str] = set()
+    names: dict[str, int] = {}
     inside = False
 
-    for line in path.read_text().splitlines():
+    py_lines = path.read_text().splitlines()
+    for index, line in enumerate(py_lines):
         if re.match(r"class Flexemarkets\b", line):
             inside = True
             continue
@@ -231,17 +312,19 @@ def python_methods(path: Path) -> set[str]:
             continue
         match = re.match(r"    def ([a-z][a-z0-9_]*)\s*\(", line)
         if match:
-            names.add(camel(match.group(1)))
+            names[camel(match.group(1))] = _required(_signature(py_lines, index),
+                                                     drop_self=True)
 
     return names
 
 
-def typescript_methods(path: Path) -> set[str]:
+def typescript_methods(path: Path) -> dict[str, int]:
     """Public methods and getters on the Flexemarkets class."""
-    names: set[str] = set()
+    names: dict[str, int] = {}
     inside = False
 
-    for line in path.read_text().splitlines():
+    ts_lines = path.read_text().splitlines()
+    for index, line in enumerate(ts_lines):
         if re.match(r"export class Flexemarkets\b", line):
             inside = True
             continue
@@ -251,7 +334,7 @@ def typescript_methods(path: Path) -> set[str]:
             continue
         match = re.match(r"  (?:static\s+|async\s+|get\s+)*([a-zA-Z][a-zA-Z0-9]*)\s*\(", line)
         if match and match.group(1) not in ("constructor", "if", "for", "while", "catch"):
-            names.add(match.group(1))
+            names[match.group(1)] = _required(_signature(ts_lines, index))
 
     return names
 
@@ -265,7 +348,7 @@ def check_methods(verbose: bool) -> list[str]:
         return ["method parity: a parser found nothing; it is broken, not the SDKs"]
 
     problems: list[str] = []
-    for name in sorted(java | python | typescript):
+    for name in sorted(set(java) | set(python) | set(typescript)):
         if name in METHOD_EXEMPTIONS:
             continue
         missing = [
@@ -283,6 +366,18 @@ def check_methods(verbose: bool) -> list[str]:
             ]
             problems.append(
                 f"{name}() is in {', '.join(present)} but missing from {', '.join(missing)}"
+            )
+            continue
+
+        if name in ARITY_EXEMPTIONS:
+            continue
+
+        required = {language: names[name] for language, names in (
+            ("java", java), ("python", python), ("typescript", typescript))}
+        if len(set(required.values())) > 1:
+            shape = ", ".join(f"{lang} {n}" for lang, n in required.items())
+            problems.append(
+                f"{name}() requires a different number of arguments in each SDK: {shape}"
             )
 
     if verbose:
@@ -371,8 +466,10 @@ def main() -> int:
         for problem in method_problems:
             print(f"  - {problem}", file=sys.stderr)
         print(
-            "\nA method added to one SDK is a method the other two are missing. If a "
-            "difference is intended, record it in METHOD_EXEMPTIONS with the reason.",
+            "\nA method added to one SDK is a method the other two are missing, and a "
+            "method that demands an extra argument in one SDK is one its callers have to "
+            "invent a value for. If a difference is intended, record it in "
+            "METHOD_EXEMPTIONS (missing) or ARITY_EXEMPTIONS (arguments), with the reason.",
             file=sys.stderr,
         )
         return 1
