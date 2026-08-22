@@ -225,6 +225,14 @@ endif
 		sdks/java/pom.xml sdks/java/fm-sdk/pom.xml sdks/java/fm-spi/pom.xml sdks/java/examples/ticker/pom.xml
 	@# MCP server
 	sed -i 's|^version = ".*"|version = "$(V)"|' mcp-server/pyproject.toml
+	@# The Java README's dependency snippet. Marked rather than matched
+	@# loosely, because a bare version number appears in prose too. It said
+	@# 0.0.4 while Central was on 0.0.12 -- eight releases of drift, because
+	@# nothing moved it and nothing failed when it was wrong.
+	sed -i 's|<version>[^<]*</version><!-- fm-readme-version -->|<version>$(V)</version><!-- fm-readme-version -->|' \
+		sdks/java/README.md
+	sed -i 's|fm-sdk:[^"]*") // fm-readme-version|fm-sdk:$(V)") // fm-readme-version|' \
+		sdks/java/README.md
 	@echo "Version set to $(V) (Maven: $(MAVEN_V))"
 	@echo "fm-spi stays at $$(make -s spi-version) — use set-spi-version to move it"
 

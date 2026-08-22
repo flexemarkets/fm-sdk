@@ -14,14 +14,14 @@ Maven:
 <dependency>
     <groupId>com.flexemarkets</groupId>
     <artifactId>fm-sdk</artifactId>
-    <version>0.0.4</version>
+    <version>0.1.0-dev0</version><!-- fm-readme-version -->
 </dependency>
 ```
 
 Gradle:
 
 ```kotlin
-implementation("com.flexemarkets:fm-sdk:0.0.4")
+implementation("com.flexemarkets:fm-sdk:0.1.0-dev0") // fm-readme-version
 ```
 
 ## Configuration
@@ -62,10 +62,11 @@ endpoint=https://api.flexemarkets.com/api/marketplaces/123
 import fm.Flexemarkets;
 import fm.OrderBooks;
 import fm.MarketplaceTrades;
-import fm.Types.Holding;
-import fm.Types.Market;
-import fm.Types.Order;
-import fm.Types.Session;
+import fm.Holding;
+import fm.Market;
+import fm.Order;
+import fm.Session;
+import fm.Side;
 
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -81,7 +82,7 @@ try (var fm = Flexemarkets.connect(null, null, "my-bot")) {
     Holding holding = fm.holding(marketplaceId);
 
     // Submit orders
-    Order order = fm.submitLimit(marketplaceId, markets.get(0).id(), "BUY", 1, 950);
+    Order order = fm.submitLimit(marketplaceId, markets.get(0).id(), Side.BUY, 1, 950);
     fm.submitCancel(marketplaceId, markets.get(0).id(), order.id());
 
     // WebSocket events
@@ -110,8 +111,8 @@ manager (or admin) credentials — the server answers 401/403 otherwise.
 
 ```java
 import fm.Flexemarkets;
-import fm.Types.Holding;
-import fm.Types.Person;
+import fm.Holding;
+import fm.Person;
 import java.nio.file.Path;
 import java.util.List;
 
