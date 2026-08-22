@@ -284,7 +284,18 @@ excluded_artifacts() {
 
 # fm-spi is checked against its own version, not the SDK's: it is on a separate
 # line and the two are not required to agree.
+#
+# The exclusion is consulted here for the same reason check_java_version
+# consults it. Under TARGET=all both run, and this one used to fail the release
+# for fm-spi 0.0.11 being on Central -- which is true, expected, and precisely
+# why the pom holds it back. The run then printed both "excluded from this
+# release by the pom" and "already published" about the same artifact, and
+# refused. A gate that contradicts itself teaches people to pass --force.
 check_spi_version() {
+    if grep -qx "fm-spi" <<< "$(excluded_artifacts)"; then
+        pass "central fm-spi $SPI_VERSION" "excluded from this release by the pom"
+        return
+    fi
     if curl -fsS --max-time 20 \
          "https://repo1.maven.org/maven2/com/flexemarkets/fm-spi/maven-metadata.xml" 2>/dev/null \
          | grep -q "<version>$SPI_VERSION</version>"; then
