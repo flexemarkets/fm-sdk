@@ -85,6 +85,44 @@ they have to `instanceof`. They read now as three things that can happen to a
 stream: `StreamDropped`, `Reconnected`, `FrameUnreadable`. Python and TypeScript
 rename identically.
 
+### The stream restores itself, and says so (Python and TypeScript)
+
+Java has always reconnected the subscription in the background after a
+`StreamDropped` and then put a `Reconnected` on the queue. Python and
+TypeScript did neither: `listen()` delivered a `StreamDropped` and the stream
+stayed dead until you called `fm.reconnect()` yourself.
+
+If your code does this, **delete it** — you will now reconnect twice:
+
+```python
+# before — the caller drove the reconnect
+if isinstance(event, StreamDropped):
+    fm.reconnect()
+```
+
+```python
+# after — the listener has already done it; reseed when it confirms
+if isinstance(event, Reconnected):
+    reseed()          # everything missed while the socket was down
+```
+
+`Reconnected` carries `marketplace_id` / `marketplaceId`, since one client can
+hold several subscriptions. `fm.reconnect()` still exists and still works.
+
+Code using `observe()` needs no change: `MarketView` reseeds and fires
+`on_reconnect` / `onReconnect` exactly as before.
+
+TypeScript's discriminants changed with the type names — the `kind` tag was
+left speaking the old vocabulary:
+
+| Find | Replace |
+|---|---|
+| `kind === "transport-error"` | `kind === "stream-dropped"` |
+| `kind === "ws-exception"` | `kind === "frame-unreadable"` |
+
+`tsc` catches every one of these, provided your `tsconfig` covers the files
+that switch on it.
+
 ### Types that moved to `fm.internal`
 
 Two public types no caller could reach — nothing on `Flexemarkets`, the roles
