@@ -9,6 +9,7 @@ VERSION := $(shell cat VERSION)
        install-python install-typescript install-java install-mcp \
        build-python build-typescript build-java \
        check-parity check-python check-typescript check-java check-mcp \
+       build-release build-release-java build-release-python build-release-typescript \
        test-python test-typescript test-java \
        ticker-python ticker-typescript ticker-java \
        mcp-server \
@@ -69,7 +70,7 @@ test-python:
 ticker-python:
 	$(VENV_PY) sdks/python/ticker.py $(ARGS)
 
-publish-python: check-publish-python
+publish-python: check-publish-python build-release-python
 	$(VENV_PY) -m pip install build twine
 	$(VENV_PY) -m build sdks/python
 	$(VENV_PY) -m twine upload sdks/python/dist/*
@@ -98,7 +99,7 @@ ticker-typescript:
 
 # OTP=<code> is passed through to npm for accounts with two-factor auth on
 # writes. Without it npm prompts, and a prompt inside make is a hang.
-publish-typescript: check-publish-typescript
+publish-typescript: check-publish-typescript build-release-typescript
 	cd sdks/typescript && npm publish --access public $(if $(OTP),--otp=$(OTP),)
 
 # ---------------------------------------------------------------------------
@@ -120,7 +121,7 @@ test-java:
 ticker-java:
 	java --enable-preview -jar sdks/java/examples/ticker/target/fm-ticker-$(VERSION).jar $(ARGS)
 
-publish-java: check-publish-java
+publish-java: check-publish-java build-release-java
 	cd sdks/java && mvn deploy -P release
 
 # fm-spi alone, for a release where only the contract changed.
@@ -166,7 +167,18 @@ mcp-server:
 # ran second, 0.0.9 was already live on PyPI by the time it refused. PyPI is
 # append-only, so that version was burned there and unusable everywhere else.
 # Put the registry that can demand interaction where a refusal costs nothing.
-publish: check-publish publish-typescript publish-python publish-java
+# build-release comes between the gate and the first upload, and that order is
+# the whole point. check-publish asks whether the credentials and the registries
+# will accept a release; it does not ask whether one can be built. Those are
+# different questions, and 0.1.0 answered them in the wrong order: npm and PyPI
+# published, then the Java build failed, and both uploads were already
+# permanent. Every failure that only appears under `-P release` -- javadoc,
+# gpg signing, the publishing plugin itself -- was undiscoverable until after
+# two registries were committed.
+#
+# So: build all three exactly as they will be published, then upload. A build
+# failure now costs nothing.
+publish: check-publish build-release publish-typescript publish-python publish-java
 
 # Every publish target carries its own gate as well, because each is also run
 # on its own -- and when only the aggregate was gated, `make publish-python`
@@ -176,6 +188,28 @@ publish: check-publish publish-typescript publish-python publish-java
 # Running `make publish` therefore checks a registry twice: once up front via
 # check-publish, once at its own target. That is a handful of HTTP requests,
 # and it is what makes the individual targets safe in isolation.
+# Everything a publish would upload, produced but not sent.
+#
+# -P release is not optional here: it is the profile that adds the source jar,
+# the javadoc jar and the gpg signature, so a plain `verify` exercises none of
+# the three things most likely to fail. `verify` stops short of `deploy`, which
+# is where central-publishing binds, so nothing leaves the machine.
+#
+# Tests are not skipped. `make check` runs them too, and running them twice
+# costs a minute against a release that cannot be withdrawn.
+build-release: build-release-java build-release-python build-release-typescript
+	@echo "build-release: all three artifacts built; nothing uploaded"
+
+build-release-java:
+	cd sdks/java && mvn -o -P release verify
+
+build-release-python:
+	$(VENV_PY) -m pip install --quiet build
+	$(VENV_PY) -m build sdks/python
+
+build-release-typescript:
+	cd sdks/typescript && npm run build && npm pack --dry-run
+
 check-publish:
 	@scripts/check-publish.sh all
 
