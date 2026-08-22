@@ -1,6 +1,5 @@
 package fm;
 
-import static fm.OrderUtils.isCancel;
 import static fm.OrderUtils.isConsumed;
 import static fm.OrderUtils.isSplit;
 import static fm.OrderUtils.isSymbol;
@@ -38,7 +37,7 @@ public class Trades {
 
         for (var order : ordersUpdate) {
             if (!isSymbol(market.symbol(), order)) continue;
-            if (isCancel(order)) continue;
+            if (OrderType.CANCEL == order.type()) continue;
             if (isSplit(order)) continue;
 
             if (isConsumed(order)) {

@@ -73,6 +73,21 @@ Three event records left the STOMP client, which was never meant to be API:
 | `import fm.Events.Reconnected;` | `import fm.Reconnected;` |
 | `Events.WsException` | `WsException` |
 
+### Types that moved to `fm.internal`
+
+Five public types no caller could reach — nothing on `Flexemarkets`, the roles
+or `MarketView` returned or accepted any of them:
+
+| type | was |
+|---|---|
+| `ApiRoot`, `ApiRoot.LinkObject` | HAL plumbing, read once at connect |
+| `Approval` | `approveAccount` returns `Account`, not this |
+| `Version` | the WebSocket protocol handshake |
+| `MarketplaceTrades`, `OrderBooks` | aggregators behind `MarketView` |
+
+If you import one, you were reaching past the contract. `MarketView` is the
+supported way to a maintained order book.
+
 ### The implementation is no longer importable
 
 `fm.HttpFlexemarkets` and `fm.Events` moved to `fm.internal`, along with
@@ -127,6 +142,15 @@ a blind replace of `.account(` is wrong. Match on the argument.
 | `Order.TYPE_CANCEL` | `OrderType.CANCEL` |
 | `OrderUtils.contra(side)` | `side.contra()` |
 | `OrderUtils.isBuy(sideString)` | `Side.BUY == side` |
+| `OrderUtils.isBuy(order)` | `Side.BUY == order.side()` |
+| `OrderUtils.isSell(order)` | `Side.SELL == order.side()` |
+| `OrderUtils.isCancel(order)` | `OrderType.CANCEL == order.type()` |
+| `OrderUtils.isLimit(order)` | `OrderType.LIMIT == order.type()` |
+
+`OrderUtils` keeps what needs a set of orders to answer — `isAvailable`,
+`isConsumed`, `isSplit`, `isResting`, `isSubmit`, `isSymbol`, `findOrder`. The
+four above became one-line enum comparisons when side and type became types, and
+two ways to ask one question is one too many.
 
 `submitLimit`, `submitMarket` and `MarketView.submitLimit` take `Side`.
 `Order.side()` returns `Side` and `Order.type()` returns `OrderType`; both may

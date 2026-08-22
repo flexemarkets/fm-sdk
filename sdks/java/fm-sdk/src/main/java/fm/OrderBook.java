@@ -1,8 +1,6 @@
 package fm;
 
 import static fm.OrderUtils.isAvailable;
-import static fm.OrderUtils.isBuy;
-import static fm.OrderUtils.isCancel;
 import static fm.OrderUtils.isResting;
 import static fm.OrderUtils.isSplit;
 import static fm.OrderUtils.isSymbol;
@@ -45,7 +43,7 @@ public class OrderBook {
 
             if (!initialized) continue;
 
-            if (isCancel(order)) {
+            if (OrderType.CANCEL == order.type()) {
                 remove(side, price, units);
                 continue;
             }

@@ -1,6 +1,20 @@
 package fm;
 
 
+/**
+ * What can only be worked out from a set of orders together.
+ *
+ * <p>Whether an order rests, was split, or was consumed is a question about
+ * its relationships — the exchange expresses a trade as several orders
+ * referring to each other — so it cannot be answered by the order alone and
+ * belongs here rather than on {@link Order}.
+ *
+ * <p>isBuy, isSell, isCancel and isLimit used to live here too. They became
+ * one-line comparisons the moment side and type became enums: {@code
+ * Side.BUY == order.side()} says the same thing as {@code isBuy(order)},
+ * reads the same way, and is one fewer name to know. Two ways to ask one
+ * question is one too many.
+ */
 public class OrderUtils {
     private OrderUtils() {}
 
@@ -24,22 +38,6 @@ public class OrderUtils {
         return false;
     }
 
-    public static boolean isCancel(Order order) {
-        return OrderType.CANCEL == order.type();
-    }
-
-    public static boolean isLimit(Order order) {
-        return OrderType.LIMIT == order.type();
-    }
-
-    public static boolean isBuy(Order order) {
-        return Side.BUY == order.side();
-    }
-
-    public static boolean isSell(Order order) {
-        return Side.SELL == order.side();
-    }
-
     public static boolean isSymbol(String symbol, Order order) {
         return symbol == null || symbol.equalsIgnoreCase(order.symbol());
     }
@@ -57,7 +55,7 @@ public class OrderUtils {
      * participants actually did had to spell the identity check out by hand.
      */
     public static boolean isSubmit(Order order) {
-        return isCancel(order)
+        return OrderType.CANCEL == order.type()
             || (order.id() == order.original() && order.id() == order.supplier());
     }
 
@@ -78,7 +76,7 @@ public class OrderUtils {
         }
 
         // CANCEL order is not resting
-        if (isCancel(order)) {
+        if (OrderType.CANCEL == order.type()) {
             return false;
         }
 
@@ -121,9 +119,9 @@ public class OrderUtils {
     }
 
     private static boolean isTraded(Order[] orders, Order order) {
-        if (isLimit(order) && isConsumed(order)) {
+        if (OrderType.LIMIT == order.type() && isConsumed(order)) {
             var consumer = findOrder(orders, order.consumer());
-            return consumer != null && isLimit(consumer);
+            return consumer != null && OrderType.LIMIT == consumer.type();
         }
         return false;
     }
