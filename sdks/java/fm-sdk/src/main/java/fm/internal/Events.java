@@ -31,6 +31,14 @@ import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 
 
+/**
+ * The STOMP client underneath {@link fm.Streaming}: one WebSocket
+ * subscription, delivering onto a caller's queue.
+ *
+ * <p>Internal because it is the implementation. A caller reaches this through
+ * {@code listen}, {@code subscribe} or {@code observe}, and holds the
+ * {@link Subscription} rather than this type.
+ */
 public class Events implements Subscription {
 
     /**

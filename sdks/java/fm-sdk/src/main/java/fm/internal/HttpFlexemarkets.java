@@ -58,6 +58,13 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
 
+/**
+ * The HTTP implementation of {@link Flexemarkets}.
+ *
+ * <p>Internal, and public only by accident of having to be constructed from
+ * {@code fm}. Nothing should import it: {@link Flexemarkets#connect} builds one
+ * and answers the interface, which is the supported way to get a connection.
+ */
 public class HttpFlexemarkets implements Flexemarkets {
 
     /**
@@ -68,6 +75,17 @@ public class HttpFlexemarkets implements Flexemarkets {
      * implementation, and the only thing outside {@code fm.internal} that
      * should be able to say is "make me one from these". Properties are its own
      * business.
+     *
+     * @param credential         a password, a token, or a path to a credential
+     *                           file holding one
+     * @param endpoint           the endpoint to connect to
+     * @param clientDescription  how this client identifies itself
+     * @param capture            whether to write each request and response to
+     *                           stdout
+     * @param impersonateAccount the account an administrator wishes to act as,
+     *                           or null
+     * @return an open connection, which the caller must close
+     * @throws IOException if the connection cannot be established
      */
     public static Flexemarkets open(String credential, String endpoint,
                                     String clientDescription, boolean capture,
@@ -1463,6 +1481,17 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     // --- Credential loading ---
 
+    /**
+     * The connection's properties, from defaults overlaid with the credential
+     * file and the arguments.
+     *
+     * @param credential        a password, a token, or a path to a credential
+     *                          file holding one
+     * @param endpoint          the endpoint to connect to
+     * @param clientDescription how this client identifies itself
+     * @return the resolved properties
+     * @throws IOException if a named credential file cannot be read
+     */
     public static Properties loadProperties(String credential, String endpoint, String clientDescription) throws IOException {
         var properties = setDefaultProperties();
 

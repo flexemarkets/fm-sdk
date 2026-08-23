@@ -101,6 +101,13 @@ public class DefaultMarketView implements MarketView {
      */
     private long lastAppliedSeq;
 
+    /**
+     * A view over one marketplace's markets, seeded but not yet observing.
+     *
+     * @param flexemarkets  the connection to read and stream through
+     * @param marketplaceId the marketplace to follow
+     * @param markets       its markets, which fix the books and tapes kept
+     */
     public DefaultMarketView(Flexemarkets flexemarkets, long marketplaceId, List<Market> markets) {
         this.flexemarkets = flexemarkets;
         this.marketplaceId = marketplaceId;
