@@ -16,6 +16,8 @@ Client SDKs for the [Flexemarkets](https://api.flexemarkets.com) trading API —
 |----------|--------|
 | [docs/API-REFERENCE.md](docs/API-REFERENCE.md) | The REST and WebSocket (STOMP) surface the SDKs wrap — auth, OTP, error bodies, endpoints, the snapshot/sequence contract |
 | [docs/FM-ROBOTS.md](docs/FM-ROBOTS.md) | The `fm-manager` CLI, the robot agents, and the `fm-spi` plugin contract |
+| [docs/UPGRADING-0.1.md](docs/UPGRADING-0.1.md) | Migrating a codebase from 0.0.x to 0.1.x, in all three languages |
+| [docs/DESIGN-0.2.md](docs/DESIGN-0.2.md) | Public API changes under consideration for 0.2, and the ones already rejected |
 
 Per-language quickstarts are in each SDK's README, linked from [Usage](#usage)
 below.
