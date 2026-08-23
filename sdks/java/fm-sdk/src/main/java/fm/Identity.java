@@ -22,12 +22,16 @@ public interface Identity {
     Account account();
 
     /**
-     * @return the id of the account this connection is signed in to
+     * The signed-in account's id.
+     *
+     * @return the account id
      */
     long accountId();
 
     /**
-     * @return the name of the account this connection is signed in to
+     * The signed-in account's name.
+     *
+     * @return the account name
      */
     String accountName();
 
@@ -39,7 +43,9 @@ public interface Identity {
     Person user();
 
     /**
-     * @return the id of the person this connection is signed in as
+     * The signed-in person's id.
+     *
+     * @return the user id
      */
     long userId();
 
@@ -108,7 +114,9 @@ public interface Identity {
     long endpointMarketplaceId();
 
     /**
-     * @return the base URL this connection talks to
+     * Where this connection points.
+     *
+     * @return the base URL it talks to
      */
     String endpointUrl();
 }

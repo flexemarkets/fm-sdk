@@ -54,6 +54,16 @@ public interface Flexemarkets
      * <p>Nothing is registered by default and the fallback is HTTP, so ordinary
      * use is unchanged -- including when a provider is present but does not
      * recognise the endpoint.
+     *
+     * @param credential        a password, a token, or a path to a credential
+     *                          file holding one
+     * @param endpoint          a URL, a bare marketplace id, or a file holding
+     *                          either; see {@link Endpoints#resolve}
+     * @param clientDescription how this client identifies itself to the server,
+     *                          and what appears against its connection
+     * @return an open connection, which the caller must close
+     * @throws IOException if the endpoint cannot be resolved or the connection
+     *                     cannot be established
      */
     static Flexemarkets connect(String credential, String endpoint, String clientDescription)
             throws IOException {
@@ -80,6 +90,19 @@ public interface Flexemarkets
      * <p>A provider that claims the endpoint is handed the plain connect: these
      * two are properties of the HTTP exchange, and a provider that does not
      * speak HTTP has nothing to apply them to.
+     *
+     * @param credential         a password, a token, or a path to a credential
+     *                           file holding one
+     * @param endpoint           a URL, a bare marketplace id, or a file holding
+     *                           either; see {@link Endpoints#resolve}
+     * @param clientDescription  how this client identifies itself to the server
+     * @param capture            whether to write each request and response to
+     *                           stdout
+     * @param impersonateAccount the account an administrator wishes to act as,
+     *                           or null to act as themselves
+     * @return an open connection, which the caller must close
+     * @throws IOException if the endpoint cannot be resolved or the connection
+     *                     cannot be established
      */
     static Flexemarkets connect(String credential, String endpoint, String clientDescription,
                                 boolean capture, String impersonateAccount) throws IOException {

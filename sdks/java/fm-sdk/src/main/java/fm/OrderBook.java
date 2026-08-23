@@ -10,22 +10,65 @@ import java.util.Map;
 import java.util.TreeMap;
 
 
+/**
+ * One market's resting interest, aggregated to price levels.
+ *
+ * <p>Kept current by feeding it {@link #update}; {@link MarketView} does that
+ * for a caller who does not want to drive the event queue themselves.
+ *
+ * <p>Levels are quantity by price, buys highest-first and sells lowest-first,
+ * so the best of either side is the first entry. An empty side answers
+ * {@code -1} rather than {@code 0}: a taker reads the sentinel as "nothing to
+ * cross with", where a zero would read as a free fill.
+ *
+ * <p>Every accessor is synchronized, because the stream updates the book on its
+ * own thread while the caller reads it on theirs.
+ */
 public class OrderBook {
     private final Market market;
     private final TreeMap<Long, Long> buys;
     private final TreeMap<Long, Long> sells;
     private boolean initialized;
 
+    /**
+     * An empty book for one market.
+     *
+     * @param market the market this book is for; its symbol is what
+     *               {@link #update} filters on
+     */
     public OrderBook(Market market) {
         this.market = market;
         this.buys = new TreeMap<>(Collections.reverseOrder());
         this.sells = new TreeMap<>();
     }
 
+    /**
+     * The market this book is for.
+     *
+     * @return the market
+     */
     public Market market() { return market; }
+
+    /**
+     * That market's symbol, which is what {@link #update} filters on.
+     *
+     * @return the symbol
+     */
     public String symbol() { return market.symbol(); }
+
+    /**
+     * That market's id.
+     *
+     * @return the market id
+     */
     public long marketId() { return market.id(); }
 
+    /**
+     * Apply an orders update, ignoring anything for another market.
+     *
+     * @param ordersUpdate orders as the stream delivered them; those whose
+     *                     symbol is not this book's are skipped
+     */
     public synchronized void update(Order[] ordersUpdate) {
         boolean wasSplit = false;
 
@@ -65,26 +108,56 @@ public class OrderBook {
         }
     }
 
+    /**
+     * The best bid.
+     *
+     * @return the highest resting bid price, or -1 if the side is empty
+     */
     public synchronized long bestBuyPrice() {
         return buys.isEmpty() ? -1 : buys.firstKey();
     }
 
+    /**
+     * The best offer.
+     *
+     * @return the lowest resting offer price, or -1 if the side is empty
+     */
     public synchronized long bestSellPrice() {
         return sells.isEmpty() ? -1 : sells.firstKey();
     }
 
+    /**
+     * The size available at the best bid.
+     *
+     * @return units resting at the best bid, or -1 if the side is empty
+     */
     public synchronized long bestBuyUnits() {
         return buys.isEmpty() ? -1 : buys.firstEntry().getValue();
     }
 
+    /**
+     * The size available at the best offer.
+     *
+     * @return units resting at the best offer, or -1 if the side is empty
+     */
     public synchronized long bestSellUnits() {
         return sells.isEmpty() ? -1 : sells.firstEntry().getValue();
     }
 
+    /**
+     * The buy side, aggregated to price levels.
+     *
+     * @return units by price, highest price first; a snapshot, not a view
+     */
     public synchronized Map<Long, Long> buyLevels() {
         return Collections.unmodifiableMap(new TreeMap<>(buys));
     }
 
+    /**
+     * The sell side, aggregated to price levels.
+     *
+     * @return units by price, lowest price first; a snapshot, not a view
+     */
     public synchronized Map<Long, Long> sellLevels() {
         return Collections.unmodifiableMap(new TreeMap<>(sells));
     }
