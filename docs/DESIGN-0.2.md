@@ -136,6 +136,41 @@ abstract" expressible. Recorded because the benefit they were added for is not
 yet being realised by anyone, and that is worth knowing before more is built on
 the assumption that it is.
 
+### A `fm.model` package (and perhaps `fm.event`)
+
+`fm` is flat: **52 public types in one package** — 23 records, 11 exceptions,
+10 interfaces, and 8 classes and enums. Nothing groups them, so the types you
+*receive* sit beside the types you *call* and the ones you *catch*, and an IDE
+completion on `fm.` is a wall.
+
+A plausible split:
+
+| package | what | roughly |
+|---|---|---|
+| `fm.model` | the wire records — `Account`, `Allotment`, `Assets`, `ClientConnection`, `Holding`, `ManagerOtpBundle`, `Market`, `Marketplace`, `Order`, `Person`, `Security`, `Session`, `Token` | 13 |
+| `fm.event` | what arrives on a queue — `StreamDropped`, `FrameUnreadable`, `Reconnected`, `ReconnectEvent`, `GapEvent`, `OrdersUpdate`, `Version` | 7 |
+| `fm` | what you call and catch — the six roles, `Flexemarkets`, `MarketView`, `Subscription`, the eleven exceptions, `Endpoints`, the aggregators, `OrderUtils`, `Side`, `OrderType`, `TickGrid`, `Snapshot` | the rest |
+
+Not obvious, and the cost is specific rather than general.
+
+**The cost is a second mass re-import inside one release cycle.** 0.1.0's
+headline change was that the seventeen records left the `Types` holder class
+and became top-level in `fm`; fm-robots rewrote 478 import lines to follow, in
+August 2026. Moving them again — even into a package, which is the idiomatic
+answer where a holder class was not — asks every consumer to rewrite the same
+imports a second time, months apart, for a benefit they did not ask for.
+
+**So the sequencing matters more than the decision.** If this happens it should
+land in the *same* release as any other change that rewrites imports, so a
+consumer re-imports once. Doing it alone, in a release whose other contents are
+a trade-tape accessor and an internal move, spends the whole cost on
+tidiness.
+
+Two smaller questions inside it, if it is taken: whether `Snapshot` and
+`TickGrid` are model at all — one is a wrapper, the other a parameter type —
+and whether the exceptions want `fm.exception` or are fine where they are,
+given `catch` sites read better unqualified.
+
 ### HAL-less and V1-only
 
 Directional, and blocked on the server rather than on the SDK. The SDK reads
