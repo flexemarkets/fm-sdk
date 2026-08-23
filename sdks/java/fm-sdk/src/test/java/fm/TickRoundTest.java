@@ -124,7 +124,7 @@ class TickRoundTest {
                 .as("125 is inside the bounds and off the tick: \"price is not on a tic\"")
                 .isFalse();
 
-        long fixed = Market.tickRound(137, minimum, maximum, tick);
+        long fixed = TickGrid.round(137, minimum, maximum, tick);
         assertThat(fixed).isEqualTo(135L);
         assertThat(serverWouldAccept(fixed, minimum, maximum, tick)).isTrue();
     }
@@ -141,7 +141,7 @@ class TickRoundTest {
                 .as("199 is the ceiling and is not itself a legal price")
                 .isFalse();
 
-        long fixed = Market.tickRound(210, minimum, maximum, tick);
+        long fixed = TickGrid.round(210, minimum, maximum, tick);
         assertThat(fixed).isEqualTo(185L);
         assertThat(serverWouldAccept(fixed, minimum, maximum, tick)).isTrue();
     }
@@ -153,7 +153,7 @@ class TickRoundTest {
                 .assertThatThrownBy(() -> legacyRound(137, 150, 150, 0))
                 .isInstanceOf(ArithmeticException.class);
 
-        assertThat(Market.tickRound(137, 150, 150, 0)).isEqualTo(150L);
+        assertThat(TickGrid.round(137, 150, 150, 0)).isEqualTo(150L);
     }
 
     /**
@@ -176,7 +176,7 @@ class TickRoundTest {
         for (long[] grid : grids) {
             long minimum = grid[0], maximum = grid[1], tick = grid[2];
             for (long value = -50; value <= maximum + 50; value++) {
-                long rounded = Market.tickRound(value, minimum, maximum, tick);
+                long rounded = TickGrid.round(value, minimum, maximum, tick);
                 assertThat(serverWouldAccept(rounded, minimum, maximum, tick))
                         .as("grid [%d,%d]/%d rounded %d to %d, which the server refuses",
                             minimum, maximum, tick, value, rounded)

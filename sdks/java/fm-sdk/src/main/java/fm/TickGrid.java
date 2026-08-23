@@ -39,14 +39,56 @@ public record TickGrid(long minimum, long maximum, long tick) {
     /**
      * {@code value} moved down onto this grid, clamped to it.
      *
-     * <p>The same rule {@link Market#priceRound} and {@link Market#unitRound}
-     * apply, so a caller holding a grid does not have to hold a market too.
+     * <p>The rule itself, which {@link Market#priceRound} and
+     * {@link Market#unitRound} apply to a market's two dimensions -- so a
+     * caller holding a grid does not have to hold a market too.
      *
      * @param value the value to round
      * @return the largest legal value not greater than {@code value}, clamped
      *         into the grid
      */
     public long round(long value) {
-        return Market.tickRound(value, minimum, maximum, tick);
+        return round(value, minimum, maximum, tick);
+    }
+
+    /**
+     * A value moved down onto a bounded tick grid.
+     *
+     * <p>The server applies this rule twice, to price and to units, and spells
+     * it the same way both times: a value must lie within its bounds and
+     * satisfy {@code (value - minimum) % tick}. So the grid is anchored at the
+     * <em>minimum</em>, not at zero, and this used to subtract
+     * {@code value % tick} — right whenever the floor happens to be a multiple
+     * of the tick, and wrong for the rest in a way that yields a plausible
+     * number rather than an error. With a floor of 110 and a tick of 25 the
+     * legal values are 110/135/160/185, and rounding 137 gave 125.
+     *
+     * <p>The ceiling is the highest legal tick rather than {@code maximum}
+     * itself: clamping to the maximum lands off the grid whenever the range is
+     * not a whole number of ticks, which is the case this exists for.
+     *
+     * <p>A tick of zero marks a fixed dimension — the two bounds are equal and
+     * there is one legal value. It used to divide by zero.
+     *
+     * <p>Static, and taking its bounds loose, for {@link Market}: a market
+     * holds six longs rather than two grids, so this spares it building a
+     * {@code TickGrid} per rounding call.
+     *
+     * @param value   the value to round
+     * @param minimum the lowest legal value
+     * @param maximum the highest legal value
+     * @param tick    the step between legal values; zero marks a fixed
+     *                dimension
+     * @return the largest legal value not greater than {@code value}, clamped
+     *         into the grid
+     */
+    static long round(long value, long minimum, long maximum, long tick) {
+        if (tick <= 0) {
+            return Math.min(Math.max(value, minimum), maximum);
+        }
+
+        long highest = minimum + ((maximum - minimum) / tick) * tick;
+        long rounded = minimum + Math.floorDiv(value - minimum, tick) * tick;
+        return Math.min(Math.max(rounded, minimum), highest);
     }
 }
