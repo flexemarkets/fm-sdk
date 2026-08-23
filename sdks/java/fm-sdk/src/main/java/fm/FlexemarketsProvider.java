@@ -40,6 +40,10 @@ public interface FlexemarketsProvider {
      * of your own — a scheme, a prefix — rather than trying to claim anything
      * plausible, because claiming an endpoint you cannot serve turns a working
      * HTTP connection into a failure.
+     *
+     * @param endpoint the endpoint, already resolved -- a bare marketplace id
+     *                 or a file holding one has become what it denotes
+     * @return true if this provider will serve it
      */
     boolean handles(String endpoint);
 
@@ -48,6 +52,13 @@ public interface FlexemarketsProvider {
      *
      * <p>Called only after {@code handles} returned true. The result is owned by
      * the caller and will be closed by it, exactly as an HTTP connection is.
+     *
+     * @param credential        a password, a token, or a path to a credential
+     *                          file holding one
+     * @param endpoint          the resolved endpoint this provider claimed
+     * @param clientDescription how the client identifies itself
+     * @return an open connection, which the caller must close
+     * @throws IOException if the connection cannot be established
      */
     Flexemarkets connect(String credential, String endpoint, String clientDescription)
             throws IOException;

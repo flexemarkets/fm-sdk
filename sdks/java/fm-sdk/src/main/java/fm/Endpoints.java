@@ -44,6 +44,12 @@ public final class Endpoints {
      * not recognise may be one a provider does, and refusing here would decide
      * that question before the providers are asked. A genuine typo still fails,
      * a moment later, when nothing claims it and the HTTP client rejects it.
+     *
+     * @param endpoint a URL, a bare marketplace id, or a path to a file
+     *                 holding either; null and blank pass through
+     * @return the endpoint it denotes, or the input unchanged if this class
+     *         does not recognise the form
+     * @throws IOException if the endpoint names a file that cannot be read
      */
     public static String resolve(String endpoint) throws IOException {
         if (null == endpoint || endpoint.isBlank()) {
@@ -80,6 +86,10 @@ public final class Endpoints {
      *
      * <p>One place, so a provider does not have to re-derive it from a shape it
      * only half understands.
+     *
+     * @param endpoint a URL or a bare marketplace id
+     * @return the marketplace it names
+     * @throws IllegalArgumentException if it names none
      */
     public static long marketplaceId(String endpoint) {
         if (null == endpoint) {

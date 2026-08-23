@@ -18,7 +18,10 @@ import com.fasterxml.jackson.annotation.JsonCreator;
  */
 public enum Side {
 
+    /** Buying: the bid side of the book. */
     BUY,
+
+    /** Selling: the offer side of the book. */
     SELL;
 
     /**
@@ -26,6 +29,8 @@ public enum Side {
      *
      * <p>Replaces {@code OrderUtils.contra(String)}, which had to spell the
      * pairing out and could be handed something that was neither.
+     *
+     * @return SELL for BUY, and BUY for SELL
      */
     public Side contra() {
         return this == BUY ? SELL : BUY;
@@ -39,6 +44,10 @@ public enum Side {
      * value, which would fail an entire response — an order list, a holdings
      * snapshot — over one field the caller may not even read. A null side is
      * recoverable and localised; a refused response is neither.
+     *
+     * @param value the side as the server spelled it, in any case
+     * @return the matching side, or null for null and for anything
+     *         unrecognised
      */
     @JsonCreator
     public static Side of(String value) {

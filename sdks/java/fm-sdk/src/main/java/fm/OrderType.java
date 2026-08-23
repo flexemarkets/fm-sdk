@@ -13,7 +13,10 @@ import com.fasterxml.jackson.annotation.JsonCreator;
  */
 public enum OrderType {
 
+    /** A priced order, which rests on the book until filled or cancelled. */
     LIMIT,
+
+    /** An order that consumes a resting one, removing it from the book. */
     CANCEL;
 
     /**
@@ -25,6 +28,10 @@ public enum OrderType {
      * the server has emitted {@code "MARKET"} on at least one path, which a
      * strict enum would have turned into a parse failure for every order in the
      * list.
+     *
+     * @param value the type as the server spelled it, in any case
+     * @return the matching type, or null for null and for anything
+     *         unrecognised, including {@code "MARKET"}
      */
     @JsonCreator
     public static OrderType of(String value) {
