@@ -4,6 +4,25 @@ import java.time.Instant;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+/**
+ * One run of a marketplace: when it opened, when it closed, and what state
+ * it is in now.
+ *
+ * <p>Sessions form lines. A repeat carries the id of the first in
+ * {@code original}, which is what lets a study group several runs of the
+ * same setup together.
+ *
+ * @param marketplaceId the marketplace this session belongs to
+ * @param allocationId  the allocation its holdings started from
+ * @param id            the session's id
+ * @param original      the first session of this line; equal to {@code id}
+ *                      for the first run, and the earlier one for a repeat
+ * @param state         INIT, OPEN, PAUSED or CLOSED
+ * @param name          the session's name
+ * @param description   the session's description
+ * @param openDate      when it opened, or null before it has
+ * @param closeDate     when it closed, or null while it is still running
+ */
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record Session(

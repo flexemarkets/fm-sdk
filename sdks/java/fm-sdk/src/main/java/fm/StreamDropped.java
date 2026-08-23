@@ -13,5 +13,7 @@ package fm;
  * a reader to {@code catch} what they have to {@code instanceof}. It reads now
  * as one of the three things that can happen to a stream, beside
  * {@link Reconnected} and {@link FrameUnreadable}.
+ *
+ * @param failure what the transport reported
  */
 public record StreamDropped(Throwable failure) {}

@@ -4,6 +4,24 @@ import java.time.Instant;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+/**
+ * An account, and the person who owns it.
+ *
+ * <p>The unit a server bills and administers. Everyone in one is reachable
+ * through {@link Reading#users()}; the account itself through
+ * {@link Identity#account()} for the caller's own, or
+ * {@link Administration#accountById} for anyone else's.
+ *
+ * @param createdDate         when the account was created
+ * @param lastModifiedDate    when it last changed
+ * @param id                  the account's id
+ * @param name                the account name, unique across the server
+ * @param description         the account's description
+ * @param owner               the person who owns it
+ * @param approval            whether it has been approved, or null where
+ *                            nobody has decided yet
+ * @param approvalDescription what the decision was accompanied by
+ */
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record Account(
@@ -27,7 +45,11 @@ public record Account(
     Boolean approval,
     String approvalDescription) {
 
-    /** Approved, treating "not yet decided" as not approved. */
+    /**
+     * Approved, treating "not yet decided" as not approved.
+     *
+     * @return true only where an administrator has approved the account
+     */
     public boolean isApproved() {
         return Boolean.TRUE.equals(approval);
     }

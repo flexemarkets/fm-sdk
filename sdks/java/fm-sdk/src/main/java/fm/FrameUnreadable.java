@@ -9,5 +9,8 @@ package fm;
  *
  * <p>Was {@code FrameUnreadable}, which named it for a thing it is not: a record
  * delivered on a queue, never thrown.
+ *
+ * @param message what could not be read
+ * @param failure the parse failure underneath it
  */
 public record FrameUnreadable(String message, Throwable failure) {}

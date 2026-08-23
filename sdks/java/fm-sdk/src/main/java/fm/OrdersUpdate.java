@@ -20,6 +20,9 @@ package fm;
  * doing {@code case Order[] orders -> ...} should switch to
  * {@code case OrdersUpdate update -> ...} and read
  * {@code update.orders()}.
+ *
+ * @param orders the orders this update carries
+ * @param seq    the sequence number it arrived with, for detecting a gap
  */
 public record OrdersUpdate(Order[] orders, long seq) {
 }

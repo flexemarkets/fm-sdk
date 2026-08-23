@@ -6,6 +6,20 @@ import java.util.Objects;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+/**
+ * One person: who they are, and what they are allowed to do.
+ *
+ * @param createdDate      when the person was created
+ * @param lastModifiedDate when they last changed
+ * @param id               the person's id
+ * @param accountId        the account they belong to
+ * @param firstName        their given name
+ * @param lastName         their family name
+ * @param email            their email, which is also their sign-in name
+ * @param roles            the roles the server granted, spelled as it spells
+ *                         them -- see {@link Identity#hasRole}
+ * @param accountOwner     whether they own the account they belong to
+ */
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record Person(
@@ -19,6 +33,10 @@ public record Person(
     String[] roles,
     Boolean accountOwner) {
 
+    /**
+     * Substitutes zero for an absent id or account id, so a caller never has
+     * to unbox a null on either.
+     */
     public Person {
         id           = Objects.requireNonNullElse(id, 0L);
         accountId    = Objects.requireNonNullElse(accountId, 0L);

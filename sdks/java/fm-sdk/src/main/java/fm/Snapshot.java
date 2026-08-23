@@ -18,6 +18,7 @@ package fm;
  * @param body    the parsed response body
  * @param asOfSeq the value of the {@code x-fm-as-of-seq} header, or
  *                {@code -1L} if absent
+ * @param <T>     what the snapshot holds
  */
 public record Snapshot<T>(T body, long asOfSeq) {
     /** Sentinel for "header absent" — see class javadoc. */

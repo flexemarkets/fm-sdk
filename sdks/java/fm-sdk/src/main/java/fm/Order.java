@@ -5,6 +5,39 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+/**
+ * One order, and its place among the orders it came from.
+ *
+ * <p>The exchange has no separate trade: a trade is a pair of orders
+ * referring to each other, and a cancel is an order that consumes a resting
+ * one. So most questions about an order are questions about its
+ * relationships, which is why {@link OrderUtils} takes the surrounding
+ * orders rather than just this one.
+ *
+ * @param createdDate       when the order arrived
+ * @param lastModifiedDate  when it last changed
+ * @param id                the order's id
+ * @param original          the order this one descends from; its own id for
+ *                          a submission
+ * @param supplier          the order that supplied it; its own id for a
+ *                          submission
+ * @param consumer          the order that consumed it: null if none has,
+ *                          zero if it was split -- see
+ *                          {@link OrderUtils#isConsumed}
+ * @param type              LIMIT or CANCEL, or null if the server named one
+ *                          this version does not know
+ * @param side              which way round it goes, or null for a cancel
+ * @param units             how many units
+ * @param price             the price, in the cents the exchange counts in
+ * @param mine              whether it is the caller's own; never on the wire
+ * @param ownerId           who submitted it
+ * @param marketplaceId     the marketplace it was submitted to
+ * @param sessionId         the session it belongs to
+ * @param symbol            the market's symbol
+ * @param marketId          the market's id
+ * @param ownerTarget       the named counterparty, resolved server-side
+ * @param clientDescription how the submitting client identified itself
+ */
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record Order(

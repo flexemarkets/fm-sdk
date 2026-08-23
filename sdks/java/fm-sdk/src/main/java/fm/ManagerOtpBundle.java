@@ -14,10 +14,21 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
  * bundle stops working, not a per-entry deadline. Handing these out is how
  * a classroom gets its students logged in without issuing passwords, which
  * is also why nothing here should be logged.
+ *
+ * @param expiresAt when every passcode in the bundle stops working
+ * @param otps      one entry per user asked for
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record ManagerOtpBundle(Instant expiresAt, List<Entry> otps) {
 
+    /**
+     * One user's passcode.
+     *
+     * @param userId the user it signs in
+     * @param email  their email, so a caller distributing these need not look
+     *               it up again
+     * @param otp    the passcode itself, good until the bundle's expiry
+     */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Entry(long userId, String email, String otp) {
     }
