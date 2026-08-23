@@ -39,6 +39,19 @@ public class MarketplaceTrades {
     }
 
     /**
+     * One market's tape.
+     *
+     * <p>The counterpart to {@link OrderBooks#get}, so a caller holding either
+     * aggregator reaches one market's view the same way.
+     *
+     * @param marketId the market to look up
+     * @return its tape, or null if no tape is kept for that market
+     */
+    public Trades get(long marketId) {
+        return collection.get(marketId);
+    }
+
+    /**
      * Every tape being kept.
      *
      * @return the tapes, in no particular order

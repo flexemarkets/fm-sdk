@@ -76,6 +76,24 @@ public interface MarketView extends AutoCloseable {
     OrderBook orderBook(long marketId);
 
     /**
+     * Always-current trade tape for {@code marketId}, most recent last.
+     *
+     * <p>Maintained alongside {@link #orderBook}: seeded from the server's
+     * recent trades when the view opens, then kept current from the same delta
+     * stream. Reads are atomic, on the same terms as the book.
+     *
+     * <p>A trade is not a distinct thing on the wire -- the exchange expresses
+     * one as a pair of orders referring to each other -- so the tape holds the
+     * resting side of each pair, which is the one carrying the price the trade
+     * happened at.
+     *
+     * @param marketId the market to read
+     * @return that market's tape, current as of this call, or null when
+     *         {@code marketId} is not in this marketplace
+     */
+    Trades trades(long marketId);
+
+    /**
      * Most-recent session update observed. Null until the first
      * {@code SESSION-UPDATE} frame lands.
      *

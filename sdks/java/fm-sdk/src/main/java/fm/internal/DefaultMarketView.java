@@ -193,6 +193,12 @@ public class DefaultMarketView implements MarketView {
     }
 
     @Override
+    public Trades trades(long marketId) {
+        _ensureOpen();
+        return trades.get(marketId);
+    }
+
+    @Override
     public Session session() {
         _ensureOpen();
         return session.get();
