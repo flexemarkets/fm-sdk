@@ -23,6 +23,10 @@ public interface Streaming {
      *
      * <p>One per connection: a second call replaces the first. For streams that
      * coexist, use {@link #subscribe}.
+     *
+     * @param marketplaceId the marketplace to stream
+     * @param queue         where events are delivered; its capacity is the
+     *                      caller's back-pressure policy
      */
     void listen(long marketplaceId, BlockingQueue<Object> queue);
 
@@ -33,11 +37,30 @@ public interface Streaming {
      * <p>Unlike {@link #listen}, several of these coexist: each has its own
      * stream and its own lifetime. That is what lets more than one
      * {@link MarketView} live in one connection without trampling each other.
+     *
+     * @param marketplaceId the marketplace to stream
+     * @param queue         where events are delivered
+     * @return the subscription, which stops delivery when closed
      */
     Subscription subscribe(long marketplaceId, BlockingQueue<Object> queue);
 
-    /** A maintained view of the order books, kept current from the event stream. */
+    /**
+     * A maintained view of the order books, kept current from the event stream.
+     *
+     * @param marketplaceId the marketplace to observe
+     * @return a view that keeps itself current until closed
+     */
     MarketView observe(long marketplaceId);
 
+    /**
+     * Re-establish the subscription by hand.
+     *
+     * <p>Rarely needed: the client reconnects in the background after a
+     * {@link StreamDropped} and puts a {@link Reconnected} on the queue when it
+     * has. Calling this as well reconnects twice.
+     *
+     * @throws InterruptedException if the wait for the new subscription is
+     *                              interrupted
+     */
     void reconnect() throws InterruptedException;
 }

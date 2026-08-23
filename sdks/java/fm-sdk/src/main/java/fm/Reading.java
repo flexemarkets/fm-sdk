@@ -21,13 +21,35 @@ import java.util.List;
  */
 public interface Reading {
 
+    /**
+     * Every marketplace the caller can see.
+     *
+     * @return the visible marketplaces, empty if there are none
+     */
     List<Marketplace> marketplaces();
 
+    /**
+     * One marketplace by id, with its markets.
+     *
+     * @param marketplaceId the marketplace to read
+     * @return the marketplace
+     */
     Marketplace marketplace(long marketplaceId);
 
+    /**
+     * The marketplace's markets.
+     *
+     * @param marketplaceId the marketplace to read
+     * @return its markets, in the order the server lists them
+     */
     List<Market> markets(long marketplaceId);
 
-    /** The marketplace's market symbols. */
+    /**
+     * The marketplace's market symbols.
+     *
+     * @param marketplaceId the marketplace to read
+     * @return the symbols, one per market
+     */
     List<String> symbols(long marketplaceId);
 
     /**
@@ -41,12 +63,26 @@ public interface Reading {
      * <p>Filter the result. fm-ui, fm-manager and capm all already do, and a
      * marketplace's session list is small enough that reading it whole costs
      * less than the confusion did.
+     *
+     * @param marketplaceId the marketplace to read
+     * @return every session it has ever had, oldest first
      */
     List<Session> sessions(long marketplaceId);
 
-    /** The current session, or null when the marketplace has never opened one. */
+    /**
+     * The current session, or null when the marketplace has never opened one.
+     *
+     * @param marketplaceId the marketplace to read
+     * @return the current session, or null if there has never been one
+     */
     Session session(long marketplaceId);
 
+    /**
+     * Orders in the current session.
+     *
+     * @param marketplaceId the marketplace to read
+     * @return the current session's orders, empty if it has none
+     */
     List<Order> orders(long marketplaceId);
 
     /**
@@ -55,6 +91,10 @@ public interface Reading {
      * <p>Answered by a different route from {@link #orders(long)} -- the
      * current-session collection cannot be filtered -- so a study reading a
      * finished run's orders needs this one.
+     *
+     * @param marketplaceId the marketplace to read
+     * @param sessionIds    the sessions to read; empty answers nothing
+     * @return their orders
      */
     List<Order> orders(long marketplaceId, List<Long> sessionIds);
 
@@ -65,6 +105,10 @@ public interface Reading {
      * because the query already fixed it; it is filled in before returning.
      * Unlike {@link #trades(long, String)} the ids are left alone -- an order
      * has its own id, and only a trade carries it in {@code original}.
+     *
+     * @param marketplaceId the marketplace to read
+     * @param symbol        the market's symbol
+     * @return that market's orders, each carrying the symbol
      */
     List<Order> orders(long marketplaceId, String symbol);
 
@@ -75,9 +119,19 @@ public interface Reading {
      * symbol on them and with the trade id in {@code original}; both are filled
      * in before returning, which is what makes the result usable as a trade
      * list rather than a set of half-populated orders.
+     *
+     * @param marketplaceId the marketplace to read
+     * @param symbol        the market's symbol
+     * @return that market's trades, most recent first
      */
     List<Order> trades(long marketplaceId, String symbol);
 
+    /**
+     * Every participant's holding in the current session.
+     *
+     * @param marketplaceId the marketplace to read
+     * @return the current session's holdings
+     */
     List<Holding> holdings(long marketplaceId);
 
     /**
@@ -86,25 +140,53 @@ public interface Reading {
      * <p>What a settlement report reads: a finished run's positions are a
      * property of its session, and {@link #holdings(long)} only ever answers
      * for the current one.
+     *
+     * @param marketplaceId the marketplace to read
+     * @param sessionIds    the sessions to read; empty answers nothing
+     * @return the holdings as those sessions left them
      */
     List<Holding> holdings(long marketplaceId, List<Long> sessionIds);
 
-    /** The caller's own holding in {@code marketplaceId}. */
+    /**
+     * The caller's own holding in {@code marketplaceId}.
+     *
+     * @param marketplaceId the marketplace to read
+     * @return the caller's holding
+     */
     Holding holding(long marketplaceId);
 
-    /** The holdings CSV, verbatim, as the server renders it. */
+    /**
+     * The holdings CSV, verbatim, as the server renders it.
+     *
+     * @param marketplaceId the marketplace to export
+     * @return the CSV text, unparsed
+     */
     String downloadHoldings(long marketplaceId);
 
     /**
      * The same CSV for particular sessions — a finished run's export, rather
      * than the current one's.
+     *
+     * @param marketplaceId the marketplace to export
+     * @param sessionIds    the sessions to export; empty answers nothing
+     * @return the CSV text, unparsed
      */
     String downloadHoldings(long marketplaceId, List<Long> sessionIds);
 
-    /** The opening positions of one allocation. */
+    /**
+     * The opening positions of one allocation.
+     *
+     * @param marketplaceId the marketplace to read
+     * @param allocationId  the allocation whose opening positions to read
+     * @return the allotments making up that allocation
+     */
     List<Allotment> allotments(long marketplaceId, long allocationId);
 
-    /** Everyone in the caller's account. */
+    /**
+     * Everyone in the caller's account.
+     *
+     * @return the account's people
+     */
     List<Person> users();
 
     /**
@@ -116,6 +198,9 @@ public interface Reading {
      *
      * <p>A connection carries the session it belonged to, so "who was present
      * in that run" is a filter on the result.
+     *
+     * @param marketplaceId the marketplace to read
+     * @return every connection it has recorded
      */
     List<ClientConnection> connections(long marketplaceId);
 
@@ -125,10 +210,26 @@ public interface Reading {
      * <p>The sequence lets a caller reconcile this snapshot against the deltas
      * arriving on the event stream, applying only those newer than the
      * snapshot.
+     *
+     * @param marketplaceId the marketplace to read
+     * @return the resting orders, and the sequence they were correct as of
      */
     Snapshot<List<Order>> activeOrders(long marketplaceId);
 
+    /**
+     * The most recent trades, with the sequence they were correct as of.
+     *
+     * @param marketplaceId the marketplace to read
+     * @param size          how many trades to ask for
+     * @return the trades, most recent first, and their sequence
+     */
     Snapshot<List<Order>> recentTrades(long marketplaceId, int size);
 
+    /**
+     * The most recent trades, in the server's default quantity.
+     *
+     * @param marketplaceId the marketplace to read
+     * @return the trades, most recent first, and their sequence
+     */
     Snapshot<List<Order>> recentTrades(long marketplaceId);
 }
