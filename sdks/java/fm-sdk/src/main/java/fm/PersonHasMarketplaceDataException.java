@@ -11,12 +11,24 @@ package fm;
  * conflict -- and meant a caller handling conflicts generally missed this one.
  */
 public final class PersonHasMarketplaceDataException extends ConflictException {
+    /** The user who could not be deleted. */
     private final long userId;
 
+    /**
+     * A refusal naming the user whose data blocked the delete.
+     *
+     * @param userId  the user who could not be deleted
+     * @param message the server's explanation
+     */
     public PersonHasMarketplaceDataException(long userId, String message) {
         super(message, null);
         this.userId = userId;
     }
 
+    /**
+     * Who the refusal was about.
+     *
+     * @return the user that still owns marketplace data
+     */
     public long userId() { return userId; }
 }

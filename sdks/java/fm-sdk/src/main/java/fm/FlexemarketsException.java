@@ -16,10 +16,21 @@ public sealed class FlexemarketsException extends RuntimeException
             ConnectionFailedException, ConfigurationException,
             HttpException, ConflictException, ApiException {
 
+    /**
+     * With a message and no underlying cause.
+     *
+     * @param message what went wrong
+     */
     protected FlexemarketsException(String message) {
         super(message);
     }
 
+    /**
+     * With a message and the failure that produced it.
+     *
+     * @param message what went wrong
+     * @param cause   the failure underneath it
+     */
     protected FlexemarketsException(String message, Throwable cause) {
         super(message, cause);
     }

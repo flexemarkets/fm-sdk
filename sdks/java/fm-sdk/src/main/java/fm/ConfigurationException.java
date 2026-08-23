@@ -8,6 +8,11 @@ package fm;
  * in the caller's configuration rather than on the server.
  */
 public final class ConfigurationException extends FlexemarketsException {
+    /**
+     * With a message and no underlying cause.
+     *
+     * @param message what went wrong
+     */
     public ConfigurationException(String message) {
         super(message);
     }

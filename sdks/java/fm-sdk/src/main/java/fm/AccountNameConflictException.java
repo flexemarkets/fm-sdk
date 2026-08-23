@@ -16,9 +16,19 @@ package fm;
  * suggestion, so a general handler and a specific one now agree.
  */
 public final class AccountNameConflictException extends ConflictException {
+    /** The name that was asked for. */
     private final String requestedName;
+
+    /** The server's proposed alternative, or null. */
     private final String suggestedName;
 
+    /**
+     * A refusal naming both the name asked for and the one proposed instead.
+     *
+     * @param requestedName the name that was asked for
+     * @param suggestedName the server's proposed alternative, or null if it
+     *                      offered none
+     */
     public AccountNameConflictException(String requestedName, String suggestedName) {
         super("Account name '%s' is taken%s".formatted(requestedName,
                 suggestedName == null ? "" : "; server suggests '%s'".formatted(suggestedName)),
@@ -27,6 +37,17 @@ public final class AccountNameConflictException extends ConflictException {
         this.suggestedName = suggestedName;
     }
 
+    /**
+     * The name that was asked for and refused.
+     *
+     * @return the requested account name
+     */
     public String requestedName() { return requestedName; }
+
+    /**
+     * The name the account would end up known by if the suggestion is taken.
+     *
+     * @return the server's proposed alternative, or null if it offered none
+     */
     public String suggestedName() { return suggestedName; }
 }
