@@ -24,6 +24,15 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
  * record ignores unknown properties, so every holding the SDK parsed came
  * back with no short allowance rather than with an error. A participant
  * permitted to short 50 read as one permitted to short nothing.
+ *
+ * @param marketId       the market this position is in
+ * @param units          settled units held
+ * @param availableUnits units free to sell, which excludes any already
+ *                       committed to a resting order
+ * @param shortUnits     the absolute short cap: the position may not fall
+ *                       below {@code -shortUnits}
+ * @param canBuy         whether the holder may buy in this market
+ * @param canSell        whether the holder may sell in this market
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record Security(
@@ -34,6 +43,12 @@ public record Security(
     Boolean canBuy,
     Boolean canSell) {
 
+    /**
+     * Substitutes zero for every absent number and false for every absent
+     * flag, so a caller never has to unbox a null. A holding the server sent
+     * with no short allowance reads as one permitted to short nothing, which
+     * is what it means.
+     */
     public Security {
         marketId       = Objects.requireNonNullElse(marketId, 0L);
         units          = Objects.requireNonNullElse(units, 0L);

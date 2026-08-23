@@ -15,6 +15,15 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
  * works out who was present in a particular run, so its absence -- the
  * record simply did not have the component until 0.0.11 -- meant every
  * connection read as belonging to no session at all.
+ *
+ * @param marketplaceId the marketplace connected to
+ * @param connectionId  the server's id for this connection
+ * @param ownerId       the person who connected
+ * @param established   when the connection opened
+ * @param terminated    when it closed, or null while it is still open
+ * @param description   how the client identified itself
+ * @param sessionId     the session it belonged to, or null if it connected
+ *                      outside one
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record ClientConnection(

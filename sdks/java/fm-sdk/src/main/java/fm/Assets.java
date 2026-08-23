@@ -22,6 +22,11 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * allocation would be created with the cash and no positions. Accepted,
  * 200, and quietly wrong. The alias is kept so a response spelling it
  * "securities" still parses.
+ *
+ * @param id         the assets' own id
+ * @param name       the holder's display name
+ * @param cash       opening cash, in the cents the exchange counts in
+ * @param securities the opening position in each market
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record Assets(

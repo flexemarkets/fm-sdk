@@ -7,6 +7,30 @@ import java.util.Optional;
 import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
+/**
+ * What one participant holds in a marketplace: cash, and a position per market.
+ *
+ * <p>A holding belongs to a session. {@link Reading#holdings(long)} answers for
+ * the current one; a settlement report reads a finished run's through
+ * {@link Reading#holdings(long, java.util.List)}.
+ *
+ * <p>Cash and units each come in two forms. The settled figure is what the
+ * participant owns; the available figure is what they may still commit, which
+ * is lower by whatever is already promised to a resting order. A robot that
+ * gates on the settled figure stops trading while the server would happily
+ * have accepted the order.
+ *
+ * @param marketplaceId the marketplace this holding is in
+ * @param sessionId     the session it belongs to
+ * @param allocationId  the allocation it started from
+ * @param ownerId       the participant it belongs to
+ * @param name          the participant's display name
+ * @param cash          settled cash, in the cents the exchange counts in
+ * @param availableCash cash free to spend, which excludes any committed to a
+ *                      resting buy
+ * @param securities    the position in each market; never null, always in
+ *                      market order
+ */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record Holding(
     long marketplaceId,
@@ -49,6 +73,9 @@ public record Holding(
      * holding looks like before the first allocation -- and
      * {@code IllegalArgumentException} said the caller had made a mistake
      * when they had only asked a question.
+     *
+     * @param marketId the market to look up
+     * @return that market's position, or empty if the holder has none
      */
     public Optional<Security> security(long marketId) {
         for (var security : securities) {

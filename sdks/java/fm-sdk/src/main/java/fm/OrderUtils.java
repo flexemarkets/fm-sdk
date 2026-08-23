@@ -18,10 +18,26 @@ package fm;
 public class OrderUtils {
     private OrderUtils() {}
 
+    /**
+     * Whether the order still rests unconsumed.
+     *
+     * @param order the order to test; null answers false
+     * @return true if nothing has consumed it
+     */
     public static boolean isAvailable(Order order) {
         return order != null && order.consumer() == null;
     }
 
+    /**
+     * Whether the order was traded against.
+     *
+     * <p>Distinct from {@link #isSplit}: both carry a consumer, but a split
+     * marker's is zero. The two are the reason a plain null check on
+     * {@code consumer()} answers the wrong question.
+     *
+     * @param order the order to test; null answers false
+     * @return true if it has a consumer other than zero
+     */
     public static boolean isConsumed(Order order) {
         if (order != null) {
             var consumer = order.consumer();
@@ -30,6 +46,12 @@ public class OrderUtils {
         return false;
     }
 
+    /**
+     * Whether the order is the marker left behind when one was split.
+     *
+     * @param order the order to test; null answers false
+     * @return true if its consumer is zero
+     */
     public static boolean isSplit(Order order) {
         if (order != null) {
             var consumer = order.consumer();
@@ -38,6 +60,14 @@ public class OrderUtils {
         return false;
     }
 
+    /**
+     * Whether the order belongs to a market, by symbol.
+     *
+     * @param symbol the symbol to match, case-insensitively; null matches
+     *               everything, which is what lets a caller pass "no filter"
+     * @param order  the order to test
+     * @return true if the order carries that symbol
+     */
     public static boolean isSymbol(String symbol, Order order) {
         return symbol == null || symbol.equalsIgnoreCase(order.symbol());
     }
@@ -53,12 +83,23 @@ public class OrderUtils {
      * <p>Python and TypeScript have had this since the order utilities landed;
      * Java had not, so a Java caller filtering a session's orders down to what
      * participants actually did had to spell the identity check out by hand.
+     *
+     * @param order the order to test
+     * @return true if somebody submitted it
      */
     public static boolean isSubmit(Order order) {
         return OrderType.CANCEL == order.type()
             || (order.id() == order.original() && order.id() == order.supplier());
     }
 
+    /**
+     * The order with a given id, if it is in the array.
+     *
+     * @param orders the orders to search
+     * @param id     the id to look for; null answers null, since an absent
+     *               consumer or supplier is spelled that way
+     * @return the matching order, or null if there is none
+     */
     public static Order findOrder(Order[] orders, Long id) {
         if (id == null) return null;
         for (var order : orders) {
@@ -69,6 +110,17 @@ public class OrderUtils {
         return null;
     }
 
+    /**
+     * Whether the order is still on the book, judged against its neighbours.
+     *
+     * <p>Needs the whole array because resting is a property of an order's
+     * relationships rather than of the order alone: a consumed order may have
+     * left a remainder that is itself resting, and only the other orders say so.
+     *
+     * @param orders the orders the judgement is made against
+     * @param order  the order to test
+     * @return true if it, or the remainder it left, is still available
+     */
     public static boolean isResting(Order[] orders, Order order) {
         // available order is resting
         if (isAvailable(order)) {
