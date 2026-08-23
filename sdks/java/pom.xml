@@ -188,6 +188,12 @@
                         </executions>
                         <configuration>
                             <release>${java.version}</release>
+                            <!-- javadoc stops reporting at 100 warnings by default, which
+                                 hides the true total and makes the count useless as a
+                                 measure of progress. -->
+                            <additionalOptions>
+                                <additionalOption>-Xmaxwarns 10000</additionalOption>
+                            </additionalOptions>
                         </configuration>
                     </plugin>
                     <plugin>
