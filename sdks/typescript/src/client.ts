@@ -548,9 +548,17 @@ function resourceId(endpoint: string): number {
   return parseInt(trimmed.substring(last + 1), 10);
 }
 
-/** A bare marketplace id resolves to that marketplace on the default production host. */
+/**
+ * A bare marketplace id resolves to that marketplace on the default host.
+ *
+ * FM_URL overrides the host, which is what makes the id form usable against a
+ * development server. Java has honoured it since the id form existed; this did
+ * not, so `-E 123` could only ever mean production here -- the same flag, in
+ * the same documented example, doing different things per language.
+ */
 function marketplaceEndpoint(marketplaceId: string): string {
-  return `${DEFAULT_ENDPOINT}/api/marketplaces/${marketplaceId}`;
+  const host = process.env.FM_URL || DEFAULT_ENDPOINT;
+  return `${host}/api/marketplaces/${marketplaceId}`;
 }
 
 /**

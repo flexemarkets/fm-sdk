@@ -51,3 +51,17 @@ test("there are endpoint fixtures to run", () => {
   // Guard the guard: a bad path would report everything passing.
   assert.ok(ENDPOINT_FIXTURES.length >= 6, `only found ${ENDPOINT_FIXTURES.length}`);
 });
+
+test("FM_URL overrides the host for a bare id", () => {
+  // What makes `-E 123` usable against a development server, as in Java.
+  const previous = process.env.FM_URL;
+  process.env.FM_URL = "http://localhost:8080";
+  try {
+    assert.deepEqual(resolveEndpoint("7"), {
+      endpoint: "http://localhost:8080/api/marketplaces/7",
+    });
+  } finally {
+    if (previous === undefined) delete process.env.FM_URL;
+    else process.env.FM_URL = previous;
+  }
+});

@@ -451,8 +451,15 @@ def _resource_id(endpoint: str) -> int:
 
 
 def _marketplace_endpoint(marketplace_id: str) -> str:
-    """A bare marketplace id resolves to that marketplace on the default production host."""
-    return f"{_DEFAULT_ENDPOINT}/api/marketplaces/{marketplace_id}"
+    """A bare marketplace id resolves to that marketplace on the default host.
+
+    FM_URL overrides the host, which is what makes the id form usable against a
+    development server. Java has honoured it since the id form existed; this
+    did not, so ``-E 123`` could only ever mean production here -- the same
+    flag, in the same documented example, doing different things per language.
+    """
+    host = os.environ.get("FM_URL") or _DEFAULT_ENDPOINT
+    return f"{host}/api/marketplaces/{marketplace_id}"
 
 
 def _resolve_endpoint(endpoint: str) -> dict[str, str]:

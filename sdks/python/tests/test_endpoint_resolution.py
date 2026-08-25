@@ -45,3 +45,10 @@ def test_api_root_matches_the_shared_fixtures(path: Path) -> None:
 def test_there_are_endpoint_fixtures_to_run() -> None:
     """Guard the guard: a bad glob would report everything passing."""
     assert len(ENDPOINT_FIXTURES) >= 6, f"only found {len(ENDPOINT_FIXTURES)}"
+
+
+def test_fm_url_overrides_the_host_for_a_bare_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """What makes `-E 123` usable against a development server, as in Java."""
+    monkeypatch.setenv("FM_URL", "http://localhost:8080")
+    assert _marketplace_endpoint("7") == "http://localhost:8080/api/marketplaces/7"
+    assert _resolve_endpoint("7") == {"endpoint": "http://localhost:8080/api/marketplaces/7"}
