@@ -103,7 +103,7 @@ with Flexemarkets.connect(credential, endpoint, "my-bot") as fm:
 Live terminal display of order book best bid/ask, spread, and recent trade prices.
 
 ```bash
-python3.11 ticker.py -C ~/.fm/credential -E https://api.flexemarkets.com/api/marketplaces/123
+python3.11 ticker.py -C ~/.fm/credential -E 123
 ```
 
 Options:
@@ -111,7 +111,7 @@ Options:
 | Flag | Description |
 |------|-------------|
 | `-C`, `--credential` | Credential file path or bearer token |
-| `-E`, `--endpoint` | Marketplace endpoint file path or URL |
+| `-E`, `--endpoint` | Marketplace id, endpoint file path, or URL |
 
 Output:
 

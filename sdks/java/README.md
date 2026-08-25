@@ -153,6 +153,19 @@ fake, a read-only provider — stays valid without stubbing them.
 The SDK includes a ticker example — a live terminal display of order book best
 bid/ask, spread, and recent trade prices.
 
+```bash
+java -jar fm-ticker-0.1.1.jar -C ~/.fm/credential -E 123
+```
+
+Options:
+
+| Flag | Description |
+|------|-------------|
+| `-C`, `--credential` | Credential file path or bearer token |
+| `-E`, `--endpoint` | Marketplace id, endpoint file path, or URL |
+
+Output:
+
 ```
 fm-ticker                                              OPEN
 

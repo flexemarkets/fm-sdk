@@ -87,6 +87,19 @@ fm.close();
 The SDK includes a ticker example — a live terminal display of order book best
 bid/ask, spread, and recent trade prices.
 
+```bash
+npx tsx src/ticker.ts -C ~/.fm/credential -E 123
+```
+
+Options:
+
+| Flag | Description |
+|------|-------------|
+| `-C`, `--credential` | Credential file path or bearer token |
+| `-E`, `--endpoint` | Marketplace id, endpoint file path, or URL |
+
+Output:
+
 ```
 fm-ticker                                              OPEN
 
