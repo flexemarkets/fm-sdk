@@ -121,8 +121,24 @@ test-java:
 ticker-java:
 	java --enable-preview -jar sdks/java/examples/ticker/target/fm-ticker-$(VERSION).jar $(ARGS)
 
+# -pl drops the example from the reactor, for the same reason publish-spi
+# narrows it below: whichever module ends the reactor bundles
+# sdks/java/target/central-staging and uploads it, and by then that directory
+# holds fm-sdk's artifacts. The example ending the reactor therefore opens a
+# second deployment carrying a coordinate the first one is still publishing,
+# and Central rejects it -- after fm-sdk has gone up. The release is complete
+# and the build exits 1, which invites a re-run that cannot work against an
+# append-only registry.
+#
+# Twice now: fm-sdk 0.1.0 (deployment 1bf80d6b) and 0.1.1 (e0ce3bfb). The
+# ticker pom carries <skipPublishing>true</skipPublishing> from the first
+# occurrence, and it is present in the effective pom under -P release, so it
+# governs the module's own artifacts and not the aggregate publish -- which
+# excludeArtifacts had already dealt with ("No files to stage for artifact").
+# Keeping the module out of the reactor is the lever that acts on the upload
+# rather than on what the upload contains.
 publish-java: check-publish-java build-release-java
-	cd sdks/java && mvn deploy -P release
+	cd sdks/java && mvn deploy -P release -pl '!examples/ticker'
 
 # fm-spi alone, for a release where only the contract changed.
 #
