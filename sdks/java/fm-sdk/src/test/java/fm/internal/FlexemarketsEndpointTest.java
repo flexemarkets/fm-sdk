@@ -57,6 +57,34 @@ public class FlexemarketsEndpointTest {
             .isEqualTo("https://api.flexemarkets.com/api/marketplaces/2540");
     }
 
+    /**
+     * The API root, given any endpoint beneath it -- and given one that names
+     * no marketplace at all.
+     *
+     * <p>The last two cases are the reason this exists. An endpoint may name
+     * only a server: DEFAULT_HOST is one, FM_API_URL is often one, and
+     * {@code -E https://api.adhocmarkets.com} is the natural way to say "that
+     * server". Handing such an endpoint back unchanged made every URL built
+     * from it a segment short -- sign-in POSTed to {@code <host>/tokens} and
+     * collected a 404 -- so a machine with nothing configured could run no
+     * command at all.
+     */
+    @Test
+    public void theApiRootIsFoundOrAppended() {
+        assertThat(HttpFlexemarkets.server("https://api.flexemarkets.com/api/marketplaces/2540"))
+            .isEqualTo("https://api.flexemarkets.com/api");
+        assertThat(HttpFlexemarkets.server("http://localhost:8080/api/v1/marketplaces/7"))
+            .isEqualTo("http://localhost:8080/api");
+
+        // The host itself starts with "api"; the search must not match there.
+        assertThat(HttpFlexemarkets.server("https://api.flexemarkets.com"))
+            .isEqualTo("https://api.flexemarkets.com/api");
+        assertThat(HttpFlexemarkets.server("http://localhost:8080"))
+            .isEqualTo("http://localhost:8080/api");
+        assertThat(HttpFlexemarkets.server("http://localhost:8080/"))
+            .isEqualTo("http://localhost:8080/api");
+    }
+
     @Test
     public void nonIdNonFileNonUrlIsRejected() {
         assertThatThrownBy(() -> HttpFlexemarkets.loadProperties(null, "not a valid endpoint", "fm-endpoint-test"))

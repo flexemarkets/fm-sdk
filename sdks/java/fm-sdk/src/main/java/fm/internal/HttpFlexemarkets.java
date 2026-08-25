@@ -1436,9 +1436,24 @@ public class HttpFlexemarkets implements Flexemarkets {
         // Skip past the scheme + host before searching for the "/api" segment.
         int scheme = endpoint.indexOf("://");
         int pathStart = scheme >= 0 ? endpoint.indexOf('/', scheme + 3) : 0;
-        if (pathStart < 0) return endpoint;
-        int idx = endpoint.indexOf("/api", pathStart);
-        return idx < 0 ? endpoint : endpoint.substring(0, idx + 4);
+        int idx = pathStart < 0 ? -1 : endpoint.indexOf("/api", pathStart);
+
+        if (idx >= 0) {
+            return endpoint.substring(0, idx + 4);
+        }
+
+        // An endpoint naming only a server gets the API root appended rather
+        // than being handed back as it stands. It used to be returned
+        // unchanged, and every URL built from it was then a segment short: the
+        // sign-in POSTed to <host>/tokens, which the server answers 404 "No
+        // static resource tokens". DEFAULT_HOST is exactly this shape, so a
+        // machine with no endpoint configured -- no -E, no FM_API_URL, no
+        // ~/.fm/endpoint -- failed that way on every command, which made an
+        // endpoint look mandatory when it is not.
+        //
+        // DEFAULT_HOST stays path-less deliberately: marketplaceUrl appends
+        // "/api/marketplaces/<id>" to it, so the "/api" cannot live there.
+        return endpoint.endsWith("/") ? endpoint + "api" : endpoint + "/api";
     }
 
     static long resourceId(String endpoint) {
