@@ -8,7 +8,7 @@ VERSION := $(shell cat VERSION)
 .PHONY: all install build check test clean set-version set-spi-version spi-version \
        install-python install-typescript install-java install-mcp \
        build-python build-typescript build-java \
-       check-parity check-python check-typescript check-java check-mcp \
+       check-parity check-sdks check-python check-typescript check-java check-mcp \
        build-release build-release-java build-release-python build-release-typescript \
        test-python test-typescript test-java \
        ticker-python ticker-typescript ticker-java \
@@ -27,7 +27,12 @@ install: install-python install-typescript install-java install-mcp
 
 build: build-python build-typescript build-java
 
-check: check-parity check-python check-typescript check-java check-mcp \
+check: check-sdks check-mcp
+
+# Everything that gates a publish, which is everything but the MCP server --
+# that is a local tool, in no publish target, and a missing venv for it must
+# not stand between a fix and a registry.
+check-sdks: check-parity check-python check-typescript check-java \
        test-python test-typescript test-java
 
 # The three SDKs are hand-written and every type is declared three times, so
@@ -70,7 +75,7 @@ test-python:
 ticker-python:
 	$(VENV_PY) sdks/python/ticker.py $(ARGS)
 
-publish-python: check-publish-python build-release-python
+publish-python: check-sdks check-publish-python build-release-python
 	$(VENV_PY) -m pip install build twine
 	$(VENV_PY) -m build sdks/python
 	$(VENV_PY) -m twine upload sdks/python/dist/*
@@ -99,7 +104,7 @@ ticker-typescript:
 
 # OTP=<code> is passed through to npm for accounts with two-factor auth on
 # writes. Without it npm prompts, and a prompt inside make is a hang.
-publish-typescript: check-publish-typescript build-release-typescript
+publish-typescript: check-sdks check-publish-typescript build-release-typescript
 	cd sdks/typescript && npm publish --access public $(if $(OTP),--otp=$(OTP),)
 
 # ---------------------------------------------------------------------------
@@ -137,7 +142,7 @@ ticker-java:
 # excludeArtifacts had already dealt with ("No files to stage for artifact").
 # Keeping the module out of the reactor is the lever that acts on the upload
 # rather than on what the upload contains.
-publish-java: check-publish-java build-release-java
+publish-java: check-sdks check-publish-java build-release-java
 	cd sdks/java && mvn deploy -P release -pl '!examples/ticker'
 
 # fm-spi alone, for a release where only the contract changed.
@@ -146,7 +151,7 @@ publish-java: check-publish-java build-release-java
 # its artifacts. Without it the deploy carries fm-sdk too, and Central refuses
 # the whole bundle because that version is already there. The alternative was
 # excluding fm-sdk by hand for one release and remembering to put it back.
-publish-spi: check-publish-spi
+publish-spi: check-sdks check-publish-spi
 	cd sdks/java && mvn deploy -P release -pl fm-spi
 
 # ---------------------------------------------------------------------------
@@ -194,7 +199,7 @@ mcp-server:
 #
 # So: build all three exactly as they will be published, then upload. A build
 # failure now costs nothing.
-publish: check-publish build-release publish-typescript publish-python publish-java
+publish: check-sdks check-publish build-release publish-typescript publish-python publish-java
 
 # Every publish target carries its own gate as well, because each is also run
 # on its own -- and when only the aggregate was gated, `make publish-python`
@@ -211,8 +216,15 @@ publish: check-publish build-release publish-typescript publish-python publish-j
 # the three things most likely to fail. `verify` stops short of `deploy`, which
 # is where central-publishing binds, so nothing leaves the machine.
 #
-# Tests are not skipped. `make check` runs them too, and running them twice
-# costs a minute against a release that cannot be withdrawn.
+# Tests are NOT run here for two of the three. `mvn verify` runs Java's; `python
+# -m build` and `npm run build && npm pack` run nothing at all. That is why
+# every publish target gates on check-sdks: for most of this repo, build-release
+# proves the artifact assembles and nothing about whether it works.
+#
+# Nor did anything here compare the three SDKs to each other, which is how
+# 0.1.1 reached Maven Central, PyPI and npm with server() fixed in Java and
+# unchanged in the other two. check-parity and the fixtures both live in
+# check-sdks, and a registry cannot be un-published.
 build-release: build-release-java build-release-python build-release-typescript
 	@echo "build-release: all three artifacts built; nothing uploaded"
 
