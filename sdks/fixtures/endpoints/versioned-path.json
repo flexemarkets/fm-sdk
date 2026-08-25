@@ -1,0 +1,5 @@
+{
+  "why": "the root is the first /api, not the deepest path -- /api/v1/... must not extend it",
+  "endpoint": "https://api.flexemarkets.com/api/v1/marketplaces/7",
+  "apiRoot": "https://api.flexemarkets.com/api"
+}

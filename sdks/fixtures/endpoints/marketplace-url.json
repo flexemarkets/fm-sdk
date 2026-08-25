@@ -1,0 +1,5 @@
+{
+  "why": "the ordinary form -- what -E gives and what a bare id expands to",
+  "endpoint": "https://api.flexemarkets.com/api/marketplaces/123",
+  "apiRoot": "https://api.flexemarkets.com/api"
+}

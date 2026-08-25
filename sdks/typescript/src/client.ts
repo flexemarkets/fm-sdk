@@ -521,16 +521,25 @@ function isValidToken(value: string): boolean {
   return BCRYPT_RE.test(value) || JWT_RE.test(value);
 }
 
-function server(endpoint: string): string {
+export function server(endpoint: string): string {
   // Locate "/api" in the path, not in the scheme/host. A host like
   // "https://api.flexemarkets.com" otherwise matches at the "//api" of the
   // host and truncates the base URL to "https://api" (unresolvable). Skip
   // past the scheme + host before searching for the "/api" path segment.
   const scheme = endpoint.indexOf("://");
   const pathStart = scheme >= 0 ? endpoint.indexOf("/", scheme + 3) : 0;
-  if (pathStart < 0) return endpoint;
-  const idx = endpoint.indexOf("/api", pathStart);
-  return idx < 0 ? endpoint : endpoint.substring(0, idx + 4);
+  const idx = pathStart < 0 ? -1 : endpoint.indexOf("/api", pathStart);
+
+  if (idx >= 0) return endpoint.substring(0, idx + 4);
+
+  // An endpoint naming only a server gets the API root appended rather than
+  // being handed back as it stands. Returned unchanged, every URL built from
+  // it was a segment short: sign-in POSTed to <host>/tokens, which the server
+  // answers 404 "No static resource tokens". DEFAULT_ENDPOINT is exactly that
+  // shape -- it has to be, since marketplaceEndpoint appends
+  // "/api/marketplaces/<id>" to it -- so a client with nothing configured
+  // could not sign in at all.
+  return endpoint.endsWith("/") ? `${endpoint}api` : `${endpoint}/api`;
 }
 
 function resourceId(endpoint: string): number {

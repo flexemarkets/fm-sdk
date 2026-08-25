@@ -1,0 +1,5 @@
+{
+  "why": "an endpoint that is already the API root resolves to itself -- appending must not repeat it",
+  "endpoint": "http://localhost:8080/api",
+  "apiRoot": "http://localhost:8080/api"
+}

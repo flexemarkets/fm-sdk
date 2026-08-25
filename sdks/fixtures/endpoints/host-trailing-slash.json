@@ -1,0 +1,5 @@
+{
+  "why": "a trailing slash must not produce a doubled one",
+  "endpoint": "http://localhost:8080/",
+  "apiRoot": "http://localhost:8080/api"
+}

@@ -431,12 +431,19 @@ def _server(endpoint: str) -> str:
     # past the scheme + host before searching for the "/api" path segment.
     scheme = endpoint.find("://")
     path_start = endpoint.find("/", scheme + 3) if scheme >= 0 else 0
-    if path_start < 0:
-        return endpoint
-    idx = endpoint.find("/api", path_start)
-    if idx < 0:
-        return endpoint
-    return endpoint[: idx + 4]
+    idx = endpoint.find("/api", path_start) if path_start >= 0 else -1
+
+    if idx >= 0:
+        return endpoint[: idx + 4]
+
+    # An endpoint naming only a server gets the API root appended rather than
+    # being handed back as it stands. Returned unchanged, every URL built from
+    # it was a segment short: sign-in POSTed to <host>/tokens, which the server
+    # answers 404 "No static resource tokens". _DEFAULT_ENDPOINT is exactly
+    # that shape -- it has to be, since _marketplace_endpoint appends
+    # "/api/marketplaces/<id>" to it -- so a client with nothing configured
+    # could not sign in at all.
+    return endpoint + "api" if endpoint.endswith("/") else endpoint + "/api"
 
 
 def _resource_id(endpoint: str) -> int:

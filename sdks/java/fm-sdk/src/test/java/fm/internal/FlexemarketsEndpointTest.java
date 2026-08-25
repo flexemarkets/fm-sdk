@@ -5,10 +5,16 @@ import fm.Flexemarkets;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
@@ -58,31 +64,44 @@ public class FlexemarketsEndpointTest {
     }
 
     /**
-     * The API root, given any endpoint beneath it -- and given one that names
-     * no marketplace at all.
+     * The API root, from the cases all three SDKs run.
      *
-     * <p>The last two cases are the reason this exists. An endpoint may name
-     * only a server: DEFAULT_HOST is one, FM_API_URL is often one, and
-     * {@code -E https://api.adhocmarkets.com} is the natural way to say "that
-     * server". Handing such an endpoint back unchanged made every URL built
-     * from it a segment short -- sign-in POSTed to {@code <host>/tokens} and
-     * collected a 404 -- so a machine with nothing configured could run no
-     * command at all.
+     * <p>Shared rather than written out here, because this is derived by hand
+     * in Java, Python and TypeScript and nothing else holds the three
+     * together. check-parity.py compares wire fields and method surfaces, and
+     * this is neither -- {@code server} is private in all three, so the
+     * divergence that shipped in 0.1.1 (fixed in Java, untouched in the other
+     * two) passed every check there was.
+     *
+     * <p>See {@code sdks/fixtures/endpoints/README.md}.
      */
-    @Test
-    public void theApiRootIsFoundOrAppended() {
-        assertThat(HttpFlexemarkets.server("https://api.flexemarkets.com/api/marketplaces/2540"))
-            .isEqualTo("https://api.flexemarkets.com/api");
-        assertThat(HttpFlexemarkets.server("http://localhost:8080/api/v1/marketplaces/7"))
-            .isEqualTo("http://localhost:8080/api");
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("endpointFixtures")
+    public void theApiRootMatchesTheSharedFixtures(String name, String endpoint, String apiRoot) {
+        assertThat(HttpFlexemarkets.server(endpoint))
+            .as("%s: %s", name, endpoint)
+            .isEqualTo(apiRoot);
+    }
 
-        // The host itself starts with "api"; the search must not match there.
-        assertThat(HttpFlexemarkets.server("https://api.flexemarkets.com"))
-            .isEqualTo("https://api.flexemarkets.com/api");
-        assertThat(HttpFlexemarkets.server("http://localhost:8080"))
-            .isEqualTo("http://localhost:8080/api");
-        assertThat(HttpFlexemarkets.server("http://localhost:8080/"))
-            .isEqualTo("http://localhost:8080/api");
+    /** Guard the guard: a bad path would report everything passing. */
+    @Test
+    public void thereAreEndpointFixturesToRun() throws Exception {
+        assertThat(endpointFixtures().toList()).hasSizeGreaterThanOrEqualTo(6);
+    }
+
+    static Stream<Arguments> endpointFixtures() throws IOException {
+        var directory = Path.of("..", "..", "fixtures", "endpoints").toAbsolutePath().normalize();
+
+        try (var files = Files.list(directory)) {
+            var out = new ArrayList<Arguments>();
+            for (var path : files.filter(p -> p.toString().endsWith(".json")).sorted().toList()) {
+                var doc = HttpFlexemarkets.MAPPER.readTree(Files.readString(path));
+                out.add(Arguments.of(path.getFileName().toString().replace(".json", ""),
+                                     doc.get("endpoint").asString(),
+                                     doc.get("apiRoot").asString()));
+            }
+            return out.stream();
+        }
     }
 
     @Test

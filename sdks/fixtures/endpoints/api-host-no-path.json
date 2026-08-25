@@ -1,0 +1,5 @@
+{
+  "why": "DEFAULT_ENDPOINT is this shape, so it is what a client with nothing configured uses. Returning it unchanged made sign-in POST <host>/tokens and collect a 404. The host also begins with 'api', so a search that does not skip the host truncates this to 'https://api'.",
+  "endpoint": "https://api.flexemarkets.com",
+  "apiRoot": "https://api.flexemarkets.com/api"
+}

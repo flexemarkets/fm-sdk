@@ -1,0 +1,5 @@
+{
+  "why": "FM_API_URL as a bare host, and the natural reading of -E https://host -- name the server, no marketplace in particular",
+  "endpoint": "http://localhost:8080",
+  "apiRoot": "http://localhost:8080/api"
+}
