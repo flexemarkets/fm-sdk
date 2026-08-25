@@ -349,13 +349,6 @@ public class HttpFlexemarkets implements Flexemarkets {
         return get(uriIdSegmentParam(apiRoot, "marketplaces", marketplaceId, "connections", "format=application/json"), CONNECTIONS_TYPE);
     }
 
-    /**
-     * {@code sessionIds=}, not {@code sessions=}. The server spells the filter
-     * differently on this route than on the holdings download, and using the
-     * wrong one is not an error -- it is an unfiltered answer.
-     */
-
-
     /** {@code sessions=} here, unlike the two routes above. */
     @Override
     public String downloadHoldings(long marketplaceId, List<Long> sessionIds) {
@@ -373,7 +366,14 @@ public class HttpFlexemarkets implements Flexemarkets {
      * than half-populated orders -- fm-lib-net does the same, and a study that
      * groups by symbol or keys by id depends on it.
      */
-    /** {@code sessionOrdersJson}, not the marketplace's orders collection: that one is current-session only. */
+    /**
+     * {@code sessionOrdersJson}, not the marketplace's orders collection: that
+     * one is current-session only.
+     *
+     * <p>{@code sessionIds=}, not {@code sessions=}. The server spells the
+     * filter differently on this route than on the holdings download, and
+     * using the wrong one is not an error -- it is an unfiltered answer.
+     */
     @Override
     public List<Order> orders(long marketplaceId, List<Long> sessionIds) {
         if (sessionIds == null || sessionIds.isEmpty()) {
