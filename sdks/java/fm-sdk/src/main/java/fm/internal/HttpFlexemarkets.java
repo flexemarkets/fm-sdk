@@ -360,13 +360,6 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     /**
-     * The symbol-keyed trades route answers with the trade id in
-     * {@code original} and no symbol on the orders, because the query already
-     * fixed the symbol. Both are filled in here so a caller gets trades rather
-     * than half-populated orders -- fm-lib-net does the same, and a study that
-     * groups by symbol or keys by id depends on it.
-     */
-    /**
      * {@code sessionOrdersJson}, not the marketplace's orders collection: that
      * one is current-session only.
      *
@@ -398,6 +391,13 @@ public class HttpFlexemarkets implements Flexemarkets {
                 .toList();
     }
 
+    /**
+     * The symbol-keyed trades route answers with the trade id in
+     * {@code original} and no symbol on the orders, because the query already
+     * fixed the symbol. Both are filled in here so a caller gets trades rather
+     * than half-populated orders -- fm-lib-net does the same, and a study that
+     * groups by symbol or keys by id depends on it.
+     */
     @Override
     public List<Order> trades(long marketplaceId, String symbol) {
         var url = uriParam(apiRoot, "symbolTradesJson", "marketplaceId=" + marketplaceId)
