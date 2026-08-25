@@ -14,14 +14,14 @@ Maven:
 <dependency>
     <groupId>com.flexemarkets</groupId>
     <artifactId>fm-sdk</artifactId>
-    <version>0.1.1</version><!-- fm-readme-version -->
+    <version>0.1.2</version><!-- fm-readme-version -->
 </dependency>
 ```
 
 Gradle:
 
 ```kotlin
-implementation("com.flexemarkets:fm-sdk:0.1.1") // fm-readme-version
+implementation("com.flexemarkets:fm-sdk:0.1.2") // fm-readme-version
 ```
 
 ## Configuration
