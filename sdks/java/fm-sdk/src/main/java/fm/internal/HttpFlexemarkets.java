@@ -1083,11 +1083,6 @@ public class HttpFlexemarkets implements Flexemarkets {
         return send(request, type);
     }
 
-    /**
-     * GET returning the body verbatim, for endpoints that answer with something
-     * other than JSON. The holdings download is a CSV, and parsing it as JSON
-     * would fail on the first line.
-     */
     /** DELETE, whose answer is a status and nothing worth parsing. */
     private void delete(String url) {
         var request = request(url, "application/json")
@@ -1096,6 +1091,11 @@ public class HttpFlexemarkets implements Flexemarkets {
         sendDiscardingBody(request);
     }
 
+    /**
+     * GET returning the body verbatim, for endpoints that answer with something
+     * other than JSON. The holdings download is a CSV, and parsing it as JSON
+     * would fail on the first line.
+     */
     private String getText(String url) {
         var request = request(url, "text/csv, */*")
             .GET()
