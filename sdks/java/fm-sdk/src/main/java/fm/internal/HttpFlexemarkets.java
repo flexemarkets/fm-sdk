@@ -1476,14 +1476,41 @@ public class HttpFlexemarkets implements Flexemarkets {
      */
     private static FlexemarketsException failureFor(int statusCode, String body) {
         return switch (statusCode) {
-            case 400 -> new InvalidArgumentException("Invalid request: " + body);
-            case 401 -> new AuthenticationException("Authentication failed: " + body);
-            case 403 -> new AuthorizationException("Not permitted: " + body);
+            case 400 -> new InvalidArgumentException("Invalid request: " + detail(body));
+            case 401 -> new AuthenticationException("Authentication failed: " + detail(body));
+            case 403 -> new AuthorizationException("Not permitted: " + detail(body));
             case 409 -> new ConflictException("Conflict: " + body, tryParseConflict(body));
             default -> statusCode >= 500
                     ? new ConnectionFailedException("Server error " + statusCode + ": " + body)
                     : new HttpException(statusCode, body);
         };
+    }
+
+    /**
+     * What the server said, rather than the envelope it said it in.
+     *
+     * <p>Failures arrive as {@code {"error","message","path","shortDigest","status"}}
+     * and the message is the only part a caller can act on. Pasting the whole
+     * document into the exception buried it: a study given an allotments file
+     * naming people who are not in the account reported the rows and addresses
+     * at fault -- genuinely useful -- inside six lines of JSON, so the sentence
+     * that told you which rows to fix was the hardest part to find.
+     *
+     * <p>Falls back to the raw body, because a failure that does not parse is
+     * exactly when the caller most needs to see what actually came back.
+     */
+    private static String detail(String body) {
+        if (body == null || body.isBlank()) {
+            return "(no response body)";
+        }
+        try {
+            ConflictFailure failure = MAPPER.readValue(body, CONFLICT_TYPE);
+            return failure != null && failure.message() != null && !failure.message().isBlank()
+                    ? failure.message()
+                    : body;
+        } catch (Exception e) {
+            return body;
+        }
     }
 
     private static ConflictFailure tryParseConflict(String body) {
