@@ -58,6 +58,17 @@ class WireFixturesTest {
             "Security", fm.Security.class,
             "Token", fm.Token.class);
 
+    /**
+     * The snapshot envelope is not a record the mapper binds -- it is a shape
+     * the SDK has to recognise, which is exactly why it has broken twice. The
+     * fixtures for it run through the real unwrap.
+     */
+    record OrdersSnapshot(java.util.List<fm.Order> orders) { }
+
+    /** Types the fixture run handles by a route other than {@link #TYPES}. */
+    private static final java.util.Set<String> HANDLED_WITHOUT_A_TYPE =
+            java.util.Set.of("OrdersSnapshot");
+
     record Fixture(String name, String type, JsonNode payload, JsonNode expect) {
         @Override
         public String toString() {
@@ -81,10 +92,15 @@ class WireFixturesTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("fixtures")
     void fixture(Fixture fixture) {
-        var type = TYPES.get(fixture.type());
-        assertNotNull(type, "no Java type mapped for " + fixture.type());
-
-        var parsed = HttpFlexemarkets.MAPPER.treeToValue(fixture.payload(), type);
+        Object parsed;
+        if ("OrdersSnapshot".equals(fixture.type())) {
+            parsed = new OrdersSnapshot(HttpFlexemarkets._unwrapOrders(
+                    new fm.Snapshot<>(fixture.payload(), fm.Snapshot.NO_SEQ)).body());
+        } else {
+            var type = TYPES.get(fixture.type());
+            assertNotNull(type, "no Java type mapped for " + fixture.type());
+            parsed = HttpFlexemarkets.MAPPER.treeToValue(fixture.payload(), type);
+        }
         assertNotNull(parsed, fixture.name() + ": deserialized to null");
 
         fixture.expect().propertyStream().forEach(entry ->
@@ -179,7 +195,8 @@ class WireFixturesTest {
     void everyFixtureTypeIsMapped() throws IOException {
         // A fixture for a type nothing maps is a test that does not run.
         var unmapped = fixtures().map(Fixture::type).distinct()
-                .filter(t -> !TYPES.containsKey(t)).sorted().toList();
+                .filter(t -> !TYPES.containsKey(t) && !HANDLED_WITHOUT_A_TYPE.contains(t))
+                .sorted().toList();
         assertEquals(List.of(), unmapped, "fixtures exist for types with no Java mapping");
     }
 }

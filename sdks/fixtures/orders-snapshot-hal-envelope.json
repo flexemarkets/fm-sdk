@@ -1,0 +1,77 @@
+{
+  "type": "OrdersSnapshot",
+  "why": "The Spring HATEOAS CollectionModel envelope an older fm-server sends. Accepting the bare array must not stop this working, or fixing the new shape breaks every deployment still on the old one.",
+  "payload": {
+    "_embedded": {
+      "orders": [
+        {
+          "createdDate": "2026-08-27T22:12:58.945770",
+          "lastModifiedDate": "2026-08-27T22:12:58.945770",
+          "id": 80037877,
+          "original": 80037877,
+          "supplier": 80037877,
+          "consumer": null,
+          "type": "LIMIT",
+          "side": "SELL",
+          "symbol": "A",
+          "units": 10,
+          "price": 1150,
+          "mine": false,
+          "ownerTarget": null,
+          "ownerId": 47,
+          "accountId": 51,
+          "marketplaceId": 4505,
+          "marketId": 7159,
+          "sessionId": 184237,
+          "clientDescription": "fm-replay",
+          "submissionId": null
+        },
+        {
+          "createdDate": "2026-08-27T22:12:58.453026",
+          "lastModifiedDate": "2026-08-27T22:12:58.453026",
+          "id": 80037876,
+          "original": 80037876,
+          "supplier": 80037876,
+          "consumer": null,
+          "type": "LIMIT",
+          "side": "BUY",
+          "symbol": "A",
+          "units": 10,
+          "price": 900,
+          "mine": false,
+          "ownerTarget": null,
+          "ownerId": 47,
+          "accountId": 51,
+          "marketplaceId": 4505,
+          "marketId": 7159,
+          "sessionId": 184237,
+          "clientDescription": "fm-replay",
+          "submissionId": null
+        }
+      ]
+    },
+    "_links": {
+      "self": {
+        "href": "/api/v1/marketplaces/4505/orders/active"
+      }
+    }
+  },
+  "expect": {
+    "orders": [
+      {
+        "id": 80037877,
+        "ownerId": 47,
+        "side": "SELL",
+        "price": 1150,
+        "units": 10
+      },
+      {
+        "id": 80037876,
+        "ownerId": 47,
+        "side": "BUY",
+        "price": 900,
+        "units": 10
+      }
+    ]
+  }
+}

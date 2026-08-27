@@ -54,6 +54,7 @@ import java.util.concurrent.BlockingQueue;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -265,7 +266,7 @@ public class HttpFlexemarkets implements Flexemarkets {
      */
     public Snapshot<List<Order>> activeOrders(long marketplaceId) {
         var url = v1("/marketplaces/" + marketplaceId + "/orders/active");
-        return _unwrapOrders(getSnapshot(url, ORDERS_COLLECTION_TYPE));
+        return _unwrapOrders(getSnapshot(url, SNAPSHOT_TYPE));
     }
 
     /**
@@ -276,47 +277,49 @@ public class HttpFlexemarkets implements Flexemarkets {
     public Snapshot<List<Order>> recentTrades(long marketplaceId, int size) {
         var url = server(endpointUrl()) + "/v1/marketplaces/" + marketplaceId
                 + "/orders/recent-trades?size=" + size;
-        return _unwrapOrders(getSnapshot(url, ORDERS_COLLECTION_TYPE));
+        return _unwrapOrders(getSnapshot(url, SNAPSHOT_TYPE));
     }
 
-    /** Unwrap the Spring HATEOAS {@code CollectionModel<OrderDto>} envelope
-     *  that the V1 endpoints return, defaulting to an empty list when
-     *  {@code _embedded} is absent (which fm-server omits on empty
-     *  responses). */
-    private static Snapshot<List<Order>> _unwrapOrders(Snapshot<HateoasCollection<Order>> raw) {
-        List<Order> orders;
-        if (raw.body() == null || raw.body().embedded == null || raw.body().embedded.orderDtoes == null) {
-            orders = List.of();
-        } else {
-            orders = raw.body().embedded.orderDtoes;
+    /**
+     * The orders in a snapshot response, whatever shape it arrives in.
+     *
+     * <p>Three shapes, because the envelope has moved twice and both older ones
+     * are still deployed: a bare array, which is what fm-server sends now;
+     * {@code _embedded.orders}, the Spring HATEOAS CollectionModel; and
+     * {@code _embedded.orderDtoes}, HATEOAS pluralising {@code OrderDto}.
+     *
+     * <p>Each move broke every SDK at once and neither was caught. The first
+     * returned an empty list forever, so {@link fm.MarketView}'s books seeded
+     * from live deltas instead and looked plausible. The second threw
+     * {@code MismatchedInputException} binding an array to the envelope bean,
+     * which took {@code observe()} down with it.
+     *
+     * <p>Reading the shape rather than assuming one is the fix that
+     * generalises. Accepting both <em>names</em> was the fix last time, and it
+     * did not survive the envelope itself being dropped.
+     */
+    static Snapshot<List<Order>> _unwrapOrders(Snapshot<JsonNode> raw) {
+        JsonNode body = raw.body();
+        JsonNode array = null;
+
+        if (body != null) {
+            if (body.isArray()) {
+                array = body;
+            } else {
+                JsonNode embedded = body.path("_embedded");
+                array = embedded.has("orders") ? embedded.path("orders")
+                      : embedded.path("orderDtoes");
+            }
         }
+
+        List<Order> orders = (array == null || !array.isArray())
+            ? List.of()
+            : List.of(MAPPER.treeToValue(array, Order[].class));
+
         return new Snapshot<>(orders, raw.asOfSeq());
     }
 
-    /** Spring HATEOAS CollectionModel envelope, just the bits we need. */
-    private static class HateoasCollection<T> {
-        @com.fasterxml.jackson.annotation.JsonProperty("_embedded")
-        Embedded<T> embedded;
-    }
-
-    private static class Embedded<T> {
-        /**
-         * The server embeds these under "orders".
-         *
-         * <p>It was "orderDtoes" -- Spring HATEOAS pluralising OrderDto -- and
-         * every SDK still read that name long after the server stopped sending
-         * it, so activeOrders and recentTrades returned an empty list always.
-         * MarketView seeds from activeOrders, so its books were never seeded;
-         * they filled from live deltas and looked plausible.
-         *
-         * <p>The alias keeps an older server working.
-         */
-        @com.fasterxml.jackson.annotation.JsonProperty("orders")
-        @com.fasterxml.jackson.annotation.JsonAlias("orderDtoes")
-        List<T> orderDtoes;
-    }
-
-    private static final TypeReference<HateoasCollection<Order>> ORDERS_COLLECTION_TYPE = new TypeReference<>() {};
+    private static final TypeReference<JsonNode> SNAPSHOT_TYPE = new TypeReference<>() {};
 
     /** Sensible default — the server caps at 5000 and defaults to 1000. */
     public Snapshot<List<Order>> recentTrades(long marketplaceId) {

@@ -350,9 +350,17 @@ export function parseConnection(data: JsonObject): ClientConnection {
  * empty array always. `MarketView` seeds from `activeOrders`, so its books were
  * never seeded; they filled from live deltas and looked plausible.
  *
- * Both names are accepted, so an older server still works.
+ * Then the envelope itself went: fm-server now sends a bare array. Accepting
+ * both *names* did not survive that, and this SDK failed the same silent way a
+ * second time — `._embedded` on an array is `undefined`, so it returned an
+ * empty book rather than throwing, while Java and Python at least raised.
+ *
+ * So read the shape rather than assume one. All three are accepted, because
+ * all three are still deployed somewhere.
  */
-function embeddedOrders(data: JsonObject): JsonObject[] {
+export function embeddedOrders(data: unknown): JsonObject[] {
+  if (Array.isArray(data)) return data as JsonObject[];
+  if (data === null || typeof data !== "object") return [];
   const embedded = (data as { _embedded?: { orders?: JsonObject[]; orderDtoes?: JsonObject[] } })._embedded;
   return embedded?.orders ?? embedded?.orderDtoes ?? [];
 }

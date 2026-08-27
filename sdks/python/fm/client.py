@@ -283,18 +283,29 @@ def _http_origin(url: str | None) -> str | None:
     return url if path_start < 0 else url[:path_start]
 
 
-def _embedded_orders(body: dict[str, Any]) -> list[dict[str, Any]]:
-    """The orders inside a HAL envelope.
+def _embedded_orders(body: Any) -> list[dict[str, Any]]:
+    """The orders in a snapshot response, whatever shape it arrives in.
 
-    The server embeds them under ``orders``. It was ``orderDtoes`` -- Spring
-    HATEOAS pluralising ``OrderDto`` -- and every SDK still read that name long
-    after the server stopped sending it, so ``active_orders`` and
-    ``recent_trades`` returned an empty list always. ``MarketView`` seeds from
-    ``active_orders``, so its books were never seeded; they filled from live
-    deltas and looked plausible.
+    Three shapes, because the envelope has moved twice and both older ones are
+    still deployed:
 
-    Both names are accepted, so an older server still works.
+    * a bare array -- what fm-server sends now, HAL-less
+    * ``_embedded.orders`` -- the Spring HATEOAS CollectionModel
+    * ``_embedded.orderDtoes`` -- HATEOAS pluralising ``OrderDto``
+
+    Each move broke every SDK at once, and neither was caught: the first
+    returned an empty list forever, so ``MarketView``'s books seeded from live
+    deltas instead and looked plausible; the second raised ``AttributeError``
+    from ``.get`` on a list, which took ``observe()`` down with it.
+
+    Reading the shape rather than assuming one is the fix that generalises.
+    Accepting both *names* was the fix last time, and it did not survive the
+    envelope itself being dropped.
     """
+    if isinstance(body, list):
+        return body
+    if not isinstance(body, dict):
+        return []
     embedded = body.get("_embedded") or {}
     return embedded.get("orders") or embedded.get("orderDtoes") or []
 

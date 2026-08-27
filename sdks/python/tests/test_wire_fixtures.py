@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Callable
 
 import pytest
@@ -39,6 +40,11 @@ PARSERS: dict[str, list[tuple[str, Callable[[dict[str, Any]], Any]]]] = {
     "ClientConnection": [("client", rest._parse_connection)],
     "Security": [("client", rest._parse_security)],
     "Token": [("client", rest._parse_token)],
+    # Not a parser but a shape the SDK has to recognise, which is why it has
+    # broken twice. This is exactly what active_orders/recent_trades do with a
+    # response body.
+    "OrdersSnapshot": [("client", lambda body: SimpleNamespace(
+        orders=[rest._parse_order(o) for o in rest._embedded_orders(body)]))],
 }
 
 
