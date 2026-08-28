@@ -42,11 +42,11 @@ class ApiRootLinksTest {
         """;
 
     // Jackson 3 mappers are built, not constructed and configured.
-    private final ObjectMapper mapper = JsonMapper.builder().build();
+    private final ObjectMapper _mapper = JsonMapper.builder().build();
 
     @Test
     void readsTheWiresUnderscoreIntoTheLinksComponent() throws Exception {
-        ApiRoot root = mapper.readValue(WIRE, ApiRoot.class);
+        ApiRoot root = _mapper.readValue(WIRE, ApiRoot.class);
 
         assertThat(root.links()).containsKeys("orders", "marketplaces");
         assertThat(root.links().get("orders").href())
@@ -55,7 +55,7 @@ class ApiRootLinksTest {
 
     @Test
     void getLinkResolvesThroughToTheHref() throws Exception {
-        ApiRoot root = mapper.readValue(WIRE, ApiRoot.class);
+        ApiRoot root = _mapper.readValue(WIRE, ApiRoot.class);
 
         assertThat(root.getLink("marketplaces"))
                 .contains("https://api.flexemarkets.com/api/marketplaces{?page,size,sort*}");
@@ -69,7 +69,7 @@ class ApiRootLinksTest {
      */
     @Test
     void aPayloadWithoutTheUnderscoreYieldsNoLinks() throws Exception {
-        ApiRoot root = mapper.readValue(
+        ApiRoot root = _mapper.readValue(
                 "{\"links\": {\"orders\": {\"href\": \"https://example.com\"}}}", ApiRoot.class);
 
         assertThat(root.links()).isNullOrEmpty();
@@ -78,9 +78,9 @@ class ApiRootLinksTest {
     /** Writing must produce what the server produces, not the Java name. */
     @Test
     void writesTheUnderscoreBackOut() throws Exception {
-        ApiRoot root = mapper.readValue(WIRE, ApiRoot.class);
+        ApiRoot root = _mapper.readValue(WIRE, ApiRoot.class);
 
-        String json = mapper.writeValueAsString(root);
+        String json = _mapper.writeValueAsString(root);
 
         assertThat(json).contains("\"_links\"");
         assertThat(json).doesNotContain("\"links\"");
@@ -88,7 +88,7 @@ class ApiRootLinksTest {
 
     @Test
     void toleratesAnAbsentEnvelope() throws Exception {
-        ApiRoot root = mapper.readValue("{}", ApiRoot.class);
+        ApiRoot root = _mapper.readValue("{}", ApiRoot.class);
 
         assertThat(root.getLink("orders")).isEmpty();
     }
