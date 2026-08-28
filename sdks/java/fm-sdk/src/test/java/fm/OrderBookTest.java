@@ -236,4 +236,57 @@ class OrderBookTest {
             .isEqualTo(price);
         assertThat(book.bestBuyUnits()).as("ghost units").isPositive();
     }
+
+    /**
+     * The side-generic accessors, which Java did not have.
+     *
+     * <p>Python and TypeScript have carried {@code hasValue}, {@code bestPrice}
+     * and {@code bestUnits} all along; Java shipped only the four fixed
+     * variants, so a caller holding a {@link Side} at runtime -- which is most
+     * of them, since a side arrives on an order -- branched by hand to reach a
+     * book that could already answer. The parity check could not see it: it
+     * compared the client surface and stopped there.
+     */
+    @Test
+    void sideGenericAccessorsAgreeWithTheFixedOnes() {
+        Market market = market(1L, "A");
+        OrderBook book = new OrderBook(market);
+        book.update(toArray(
+            limitOf(market, 1L, Side.BUY, 10, 100),
+            limitOf(market, 2L, Side.BUY, 5, 90),
+            limitOf(market, 3L, Side.SELL, 7, 110)));
+
+        assertThat(book.bestPrice(Side.BUY)).isEqualTo(book.bestBuyPrice()).isEqualTo(100);
+        assertThat(book.bestPrice(Side.SELL)).isEqualTo(book.bestSellPrice()).isEqualTo(110);
+        assertThat(book.bestUnits(Side.BUY)).isEqualTo(book.bestBuyUnits()).isEqualTo(10);
+        assertThat(book.bestUnits(Side.SELL)).isEqualTo(book.bestSellUnits()).isEqualTo(7);
+        assertThat(book.hasValue(Side.BUY)).isTrue();
+        assertThat(book.hasValue(Side.SELL)).isTrue();
+    }
+
+    @Test
+    void sideGenericAccessorsReportAnEmptySide() {
+        Market market = market(1L, "A");
+        OrderBook book = new OrderBook(market);
+        book.update(toArray(limitOf(market, 1L, Side.BUY, 10, 100)));
+
+        assertThat(book.hasValue(Side.SELL)).isFalse();
+        assertThat(book.bestPrice(Side.SELL)).isEqualTo(-1);
+        assertThat(book.bestUnits(Side.SELL)).isEqualTo(-1);
+    }
+
+    @Test
+    void marketplaceBooksAnswerForAnUnknownMarketRatherThanFailing() {
+        Market market = market(1L, "A");
+        OrderBooks books = new OrderBooks(java.util.List.of(market));
+        books.update(toArray(limitOf(market, 1L, Side.BUY, 10, 100)));
+
+        assertThat(books.bestPrice(1L, Side.BUY)).isEqualTo(100);
+        assertThat(books.hasValue(1L, Side.BUY)).isTrue();
+
+        // An absent market has nothing resting either way, so it is answered
+        // rather than raised -- the other two SDKs raise here.
+        assertThat(books.hasValue(99L, Side.BUY)).isFalse();
+        assertThat(books.bestPrice(99L, Side.BUY)).isEqualTo(-1);
+    }
 }

@@ -172,4 +172,23 @@ class TradesPairingTest {
         var market = HttpFlexemarkets.MAPPER.treeToValue(fixture().get("market"), Market.class);
         assertNull(new Trades(market, 100).last());
     }
+
+    @Test
+    @DisplayName("drain takes the tape and leaves it empty")
+    void drainEmptiesTheTape() {
+        // Python and TypeScript have had drain() all along; Java had clear(),
+        // which throws the trades away rather than handing them over, so a
+        // consumer draining what accumulated since it last looked had to read
+        // the tape and clear it in two steps with a race in between.
+        var tape = tape();
+        int held = tape.size();
+
+        Trade[] drained = tape.drain();
+
+        assertEquals(held, drained.length);
+        assertEquals(expected().size(), drained.length);
+        assertEquals(0, tape.size());
+        assertNull(tape.last());
+        assertEquals(0, tape.drain().length);
+    }
 }

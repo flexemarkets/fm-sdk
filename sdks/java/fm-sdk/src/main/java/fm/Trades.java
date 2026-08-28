@@ -164,6 +164,21 @@ public class Trades {
             .toArray();
     }
 
+    /**
+     * Take everything on the tape and leave it empty.
+     *
+     * <p>For a caller that consumes trades rather than inspecting them -- a
+     * reporter draining what has accumulated since it last looked. Distinct
+     * from {@link #clear()}, which throws the trades away.
+     *
+     * @return the retained trades, oldest first
+     */
+    public synchronized Trade[] drain() {
+        Trade[] drained = mostRecentTrades();
+        container.clear();
+        return drained;
+    }
+
     /** Empty the trade tape — used by {@code MarketView}'s gap-recovery
      *  flow before reseeding from the {@code /v1/orders/recent-trades}
      *  snapshot. */

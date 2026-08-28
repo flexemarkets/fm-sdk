@@ -145,6 +145,45 @@ public class OrderBook {
     }
 
     /**
+     * Whether either resting order sits on the given side.
+     *
+     * <p>The side-generic form of {@link #bestBuyPrice} and friends. Java had
+     * only the four fixed variants, so a caller holding a {@link Side} at
+     * runtime -- which is most of them, since a side arrives on an order --
+     * had to branch on it by hand to reach a book that could already answer.
+     *
+     * @param side the side to test; anything other than {@link Side#BUY} reads
+     *             as the sell side, matching {@code is_buy} in the other SDKs
+     * @return true if that side has any resting units
+     */
+    public synchronized boolean hasValue(Side side) {
+        return !(Side.BUY == side ? buys : sells).isEmpty();
+    }
+
+    /**
+     * The best price on the given side.
+     *
+     * @param side the side to read; anything other than {@link Side#BUY} reads
+     *             as the sell side
+     * @return the best resting price on that side, or -1 if it is empty
+     */
+    public synchronized long bestPrice(Side side) {
+        return Side.BUY == side ? bestBuyPrice() : bestSellPrice();
+    }
+
+    /**
+     * The size available at the best price on the given side.
+     *
+     * @param side the side to read; anything other than {@link Side#BUY} reads
+     *             as the sell side
+     * @return units resting at the best price on that side, or -1 if it is
+     *         empty
+     */
+    public synchronized long bestUnits(Side side) {
+        return Side.BUY == side ? bestBuyUnits() : bestSellUnits();
+    }
+
+    /**
      * The buy side, aggregated to price levels.
      *
      * @return units by price, highest price first; a snapshot, not a view

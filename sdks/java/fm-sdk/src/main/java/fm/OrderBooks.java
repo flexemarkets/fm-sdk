@@ -52,6 +52,34 @@ public class OrderBooks {
     }
 
     /**
+     * Whether one market's book has resting units on the given side.
+     *
+     * @param marketId the market to read
+     * @param side     the side to test
+     * @return true if that side has any resting units; false when the market
+     *         is not in this marketplace, which is the answer rather than a
+     *         failure -- the other SDKs raise there, and an absent market has
+     *         nothing resting either way
+     */
+    public boolean hasValue(long marketId, Side side) {
+        OrderBook book = get(marketId);
+        return book != null && book.hasValue(side);
+    }
+
+    /**
+     * The best price on one market's given side.
+     *
+     * @param marketId the market to read
+     * @param side     the side to read
+     * @return the best resting price, or -1 when that side is empty or the
+     *         market is not in this marketplace
+     */
+    public long bestPrice(long marketId, Side side) {
+        OrderBook book = get(marketId);
+        return book == null ? -1 : book.bestPrice(side);
+    }
+
+    /**
      * Every book being kept.
      *
      * @return the books, in no particular order
