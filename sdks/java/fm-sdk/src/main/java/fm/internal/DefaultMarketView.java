@@ -72,7 +72,7 @@ public class DefaultMarketView implements MarketView {
     private final long marketplaceId;
     private final List<Market> markets;
 
-    private final MarketplaceBooks orderBooks;
+    private final MarketplaceBooks _books;
     private final MarketplaceTrades trades;
     private final AtomicReference<Session> session = new AtomicReference<>();
     private final AtomicReference<Holding> holding = new AtomicReference<>();
@@ -113,7 +113,7 @@ public class DefaultMarketView implements MarketView {
         this.flexemarkets = flexemarkets;
         this.marketplaceId = marketplaceId;
         this.markets = List.copyOf(markets);
-        this.orderBooks = new MarketplaceBooks(this.markets);
+        this._books = new MarketplaceBooks(this.markets);
         // 100 matches the default per-market MarketTrades capacity — see
         // MarketTrades(Market) ctor. Plumb through to observe() later if a
         // caller needs deeper trade scrollback.
@@ -156,7 +156,7 @@ public class DefaultMarketView implements MarketView {
         // Clear before reseeding so a resync (Phase 2b) doesn't
         // double-add against existing price levels. Initial seed
         // hits empty books so clear() is a no-op there.
-        this.orderBooks.clear();
+        this._books.clear();
         this.trades.clear();
 
         // Snapshot orders are all available (consumer == null), so
@@ -164,7 +164,7 @@ public class DefaultMarketView implements MarketView {
         // deltas use. MarketTrades snapshot feeds the tape via the same
         // update() entrypoint.
         if (!orders.body().isEmpty()) {
-            this.orderBooks.update(orders.body().toArray(new Order[0]));
+            this._books.update(orders.body().toArray(new Order[0]));
         }
         if (!trades.body().isEmpty()) {
             this.trades.update(trades.body().toArray(new Order[0]));
@@ -190,7 +190,7 @@ public class DefaultMarketView implements MarketView {
     @Override
     public MarketBook orderBook(long marketId) {
         _ensureOpen();
-        return orderBooks.get(marketId);
+        return _books.get(marketId);
     }
 
     @Override
@@ -371,7 +371,7 @@ public class DefaultMarketView implements MarketView {
 
         Order[] orders = update.orders();
         var touched = _marketIdsTouched(orders);
-        orderBooks.update(orders);
+        _books.update(orders);
         var traded = trades.update(orders);
 
         // MarketTrades first: the more specific event, and a book handler that then
@@ -387,7 +387,7 @@ public class DefaultMarketView implements MarketView {
         }
 
         for (long marketId : touched) {
-            var book = orderBooks.get(marketId);
+            var book = _books.get(marketId);
             if (book == null) continue;
             for (var h : bookHandlers) {
                 if (h.marketId == marketId) h.handler.accept(book);
