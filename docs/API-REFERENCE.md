@@ -365,7 +365,16 @@ narrow race window remains; treat a one-frame overlap as normal and re-snapshot
 if your book detects a crossed state.
 
 `recent-trades` accepts `size` (default 1000, hard ceiling 5000) and returns
-both legs of each trade, newest first.
+both legs of each trade, **oldest first**. Which trades and what order they
+arrive in are separate decisions: you get the newest `size` of them, handed
+back in the order they happened, so appending the snapshot to a trade tape
+leaves the newest trade at the end.
+
+It answered newest-first up to and including fm-server 4.3.1, which made every
+client that appended it build its tape backwards — including all three SDKs,
+whose "most recent trade" was then the oldest one they had retained. `Trades`
+sorts each batch by time regardless of what the server sends, so the tape is
+right against a server on either side of that change.
 
 ## WebSocket (STOMP)
 

@@ -1163,6 +1163,14 @@ class Flexemarkets:
         tape. Same ``x-fm-as-of-seq`` contract as
         :meth:`active_orders`. Server caps at 5000; default is
         1000.
+
+        Ordering is the server's and has changed: up to and including
+        fm-server 4.3.1 this answered newest first, later versions answer
+        oldest first. Either way it is the newest ``size`` trades that come
+        back -- only their order differs. :class:`~fm.trades.Trades` sorts
+        what it is given, so a caller seeding a tape through
+        :class:`~fm.market_view.MarketView` is unaffected; a caller reading
+        this list directly should not assume one.
         """
         url = f"{_server(self._endpoint)}/v1/marketplaces/{marketplace_id}/orders/recent-trades?size={size}"
         body, as_of_seq = self._get_snapshot(url)

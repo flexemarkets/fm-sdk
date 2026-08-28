@@ -219,17 +219,31 @@ public interface Reading {
     /**
      * The most recent trades, with the sequence they were correct as of.
      *
+     * <p>Ordering is the server's and has changed: up to and including
+     * fm-server 4.3.1 this answered newest first, later versions answer oldest
+     * first. Either way it is the newest {@code size} trades that come back —
+     * only their order differs. {@link Trades} sorts what it is given, so a
+     * caller seeding a tape through {@link MarketView} is unaffected; a caller
+     * reading this list directly should not assume one.
+     *
      * @param marketplaceId the marketplace to read
      * @param size          how many trades to ask for
-     * @return the trades, most recent first, and their sequence
+     * @return the trades, in the server's order, and their sequence
      */
     Snapshot<List<Order>> recentTrades(long marketplaceId, int size);
 
     /**
      * The most recent trades, in the server's default quantity.
      *
+     * <p>Ordering is the server's and has changed: up to and including
+     * fm-server 4.3.1 this answered newest first, later versions answer oldest
+     * first. Either way it is the newest {@code size} trades that come back —
+     * only their order differs. {@link Trades} sorts what it is given, so a
+     * caller seeding a tape through {@link MarketView} is unaffected; a caller
+     * reading this list directly should not assume one.
+     *
      * @param marketplaceId the marketplace to read
-     * @return the trades, most recent first, and their sequence
+     * @return the trades, in the server's order, and their sequence
      */
     Snapshot<List<Order>> recentTrades(long marketplaceId);
 }
