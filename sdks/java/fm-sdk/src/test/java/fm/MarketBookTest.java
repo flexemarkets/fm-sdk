@@ -24,14 +24,14 @@ class MarketBookTest {
     }
 
     /** A resting limit, its id serving as original and supplier. */
-    private static Order limitOf(Market market, long orderId, OrderSide side, long units, long price) {
+    private static Order _limitOf(Market market, long orderId, OrderSide side, long units, long price) {
         return new Order(null, null, orderId, orderId, orderId, null,
                          OrderType.LIMIT, side, units, price, null, null,
                          market.marketplaceId(), 0L, market.symbol(), market.id(), null, null);
     }
 
     /** The SDK's records are positional; this is the {@code toBuilder} the test was written against. */
-    private static Order with(Order o, Long original, Long supplier, Long consumer,
+    private static Order _with(Order o, Long original, Long supplier, Long consumer,
                               OrderSide side, Long id, Long units) {
         return new Order(o.createdDate(), o.lastModifiedDate(),
                          id != null ? id : o.id(),
@@ -45,49 +45,49 @@ class MarketBookTest {
                          o.symbol(), o.marketId(), o.ownerTarget(), o.clientDescription());
     }
 
-    private static Order[] toArray(Order... orders) {
+    private static Order[] _toArray(Order... orders) {
         return orders;
     }
 
-    private static OrderSide contra(OrderSide side) {
+    private static OrderSide _contra(OrderSide side) {
         return side.contra();
     }
 
     /** What fm-server broadcasts for a cancel: the cancel, and the limit it consumed. */
-    private static Order[] cancelSet(Order order) {
+    private static Order[] _cancelSet(Order order) {
         long cancelId = order.id() + 1;
 
         var cancel = new Order(null, null, cancelId, cancelId, order.id(), order.id(),
                                OrderType.CANCEL, order.side(), order.units(), order.price(),
                                null, null, order.marketplaceId(), order.sessionId(),
                                order.symbol(), order.marketId(), null, null);
-        var limit = with(order, null, null, cancel.id(), null, null, null);
+        var limit = _with(order, null, null, cancel.id(), null, null, null);
 
-        return toArray(limit, cancel);
+        return _toArray(limit, cancel);
     }
 
     /** A full cross: the limit gains a consumer, and the contra side arrives with it. */
-    private static Order[] crossSet(Order order) {
+    private static Order[] _crossSet(Order order) {
         long crossId = order.id() + 1;
 
-        var limit = with(order, null, null, crossId, null, null, null);
-        var cross = with(order, crossId, crossId, limit.id(), contra(limit.side()), crossId, null);
+        var limit = _with(order, null, null, crossId, null, null, null);
+        var cross = _with(order, crossId, crossId, limit.id(), _contra(limit.side()), crossId, null);
 
-        return toArray(limit, cross);
+        return _toArray(limit, cross);
     }
 
     /**
      * A partial fill: the split marker (the previous fragment, consumer set to
      * zero), the remainder carrying the unfilled units, and the trade pair.
      */
-    private static Order[] crossSplitWithUnitsSet(Order order, long units) {
-        var split = with(order, null, null, 0L, null, null, null);
-        var remainder = with(split, split.id(), split.id(), null, null, split.id() + 1,
+    private static Order[] _crossSplitWithUnitsSet(Order order, long units) {
+        var split = _with(order, null, null, 0L, null, null, null);
+        var remainder = _with(split, split.id(), split.id(), null, null, split.id() + 1,
                              order.units() - units);
-        var match = with(remainder, split.id(), split.id(), null, null, remainder.id() + 1, units);
-        var cross = crossSet(match);
+        var match = _with(remainder, split.id(), split.id(), null, null, remainder.id() + 1, units);
+        var cross = _crossSet(match);
 
-        return toArray(split, remainder, cross[0], cross[1]);
+        return _toArray(split, remainder, cross[0], cross[1]);
     }
 
     @Test
@@ -100,29 +100,29 @@ class MarketBookTest {
         assertThat(book.bestBuyUnits()).isEqualTo(-1L);
         assertThat(book.bestSellUnits()).isEqualTo(-1L);
 
-        var sell = limitOf(market, 1, OrderSide.SELL, 1, 100);
-        book.update(toArray(sell));
+        var sell = _limitOf(market, 1, OrderSide.SELL, 1, 100);
+        book.update(_toArray(sell));
 
         assertThat(book.bestSellPrice()).isEqualTo(100L);
         assertThat(book.bestSellUnits()).isEqualTo(1L);
         assertThat(book.bestBuyPrice()).isEqualTo(-1L);
 
-        book.update(cancelSet(sell));
+        book.update(_cancelSet(sell));
 
         assertThat(book.bestSellPrice()).as("cancelled").isEqualTo(-1L);
         assertThat(book.bestSellUnits()).isEqualTo(-1L);
 
-        book.update(toArray(sell));
-        book.update(crossSet(sell));
+        book.update(_toArray(sell));
+        book.update(_crossSet(sell));
 
         assertThat(book.bestSellPrice()).as("crossed").isEqualTo(-1L);
         assertThat(book.bestSellUnits()).isEqualTo(-1L);
 
-        var buy = limitOf(market, 1, OrderSide.BUY, 30, 900);
-        book.update(toArray(buy));
+        var buy = _limitOf(market, 1, OrderSide.BUY, 30, 900);
+        book.update(_toArray(buy));
         assertThat(book.bestBuyPrice()).isEqualTo(900L);
 
-        book.update(crossSplitWithUnitsSet(buy, 1));
+        book.update(_crossSplitWithUnitsSet(buy, 1));
 
         assertThat(book.bestBuyPrice()).isEqualTo(900L);
         assertThat(book.bestBuyUnits()).as("one of thirty filled").isEqualTo(29L);
@@ -143,7 +143,7 @@ class MarketBookTest {
         long price = 708;
         long nextId = 100;
         long originalId = nextId++;
-        book.update(toArray(limitOf(market, originalId, OrderSide.BUY, 6, price)));
+        book.update(_toArray(_limitOf(market, originalId, OrderSide.BUY, 6, price)));
         assertThat(book.bestBuyUnits()).as("initial").isEqualTo(6L);
 
         long restingId = originalId;
@@ -155,16 +155,16 @@ class MarketBookTest {
             long crossId = nextId++;
             long remainingUnits = restingUnits - 1;
 
-            var splitMarker = with(limitOf(market, splitId, OrderSide.BUY, restingUnits, price),
+            var splitMarker = _with(_limitOf(market, splitId, OrderSide.BUY, restingUnits, price),
                                    null, null, 0L, null, null, null);
-            var remainder = with(limitOf(market, remainderId, OrderSide.BUY, remainingUnits, price),
+            var remainder = _with(_limitOf(market, remainderId, OrderSide.BUY, remainingUnits, price),
                                  originalId, splitId, null, null, null, null);
-            var matched = with(limitOf(market, matchId, OrderSide.BUY, 1, price),
+            var matched = _with(_limitOf(market, matchId, OrderSide.BUY, 1, price),
                                originalId, splitId, crossId, null, null, null);
-            var cross = with(limitOf(market, crossId, OrderSide.SELL, 1, price),
+            var cross = _with(_limitOf(market, crossId, OrderSide.SELL, 1, price),
                              crossId, crossId, matchId, null, null, null);
 
-            book.update(toArray(splitMarker, remainder, matched, cross));
+            book.update(_toArray(splitMarker, remainder, matched, cross));
 
             assertThat(book.bestBuyUnits()).as("after fill " + (i + 1)).isEqualTo(remainingUnits);
             restingId = remainderId;
@@ -173,9 +173,9 @@ class MarketBookTest {
 
         assertThat(book.bestBuyUnits()).as("one unit left after five fills").isEqualTo(1L);
 
-        var cancelled = with(limitOf(market, restingId, OrderSide.BUY, restingUnits, price),
+        var cancelled = _with(_limitOf(market, restingId, OrderSide.BUY, restingUnits, price),
                              originalId, restingId, null, null, null, null);
-        book.update(cancelSet(cancelled));
+        book.update(_cancelSet(cancelled));
 
         assertThat(book.bestBuyPrice()).as("price cleared after the cancel").isEqualTo(-1L);
         assertThat(book.buyLevels()).as("buy side empty").isEmpty();
@@ -199,7 +199,7 @@ class MarketBookTest {
         long price = 708;
         long nextId = 100;
         long originalId = nextId++;
-        book.update(toArray(limitOf(market, originalId, OrderSide.BUY, 6, price)));
+        book.update(_toArray(_limitOf(market, originalId, OrderSide.BUY, 6, price)));
 
         int dropAtFill = 3;
 
@@ -212,24 +212,24 @@ class MarketBookTest {
             long crossId = nextId++;
             long remainingUnits = restingUnits - 1;
 
-            var splitMarker = with(limitOf(market, splitId, OrderSide.BUY, restingUnits, price),
+            var splitMarker = _with(_limitOf(market, splitId, OrderSide.BUY, restingUnits, price),
                                    null, null, 0L, null, null, null);
-            var remainder = with(limitOf(market, remainderId, OrderSide.BUY, remainingUnits, price),
+            var remainder = _with(_limitOf(market, remainderId, OrderSide.BUY, remainingUnits, price),
                                  originalId, splitId, null, null, null, null);
-            var matched = with(limitOf(market, matchId, OrderSide.BUY, 1, price),
+            var matched = _with(_limitOf(market, matchId, OrderSide.BUY, 1, price),
                                originalId, splitId, crossId, null, null, null);
-            var cross = with(limitOf(market, crossId, OrderSide.SELL, 1, price),
+            var cross = _with(_limitOf(market, crossId, OrderSide.SELL, 1, price),
                              crossId, crossId, matchId, null, null, null);
 
             book.update(i == dropAtFill
-                    ? toArray(remainder, matched, cross)
-                    : toArray(splitMarker, remainder, matched, cross));
+                    ? _toArray(remainder, matched, cross)
+                    : _toArray(splitMarker, remainder, matched, cross));
 
             restingId = remainderId;
             restingUnits = remainingUnits;
         }
 
-        book.update(cancelSet(limitOf(market, restingId, OrderSide.BUY, restingUnits, price)));
+        book.update(_cancelSet(_limitOf(market, restingId, OrderSide.BUY, restingUnits, price)));
 
         assertThat(book.bestBuyPrice())
             .as("a ghost bid survives the cancel, and only a re-seed clears it")
@@ -251,10 +251,10 @@ class MarketBookTest {
     void sideGenericAccessorsAgreeWithTheFixedOnes() {
         Market market = market(1L, "A");
         MarketBook book = new MarketBook(market);
-        book.update(toArray(
-            limitOf(market, 1L, OrderSide.BUY, 10, 100),
-            limitOf(market, 2L, OrderSide.BUY, 5, 90),
-            limitOf(market, 3L, OrderSide.SELL, 7, 110)));
+        book.update(_toArray(
+            _limitOf(market, 1L, OrderSide.BUY, 10, 100),
+            _limitOf(market, 2L, OrderSide.BUY, 5, 90),
+            _limitOf(market, 3L, OrderSide.SELL, 7, 110)));
 
         assertThat(book.bestPrice(OrderSide.BUY)).isEqualTo(book.bestBuyPrice()).isEqualTo(100);
         assertThat(book.bestPrice(OrderSide.SELL)).isEqualTo(book.bestSellPrice()).isEqualTo(110);
@@ -268,7 +268,7 @@ class MarketBookTest {
     void sideGenericAccessorsReportAnEmptySide() {
         Market market = market(1L, "A");
         MarketBook book = new MarketBook(market);
-        book.update(toArray(limitOf(market, 1L, OrderSide.BUY, 10, 100)));
+        book.update(_toArray(_limitOf(market, 1L, OrderSide.BUY, 10, 100)));
 
         assertThat(book.hasValue(OrderSide.SELL)).isFalse();
         assertThat(book.bestPrice(OrderSide.SELL)).isEqualTo(-1);
@@ -279,7 +279,7 @@ class MarketBookTest {
     void marketplaceBooksAnswerForAnUnknownMarketRatherThanFailing() {
         Market market = market(1L, "A");
         MarketplaceBooks books = new MarketplaceBooks(java.util.List.of(market));
-        books.update(toArray(limitOf(market, 1L, OrderSide.BUY, 10, 100)));
+        books.update(_toArray(_limitOf(market, 1L, OrderSide.BUY, 10, 100)));
 
         assertThat(books.bestPrice(1L, OrderSide.BUY)).isEqualTo(100);
         assertThat(books.hasValue(1L, OrderSide.BUY)).isTrue();

@@ -62,9 +62,9 @@ public final class Endpoints {
             return marketplaceUrl(trimmed);
         }
 
-        Path path = asPath(trimmed);
+        Path path = _asPath(trimmed);
         if (null != path && Files.isRegularFile(path)) {
-            String fromFile = endpointIn(path);
+            String fromFile = _endpointIn(path);
             if (null == fromFile) {
                 return trimmed;
             }
@@ -123,7 +123,7 @@ public final class Endpoints {
         return (null == host ? DEFAULT_HOST : host) + "/api/marketplaces/" + marketplaceId;
     }
 
-    private static String endpointIn(Path path) throws IOException {
+    private static String _endpointIn(Path path) throws IOException {
         Properties properties = new Properties();
         try (var reader = Files.newBufferedReader(path)) {
             properties.load(reader);
@@ -138,7 +138,7 @@ public final class Endpoints {
      * use — a NUL byte, on some platforms a colon — and an endpoint form this
      * class does not recognise must not become an exception here.
      */
-    private static Path asPath(String candidate) {
+    private static Path _asPath(String candidate) {
         try {
             return Path.of(candidate);
         } catch (RuntimeException e) {

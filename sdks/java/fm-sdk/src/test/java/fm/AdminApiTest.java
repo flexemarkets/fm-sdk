@@ -36,141 +36,141 @@ class AdminApiTest {
     private static final String TOKEN =
             "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl";
 
-    private HttpServer server;
-    private final List<String> requests = new ArrayList<>();
-    private final List<String> bodies = new ArrayList<>();
+    private HttpServer _server;
+    private final List<String> _requests = new ArrayList<>();
+    private final List<String> _bodies = new ArrayList<>();
 
     /** Roles the sign-in token reports; a test may change this before connecting. */
-    private String roles = "[\"ROLE_MANAGER\"]";
+    private String _roles = "[\"ROLE_MANAGER\"]";
 
     /** When set, POST /api/accounts and DELETE /api/v1/users/* answer 409. */
-    private boolean conflict = false;
+    private boolean _conflict = false;
 
     @BeforeEach
     void startServer() throws IOException {
-        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        _server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 
-        server.createContext("/api/tokens", exchange ->
-                respond(exchange, 200, """
+        _server.createContext("/api/tokens", exchange ->
+                _respond(exchange, 200, """
                     {"token":"%s",
                      "person":{"id":7,"accountId":1,"email":"dev@dev","roles":%s},
                      "account":{"id":1,"name":"dev"}}
-                    """.formatted(TOKEN, roles)));
+                    """.formatted(TOKEN, _roles)));
 
-        server.createContext("/api/accounts", exchange -> {
+        _server.createContext("/api/accounts", exchange -> {
             record(exchange);
             if ("POST".equals(exchange.getRequestMethod())) {
-                if (conflict) {
-                    respond(exchange, 409,
+                if (_conflict) {
+                    _respond(exchange, 409,
                             "{\"status\":\"CONFLICT\",\"message\":\"taken\",\"suggestedName\":\"acme-2\"}");
                     return;
                 }
-                respond(exchange, 200, """
+                _respond(exchange, 200, """
                     {"token":"%s",
                      "person":{"id":8,"accountId":2,"email":"owner@new"},
                      "account":{"id":2,"name":"acme"}}
                     """.formatted(TOKEN));
             } else if ("DELETE".equals(exchange.getRequestMethod())) {
-                respond(exchange, 204, "");
+                _respond(exchange, 204, "");
             } else if (exchange.getRequestURI().getPath().matches(".*/accounts/\\d+")) {
-                respond(exchange, 200, "{\"id\":2,\"name\":\"acme\",\"approval\":true}");
+                _respond(exchange, 200, "{\"id\":2,\"name\":\"acme\",\"approval\":true}");
             } else {
-                respond(exchange, 200,
+                _respond(exchange, 200,
                         "[{\"id\":1,\"name\":\"dev\"},{\"id\":2,\"name\":\"acme\"}]");
             }
         });
 
-        server.createContext("/api/approvals", exchange -> {
+        _server.createContext("/api/approvals", exchange -> {
             record(exchange);
-            respond(exchange, 200,
+            _respond(exchange, 200,
                     "{\"account\":{\"id\":2,\"name\":\"acme\",\"approval\":true},\"approve\":true}");
         });
 
-        server.createContext("/api/v1/users", exchange -> {
+        _server.createContext("/api/v1/users", exchange -> {
             record(exchange);
             if ("DELETE".equals(exchange.getRequestMethod())) {
-                if (conflict) {
-                    respond(exchange, 409, "{\"message\":\"user still owns orders\"}");
+                if (_conflict) {
+                    _respond(exchange, 409, "{\"message\":\"user still owns orders\"}");
                     return;
                 }
-                respond(exchange, 204, "");
+                _respond(exchange, 204, "");
             } else {
-                respond(exchange, 200,
+                _respond(exchange, 200,
                         "{\"id\":42,\"accountId\":1,\"email\":\"alice@lab.edu\"}");
             }
         });
 
-        server.createContext("/api/marketplaces", exchange -> {
+        _server.createContext("/api/marketplaces", exchange -> {
             record(exchange);
             if ("DELETE".equals(exchange.getRequestMethod())) {
-                respond(exchange, 204, "");
+                _respond(exchange, 204, "");
             } else if (exchange.getRequestURI().getPath().endsWith("/markets")) {
-                respond(exchange, 200,
+                _respond(exchange, 200,
                         "{\"id\":10,\"marketplaceId\":5,\"symbol\":\"STK\",\"unitTick\":1}");
             } else {
-                respond(exchange, 200, "{\"id\":5,\"name\":\"course\",\"markets\":[]}");
+                _respond(exchange, 200, "{\"id\":5,\"name\":\"course\",\"markets\":[]}");
             }
         });
 
-        server.createContext("/api/marketplaces/1/privateTraders", exchange -> {
+        _server.createContext("/api/marketplaces/1/privateTraders", exchange -> {
             record(exchange);
-            respond(exchange, 200, "[\"t1\",\"t2\"]");
+            _respond(exchange, 200, "[\"t1\",\"t2\"]");
         });
 
-        server.createContext("/api/accounts/me", exchange -> {
+        _server.createContext("/api/accounts/me", exchange -> {
             record(exchange);
-            respond(exchange, 204, "");
+            _respond(exchange, 204, "");
         });
 
-        server.createContext("/api/marketplaces/1/symbols", exchange -> {
+        _server.createContext("/api/marketplaces/1/symbols", exchange -> {
             record(exchange);
-            respond(exchange, 200, "[\"STK\",\"BND\"]");
+            _respond(exchange, 200, "[\"STK\",\"BND\"]");
         });
 
-        server.createContext("/api/otp/manager", exchange -> {
+        _server.createContext("/api/otp/manager", exchange -> {
             record(exchange);
-            respond(exchange, 200, """
+            _respond(exchange, 200, """
                 {"expiresAt":"2026-08-15T18:00:00Z",
                  "otps":[{"userId":1,"email":"alice@lab.edu","otp":"123456"}]}
                 """);
         });
 
-        server.createContext("/api", exchange -> {
+        _server.createContext("/api", exchange -> {
             record(exchange);
-            respond(exchange, 200, """
+            _respond(exchange, 200, """
                 {"_links":{"marketplaces":{"href":"%1$s/marketplaces"},
                            "accounts":{"href":"%1$s/accounts"},
                            "users":{"href":"%1$s/users"},
                            "usersJson":{"href":"%1$s/usersJson"}}}
-                """.formatted(api()));
+                """.formatted(_api()));
         });
 
-        server.start();
+        _server.start();
     }
 
     @AfterEach
     void stopServer() {
-        if (server != null) server.stop(0);
+        if (_server != null) _server.stop(0);
     }
 
-    private String api() {
-        return "http://127.0.0.1:" + server.getAddress().getPort() + "/api";
+    private String _api() {
+        return "http://127.0.0.1:" + _server.getAddress().getPort() + "/api";
     }
 
-    private Flexemarkets connect() throws IOException {
-        return Flexemarkets.connect(TOKEN, api() + "/marketplaces/1", "admin-test");
+    private Flexemarkets _connect() throws IOException {
+        return Flexemarkets.connect(TOKEN, _api() + "/marketplaces/1", "admin-test");
     }
 
     private void record(HttpExchange exchange) {
-        requests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+        _requests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
         try {
-            bodies.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            _bodies.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
         } catch (IOException e) {
-            bodies.add("");
+            _bodies.add("");
         }
     }
 
-    private static void respond(HttpExchange exchange, int status, String body) throws IOException {
+    private static void _respond(HttpExchange exchange, int status, String body) throws IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
         exchange.sendResponseHeaders(status, bytes.length == 0 ? -1 : bytes.length);
@@ -183,13 +183,13 @@ class AdminApiTest {
         }
     }
 
-    private String bodyOf(String requestPrefix) {
-        for (int i = 0; i < requests.size(); i++) {
-            if (requests.get(i).startsWith(requestPrefix)) {
-                return bodies.get(i);
+    private String _bodyOf(String requestPrefix) {
+        for (int i = 0; i < _requests.size(); i++) {
+            if (_requests.get(i).startsWith(requestPrefix)) {
+                return _bodies.get(i);
             }
         }
-        throw new AssertionError("no request matching " + requestPrefix + " in " + requests);
+        throw new AssertionError("no request matching " + requestPrefix + " in " + _requests);
     }
 
     // --- accounts -----------------------------------------------------------
@@ -202,13 +202,13 @@ class AdminApiTest {
     @Test
     void signupNamesTheOwnersCredentialsTheWayTheServerReadsThem() throws Exception {
         Token created;
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             created = fm.signup("acme", "owner@new", "s3cret", "Ada", "Lovelace");
         }
 
         assertThat(created.account().name()).isEqualTo("acme");
 
-        var body = bodyOf("POST /api/accounts");
+        var body = _bodyOf("POST /api/accounts");
         assertThat(body).contains("\"ownerEmail\":\"owner@new\"");
         assertThat(body).contains("\"ownerPassword\":\"s3cret\"");
         assertThat(body).contains("\"accountName\":\"acme\"");
@@ -218,11 +218,11 @@ class AdminApiTest {
     /** The short form is the long one with no name, not a different request. */
     @Test
     void theShortSignupSendsTheSameShape() throws Exception {
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             fm.signup("acme", "owner@new", "s3cret");
         }
 
-        var body = bodyOf("POST /api/accounts");
+        var body = _bodyOf("POST /api/accounts");
         assertThat(body).contains("\"accountName\":\"acme\"");
         assertThat(body).contains("\"firstName\":null");
     }
@@ -231,7 +231,7 @@ class AdminApiTest {
     void accountsAreListedAndApproved() throws Exception {
         List<Account> all;
         Account approved;
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             all = fm.accounts();
             approved = fm.approveAccount("acme");
         }
@@ -239,7 +239,7 @@ class AdminApiTest {
         assertThat(all).hasSize(2);
         assertThat(approved.name()).isEqualTo("acme");
         assertThat(approved.approval()).isTrue();
-        assertThat(bodyOf("POST /api/approvals")).contains("\"name\":\"acme\"").contains("\"approval\":true");
+        assertThat(_bodyOf("POST /api/approvals")).contains("\"name\":\"acme\"").contains("\"approval\":true");
     }
 
     // --- users --------------------------------------------------------------
@@ -247,12 +247,12 @@ class AdminApiTest {
     @Test
     void aUserIsCreatedWithTheRolesGiven() throws Exception {
         Person created;
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             created = fm.createUser("alice@lab.edu", "pw", "Alice", "Anderson", "ROLE_MANAGER");
         }
 
         assertThat(created.id()).isEqualTo(42L);
-        var body = bodyOf("POST /api/v1/users");
+        var body = _bodyOf("POST /api/v1/users");
         assertThat(body).contains("\"email\":\"alice@lab.edu\"");
         assertThat(body).contains("\"roles\":[\"ROLE_MANAGER\"]");
     }
@@ -260,11 +260,11 @@ class AdminApiTest {
     /** No roles is an empty array, not a missing field or a null. */
     @Test
     void aUserCreatedWithoutRolesSendsAnEmptyArray() throws Exception {
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             fm.createUser("bob@lab.edu", "pw", "Bob", "Baker");
         }
 
-        assertThat(bodyOf("POST /api/v1/users")).contains("\"roles\":[]");
+        assertThat(_bodyOf("POST /api/v1/users")).contains("\"roles\":[]");
     }
 
     // --- deletion -----------------------------------------------------------
@@ -276,25 +276,25 @@ class AdminApiTest {
      */
     @Test
     void deletesUseTheDeleteVerb() throws Exception {
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             fm.deleteUser(42);
             fm.deleteAccount(2);
             fm.deleteMarketplace(5);
         }
 
-        assertThat(requests).contains("DELETE /api/v1/users/42");
-        assertThat(requests).contains("DELETE /api/accounts/2");
-        assertThat(requests).contains("DELETE /api/marketplaces/5");
+        assertThat(_requests).contains("DELETE /api/v1/users/42");
+        assertThat(_requests).contains("DELETE /api/accounts/2");
+        assertThat(_requests).contains("DELETE /api/marketplaces/5");
     }
 
     /** 204 with no body is success, not something to parse. */
     @Test
     void anEmptyDeleteResponseIsNotAParseFailure() throws Exception {
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             fm.deleteUser(42);
         }
 
-        assertThat(requests).contains("DELETE /api/v1/users/42");
+        assertThat(_requests).contains("DELETE /api/v1/users/42");
     }
 
     // --- marketplaces -------------------------------------------------------
@@ -314,14 +314,14 @@ class AdminApiTest {
     @Test
     void aMarketIsAddedToAMarketplace() throws Exception {
         Market market;
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             market = fm.createMarket(5, "STK", "Stock",
                     new TickGrid(0, 10_000, 1), TickGrid.units(), false);
         }
 
         assertThat(market.symbol()).isEqualTo("STK");
 
-        var marketBody = bodyOf("POST /api/marketplaces/5/markets");
+        var marketBody = _bodyOf("POST /api/marketplaces/5/markets");
         assertThat(marketBody).contains("\"priceMinimum\":0");
         assertThat(marketBody).contains("\"priceMaximum\":10000");
         assertThat(marketBody).contains("\"unitMinimum\":1");
@@ -338,12 +338,12 @@ class AdminApiTest {
      */
     @Test
     void unitBoundsAreTheCallersToo() throws Exception {
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             fm.createMarket(5, "STK", "Stock",
                     new TickGrid(100, 200, 25), new TickGrid(10, 500, 10), false);
         }
 
-        var body = bodyOf("POST /api/marketplaces/5/markets");
+        var body = _bodyOf("POST /api/marketplaces/5/markets");
         assertThat(body).contains("\"unitMinimum\":10");
         assertThat(body).contains("\"unitMaximum\":500");
         assertThat(body).contains("\"unitTick\":10");
@@ -362,7 +362,7 @@ class AdminApiTest {
     @Test
     void symbolsAreReadFromTheMarketplace() throws Exception {
         List<String> symbols;
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             symbols = fm.symbols(1);
         }
 
@@ -371,24 +371,24 @@ class AdminApiTest {
 
     @Test
     void singleAccountsUsersAndIdentifiersAreReadById() throws Exception {
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             assertThat(fm.accountById(2).name()).isEqualTo("acme");
             assertThat(fm.userById(42).email()).isEqualTo("alice@lab.edu");
             assertThat(fm.identifiers(1)).containsExactly("t1", "t2");
         }
 
-        assertThat(requests).contains("GET /api/accounts/2");
-        assertThat(requests).contains("GET /api/v1/users/42");
+        assertThat(_requests).contains("GET /api/accounts/2");
+        assertThat(_requests).contains("GET /api/v1/users/42");
     }
 
     /** Deleting your own account is its own route, not accounts/{yourId}. */
     @Test
     void deletingYourOwnAccountUsesTheMeRoute() throws Exception {
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             fm.deleteMyAccount();
         }
 
-        assertThat(requests).contains("DELETE /api/accounts/me");
+        assertThat(_requests).contains("DELETE /api/accounts/me");
     }
 
     /**
@@ -398,9 +398,9 @@ class AdminApiTest {
      */
     @Test
     void aTakenAccountNameCarriesTheServersSuggestion() throws Exception {
-        conflict = true;
+        _conflict = true;
 
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             assertThatThrownBy(() -> fm.signup("acme", "owner@new", "s3cret"))
                     .isInstanceOf(AccountNameConflictException.class)
                     .satisfies(e -> {
@@ -421,9 +421,9 @@ class AdminApiTest {
      */
     @Test
     void aTakenAccountNameIsCatchableAsAConflict() throws Exception {
-        conflict = true;
+        _conflict = true;
 
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             assertThatThrownBy(() -> fm.signup("acme", "owner@new", "s3cret"))
                     .isInstanceOf(ConflictException.class)
                     .satisfies(e -> assertThat(((ConflictException) e).failure().suggestedName())
@@ -440,9 +440,9 @@ class AdminApiTest {
      */
     @Test
     void aUserWhoOwnsDataIsCatchableAsAConflict() throws Exception {
-        conflict = true;
+        _conflict = true;
 
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             assertThatThrownBy(() -> fm.deleteUser(42))
                     .isInstanceOf(ConflictException.class)
                     .isInstanceOf(PersonHasMarketplaceDataException.class);
@@ -452,9 +452,9 @@ class AdminApiTest {
     /** Deleting a user who still owns data is refused, and says whose. */
     @Test
     void deletingAUserWhoOwnsDataIsRefused() throws Exception {
-        conflict = true;
+        _conflict = true;
 
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             assertThatThrownBy(() -> fm.deleteUser(42))
                     .isInstanceOf(PersonHasMarketplaceDataException.class)
                     .satisfies(e -> assertThat(
@@ -472,16 +472,16 @@ class AdminApiTest {
      */
     @Test
     void isAdminReadsTheRolesOnTheToken() throws Exception {
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             assertThat(fm.isAdmin()).as("ROLE_MANAGER is not ROLE_ADMIN").isFalse();
             assertThat(fm.token().token()).isEqualTo(TOKEN);
         }
 
         stopServer();
-        roles = "[\"ROLE_ADMIN\",\"ROLE_MANAGER\"]";
+        _roles = "[\"ROLE_ADMIN\",\"ROLE_MANAGER\"]";
         startServer();
 
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             assertThat(fm.isAdmin()).isTrue();
         }
     }
@@ -489,10 +489,10 @@ class AdminApiTest {
     @Test
     void aTokenWithoutRolesIsNotAdmin() throws Exception {
         stopServer();
-        roles = "null";
+        _roles = "null";
         startServer();
 
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             assertThat(fm.isAdmin()).isFalse();
             assertThat(fm.isManager()).isFalse();
             assertThat(fm.hasRole("ROLE_USER")).isFalse();
@@ -509,7 +509,7 @@ class AdminApiTest {
      */
     @Test
     void managerAndArbitraryRolesAreAnswerableToo() throws Exception {
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             assertThat(fm.isManager()).isTrue();
             assertThat(fm.hasRole("ROLE_MANAGER")).isTrue();
             assertThat(fm.hasRole("ROLE_ADMIN")).isFalse();
@@ -522,7 +522,7 @@ class AdminApiTest {
     @Test
     void otpBundlesAreMintedForTheUsersAsked() throws Exception {
         ManagerOtpBundle bundle;
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             bundle = fm.managerOtpBundle(List.of(1L, 2L));
         }
 
@@ -531,7 +531,7 @@ class AdminApiTest {
             assertThat(entry.userId()).isEqualTo(1L);
             assertThat(entry.otp()).isEqualTo("123456");
         });
-        assertThat(bodyOf("POST /api/otp/manager")).contains("\"userIds\":[1,2]");
+        assertThat(_bodyOf("POST /api/otp/manager")).contains("\"userIds\":[1,2]");
     }
 
     /**

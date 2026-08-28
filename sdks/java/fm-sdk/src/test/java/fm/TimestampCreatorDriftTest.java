@@ -50,7 +50,7 @@ class TimestampCreatorDriftTest {
             "assembled client-side by MarketTrades from two Orders that were "
                 + "themselves parsed; the exchange sends no such object.");
 
-    private static List<Class<?>> records() throws Exception {
+    private static List<Class<?>> _records() throws Exception {
         Path classes = Path.of("target", "classes", "fm");
         assertThat(classes).as("compiled package to scan").exists();
 
@@ -84,7 +84,7 @@ class TimestampCreatorDriftTest {
     void everyRecordHoldingAnInstantHasACreatorToBuildItFromTheWire() throws Exception {
         var missing = new ArrayList<String>();
 
-        for (Class<?> type : records()) {
+        for (Class<?> type : _records()) {
             if (NOT_FROM_THE_WIRE.containsKey(type.getSimpleName())) {
                 continue;
             }
@@ -105,7 +105,7 @@ class TimestampCreatorDriftTest {
     void everyCreatorTakesExactlyTheComponentsInOrder() throws Exception {
         var drifted = new ArrayList<String>();
 
-        for (Class<?> type : records()) {
+        for (Class<?> type : _records()) {
             Executable creator = creator(type);
             if (creator == null) {
                 continue;
@@ -135,7 +135,7 @@ class TimestampCreatorDriftTest {
     void nothingExemptedIsAWireType() throws Exception {
         var wrongly = new ArrayList<String>();
 
-        for (Class<?> type : records()) {
+        for (Class<?> type : _records()) {
             if (NOT_FROM_THE_WIRE.containsKey(type.getSimpleName())
                     && type.isAnnotationPresent(JsonIgnoreProperties.class)) {
                 wrongly.add(type.getSimpleName());

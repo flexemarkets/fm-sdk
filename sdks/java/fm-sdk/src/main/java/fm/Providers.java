@@ -24,9 +24,9 @@ final class Providers {
      * later.
      */
     private static final class Holder {
-        private static final List<FlexemarketsProvider> PROVIDERS = load();
+        private static final List<FlexemarketsProvider> PROVIDERS = _load();
 
-        private static List<FlexemarketsProvider> load() {
+        private static List<FlexemarketsProvider> _load() {
             try {
                 return ServiceLoader.load(FlexemarketsProvider.class).stream()
                         .map(ServiceLoader.Provider::get)

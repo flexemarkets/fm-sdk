@@ -133,27 +133,27 @@ public class OrderUtils {
         }
 
         // Cancelled LIMIT order is resting
-        if (isCancelled(orders, order)) {
+        if (_isCancelled(orders, order)) {
             return true;
         }
 
         // order with supplier not in trade-set is resting
-        if (!inTradeSet(orders, order.supplier())) {
+        if (!_inTradeSet(orders, order.supplier())) {
             return true;
         }
 
         // order supplier older than consumer supplier
-        if (isTraded(orders, order)) {
-            return isSupplierOlder(orders, order);
+        if (_isTraded(orders, order)) {
+            return _isSupplierOlder(orders, order);
         }
 
         // split order with child younger than its consumer is resting
-        return isSupplierOlder(orders, firstChild(orders, order));
+        return _isSupplierOlder(orders, _firstChild(orders, order));
     }
 
     // --- private helpers ---
 
-    private static boolean isCancelled(Order[] orders, Order order) {
+    private static boolean _isCancelled(Order[] orders, Order order) {
         var consumer = findOrder(orders, order.consumer());
         if (consumer != null) {
             return order.type() != consumer.type();
@@ -161,7 +161,7 @@ public class OrderUtils {
         return false;
     }
 
-    private static boolean inTradeSet(Order[] orders, long id) {
+    private static boolean _inTradeSet(Order[] orders, long id) {
         for (var order : orders) {
             if (order.id() == id) {
                 return true;
@@ -170,7 +170,7 @@ public class OrderUtils {
         return false;
     }
 
-    private static boolean isTraded(Order[] orders, Order order) {
+    private static boolean _isTraded(Order[] orders, Order order) {
         if (OrderType.LIMIT == order.type() && isConsumed(order)) {
             var consumer = findOrder(orders, order.consumer());
             return consumer != null && OrderType.LIMIT == consumer.type();
@@ -178,7 +178,7 @@ public class OrderUtils {
         return false;
     }
 
-    private static boolean isSupplierOlder(Order[] orders, Order order) {
+    private static boolean _isSupplierOlder(Order[] orders, Order order) {
         if (order == null) return false;
 
         var orderSupplier = findOrder(orders, order.supplier());
@@ -190,15 +190,15 @@ public class OrderUtils {
         }
 
         var consumerSupplier = findOrder(orders, consumerSupplierId);
-        return isOlder(orders, orderSupplier, consumerSupplier);
+        return _isOlder(orders, orderSupplier, consumerSupplier);
     }
 
-    private static boolean isOlder(Order[] orders, Order o1, Order o2) {
+    private static boolean _isOlder(Order[] orders, Order o1, Order o2) {
         if (o1 == null) return true;
         if (o2 == null) return false;
 
-        var o1InTradeSet = inTradeSet(orders, o1.original());
-        var o2InTradeSet = inTradeSet(orders, o2.original());
+        var o1InTradeSet = _inTradeSet(orders, o1.original());
+        var o2InTradeSet = _inTradeSet(orders, o2.original());
 
         if (!o1InTradeSet && o2InTradeSet) return true;
         if (o1InTradeSet && !o2InTradeSet) return false;
@@ -213,14 +213,14 @@ public class OrderUtils {
             o2original = findOrder(orders, o2.original());
         }
 
-        return isCreatedEarlier(o1original, o2original);
+        return _isCreatedEarlier(o1original, o2original);
     }
 
-    private static boolean isCreatedEarlier(Order order, Order consumer) {
+    private static boolean _isCreatedEarlier(Order order, Order consumer) {
         return order.id() < consumer.id();
     }
 
-    private static Order firstChild(Order[] orders, Order order) {
+    private static Order _firstChild(Order[] orders, Order order) {
         for (var o : orders) {
             if (order.id() == o.original() && !isSplit(o)) {
                 return o;

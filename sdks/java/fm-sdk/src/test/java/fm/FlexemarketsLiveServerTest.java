@@ -37,14 +37,14 @@ import static org.assertj.core.api.Assertions.assertThatNoException;
  */
 public class FlexemarketsLiveServerTest {
 
-    private static Path credentialPath;
-    private static Path endpointPath;
+    private static Path _credentialPath;
+    private static Path _endpointPath;
 
     @BeforeAll
     static void resolveConfig() {
         var home = System.getProperty("user.home");
-        credentialPath = Paths.get(home, ".fm", "credential");
-        endpointPath = Paths.get(home, ".fm", "endpoint");
+        _credentialPath = Paths.get(home, ".fm", "credential");
+        _endpointPath = Paths.get(home, ".fm", "endpoint");
     }
 
     /** Precondition gate for every test in this class. Returns true only
@@ -131,8 +131,8 @@ public class FlexemarketsLiveServerTest {
         // Flexemarkets.connect expects file paths (or a token / URL),
         // not the file contents. Same convention the ticker example uses.
         return Flexemarkets.connect(
-                credentialPath.toString(),
-                endpointPath.toString(),
+                _credentialPath.toString(),
+                _endpointPath.toString(),
                 clientDescription);
     }
 }

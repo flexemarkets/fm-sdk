@@ -26,10 +26,10 @@ import java.util.TreeMap;
  * own thread while the caller reads it on theirs.
  */
 public class MarketBook {
-    private final Market market;
-    private final TreeMap<Long, Long> buys;
-    private final TreeMap<Long, Long> sells;
-    private boolean initialized;
+    private final Market _market;
+    private final TreeMap<Long, Long> _buys;
+    private final TreeMap<Long, Long> _sells;
+    private boolean _initialized;
 
     /**
      * An empty book for one market.
@@ -38,9 +38,9 @@ public class MarketBook {
      *               {@link #update} filters on
      */
     public MarketBook(Market market) {
-        this.market = market;
-        this.buys = new TreeMap<>(Collections.reverseOrder());
-        this.sells = new TreeMap<>();
+        this._market = market;
+        this._buys = new TreeMap<>(Collections.reverseOrder());
+        this._sells = new TreeMap<>();
     }
 
     /**
@@ -48,21 +48,21 @@ public class MarketBook {
      *
      * @return the market
      */
-    public Market market() { return market; }
+    public Market market() { return _market; }
 
     /**
      * That market's symbol, which is what {@link #update} filters on.
      *
      * @return the symbol
      */
-    public String symbol() { return market.symbol(); }
+    public String symbol() { return _market.symbol(); }
 
     /**
      * That market's id.
      *
      * @return the market id
      */
-    public long marketId() { return market.id(); }
+    public long marketId() { return _market.id(); }
 
     /**
      * Apply an orders update, ignoring anything for another market.
@@ -81,11 +81,11 @@ public class MarketBook {
             var units = order.units();
 
             if (isAvailable(order)) {
-                add(side, price, units);
+                _add(side, price, units);
                 continue;
             }
 
-            if (!initialized) continue;
+            if (!_initialized) continue;
 
             if (OrderType.CANCEL == order.type()) {
                 // fm-server broadcasts a cancel as two rows: the CANCEL, and the LIMIT it
@@ -101,25 +101,25 @@ public class MarketBook {
                 // So remove only when the order being cancelled is not in this batch --
                 // which keeps a lone CANCEL working, and stops the pair double-counting.
                 if (findOrder(ordersUpdate, order.consumer()) == null) {
-                    remove(side, price, units);
+                    _remove(side, price, units);
                 }
                 continue;
             }
 
             if (isSplit(order)) {
                 wasSplit = true;
-                remove(side, price, units);
+                _remove(side, price, units);
                 continue;
             }
 
             if (!wasSplit && isResting(ordersUpdate, order)) {
-                remove(side, price, units);
+                _remove(side, price, units);
                 continue;
             }
         }
 
-        if (!initialized) {
-            initialized = true;
+        if (!_initialized) {
+            _initialized = true;
         }
     }
 
@@ -129,7 +129,7 @@ public class MarketBook {
      * @return the highest resting bid price, or -1 if the side is empty
      */
     public synchronized long bestBuyPrice() {
-        return buys.isEmpty() ? -1 : buys.firstKey();
+        return _buys.isEmpty() ? -1 : _buys.firstKey();
     }
 
     /**
@@ -138,7 +138,7 @@ public class MarketBook {
      * @return the lowest resting offer price, or -1 if the side is empty
      */
     public synchronized long bestSellPrice() {
-        return sells.isEmpty() ? -1 : sells.firstKey();
+        return _sells.isEmpty() ? -1 : _sells.firstKey();
     }
 
     /**
@@ -147,7 +147,7 @@ public class MarketBook {
      * @return units resting at the best bid, or -1 if the side is empty
      */
     public synchronized long bestBuyUnits() {
-        return buys.isEmpty() ? -1 : buys.firstEntry().getValue();
+        return _buys.isEmpty() ? -1 : _buys.firstEntry().getValue();
     }
 
     /**
@@ -156,7 +156,7 @@ public class MarketBook {
      * @return units resting at the best offer, or -1 if the side is empty
      */
     public synchronized long bestSellUnits() {
-        return sells.isEmpty() ? -1 : sells.firstEntry().getValue();
+        return _sells.isEmpty() ? -1 : _sells.firstEntry().getValue();
     }
 
     /**
@@ -172,7 +172,7 @@ public class MarketBook {
      * @return true if that side has any resting units
      */
     public synchronized boolean hasValue(OrderSide side) {
-        return !(OrderSide.BUY == side ? buys : sells).isEmpty();
+        return !(OrderSide.BUY == side ? _buys : _sells).isEmpty();
     }
 
     /**
@@ -204,7 +204,7 @@ public class MarketBook {
      * @return units by price, highest price first; a snapshot, not a view
      */
     public synchronized Map<Long, Long> buyLevels() {
-        return Collections.unmodifiableMap(new TreeMap<>(buys));
+        return Collections.unmodifiableMap(new TreeMap<>(_buys));
     }
 
     /**
@@ -213,7 +213,7 @@ public class MarketBook {
      * @return units by price, lowest price first; a snapshot, not a view
      */
     public synchronized Map<Long, Long> sellLevels() {
-        return Collections.unmodifiableMap(new TreeMap<>(sells));
+        return Collections.unmodifiableMap(new TreeMap<>(_sells));
     }
 
     /**
@@ -226,18 +226,18 @@ public class MarketBook {
      * levels.
      */
     public synchronized void clear() {
-        buys.clear();
-        sells.clear();
-        initialized = false;
+        _buys.clear();
+        _sells.clear();
+        _initialized = false;
     }
 
-    private void add(OrderSide side, long price, long units) {
-        var levels = priceLevels(side);
+    private void _add(OrderSide side, long price, long units) {
+        var levels = _priceLevels(side);
         levels.merge(price, units, Long::sum);
     }
 
-    private void remove(OrderSide side, long price, long units) {
-        var levels = priceLevels(side);
+    private void _remove(OrderSide side, long price, long units) {
+        var levels = _priceLevels(side);
         var current = levels.getOrDefault(price, 0L);
         var updated = current - units;
         if (updated <= 0) {
@@ -247,7 +247,7 @@ public class MarketBook {
         }
     }
 
-    private TreeMap<Long, Long> priceLevels(OrderSide side) {
-        return OrderSide.BUY == side ? buys : sells;
+    private TreeMap<Long, Long> _priceLevels(OrderSide side) {
+        return OrderSide.BUY == side ? _buys : _sells;
     }
 }

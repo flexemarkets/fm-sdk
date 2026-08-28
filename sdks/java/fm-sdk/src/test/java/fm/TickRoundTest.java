@@ -21,7 +21,7 @@ class TickRoundTest {
      * The arithmetic this replaced, kept so the defect is demonstrable rather
      * than merely described. Every SDK carried this line.
      */
-    private static long legacyRound(long value, long minimum, long maximum, long tick) {
+    private static long _legacyRound(long value, long minimum, long maximum, long tick) {
         return Math.min(Math.max(value - value % tick, minimum), maximum);
     }
 
@@ -32,14 +32,14 @@ class TickRoundTest {
      * exchange will actually accept -- rather than an assertion about what the
      * SDK happens to compute.
      */
-    private static boolean serverWouldAccept(long value, long minimum, long maximum, long tick) {
+    private static boolean _serverWouldAccept(long value, long minimum, long maximum, long tick) {
         if (value < minimum || value > maximum) {
             return false;
         }
         return tick <= 0 || 0 == (value - minimum) % tick;
     }
 
-    private static Market market(long minimum, long maximum, long tick) {
+    private static Market _market(long minimum, long maximum, long tick) {
         return new Market(11L, 1L, "Stock", null, "STK", false,
                 minimum, maximum, tick, 1L, 100L, 1L);
     }
@@ -47,7 +47,7 @@ class TickRoundTest {
     /** A floor on the tick: the old arithmetic happened to agree here. */
     @Test
     void aGridAnchoredAtAMultipleOfTheTick() {
-        var stock = market(100, 200, 25);
+        var stock = _market(100, 200, 25);
 
         assertThat(stock.priceRound(137)).isEqualTo(125L);
         assertThat(stock.priceRound(125)).isEqualTo(125L);
@@ -60,7 +60,7 @@ class TickRoundTest {
      */
     @Test
     void aGridAnchoredAwayFromZero() {
-        var stock = market(110, 199, 25);
+        var stock = _market(110, 199, 25);
 
         assertThat(stock.priceRound(137)).isEqualTo(135L);
         assertThat(stock.priceRound(199)).isEqualTo(185L);
@@ -69,7 +69,7 @@ class TickRoundTest {
 
     @Test
     void pricesOutsideTheRangeAreClamped() {
-        var stock = market(110, 199, 25);
+        var stock = _market(110, 199, 25);
 
         assertThat(stock.priceRound(5)).isEqualTo(110L);
         assertThat(stock.priceRound(10_000)).isEqualTo(185L);
@@ -78,7 +78,7 @@ class TickRoundTest {
     /** A tick of zero is a fixed dimension. This used to divide by zero. */
     @Test
     void aFixedPriceMarketHasOneLegalPrice() {
-        var fixed = market(150, 150, 0);
+        var fixed = _market(150, 150, 0);
 
         assertThat(fixed.priceRound(137)).isEqualTo(150L);
         assertThat(fixed.priceRound(150)).isEqualTo(150L);
@@ -118,15 +118,15 @@ class TickRoundTest {
     void theOldArithmeticProducedPricesTheServerRefuses() {
         long minimum = 110, maximum = 199, tick = 25;
 
-        long legacy = legacyRound(137, minimum, maximum, tick);
+        long legacy = _legacyRound(137, minimum, maximum, tick);
         assertThat(legacy).isEqualTo(125L);
-        assertThat(serverWouldAccept(legacy, minimum, maximum, tick))
+        assertThat(_serverWouldAccept(legacy, minimum, maximum, tick))
                 .as("125 is inside the bounds and off the tick: \"price is not on a tic\"")
                 .isFalse();
 
         long fixed = TickGrid.round(137, minimum, maximum, tick);
         assertThat(fixed).isEqualTo(135L);
-        assertThat(serverWouldAccept(fixed, minimum, maximum, tick)).isTrue();
+        assertThat(_serverWouldAccept(fixed, minimum, maximum, tick)).isTrue();
     }
 
     /**
@@ -137,20 +137,20 @@ class TickRoundTest {
     void clampingToTheMaximumWouldAlsoBeRefused() {
         long minimum = 110, maximum = 199, tick = 25;
 
-        assertThat(serverWouldAccept(maximum, minimum, maximum, tick))
+        assertThat(_serverWouldAccept(maximum, minimum, maximum, tick))
                 .as("199 is the ceiling and is not itself a legal price")
                 .isFalse();
 
         long fixed = TickGrid.round(210, minimum, maximum, tick);
         assertThat(fixed).isEqualTo(185L);
-        assertThat(serverWouldAccept(fixed, minimum, maximum, tick)).isTrue();
+        assertThat(_serverWouldAccept(fixed, minimum, maximum, tick)).isTrue();
     }
 
     /** The fixed-dimension bug: a tick of zero used to divide by zero. */
     @Test
     void theOldArithmeticDividedByZeroOnAFixedDimension() {
         org.assertj.core.api.Assertions
-                .assertThatThrownBy(() -> legacyRound(137, 150, 150, 0))
+                .assertThatThrownBy(() -> _legacyRound(137, 150, 150, 0))
                 .isInstanceOf(ArithmeticException.class);
 
         assertThat(TickGrid.round(137, 150, 150, 0)).isEqualTo(150L);
@@ -177,7 +177,7 @@ class TickRoundTest {
             long minimum = grid[0], maximum = grid[1], tick = grid[2];
             for (long value = -50; value <= maximum + 50; value++) {
                 long rounded = TickGrid.round(value, minimum, maximum, tick);
-                assertThat(serverWouldAccept(rounded, minimum, maximum, tick))
+                assertThat(_serverWouldAccept(rounded, minimum, maximum, tick))
                         .as("grid [%d,%d]/%d rounded %d to %d, which the server refuses",
                             minimum, maximum, tick, value, rounded)
                         .isTrue();
@@ -188,7 +188,7 @@ class TickRoundTest {
     /** Every result is a price the server would accept. */
     @Test
     void everyResultSitsOnTheGrid() {
-        var stock = market(110, 199, 25);
+        var stock = _market(110, 199, 25);
 
         for (long price = 0; price <= 300; price++) {
             long rounded = stock.priceRound(price);

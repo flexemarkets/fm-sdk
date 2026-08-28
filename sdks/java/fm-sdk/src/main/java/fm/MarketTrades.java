@@ -44,9 +44,9 @@ import java.util.stream.Stream;
  * on its thread while the caller reads on theirs.
  */
 public class MarketTrades {
-    private final Market market;
-    private final int capacity;
-    private final ArrayDeque<Trade> container;
+    private final Market _market;
+    private final int _capacity;
+    private final ArrayDeque<Trade> _container;
 
     /**
      * An empty tape for one market.
@@ -61,9 +61,9 @@ public class MarketTrades {
     public MarketTrades(Market market, int capacity) {
         if (market == null) throw new NullPointerException("Market is required.");
         if (capacity < 1) throw new IllegalArgumentException("Capacity must be greater than zero.");
-        this.market = market;
-        this.capacity = capacity;
-        this.container = new ArrayDeque<>(capacity);
+        this._market = market;
+        this._capacity = capacity;
+        this._container = new ArrayDeque<>(capacity);
     }
 
     /**
@@ -80,28 +80,28 @@ public class MarketTrades {
      *
      * @return the market
      */
-    public Market market() { return market; }
+    public Market market() { return _market; }
 
     /**
      * That market's id.
      *
      * @return the market id
      */
-    public long marketId() { return market.id(); }
+    public long marketId() { return _market.id(); }
 
     /**
      * How many trades this tape retains.
      *
      * @return the capacity it was built with
      */
-    public int capacity() { return capacity; }
+    public int capacity() { return _capacity; }
 
     /**
      * How many trades it currently holds.
      *
      * @return the count, never more than {@link #capacity}
      */
-    public int size() { return container.size(); }
+    public int size() { return _container.size(); }
 
     /**
      * Apply an orders update, keeping whatever trades it describes.
@@ -122,7 +122,7 @@ public class MarketTrades {
         var found = new ArrayList<Trade>();
 
         for (var order : ordersUpdate) {
-            if (!isSymbol(market.symbol(), order)) continue;
+            if (!isSymbol(_market.symbol(), order)) continue;
             if (OrderType.LIMIT != order.type() || !isConsumed(order)) continue;
 
             var aggressor = findOrder(ordersUpdate, order.consumer());
@@ -134,7 +134,7 @@ public class MarketTrades {
 
         found.sort(Comparator.comparing(Trade::at,
             Comparator.nullsLast(Comparator.naturalOrder())));
-        found.forEach(this::save);
+        found.forEach(this::_save);
 
         return found.toArray(new Trade[0]);
     }
@@ -145,7 +145,7 @@ public class MarketTrades {
      * @return the retained trades, each carrying both of its sides
      */
     public synchronized Trade[] mostRecentTrades() {
-        return container.toArray(new Trade[0]);
+        return _container.toArray(new Trade[0]);
     }
 
     /**
@@ -155,7 +155,7 @@ public class MarketTrades {
      * @return the newest retained trade, or null when nothing has traded yet
      */
     public synchronized Trade last() {
-        return container.peekLast();
+        return _container.peekLast();
     }
 
     /**
@@ -180,7 +180,7 @@ public class MarketTrades {
      */
     public synchronized Trade[] drain() {
         Trade[] drained = mostRecentTrades();
-        container.clear();
+        _container.clear();
         return drained;
     }
 
@@ -188,13 +188,13 @@ public class MarketTrades {
      *  flow before reseeding from the {@code /v1/orders/recent-trades}
      *  snapshot. */
     public synchronized void clear() {
-        container.clear();
+        _container.clear();
     }
 
-    private void save(Trade trade) {
-        if (container.size() == capacity) {
-            container.removeFirst();
+    private void _save(Trade trade) {
+        if (_container.size() == _capacity) {
+            _container.removeFirst();
         }
-        container.addLast(trade);
+        _container.addLast(trade);
     }
 }

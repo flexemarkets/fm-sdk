@@ -12,7 +12,7 @@ package fm;
  */
 public final class PersonHasMarketplaceDataException extends ConflictException {
     /** The user who could not be deleted. */
-    private final long userId;
+    private final long _userId;
 
     /**
      * A refusal naming the user whose data blocked the delete.
@@ -22,7 +22,7 @@ public final class PersonHasMarketplaceDataException extends ConflictException {
      */
     public PersonHasMarketplaceDataException(long userId, String message) {
         super(message, null);
-        this.userId = userId;
+        this._userId = userId;
     }
 
     /**
@@ -30,5 +30,5 @@ public final class PersonHasMarketplaceDataException extends ConflictException {
      *
      * @return the user that still owns marketplace data
      */
-    public long userId() { return userId; }
+    public long userId() { return _userId; }
 }

@@ -13,7 +13,7 @@ public sealed class ConflictException extends FlexemarketsException
     permits AccountNameConflictException, PersonHasMarketplaceDataException {
 
     /** The server's structured account of the conflict, or null. */
-    private final ConflictFailure failure;
+    private final ConflictFailure _failure;
 
     /**
      * A conflict, with whatever detail the server gave.
@@ -24,7 +24,7 @@ public sealed class ConflictException extends FlexemarketsException
      */
     public ConflictException(String message, ConflictFailure failure) {
         super(message);
-        this.failure = failure;
+        this._failure = failure;
     }
 
     /**
@@ -32,5 +32,5 @@ public sealed class ConflictException extends FlexemarketsException
      *
      * @return the failure detail, or null if the server gave none
      */
-    public ConflictFailure failure() { return failure; }
+    public ConflictFailure failure() { return _failure; }
 }

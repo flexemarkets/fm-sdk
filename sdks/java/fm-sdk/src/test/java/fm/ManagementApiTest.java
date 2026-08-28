@@ -41,16 +41,16 @@ class ManagementApiTest {
     private static final String TOKEN =
             "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl";
 
-    private HttpServer server;
-    private final List<String> requests = new ArrayList<>();
-    private final List<String> bodies = new ArrayList<>();
+    private HttpServer _server;
+    private final List<String> _requests = new ArrayList<>();
+    private final List<String> _bodies = new ArrayList<>();
 
     @BeforeEach
     void startServer() throws IOException {
-        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        _server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 
-        server.createContext("/api/tokens", exchange ->
-                respond(exchange, 200, """
+        _server.createContext("/api/tokens", exchange ->
+                _respond(exchange, 200, """
                     {"token":"%s",
                      "person":{"id":7,"accountId":1,"email":"dev@dev"},
                      "account":{"id":1,"name":"dev"}}
@@ -59,101 +59,101 @@ class ManagementApiTest {
         // Session transitions: one handler, echoing back the state implied by
         // the path so a test can tell open from close.
         for (var transition : List.of("open", "pause", "close")) {
-            server.createContext("/api/marketplaces/1/" + transition, exchange -> {
+            _server.createContext("/api/marketplaces/1/" + transition, exchange -> {
                 record(exchange);
                 var state = switch (transition) {
                     case "open" -> "OPEN";
                     case "pause" -> "PAUSED";
                     default -> "CLOSED";
                 };
-                respond(exchange, 200,
+                _respond(exchange, 200,
                         "{\"id\":99,\"marketplaceId\":1,\"state\":\"%s\"}".formatted(state));
             });
         }
 
-        server.createContext("/api/marketplaces/1/holdings", exchange -> {
+        _server.createContext("/api/marketplaces/1/holdings", exchange -> {
             record(exchange);
-            respond(exchange, 200,
+            _respond(exchange, 200,
                     "[{\"ownerId\":8,\"name\":\"alice\",\"cash\":10000,\"sessionId\":300}]");
         });
 
-        server.createContext("/api/v1/marketplaces/1/sessions", exchange -> {
+        _server.createContext("/api/v1/marketplaces/1/sessions", exchange -> {
             record(exchange);
-            respond(exchange, 200, "[{\"id\":300,\"state\":\"CLOSED\"}]");
+            _respond(exchange, 200, "[{\"id\":300,\"state\":\"CLOSED\"}]");
         });
 
-        server.createContext("/api/marketplaces/1/connections", exchange -> {
+        _server.createContext("/api/marketplaces/1/connections", exchange -> {
             record(exchange);
-            respond(exchange, 200,
+            _respond(exchange, 200,
                     "[{\"id\":9,\"ownerId\":8,\"marketplaceId\":1,\"sessionId\":300}]");
         });
 
-        server.createContext("/api/symbolOrdersJson", exchange -> {
+        _server.createContext("/api/symbolOrdersJson", exchange -> {
             record(exchange);
             // An order keeps its own id; only the symbol is absent.
-            respond(exchange, 200,
+            _respond(exchange, 200,
                     "[{\"id\":11,\"original\":7,\"units\":5,\"price\":950}]");
         });
 
-        server.createContext("/api/sessionOrdersJson", exchange -> {
+        _server.createContext("/api/sessionOrdersJson", exchange -> {
             record(exchange);
-            respond(exchange, 200, "[{\"id\":12,\"original\":12,\"sessionId\":300}]");
+            _respond(exchange, 200, "[{\"id\":12,\"original\":12,\"sessionId\":300}]");
         });
 
-        server.createContext("/api/symbolTradesJson", exchange -> {
+        _server.createContext("/api/symbolTradesJson", exchange -> {
             record(exchange);
             // The symbol-keyed route answers with the trade id in "original"
             // and no symbol on the order.
-            respond(exchange, 200,
+            _respond(exchange, 200,
                     "[{\"id\":0,\"original\":4242,\"units\":5,\"price\":950}]");
         });
 
-        server.createContext("/api/usersJson", exchange -> {
+        _server.createContext("/api/usersJson", exchange -> {
             record(exchange);
-            respond(exchange, 200, "[{\"id\":7,\"email\":\"dev@dev\"},{\"id\":8,\"email\":\"t1@dev\"}]");
+            _respond(exchange, 200, "[{\"id\":7,\"email\":\"dev@dev\"},{\"id\":8,\"email\":\"t1@dev\"}]");
         });
 
-        server.createContext("/api/v1/marketplaces/1/allotments", exchange -> {
+        _server.createContext("/api/v1/marketplaces/1/allotments", exchange -> {
             record(exchange);
-            respond(exchange, 200, allotmentsJson());
+            _respond(exchange, 200, _allotmentsJson());
         });
 
-        server.createContext("/api/v1/marketplaces", exchange -> {
+        _server.createContext("/api/v1/marketplaces", exchange -> {
             record(exchange);
-            respond(exchange, 200, "{\"id\":77,\"name\":\"simple-dividend\",\"markets\":[]}");
+            _respond(exchange, 200, "{\"id\":77,\"name\":\"simple-dividend\",\"markets\":[]}");
         });
 
-        server.createContext("/api/marketplaces/1/allocations", exchange -> {
+        _server.createContext("/api/marketplaces/1/allocations", exchange -> {
             record(exchange);
-            respond(exchange, 200, allotmentsJson());
+            _respond(exchange, 200, _allotmentsJson());
         });
 
-        server.createContext("/api/marketplaces/1/holdings/downloads", exchange -> {
+        _server.createContext("/api/marketplaces/1/holdings/downloads", exchange -> {
             record(exchange);
-            respondCsv(exchange, "owner,cash\nalice,10000\n");
+            _respondCsv(exchange, "owner,cash\nalice,10000\n");
         });
 
-        server.createContext("/api/marketplaces/1/holdings/uploads", exchange -> {
+        _server.createContext("/api/marketplaces/1/holdings/uploads", exchange -> {
             record(exchange);
-            respond(exchange, 200, allotmentsJson());
+            _respond(exchange, 200, _allotmentsJson());
         });
 
-        server.createContext("/api", exchange -> {
+        _server.createContext("/api", exchange -> {
             record(exchange);
-            respond(exchange, 200, """
+            _respond(exchange, 200, """
                 {"_links":{"marketplaces":{"href":"%1$s/marketplaces"},
                            "symbolTradesJson":{"href":"%1$s/symbolTradesJson"},
                            "symbolOrdersJson":{"href":"%1$s/symbolOrdersJson"},
                            "sessionOrdersJson":{"href":"%1$s/sessionOrdersJson"},
                            "usersJson":{"href":"%1$s/usersJson"}}}
-                """.formatted(api()));
+                """.formatted(_api()));
         });
 
-        server.start();
+        _server.start();
     }
 
     /** One allotment, spelling capital the way the server does: "grants". */
-    private static String allotmentsJson() {
+    private static String _allotmentsJson() {
         return """
             [{"id":5,"allocationId":42,"marketplaceId":1,"ownerId":8,"name":"alice",
               "assets":{"cash":10000,"grants":[{"marketId":10,"units":50}]}}]
@@ -162,17 +162,17 @@ class ManagementApiTest {
 
     @AfterEach
     void stopServer() {
-        if (server != null) {
-            server.stop(0);
+        if (_server != null) {
+            _server.stop(0);
         }
     }
 
     private void record(HttpExchange exchange) throws IOException {
-        requests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-        bodies.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+        _requests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+        _bodies.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
     }
 
-    private static void respond(HttpExchange exchange, int status, String body) throws IOException {
+    private static void _respond(HttpExchange exchange, int status, String body) throws IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
         exchange.sendResponseHeaders(status, bytes.length);
@@ -181,7 +181,7 @@ class ManagementApiTest {
         }
     }
 
-    private static void respondCsv(HttpExchange exchange, String body) throws IOException {
+    private static void _respondCsv(HttpExchange exchange, String body) throws IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "text/csv");
         exchange.sendResponseHeaders(200, bytes.length);
@@ -190,32 +190,32 @@ class ManagementApiTest {
         }
     }
 
-    private String api() {
-        return "http://127.0.0.1:" + server.getAddress().getPort() + "/api";
+    private String _api() {
+        return "http://127.0.0.1:" + _server.getAddress().getPort() + "/api";
     }
 
-    private Flexemarkets connect() throws IOException {
-        return Flexemarkets.connect(TOKEN, api() + "/marketplaces/1", "management-test");
+    private Flexemarkets _connect() throws IOException {
+        return Flexemarkets.connect(TOKEN, _api() + "/marketplaces/1", "management-test");
     }
 
-    private String bodyOf(String requestPrefix) {
-        for (int i = 0; i < requests.size(); i++) {
-            if (requests.get(i).startsWith(requestPrefix)) {
-                return bodies.get(i);
+    private String _bodyOf(String requestPrefix) {
+        for (int i = 0; i < _requests.size(); i++) {
+            if (_requests.get(i).startsWith(requestPrefix)) {
+                return _bodies.get(i);
             }
         }
-        throw new AssertionError("no request matching '" + requestPrefix + "' in " + requests);
+        throw new AssertionError("no request matching '" + requestPrefix + "' in " + _requests);
     }
 
     @Test
     void sessionTransitionsArePatchesToTheirOwnRoutes() throws Exception {
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             assertThat(fm.openSession(1).state()).isEqualTo("OPEN");
             assertThat(fm.pauseSession(1).state()).isEqualTo("PAUSED");
             assertThat(fm.closeSession(1).state()).isEqualTo("CLOSED");
         }
 
-        assertThat(requests)
+        assertThat(_requests)
                 .contains("PATCH /api/marketplaces/1/open")
                 .contains("PATCH /api/marketplaces/1/pause")
                 .contains("PATCH /api/marketplaces/1/close");
@@ -224,25 +224,25 @@ class ManagementApiTest {
     @Test
     void usersReadsTheJsonRouteRatherThanTheHalOne() throws Exception {
         List<Person> users;
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             users = fm.users();
         }
 
         assertThat(users).hasSize(2);
         assertThat(users.get(1).email()).isEqualTo("t1@dev");
-        assertThat(requests).contains("GET /api/usersJson");
+        assertThat(_requests).contains("GET /api/usersJson");
     }
 
     @Test
     void allotmentsAreReadFromTheV1RouteForOneAllocation() throws Exception {
         List<Allotment> allotments;
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             allotments = fm.allotments(1, 42);
         }
 
         assertThat(allotments).hasSize(1);
         assertThat(allotments.get(0).assets().securities().get(0).units()).isEqualTo(50L);
-        assertThat(requests).contains("GET /api/v1/marketplaces/1/allotments?allocation=42");
+        assertThat(_requests).contains("GET /api/v1/marketplaces/1/allotments?allocation=42");
     }
 
     /**
@@ -262,11 +262,11 @@ class ManagementApiTest {
         var holding = new Holding(1, 0, 0, 8, "alice", 10000, 10000,
                 List.of(new Security(10L, 50L, 50L, 0L, true, true)));
 
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             fm.allocate(1, List.of(holding));
         }
 
-        var body = bodyOf("POST /api/marketplaces/1/allocations");
+        var body = _bodyOf("POST /api/marketplaces/1/allocations");
         assertThat(body)
                 .as("the server reads positions from 'grants'")
                 .contains("\"grants\"")
@@ -279,7 +279,7 @@ class ManagementApiTest {
         var holding = new Holding(1, 0, 0, 8, "alice", 10000, 10000, List.of());
 
         List<Holding> created;
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             created = fm.allocate(1, List.of(holding));
         }
 
@@ -300,14 +300,14 @@ class ManagementApiTest {
     @Test
     void aMarketplaceIsCreatedFromItsJsonDefinition() throws Exception {
         Marketplace created;
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             created = fm.createMarketplaceFromJson(
                     "{\"name\":\"simple-dividend\",\"markets\":[{\"symbol\":\"STK\"}]}");
         }
 
         assertThat(created.id()).isEqualTo(77L);
-        assertThat(requests).contains("POST /api/v1/marketplaces");
-        assertThat(bodyOf("POST /api/v1/marketplaces"))
+        assertThat(_requests).contains("POST /api/v1/marketplaces");
+        assertThat(_bodyOf("POST /api/v1/marketplaces"))
                 .as("the definition is forwarded, not rebuilt")
                 .contains("\"STK\"");
     }
@@ -318,13 +318,13 @@ class ManagementApiTest {
      */
     @Test
     void malformedMarketplaceJsonFailsBeforeAnyRequest() throws Exception {
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             assertThatThrownBy(() -> fm.createMarketplaceFromJson("{not json"))
                     .isInstanceOf(ApiException.class)
                     .hasMessageContaining("not valid JSON");
         }
 
-        assertThat(requests).noneSatisfy(r -> assertThat(r).contains("POST /api/v1/marketplaces"));
+        assertThat(_requests).noneSatisfy(r -> assertThat(r).contains("POST /api/v1/marketplaces"));
     }
 
     /**
@@ -334,23 +334,23 @@ class ManagementApiTest {
     @Test
     void holdingsCanBeReadForParticularSessions() throws Exception {
         List<Holding> holdings;
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             holdings = fm.holdings(1, List.of(300L, 301L));
         }
 
         assertThat(holdings).singleElement()
                 .satisfies(h -> assertThat(h.sessionId()).isEqualTo(300L));
-        assertThat(requests).contains("GET /api/marketplaces/1/holdings?sessions=300,301");
+        assertThat(_requests).contains("GET /api/marketplaces/1/holdings?sessions=300,301");
     }
 
     /** An empty filter means "now", not "no sessions" — and asks for no filter. */
     @Test
     void anEmptySessionFilterFallsBackToTheCurrentHoldings() throws Exception {
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             fm.holdings(1, List.of());
         }
 
-        assertThat(requests).contains("GET /api/marketplaces/1/holdings");
+        assertThat(_requests).contains("GET /api/marketplaces/1/holdings");
     }
 
     /**
@@ -366,28 +366,28 @@ class ManagementApiTest {
      */
     @Test
     void sessionsAndConnectionsAreNeverFilteredOnTheWire() throws Exception {
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             fm.sessions(1);
             fm.connections(1);
         }
 
-        assertThat(requests).noneSatisfy(r -> assertThat(r).contains("sessionIds="));
+        assertThat(_requests).noneSatisfy(r -> assertThat(r).contains("sessionIds="));
         // sessions moved to V1, which needs no format= to avoid HAL; connections
         // has no V1 equivalent with these semantics and stays on V0 for now.
-        assertThat(requests).anySatisfy(r -> assertThat(r)
+        assertThat(_requests).anySatisfy(r -> assertThat(r)
                 .contains("/api/v1/marketplaces/1/sessions"));
-        assertThat(requests).anySatisfy(r -> assertThat(r)
+        assertThat(_requests).anySatisfy(r -> assertThat(r)
                 .contains("/api/marketplaces/1/connections?format="));
     }
 
     /** The holdings download spells it {@code sessions}. */
     @Test
     void theHoldingsDownloadFiltersOnSessions() throws Exception {
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             fm.downloadHoldings(1, List.of(300L));
         }
 
-        assertThat(requests).anySatisfy(r -> assertThat(r)
+        assertThat(_requests).anySatisfy(r -> assertThat(r)
                 .contains("/api/marketplaces/1/holdings/downloads?sessions=300"));
     }
 
@@ -399,7 +399,7 @@ class ManagementApiTest {
     @Test
     void aConnectionCarriesItsSession() throws Exception {
         List<ClientConnection> connections;
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             connections = fm.connections(1);
         }
 
@@ -415,7 +415,7 @@ class ManagementApiTest {
     @Test
     void tradesCarryTheirIdAndSymbol() throws Exception {
         List<Order> trades;
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             trades = fm.trades(1, "STK");
         }
 
@@ -423,7 +423,7 @@ class ManagementApiTest {
             assertThat(t.id()).as("the trade id, taken from original").isEqualTo(4242L);
             assertThat(t.symbol()).isEqualTo("STK");
         });
-        assertThat(requests).anySatisfy(r -> assertThat(r).contains("symbol=STK"));
+        assertThat(_requests).anySatisfy(r -> assertThat(r).contains("symbol=STK"));
     }
 
     /**
@@ -434,13 +434,13 @@ class ManagementApiTest {
     @Test
     void ordersCanBeReadForParticularSessions() throws Exception {
         List<Order> orders;
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             orders = fm.orders(1, List.of(300L));
         }
 
         assertThat(orders).singleElement()
                 .satisfies(o -> assertThat(o.sessionId()).isEqualTo(300L));
-        assertThat(requests).anySatisfy(r -> assertThat(r)
+        assertThat(_requests).anySatisfy(r -> assertThat(r)
                 .contains("/api/sessionOrdersJson?marketplaceId=1&sessionIds=300"));
     }
 
@@ -453,7 +453,7 @@ class ManagementApiTest {
     @Test
     void symbolOrdersKeepTheirOwnId() throws Exception {
         List<Order> orders;
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             orders = fm.orders(1, "STK");
         }
 
@@ -467,18 +467,18 @@ class ManagementApiTest {
     /** An empty filter means "now", and asks for no filter at all. */
     @Test
     void anEmptyFilterFallsBackToTheUnfilteredRoute() throws Exception {
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             fm.downloadHoldings(1, List.of());
         }
 
-        assertThat(requests).noneSatisfy(r -> assertThat(r).contains("?sessions="));
+        assertThat(_requests).noneSatisfy(r -> assertThat(r).contains("?sessions="));
     }
 
     /** A CSV, returned as-is. Parsing it as JSON would fail on the header row. */
     @Test
     void downloadHoldingsReturnsTheCsvVerbatim() throws Exception {
         String csv;
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             csv = fm.downloadHoldings(1);
         }
 
@@ -491,11 +491,11 @@ class ManagementApiTest {
         Files.writeString(csv, "owner,cash\nalice,10000\n");
 
         List<Holding> created;
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             created = fm.uploadHoldings(1, csv);
         }
 
-        var body = bodyOf("POST /api/marketplaces/1/holdings/uploads");
+        var body = _bodyOf("POST /api/marketplaces/1/holdings/uploads");
         assertThat(body)
                 .as("the part must be named 'file' and carry the file's own name")
                 .contains("name=\"file\"")

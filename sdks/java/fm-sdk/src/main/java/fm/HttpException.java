@@ -9,10 +9,10 @@ package fm;
  */
 public final class HttpException extends FlexemarketsException {
     /** The status the server answered. */
-    private final int statusCode;
+    private final int _statusCode;
 
     /** The response body, verbatim. */
-    private final String body;
+    private final String _body;
 
     /**
      * An exception carrying a status the SDK has no better name for.
@@ -22,8 +22,8 @@ public final class HttpException extends FlexemarketsException {
      */
     public HttpException(int statusCode, String body) {
         super("HTTP %d: %s".formatted(statusCode, body));
-        this.statusCode = statusCode;
-        this.body = body;
+        this._statusCode = statusCode;
+        this._body = body;
     }
 
     /**
@@ -31,12 +31,12 @@ public final class HttpException extends FlexemarketsException {
      *
      * @return the HTTP status code
      */
-    public int statusCode() { return statusCode; }
+    public int statusCode() { return _statusCode; }
 
     /**
      * The response body as the server sent it.
      *
      * @return the body, unparsed
      */
-    public String body() { return body; }
+    public String body() { return _body; }
 }

@@ -37,57 +37,57 @@ class CaptureAndImpersonationTest {
     private static final String TOKEN =
             "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl";
 
-    private HttpServer server;
-    private final List<String> requests = new ArrayList<>();
-    private final List<String> impersonations = new ArrayList<>();
+    private HttpServer _server;
+    private final List<String> _requests = new ArrayList<>();
+    private final List<String> _impersonations = new ArrayList<>();
 
     @BeforeEach
     void startServer() throws IOException {
-        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        _server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 
-        server.createContext("/api/tokens", exchange -> {
+        _server.createContext("/api/tokens", exchange -> {
             record(exchange);
-            respond(exchange, 200, """
+            _respond(exchange, 200, """
                 {"token":"%s",
                  "person":{"id":7,"accountId":1,"email":"dev@dev","roles":["ROLE_ADMIN"]},
                  "account":{"id":1,"name":"dev"}}
                 """.formatted(TOKEN));
         });
 
-        server.createContext("/api/marketplaces", exchange -> {
+        _server.createContext("/api/marketplaces", exchange -> {
             record(exchange);
             if ("DELETE".equals(exchange.getRequestMethod())) {
-                respond(exchange, 204, "");
+                _respond(exchange, 204, "");
             } else {
-                respond(exchange, 200, "{\"id\":1,\"name\":\"course\",\"markets\":[]}");
+                _respond(exchange, 200, "{\"id\":1,\"name\":\"course\",\"markets\":[]}");
             }
         });
 
-        server.createContext("/api/users", exchange -> {
+        _server.createContext("/api/users", exchange -> {
             record(exchange);
-            respond(exchange, 200, "{\"id\":42,\"accountId\":1,\"email\":\"alice@lab.edu\"}");
+            _respond(exchange, 200, "{\"id\":42,\"accountId\":1,\"email\":\"alice@lab.edu\"}");
         });
 
-        server.createContext("/api", exchange -> {
+        _server.createContext("/api", exchange -> {
             record(exchange);
-            respond(exchange, 200, """
+            _respond(exchange, 200, """
                 {"_links":{"marketplaces":{"href":"%1$s/marketplaces"},
                            "accounts":{"href":"%1$s/accounts"},
                            "users":{"href":"%1$s/users"}}}
-                """.formatted(api()));
+                """.formatted(_api()));
         });
 
-        server.start();
+        _server.start();
     }
 
     @AfterEach
     void stopServer() {
-        if (server != null) server.stop(0);
+        if (_server != null) _server.stop(0);
     }
 
     @Test
     void impersonationRidesEveryAuthenticatedRequest() throws Exception {
-        try (var fm = Flexemarkets.connect(TOKEN, api() + "/marketplaces/1", "test",
+        try (var fm = Flexemarkets.connect(TOKEN, _api() + "/marketplaces/1", "test",
                                            false, "acme")) {
             fm.marketplace(1);
             fm.deleteMarketplace(1);
@@ -95,8 +95,8 @@ class CaptureAndImpersonationTest {
 
         // The API root and both marketplace calls -- a GET and a DELETE, so the
         // header is not merely on the one verb that was easiest to reach.
-        assertThat(authenticated()).isNotEmpty().allMatch("acme"::equals);
-        assertThat(requests).anyMatch(r -> r.startsWith("DELETE"));
+        assertThat(_authenticated()).isNotEmpty().allMatch("acme"::equals);
+        assertThat(_requests).anyMatch(r -> r.startsWith("DELETE"));
     }
 
     /**
@@ -106,51 +106,51 @@ class CaptureAndImpersonationTest {
      */
     @Test
     void signInDoesNotImpersonate() throws Exception {
-        try (var fm = Flexemarkets.connect(TOKEN, api() + "/marketplaces/1", "test",
+        try (var fm = Flexemarkets.connect(TOKEN, _api() + "/marketplaces/1", "test",
                                            false, "acme")) {
             fm.marketplace(1);
         }
 
-        assertThat(impersonationOn("/tokens", "/refresh")).allMatch(v -> v == null);
+        assertThat(_impersonationOn("/tokens", "/refresh")).allMatch(v -> v == null);
     }
 
     @Test
     void noHeaderWhenNotImpersonating() throws Exception {
-        try (var fm = Flexemarkets.connect(TOKEN, api() + "/marketplaces/1", "test")) {
+        try (var fm = Flexemarkets.connect(TOKEN, _api() + "/marketplaces/1", "test")) {
             fm.marketplace(1);
         }
 
-        assertThat(impersonations).allMatch(v -> v == null);
+        assertThat(_impersonations).allMatch(v -> v == null);
     }
 
     /** A blank account name is not a request to impersonate nobody-in-particular. */
     @Test
     void blankImpersonationIsNoImpersonation() throws Exception {
-        try (var fm = Flexemarkets.connect(TOKEN, api() + "/marketplaces/1", "test",
+        try (var fm = Flexemarkets.connect(TOKEN, _api() + "/marketplaces/1", "test",
                                            false, "   ")) {
             fm.marketplace(1);
         }
 
-        assertThat(impersonations).allMatch(v -> v == null);
+        assertThat(_impersonations).allMatch(v -> v == null);
     }
 
     /** The impersonation header as seen on everything but the sign-in routes. */
-    private List<String> authenticated() {
+    private List<String> _authenticated() {
         var seen = new ArrayList<String>();
-        for (int i = 0; i < requests.size(); i++) {
-            if (!requests.get(i).contains("/tokens") && !requests.get(i).contains("/refresh")) {
-                seen.add(impersonations.get(i));
+        for (int i = 0; i < _requests.size(); i++) {
+            if (!_requests.get(i).contains("/tokens") && !_requests.get(i).contains("/refresh")) {
+                seen.add(_impersonations.get(i));
             }
         }
         return seen;
     }
 
-    private List<String> impersonationOn(String... pathFragments) {
+    private List<String> _impersonationOn(String... pathFragments) {
         var seen = new ArrayList<String>();
-        for (int i = 0; i < requests.size(); i++) {
+        for (int i = 0; i < _requests.size(); i++) {
             for (var fragment : pathFragments) {
-                if (requests.get(i).contains(fragment)) {
-                    seen.add(impersonations.get(i));
+                if (_requests.get(i).contains(fragment)) {
+                    seen.add(_impersonations.get(i));
                 }
             }
         }
@@ -159,8 +159,8 @@ class CaptureAndImpersonationTest {
 
     @Test
     void captureTracesRequestAndResponse() throws Exception {
-        var traced = captureStdout(() -> {
-            try (var fm = Flexemarkets.connect(TOKEN, api() + "/marketplaces/1", "test",
+        var traced = _captureStdout(() -> {
+            try (var fm = Flexemarkets.connect(TOKEN, _api() + "/marketplaces/1", "test",
                                                true, null)) {
                 fm.marketplace(1);
             }
@@ -177,8 +177,8 @@ class CaptureAndImpersonationTest {
      */
     @Test
     void captureRedactsTheBearerToken() throws Exception {
-        var traced = captureStdout(() -> {
-            try (var fm = Flexemarkets.connect(TOKEN, api() + "/marketplaces/1", "test",
+        var traced = _captureStdout(() -> {
+            try (var fm = Flexemarkets.connect(TOKEN, _api() + "/marketplaces/1", "test",
                                                true, null)) {
                 fm.marketplace(1);
             }
@@ -190,8 +190,8 @@ class CaptureAndImpersonationTest {
 
     @Test
     void nothingIsTracedWithoutCapture() throws Exception {
-        var traced = captureStdout(() -> {
-            try (var fm = Flexemarkets.connect(TOKEN, api() + "/marketplaces/1", "test")) {
+        var traced = _captureStdout(() -> {
+            try (var fm = Flexemarkets.connect(TOKEN, _api() + "/marketplaces/1", "test")) {
                 fm.marketplace(1);
             }
         });
@@ -203,7 +203,7 @@ class CaptureAndImpersonationTest {
         void run() throws Exception;
     }
 
-    private static String captureStdout(Body body) throws Exception {
+    private static String _captureStdout(Body body) throws Exception {
         var buffer = new ByteArrayOutputStream();
         var original = System.out;
         try {
@@ -215,13 +215,13 @@ class CaptureAndImpersonationTest {
         return buffer.toString(StandardCharsets.UTF_8);
     }
 
-    private String api() {
-        return "http://127.0.0.1:" + server.getAddress().getPort() + "/api";
+    private String _api() {
+        return "http://127.0.0.1:" + _server.getAddress().getPort() + "/api";
     }
 
     private void record(HttpExchange exchange) {
-        requests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-        impersonations.add(exchange.getRequestHeaders().getFirst("X-FM-Account"));
+        _requests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+        _impersonations.add(exchange.getRequestHeaders().getFirst("X-FM-Account"));
         try {
             exchange.getRequestBody().readAllBytes();
         } catch (IOException ignored) {
@@ -229,7 +229,7 @@ class CaptureAndImpersonationTest {
         }
     }
 
-    private static void respond(HttpExchange exchange, int status, String body) throws IOException {
+    private static void _respond(HttpExchange exchange, int status, String body) throws IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
         exchange.sendResponseHeaders(status, bytes.length == 0 ? -1 : bytes.length);

@@ -21,7 +21,7 @@ import org.junit.jupiter.params.provider.CsvSource;
  */
 class PersonDisplayNameTest {
 
-    private static Person person(String firstName, String lastName, String email) {
+    private static Person _person(String firstName, String lastName, String email) {
         return new Person(null, null, 1L, 1L, firstName, lastName, email, null, null);
     }
 
@@ -38,14 +38,14 @@ class PersonDisplayNameTest {
         "null,       null,           '   ',               null",
     })
     void displayName(String first, String last, String email, String expected) {
-        assertThat(person(first, last, email).displayName()).isEqualTo(expected);
+        assertThat(_person(first, last, email).displayName()).isEqualTo(expected);
     }
 
     @Test
     void aNameWinsOverTheEmail() {
         // Not "Name <email>". That is a presentation choice, and a caller who
         // wants it composes one — baking it in would make the common case wrong.
-        String label = person("Ada", "Lovelace", "ada@example.com").displayName();
+        String label = _person("Ada", "Lovelace", "ada@example.com").displayName();
 
         assertThat(label).isEqualTo("Ada Lovelace").doesNotContain("ada@example.com");
     }
