@@ -1,5 +1,6 @@
 package fm.internal;
 
+import fm.role.Streaming;
 import fm.model.Holding;
 import fm.model.Order;
 import fm.model.Session;

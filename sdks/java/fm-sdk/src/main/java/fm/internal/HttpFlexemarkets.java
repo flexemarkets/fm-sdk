@@ -1,5 +1,6 @@
 package fm.internal;
 
+import fm.role.Reading;
 import fm.model.Account;
 import fm.model.Allotment;
 import fm.model.Assets;

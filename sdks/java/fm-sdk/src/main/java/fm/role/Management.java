@@ -1,4 +1,4 @@
-package fm;
+package fm.role;
 
 import fm.model.Holding;
 import fm.model.Marketplace;

@@ -1,5 +1,6 @@
 package fm.model;
 
+import fm.role.Identity;
 import fm.internal.Timestamps;
 import java.time.Instant;
 import java.util.Objects;

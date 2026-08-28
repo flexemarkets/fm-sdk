@@ -232,8 +232,8 @@ def camel(name: str) -> str:
 # about the SDKs rather than the other way round.
 JAVA_SURFACE = [
     "Flexemarkets.java",
-    "Identity.java", "Reading.java", "Writing.java",
-    "Management.java", "Administration.java", "Streaming.java",
+    "role/Identity.java", "role/Reading.java", "role/Writing.java",
+    "role/Management.java", "role/Administration.java", "role/Streaming.java",
 ]
 
 # Differences that are intended. Each needs a reason, so that adding one is a

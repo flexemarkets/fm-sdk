@@ -1,5 +1,6 @@
 package fm.internal;
 
+import fm.role.Writing;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import tools.jackson.databind.ObjectMapper;

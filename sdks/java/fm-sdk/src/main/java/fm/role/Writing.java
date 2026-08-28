@@ -1,4 +1,4 @@
-package fm;
+package fm.role;
 
 import fm.model.Market;
 import fm.model.Order;

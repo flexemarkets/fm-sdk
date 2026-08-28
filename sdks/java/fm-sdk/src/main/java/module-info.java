@@ -20,6 +20,7 @@ module fm {
     exports fm;
     exports fm.error;
     exports fm.model;
+    exports fm.role;
 
     opens fm to tools.jackson.databind;
     opens fm.model to tools.jackson.databind;

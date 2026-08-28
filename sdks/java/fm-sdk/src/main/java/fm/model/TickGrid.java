@@ -1,5 +1,6 @@
 package fm.model;
 
+import fm.role.Administration;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 /**

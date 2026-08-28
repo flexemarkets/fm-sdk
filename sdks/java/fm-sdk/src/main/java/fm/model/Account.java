@@ -1,5 +1,8 @@
 package fm.model;
 
+import fm.role.Administration;
+import fm.role.Identity;
+import fm.role.Reading;
 import fm.internal.Timestamps;
 import java.time.Instant;
 import com.fasterxml.jackson.annotation.JsonProperty;

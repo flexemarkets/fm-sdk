@@ -1,5 +1,9 @@
-package fm;
+package fm.role;
 
+import fm.Flexemarkets;
+import fm.MarketTrades;
+import fm.MarketView;
+import fm.Snapshot;
 import fm.model.Allotment;
 import fm.model.ClientConnection;
 import fm.model.Holding;

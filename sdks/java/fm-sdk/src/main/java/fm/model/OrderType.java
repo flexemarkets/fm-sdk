@@ -1,5 +1,6 @@
 package fm.model;
 
+import fm.role.Writing;
 import com.fasterxml.jackson.annotation.JsonCreator;
 
 /**

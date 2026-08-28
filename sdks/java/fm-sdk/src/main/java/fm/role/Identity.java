@@ -1,5 +1,6 @@
-package fm;
+package fm.role;
 
+import fm.Flexemarkets;
 import fm.model.Account;
 import fm.model.Person;
 import fm.model.Token;

@@ -1,5 +1,7 @@
 package fm;
 
+import fm.role.Management;
+import fm.role.Reading;
 import fm.model.Allotment;
 import fm.model.Assets;
 import fm.model.ClientConnection;
