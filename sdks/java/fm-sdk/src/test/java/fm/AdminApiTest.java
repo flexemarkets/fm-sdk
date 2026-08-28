@@ -58,7 +58,7 @@ class AdminApiTest {
                     """.formatted(TOKEN, _roles)));
 
         _server.createContext("/api/accounts", exchange -> {
-            record(exchange);
+            _record(exchange);
             if ("POST".equals(exchange.getRequestMethod())) {
                 if (_conflict) {
                     _respond(exchange, 409,
@@ -81,13 +81,13 @@ class AdminApiTest {
         });
 
         _server.createContext("/api/approvals", exchange -> {
-            record(exchange);
+            _record(exchange);
             _respond(exchange, 200,
                     "{\"account\":{\"id\":2,\"name\":\"acme\",\"approval\":true},\"approve\":true}");
         });
 
         _server.createContext("/api/v1/users", exchange -> {
-            record(exchange);
+            _record(exchange);
             if ("DELETE".equals(exchange.getRequestMethod())) {
                 if (_conflict) {
                     _respond(exchange, 409, "{\"message\":\"user still owns orders\"}");
@@ -101,7 +101,7 @@ class AdminApiTest {
         });
 
         _server.createContext("/api/marketplaces", exchange -> {
-            record(exchange);
+            _record(exchange);
             if ("DELETE".equals(exchange.getRequestMethod())) {
                 _respond(exchange, 204, "");
             } else if (exchange.getRequestURI().getPath().endsWith("/markets")) {
@@ -113,22 +113,22 @@ class AdminApiTest {
         });
 
         _server.createContext("/api/marketplaces/1/privateTraders", exchange -> {
-            record(exchange);
+            _record(exchange);
             _respond(exchange, 200, "[\"t1\",\"t2\"]");
         });
 
         _server.createContext("/api/accounts/me", exchange -> {
-            record(exchange);
+            _record(exchange);
             _respond(exchange, 204, "");
         });
 
         _server.createContext("/api/marketplaces/1/symbols", exchange -> {
-            record(exchange);
+            _record(exchange);
             _respond(exchange, 200, "[\"STK\",\"BND\"]");
         });
 
         _server.createContext("/api/otp/manager", exchange -> {
-            record(exchange);
+            _record(exchange);
             _respond(exchange, 200, """
                 {"expiresAt":"2026-08-15T18:00:00Z",
                  "otps":[{"userId":1,"email":"alice@lab.edu","otp":"123456"}]}
@@ -136,7 +136,7 @@ class AdminApiTest {
         });
 
         _server.createContext("/api", exchange -> {
-            record(exchange);
+            _record(exchange);
             _respond(exchange, 200, """
                 {"_links":{"marketplaces":{"href":"%1$s/marketplaces"},
                            "accounts":{"href":"%1$s/accounts"},
@@ -161,7 +161,7 @@ class AdminApiTest {
         return Flexemarkets.connect(TOKEN, _api() + "/marketplaces/1", "admin-test");
     }
 
-    private void record(HttpExchange exchange) {
+    private void _record(HttpExchange exchange) {
         _requests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
         try {
             _bodies.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));

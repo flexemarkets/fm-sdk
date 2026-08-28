@@ -52,12 +52,12 @@ class ClientTimingTest {
         _server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 
         _server.createContext("/api/marketplaces", exchange -> {
-            record(exchange);
+            _record(exchange);
             _respond(exchange, 200, "{\"id\":1,\"name\":\"course\",\"markets\":[]}");
         });
 
         _server.createContext("/api", exchange -> {
-            record(exchange);
+            _record(exchange);
             _respond(exchange, 200, """
                 {"_links":{"marketplaces":{"href":"%1$s/marketplaces"},
                            "accounts":{"href":"%1$s/accounts"},
@@ -73,7 +73,7 @@ class ClientTimingTest {
         if (_server != null) _server.stop(0);
     }
 
-    private void record(HttpExchange exchange) {
+    private void _record(HttpExchange exchange) {
         _timings.add(exchange.getRequestHeaders().getFirst("Client-Timing"));
     }
 

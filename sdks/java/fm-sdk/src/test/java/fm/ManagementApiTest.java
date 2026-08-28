@@ -60,7 +60,7 @@ class ManagementApiTest {
         // the path so a test can tell open from close.
         for (var transition : List.of("open", "pause", "close")) {
             _server.createContext("/api/marketplaces/1/" + transition, exchange -> {
-                record(exchange);
+                _record(exchange);
                 var state = switch (transition) {
                     case "open" -> "OPEN";
                     case "pause" -> "PAUSED";
@@ -72,36 +72,36 @@ class ManagementApiTest {
         }
 
         _server.createContext("/api/marketplaces/1/holdings", exchange -> {
-            record(exchange);
+            _record(exchange);
             _respond(exchange, 200,
                     "[{\"ownerId\":8,\"name\":\"alice\",\"cash\":10000,\"sessionId\":300}]");
         });
 
         _server.createContext("/api/v1/marketplaces/1/sessions", exchange -> {
-            record(exchange);
+            _record(exchange);
             _respond(exchange, 200, "[{\"id\":300,\"state\":\"CLOSED\"}]");
         });
 
         _server.createContext("/api/marketplaces/1/connections", exchange -> {
-            record(exchange);
+            _record(exchange);
             _respond(exchange, 200,
                     "[{\"id\":9,\"ownerId\":8,\"marketplaceId\":1,\"sessionId\":300}]");
         });
 
         _server.createContext("/api/symbolOrdersJson", exchange -> {
-            record(exchange);
+            _record(exchange);
             // An order keeps its own id; only the symbol is absent.
             _respond(exchange, 200,
                     "[{\"id\":11,\"original\":7,\"units\":5,\"price\":950}]");
         });
 
         _server.createContext("/api/sessionOrdersJson", exchange -> {
-            record(exchange);
+            _record(exchange);
             _respond(exchange, 200, "[{\"id\":12,\"original\":12,\"sessionId\":300}]");
         });
 
         _server.createContext("/api/symbolTradesJson", exchange -> {
-            record(exchange);
+            _record(exchange);
             // The symbol-keyed route answers with the trade id in "original"
             // and no symbol on the order.
             _respond(exchange, 200,
@@ -109,37 +109,37 @@ class ManagementApiTest {
         });
 
         _server.createContext("/api/usersJson", exchange -> {
-            record(exchange);
+            _record(exchange);
             _respond(exchange, 200, "[{\"id\":7,\"email\":\"dev@dev\"},{\"id\":8,\"email\":\"t1@dev\"}]");
         });
 
         _server.createContext("/api/v1/marketplaces/1/allotments", exchange -> {
-            record(exchange);
+            _record(exchange);
             _respond(exchange, 200, _allotmentsJson());
         });
 
         _server.createContext("/api/v1/marketplaces", exchange -> {
-            record(exchange);
+            _record(exchange);
             _respond(exchange, 200, "{\"id\":77,\"name\":\"simple-dividend\",\"markets\":[]}");
         });
 
         _server.createContext("/api/marketplaces/1/allocations", exchange -> {
-            record(exchange);
+            _record(exchange);
             _respond(exchange, 200, _allotmentsJson());
         });
 
         _server.createContext("/api/marketplaces/1/holdings/downloads", exchange -> {
-            record(exchange);
+            _record(exchange);
             _respondCsv(exchange, "owner,cash\nalice,10000\n");
         });
 
         _server.createContext("/api/marketplaces/1/holdings/uploads", exchange -> {
-            record(exchange);
+            _record(exchange);
             _respond(exchange, 200, _allotmentsJson());
         });
 
         _server.createContext("/api", exchange -> {
-            record(exchange);
+            _record(exchange);
             _respond(exchange, 200, """
                 {"_links":{"marketplaces":{"href":"%1$s/marketplaces"},
                            "symbolTradesJson":{"href":"%1$s/symbolTradesJson"},
@@ -167,7 +167,7 @@ class ManagementApiTest {
         }
     }
 
-    private void record(HttpExchange exchange) throws IOException {
+    private void _record(HttpExchange exchange) throws IOException {
         _requests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
         _bodies.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
     }

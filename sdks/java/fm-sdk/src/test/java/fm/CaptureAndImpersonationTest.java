@@ -46,7 +46,7 @@ class CaptureAndImpersonationTest {
         _server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 
         _server.createContext("/api/tokens", exchange -> {
-            record(exchange);
+            _record(exchange);
             _respond(exchange, 200, """
                 {"token":"%s",
                  "person":{"id":7,"accountId":1,"email":"dev@dev","roles":["ROLE_ADMIN"]},
@@ -55,7 +55,7 @@ class CaptureAndImpersonationTest {
         });
 
         _server.createContext("/api/marketplaces", exchange -> {
-            record(exchange);
+            _record(exchange);
             if ("DELETE".equals(exchange.getRequestMethod())) {
                 _respond(exchange, 204, "");
             } else {
@@ -64,12 +64,12 @@ class CaptureAndImpersonationTest {
         });
 
         _server.createContext("/api/users", exchange -> {
-            record(exchange);
+            _record(exchange);
             _respond(exchange, 200, "{\"id\":42,\"accountId\":1,\"email\":\"alice@lab.edu\"}");
         });
 
         _server.createContext("/api", exchange -> {
-            record(exchange);
+            _record(exchange);
             _respond(exchange, 200, """
                 {"_links":{"marketplaces":{"href":"%1$s/marketplaces"},
                            "accounts":{"href":"%1$s/accounts"},
@@ -219,7 +219,7 @@ class CaptureAndImpersonationTest {
         return "http://127.0.0.1:" + _server.getAddress().getPort() + "/api";
     }
 
-    private void record(HttpExchange exchange) {
+    private void _record(HttpExchange exchange) {
         _requests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
         _impersonations.add(exchange.getRequestHeaders().getFirst("X-FM-Account"));
         try {
