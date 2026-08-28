@@ -173,11 +173,11 @@ public class HttpFlexemarkets implements Flexemarkets {
     private static final java.util.regex.Pattern SERVER_TIMING_ST =
         java.util.regex.Pattern.compile("st=(\\d+)");
 
-    private final Properties properties;
+    private final Properties _properties;
     private final HttpClient _httpClient;
     private final String _bearerToken;
     private final Token _token;
-    private final Account account;
+    private final Account _account;
     private final Person _user;
     private final ApiRoot _apiRoot;
 
@@ -188,7 +188,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     private volatile boolean _closed;
 
     HttpFlexemarkets(Properties properties) {
-        this.properties = properties;
+        this._properties = properties;
         // NORMAL, not the JDK's default of NEVER. The edge in front of
         // production answers plain HTTP with a 301 to the same host on HTTPS,
         // and a client that does not follow it reads the edge's HTML error page
@@ -204,7 +204,7 @@ public class HttpFlexemarkets implements Flexemarkets {
         this._capture = Boolean.parseBoolean(properties.getProperty("capture"));
 
         this._token = _signIn();
-        this.account = _token.account();
+        this._account = _token.account();
         this._user = _token.person();
         this._bearerToken = "Bearer " + _token.token();
 
@@ -212,14 +212,14 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
 
-    public Account account() { return account; }
-    public long accountId() { return account.id(); }
-    public String accountName() { return account.name(); }
+    public Account account() { return _account; }
+    public long accountId() { return _account.id(); }
+    public String accountName() { return _account.name(); }
     public Person user() { return _user; }
     public long userId() { return _user.id(); }
 
     public String endpointUrl() {
-        return properties.getProperty("endpoint");
+        return _properties.getProperty("endpoint");
     }
 
     public long endpointMarketplaceId() {
@@ -1232,10 +1232,10 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     private Token _signIn() {
         var endpoint = server(endpointUrl()) + "/tokens";
-        var account = properties.getProperty("account");
-        var email = properties.getProperty("email");
-        var password = properties.getProperty("password");
-        var tokenValue = properties.getProperty("token");
+        var account = _properties.getProperty("account");
+        var email = _properties.getProperty("email");
+        var password = _properties.getProperty("password");
+        var tokenValue = _properties.getProperty("token");
 
         HttpRequest request;
 
@@ -1398,7 +1398,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     private String _clientDescription() {
-        return properties.getProperty("client-description", "Unspecified client");
+        return _properties.getProperty("client-description", "Unspecified client");
     }
 
     private String _wsUrl() {
@@ -1510,7 +1510,7 @@ public class HttpFlexemarkets implements Flexemarkets {
             return new ApiException(what + ": " + e, e);
         }
 
-        var source = properties.getProperty("endpoint-source");
+        var source = _properties.getProperty("endpoint-source");
 
         return new ApiException(
             "Cannot reach the server at %s (%s).%s".formatted(

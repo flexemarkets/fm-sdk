@@ -442,11 +442,11 @@ public class Events implements Subscription {
     // --- WebSocket.Listener ---
 
     private class StompListener implements WebSocket.Listener {
-        private final CountDownLatch connectedLatch;
+        private final CountDownLatch _connectedLatch;
         private final StringBuilder _buffer = new StringBuilder();
 
         StompListener(CountDownLatch connectedLatch) {
-            this.connectedLatch = connectedLatch;
+            this._connectedLatch = connectedLatch;
         }
 
         @Override
@@ -462,7 +462,7 @@ public class Events implements Subscription {
                 _buffer.setLength(0);
 
                 if (frame.startsWith("CONNECTED")) {
-                    connectedLatch.countDown();
+                    _connectedLatch.countDown();
                 }
 
                 // Dispatch in a virtual thread to avoid blocking the WS receive thread
