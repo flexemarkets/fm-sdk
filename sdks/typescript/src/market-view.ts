@@ -12,7 +12,7 @@
 
 import type { Flexemarkets } from "./client.js";
 import { OrderBook, OrderBooks } from "./orderbook.js";
-import { MarketplaceTrades } from "./trades.js";
+import { MarketplaceTrades, type Trades } from "./trades.js";
 import { NO_SEQ, type EventListener, type FmEvent, type OrdersUpdate, type FrameUnreadable, type Reconnected, type StreamDropped } from "./stomp.js";
 import type { Holding, Market, Order, Session } from "./types.js";
 
@@ -60,6 +60,17 @@ export interface MarketView {
    * `marketId` isn't in this marketplace.
    */
   orderBook(marketId: number): OrderBook | null;
+
+  /**
+   * Always-current trade tape for `marketId`, most recent last. Returns null
+   * if `marketId` isn't in this marketplace.
+   *
+   * Maintained alongside {@link orderBook}: seeded from the server's recent
+   * trades when the view opens, then kept current from the same delta stream.
+   * Each `Trade` on it carries both sides of its match — the resting
+   * order that was taken and the aggressor that took it.
+   */
+  trades(marketId: number): Trades | null;
 
   /**
    * Most-recent session update observed. Null until the first
@@ -215,6 +226,11 @@ export class DefaultMarketView implements MarketView {
   orderBook(marketId: number): OrderBook | null {
     this._ensureOpen();
     return this._orderBooks.get(marketId) ?? null;
+  }
+
+  trades(marketId: number): Trades | null {
+    this._ensureOpen();
+    return this._trades.get(marketId);
   }
 
   session(): Session | null {
@@ -503,6 +519,11 @@ export class MarketViewHandle implements MarketView {
   orderBook(marketId: number): OrderBook | null {
     this._check();
     return this._shared.orderBook(marketId);
+  }
+
+  trades(marketId: number): Trades | null {
+    this._check();
+    return this._shared.trades(marketId);
   }
 
   session(): Session | null {

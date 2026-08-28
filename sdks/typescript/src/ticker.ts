@@ -58,7 +58,7 @@ function display(
     const bid = book.bestBuyPrice();
     const ask = book.bestSellPrice();
     const symbol = book.symbol ?? "?";
-    const recent = trades.get(book.marketId).mostRecentPrices();
+    const recent = trades.get(book.marketId)?.mostRecentPrices() ?? [];
     lines.push(
       `  ${symbol.padStart(6)}  ${price(bid)}  ${price(ask)}  ${spread(bid, ask)}   ${tradePrices(recent, TRADE_DISPLAY_COUNT)}`,
     );

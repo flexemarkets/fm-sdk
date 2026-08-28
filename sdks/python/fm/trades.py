@@ -189,6 +189,13 @@ class MarketplaceTrades:
     def __getitem__(self, market_id: int) -> Trades:
         return self._trades[market_id]
 
+    def get(self, market_id: int) -> "Trades | None":
+        """That market's tape, or ``None`` when the market is not in this
+        marketplace -- the lookup :class:`~fm.market_view.MarketView` needs,
+        where an unknown id is an answer rather than a ``KeyError``.
+        """
+        return self._trades.get(market_id)
+
     def clear(self) -> None:
         """Empty every per-market trade tape — see
         :meth:`Trades.clear`.

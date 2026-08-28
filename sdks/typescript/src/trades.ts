@@ -171,8 +171,11 @@ export class MarketplaceTrades {
     return [...this._trades.values()];
   }
 
-  get(marketId: number): Trades {
-    return this._trades.get(marketId)!;
+  /** That market's tape, or null when the market is not in this marketplace —
+   *  the lookup MarketView needs, where an unknown id is an answer rather than
+   *  a crash on the next property read. */
+  get(marketId: number): Trades | null {
+    return this._trades.get(marketId) ?? null;
   }
 
   /** Empty every per-market trade tape — see {@link Trades.clear}. */

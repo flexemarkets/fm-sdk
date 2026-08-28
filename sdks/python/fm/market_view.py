@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 
 from .events import NO_SEQ, OrdersUpdate, FrameUnreadable, Reconnected, StreamDropped
 from .orderbook import OrderBook, OrderBooks
-from .trades import MarketplaceTrades
+from .trades import MarketplaceTrades, Trades
 from .types import Holding, Market, Order, Session
 
 if TYPE_CHECKING:
@@ -161,6 +161,19 @@ class MarketView:
         """
         self._ensure_open()
         return self._order_books.get(market_id)
+
+    def trades(self, market_id: int) -> Optional[Trades]:
+        """Always-current trade tape for *market_id*, most recent last;
+        ``None`` if the market isn't in this marketplace.
+
+        Maintained alongside :meth:`order_book`: seeded from the server's
+        recent trades when the view opens, then kept current from the same
+        delta stream. Each :class:`~fm.trades.Trade` on it carries both sides
+        of its match -- the resting order that was taken and the aggressor
+        that took it.
+        """
+        self._ensure_open()
+        return self._trades.get(market_id)
 
     def session(self) -> Optional[Session]:
         """Most-recent session update observed. ``None`` until the
@@ -476,6 +489,10 @@ class MarketViewHandle:
     def order_book(self, market_id: int) -> Optional[OrderBook]:
         self._check()
         return self._shared.order_book(market_id)
+
+    def trades(self, market_id: int) -> Optional[Trades]:
+        self._check()
+        return self._shared.trades(market_id)
 
     def session(self) -> Optional[Session]:
         self._check()
