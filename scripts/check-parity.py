@@ -453,6 +453,162 @@ def typescript_failures(path: Path) -> set[str]:
             re.findall(r"^export class (\w+) extends \w*(?:Error)\b", path.read_text(), re.M)}
 
 
+# --- read-side surface ------------------------------------------------------
+#
+# check_methods compares Flexemarkets and its roles: what a caller can ask the
+# server to do. It stops there. MarketView, OrderBook and Trades -- what a
+# caller does with the data that comes back -- were never compared, and that is
+# where the three drifted furthest. MarketView.trades(marketId) existed in Java
+# and in neither of the others, so "what was the last trade, and who took it"
+# had no answer at all in Python or TypeScript, for the whole life of the type,
+# while this script reported three SDKs in agreement.
+#
+# Construction is excluded on purpose: static factories are per-language idiom
+# -- Java's MarketView.over, TypeScript's static open -- and comparing them
+# reports three correct SDKs as three different ones. So is privacy: a helper
+# spelled `_add` in two languages and `private` in the third is one decision,
+# not three.
+#
+# What is compared is what a caller can read or call. Which means the reader
+# has to see past three spellings of the same idea -- Java's marketId(),
+# Python's plain attribute, TypeScript's getter are one member, and a check
+# that cannot say so reports idiom as divergence and is worse than nothing.
+READ_SURFACE = {
+    "MarketView": ("MarketView.java", ("market_view.py", "MarketView"),
+                   ("market-view.ts", "MarketView", "interface")),
+    "OrderBook": ("OrderBook.java", ("orderbook.py", "OrderBook"),
+                  ("orderbook.ts", "OrderBook", "class")),
+    "OrderBooks": ("OrderBooks.java", ("orderbook.py", "OrderBooks"),
+                   ("orderbook.ts", "OrderBooks", "class")),
+    "Trades": ("Trades.java", ("trades.py", "Trades"),
+               ("trades.ts", "Trades", "class")),
+    "MarketplaceTrades": ("MarketplaceTrades.java", ("trades.py", "MarketplaceTrades"),
+                          ("trades.ts", "MarketplaceTrades", "class")),
+}
+
+# Members that exist in some SDKs and not others on purpose. Same rule as the
+# other exemption maps: each needs a reason, so adding one is a decision
+# somebody wrote down rather than a way to make the check quiet.
+SURFACE_EXEMPTIONS: dict[str, str] = {}
+
+
+def _java_surface(path: Path) -> set[str]:
+    """Public instance members of a Java class or interface.
+
+    Static is dropped (construction idiom) and so is anything not public. An
+    interface has no `public` keyword on its members, so the two are read
+    differently -- reading an interface with the class rule finds nothing, and
+    a check that finds nothing passes.
+    """
+    source = re.sub(r"/\*.*?\*/", " ", path.read_text(), flags=re.S)
+    declared_type = path.stem
+    members: set[str] = set()
+
+    interface = re.search(r"^public\s+interface\s+\w+", source, re.M) is not None
+
+    for line in source.splitlines():
+        if not line.startswith("    ") or line.startswith("     "):
+            continue
+        stripped = line.strip()
+        if stripped.startswith(("*", "//", "@", "}")) or "static" in stripped:
+            continue
+        if interface:
+            if not stripped.endswith(");"):
+                continue
+        elif not stripped.startswith("public "):
+            continue
+        match = re.search(r"(\w+)\s*\(", stripped)
+        if match and match.group(1) != declared_type:
+            members.add(match.group(1))
+
+    return members
+
+
+def _python_surface(path: Path, name: str) -> set[str]:
+    """Public members of a Python class: its methods, its properties, and the
+    attributes it assigns in __init__.
+
+    The last of those is not optional. MarketView publishes marketplace_id and
+    markets as plain attributes, where Java and TypeScript use accessors --
+    read methods alone and the two of them are reported as missing from Python,
+    which is idiom being called divergence.
+    """
+    source = path.read_text()
+    body = source[source.index(f"class {name}"):]
+    following = re.search(r"\nclass ", body)
+    if following:
+        body = body[: following.start()]
+
+    members = {m.group(1) for m in re.finditer(r"^    def ([a-z]\w*)\(", body, re.M)}
+    members |= {m.group(1) for m in re.finditer(r"^        self\.([a-z]\w*)\s*[:=]", body, re.M)}
+    return {m for m in members if not m.startswith("_")}
+
+
+def _typescript_surface(path: Path, name: str, kind: str) -> set[str]:
+    """Public members of a TypeScript class or interface: methods, getters and
+    readonly fields."""
+    source = path.read_text()
+    body = source[source.index(f"{kind} {name}"):]
+    following = re.search(r"\n(?:export )?(?:class|interface|function|const) ", body[1:])
+    if following:
+        body = body[: following.start() + 1]
+
+    members: set[str] = set()
+    for line in body.splitlines():
+        if not line.startswith("  ") or line.startswith("   "):
+            continue
+        stripped = line.strip()
+        if stripped.startswith(("*", "//", "/*", "}")) or stripped.startswith("private"):
+            continue
+        if "static" in stripped.split("(")[0]:
+            continue
+        match = re.match(r"(?:async\s+|get\s+|readonly\s+)*([a-zA-Z]\w*)\s*[(:<]", stripped)
+        if match and match.group(1) not in ("constructor", "return", "if", "for", "while"):
+            members.add(match.group(1))
+
+    return {m for m in members if not m.startswith("_")}
+
+
+def check_surface(verbose: bool) -> list[str]:
+    problems: list[str] = []
+    compared = 0
+
+    for name, (java_file, (py_module, py_class), (ts_module, ts_name, ts_kind)) in \
+            sorted(READ_SURFACE.items()):
+        java = _java_surface(JAVA / java_file)
+        python = {camel(m) for m in _python_surface(PYTHON_PKG / py_module, py_class)}
+        typescript = _typescript_surface(TYPESCRIPT_SRC / ts_module, ts_name, ts_kind)
+
+        if not (java and python and typescript):
+            return [f"{name}: a reader found nothing; it is broken, not the SDKs"]
+
+        compared += len(java | python | typescript)
+
+        for member in sorted(java | python | typescript):
+            if f"{name}.{member}" in SURFACE_EXEMPTIONS:
+                continue
+            missing = [lang for lang, side in (("java", java), ("python", python),
+                                               ("typescript", typescript))
+                       if member not in side]
+            if missing:
+                present = [lang for lang, side in (("java", java), ("python", python),
+                                                   ("typescript", typescript))
+                           if member in side]
+                problems.append(
+                    f"{name}.{member} is on {', '.join(present)} but not "
+                    f"{', '.join(missing)}")
+
+        if verbose:
+            print(f"  {name:20s} java {len(java):2d}, python {len(python):2d}, "
+                  f"typescript {len(typescript):2d}")
+
+    if verbose:
+        print(f"  read surface:   {compared} member declarations across "
+              f"{len(READ_SURFACE)} types")
+
+    return problems
+
+
 # --- documentation surface --------------------------------------------------
 #
 # The method check says the same method exists in all three. It says nothing
@@ -753,6 +909,22 @@ def main() -> int:
         )
         return 1
 
+    surface_problems = check_surface(verbose)
+    if surface_problems:
+        print(f"\nparity: the SDKs disagree about {len(surface_problems)} read-side "
+              "member(s):\n", file=sys.stderr)
+        for problem in surface_problems:
+            print(f"  - {problem}", file=sys.stderr)
+        print(
+            "\nMarketView, OrderBook and Trades are what a caller does with the data "
+            "the client returns. A member on one and not the others is work its callers "
+            "have to do by hand -- which is how MarketView.trades sat in Java alone. "
+            "If a difference is intended, record it in SURFACE_EXEMPTIONS with the "
+            "reason.",
+            file=sys.stderr,
+        )
+        return 1
+
     doc_problems = check_docs(verbose)
     if doc_problems:
         print("\nparity: the SDKs document the same method unevenly:\n", file=sys.stderr)
@@ -781,7 +953,8 @@ def main() -> int:
         return 1
 
     print(f"parity ok: {len(shared)} shared types agree on their wire fields, "
-          f"the three method surfaces agree, and the same failures are catchable in each")
+          f"the client and read-side surfaces agree, and the same failures are "
+          f"catchable in each")
     return 0
 
 
