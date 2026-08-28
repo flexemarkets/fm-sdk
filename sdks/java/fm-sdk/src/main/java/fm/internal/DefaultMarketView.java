@@ -73,7 +73,7 @@ public class DefaultMarketView implements MarketView {
     private final List<Market> markets;
 
     private final MarketplaceBooks _books;
-    private final MarketplaceTrades trades;
+    private final MarketplaceTrades _trades;
     private final AtomicReference<Session> session = new AtomicReference<>();
     private final AtomicReference<Holding> holding = new AtomicReference<>();
 
@@ -117,7 +117,7 @@ public class DefaultMarketView implements MarketView {
         // 100 matches the default per-market MarketTrades capacity — see
         // MarketTrades(Market) ctor. Plumb through to observe() later if a
         // caller needs deeper trade scrollback.
-        this.trades = new MarketplaceTrades(this.markets, 100);
+        this._trades = new MarketplaceTrades(this.markets, 100);
 
         // Subscribe WS first so deltas start landing in the queue,
         // then fetch the REST snapshot, apply it, and only THEN start
@@ -157,7 +157,7 @@ public class DefaultMarketView implements MarketView {
         // double-add against existing price levels. Initial seed
         // hits empty books so clear() is a no-op there.
         this._books.clear();
-        this.trades.clear();
+        this._trades.clear();
 
         // Snapshot orders are all available (consumer == null), so
         // MarketBook.update treats them as adds — same code path WS
@@ -167,7 +167,7 @@ public class DefaultMarketView implements MarketView {
             this._books.update(orders.body().toArray(new Order[0]));
         }
         if (!trades.body().isEmpty()) {
-            this.trades.update(trades.body().toArray(new Order[0]));
+            this._trades.update(trades.body().toArray(new Order[0]));
         }
 
         // Use the orders snapshot's seq as the watermark — orders and
@@ -196,7 +196,7 @@ public class DefaultMarketView implements MarketView {
     @Override
     public MarketTrades trades(long marketId) {
         _ensureOpen();
-        return trades.get(marketId);
+        return _trades.get(marketId);
     }
 
     @Override
@@ -372,7 +372,7 @@ public class DefaultMarketView implements MarketView {
         Order[] orders = update.orders();
         var touched = _marketIdsTouched(orders);
         _books.update(orders);
-        var traded = trades.update(orders);
+        var traded = _trades.update(orders);
 
         // MarketTrades first: the more specific event, and a book handler that then
         // reads the tape sees the same trade the trade handler was just given.
