@@ -17,7 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>Building these by hand is supported -- {@link MarketView} does it for a
  * caller who does not want to drive the event queue themselves.
  */
-public class OrderBooks {
+public class MarketplaceBooks {
     private final Map<Long, MarketBook> books = new ConcurrentHashMap<>();
 
     /**
@@ -25,7 +25,7 @@ public class OrderBooks {
      *
      * @param markets the markets to keep books for
      */
-    public OrderBooks(List<Market> markets) {
+    public MarketplaceBooks(List<Market> markets) {
         for (var market : markets) {
             books.put(market.id(), new MarketBook(market));
         }

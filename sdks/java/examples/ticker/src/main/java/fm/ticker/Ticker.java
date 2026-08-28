@@ -21,7 +21,7 @@ import fm.Holding;
 import fm.Market;
 import fm.Session;
 import fm.MarketplaceTrades;
-import fm.OrderBooks;
+import fm.MarketplaceBooks;
 
 public class Ticker {
     private static final int TRADE_DISPLAY_COUNT = 5;
@@ -29,7 +29,7 @@ public class Ticker {
     private final String credential;
     private final String endpoint;
 
-    private OrderBooks orderBooks;
+    private MarketplaceBooks orderBooks;
     private MarketplaceTrades trades;
     private List<Market> markets;
 
@@ -74,7 +74,7 @@ public class Ticker {
 
             session = fm.session(marketplaceId);
 
-            orderBooks = new OrderBooks(markets);
+            orderBooks = new MarketplaceBooks(markets);
             trades = new MarketplaceTrades(markets, 10);
 
             fm.listen(marketplaceId, queue);

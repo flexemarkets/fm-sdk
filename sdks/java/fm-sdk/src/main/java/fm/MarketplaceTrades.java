@@ -12,7 +12,7 @@ import java.util.stream.Stream;
 /**
  * Every market's trade tape in one marketplace, keyed by market id.
  *
- * <p>The trade-side counterpart to {@link OrderBooks}, and fed the same way:
+ * <p>The trade-side counterpart to {@link MarketplaceBooks}, and fed the same way:
  * one update, fanned at every tape, each keeping what belongs to it.
  */
 public class MarketplaceTrades {
@@ -56,7 +56,7 @@ public class MarketplaceTrades {
     /**
      * One market's tape.
      *
-     * <p>The counterpart to {@link OrderBooks#get}, so a caller holding either
+     * <p>The counterpart to {@link MarketplaceBooks#get}, so a caller holding either
      * aggregator reaches one market's view the same way.
      *
      * @param marketId the market to look up

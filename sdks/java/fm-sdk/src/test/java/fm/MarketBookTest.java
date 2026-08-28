@@ -278,7 +278,7 @@ class MarketBookTest {
     @Test
     void marketplaceBooksAnswerForAnUnknownMarketRatherThanFailing() {
         Market market = market(1L, "A");
-        OrderBooks books = new OrderBooks(java.util.List.of(market));
+        MarketplaceBooks books = new MarketplaceBooks(java.util.List.of(market));
         books.update(toArray(limitOf(market, 1L, Side.BUY, 10, 100)));
 
         assertThat(books.bestPrice(1L, Side.BUY)).isEqualTo(100);

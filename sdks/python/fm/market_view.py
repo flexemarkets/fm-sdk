@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Callable, Optional
 log = logging.getLogger(__name__)
 
 from .events import NO_SEQ, OrdersUpdate, FrameUnreadable, Reconnected, StreamDropped
-from .orderbook import MarketBook, OrderBooks
+from .orderbook import MarketBook, MarketplaceBooks
 from .trades import MarketplaceTrades, Trade, Trades
 from .types import Holding, Market, Order, Session
 
@@ -71,7 +71,7 @@ class MarketView:
 
     Phase 1 scope: This is a skeleton that wraps the existing
     ``Flexemarkets.listen()`` queue and dispatches events into the
-    existing :class:`OrderBooks`/:class:`MarketplaceTrades`
+    existing :class:`MarketplaceBooks`/:class:`MarketplaceTrades`
     aggregators. *No reconciliation is wired yet* — REST-seed,
     sequence-gap recovery, per-identity sharing, and automatic
     reconnect land in Phase 2.
@@ -86,7 +86,7 @@ class MarketView:
         self._flexemarkets = flexemarkets
         self.marketplace_id = marketplace_id
         self.markets = list(markets)
-        self._order_books = OrderBooks(self.markets)
+        self._order_books = MarketplaceBooks(self.markets)
         # 100 matches the default per-market Trades capacity. Plumb
         # through to observe() later if a caller needs deeper trade
         # scrollback.

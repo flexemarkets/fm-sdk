@@ -18,7 +18,7 @@ from .exceptions import (
     PersonHasMarketplaceDataError,
 )
 from .market_view import GapEvent, MarketView, ReconnectEvent, Subscription
-from .orderbook import MarketBook, OrderBooks
+from .orderbook import MarketBook, MarketplaceBooks
 from .trades import MarketplaceTrades, Trade, Trades
 from .types import (
     Account,
@@ -59,7 +59,7 @@ __all__ = [
     "Version",
     # orderbook & trades
     "MarketBook",
-    "OrderBooks",
+    "MarketplaceBooks",
     "Trades",
     "MarketplaceTrades",
     "Trade",

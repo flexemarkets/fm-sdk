@@ -174,7 +174,7 @@ export class MarketBook {
 /**
  * Container of MarketBook instances, one per market.
  */
-export class OrderBooks {
+export class MarketplaceBooks {
   private readonly _books = new Map<number, MarketBook>();
 
   constructor(markets: Market[]) {

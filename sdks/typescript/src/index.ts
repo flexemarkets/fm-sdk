@@ -73,7 +73,7 @@ export {
 } from "./order-utils.js";
 
 // Order book
-export { MarketBook, OrderBooks } from "./orderbook.js";
+export { MarketBook, MarketplaceBooks } from "./orderbook.js";
 
 // Trades
 export { Trades, MarketplaceTrades, tradeOf } from "./trades.js";

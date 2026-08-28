@@ -10,7 +10,7 @@ import fm.Marketplace;
 import fm.MarketplaceTrades;
 import fm.Order;
 import fm.MarketBook;
-import fm.OrderBooks;
+import fm.MarketplaceBooks;
 import fm.OrdersUpdate;
 import fm.ReconnectEvent;
 import fm.Reconnected;
@@ -41,7 +41,7 @@ import java.util.function.Consumer;
  *   <li>Calls {@code flexemarkets.listen(marketplaceId, queue)} to
  *       drive a WS subscription, draining the queue in a background
  *       thread.</li>
- *   <li>Dispatches WS events into the existing {@link OrderBooks}
+ *   <li>Dispatches WS events into the existing {@link MarketplaceBooks}
  *       and {@link MarketplaceTrades} aggregators, plus
  *       {@link #session} / {@link #holding} fields.</li>
  *   <li>Fires registered handlers when state changes.</li>
@@ -72,7 +72,7 @@ public class DefaultMarketView implements MarketView {
     private final long marketplaceId;
     private final List<Market> markets;
 
-    private final OrderBooks orderBooks;
+    private final MarketplaceBooks orderBooks;
     private final MarketplaceTrades trades;
     private final AtomicReference<Session> session = new AtomicReference<>();
     private final AtomicReference<Holding> holding = new AtomicReference<>();
@@ -113,7 +113,7 @@ public class DefaultMarketView implements MarketView {
         this.flexemarkets = flexemarkets;
         this.marketplaceId = marketplaceId;
         this.markets = List.copyOf(markets);
-        this.orderBooks = new OrderBooks(this.markets);
+        this.orderBooks = new MarketplaceBooks(this.markets);
         // 100 matches the default per-market Trades capacity — see
         // Trades(Market) ctor. Plumb through to observe() later if a
         // caller needs deeper trade scrollback.

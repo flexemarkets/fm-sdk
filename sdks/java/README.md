@@ -60,7 +60,7 @@ endpoint=https://api.flexemarkets.com/api/marketplaces/123
 
 ```java
 import fm.Flexemarkets;
-import fm.OrderBooks;
+import fm.MarketplaceBooks;
 import fm.MarketplaceTrades;
 import fm.Holding;
 import fm.Market;
@@ -89,7 +89,7 @@ try (var fm = Flexemarkets.connect(null, null, "my-bot")) {
     BlockingQueue<Object> queue = new LinkedBlockingQueue<>(1000);
     fm.listen(marketplaceId, queue);
 
-    var books = new OrderBooks(markets);
+    var books = new MarketplaceBooks(markets);
     var trades = new MarketplaceTrades(markets, 50);
 
     while (true) {

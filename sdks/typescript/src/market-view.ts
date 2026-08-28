@@ -11,7 +11,7 @@
  */
 
 import type { Flexemarkets } from "./client.js";
-import { MarketBook, OrderBooks } from "./orderbook.js";
+import { MarketBook, MarketplaceBooks } from "./orderbook.js";
 import { MarketplaceTrades, type Trade, type Trades } from "./trades.js";
 import { NO_SEQ, type EventListener, type FmEvent, type OrdersUpdate, type FrameUnreadable, type Reconnected, type StreamDropped } from "./stomp.js";
 import type { Holding, Market, Order, Session } from "./types.js";
@@ -151,7 +151,7 @@ export class DefaultMarketView implements MarketView {
   readonly markets: Market[];
 
   private readonly _flexemarkets: Flexemarkets;
-  private readonly _orderBooks: OrderBooks;
+  private readonly _orderBooks: MarketplaceBooks;
   private readonly _trades: MarketplaceTrades;
   private _events: EventListener | null = null;
   private _session: Session | null = null;
@@ -201,7 +201,7 @@ export class DefaultMarketView implements MarketView {
     this._flexemarkets = flexemarkets;
     this.marketplaceId = marketplaceId;
     this.markets = markets;
-    this._orderBooks = new OrderBooks(markets);
+    this._orderBooks = new MarketplaceBooks(markets);
     this._trades = new MarketplaceTrades(markets, 100);
   }
 

@@ -193,7 +193,7 @@ class MarketBook:
         return "\n".join(lines)
 
 
-class OrderBooks:
+class MarketplaceBooks:
     """Container of :class:`MarketBook` instances, one per market.
 
     Port of ``MarketplaceOrderBooks``.
@@ -220,7 +220,7 @@ class OrderBooks:
     def get(self, market_id: int) -> MarketBook | None:
         """Return the order book for *market_id*, or ``None`` if the
         market isn't part of this marketplace. Mirrors the Java + TS
-        ``OrderBooks.get(marketId)`` signature so MarketView can do a
+        ``MarketplaceBooks.get(marketId)`` signature so MarketView can do a
         null-tolerant lookup.
         """
         return self._books.get(market_id)
