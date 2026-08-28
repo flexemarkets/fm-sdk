@@ -1,6 +1,9 @@
 {
   "type": "ClientConnection",
-  "why": "sessionId is null when the marketplace has never opened a session, and that is not the same as zero.",
+  "why": "sessionId is null when the marketplace has never opened a session, and that is not the same as zero. Also the older `connectionId` spelling, which all three SDKs still accept.",
+  "source": {
+    "constructed": "a marketplace that has never opened a session, which a working dev server does not have, and the pre-rename `connectionId` field. The server sends `id` now; every SDK accepts both on purpose -- Java by @JsonAlias, Python and TypeScript by falling back -- and this is what keeps the old path covered once nothing sends it any more."
+  },
   "payload": {
     "marketplaceId": 3050,
     "connectionId": 991,

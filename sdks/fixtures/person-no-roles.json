@@ -1,6 +1,9 @@
 {
   "type": "Person",
   "why": "The server omits roles for a user who has none. An absent list is empty, so has_role can be asked without a null check.",
+  "source": {
+    "constructed": "a user the server omits `roles` for. Whether one exists is an accident of the data, and the case is that an absent list reads as empty."
+  },
   "payload": {
     "id": 8,
     "accountId": 1,

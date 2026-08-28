@@ -1,6 +1,14 @@
 {
   "type": "OrdersSnapshot",
   "why": "What fm-server actually sends today: a bare array, no envelope. Every SDK read `_embedded` and nothing else, so this threw in Java and Python and silently returned an empty book in TypeScript -- and MarketView seeds from it, so observe() could not be constructed at all.",
+  "source": {
+    "captured": {
+      "path": "/v1/marketplaces/{marketplaceId}/orders/active",
+      "body": true,
+      "server": "4.3.1",
+      "on": "2026-08-28"
+    }
+  },
   "payload": [
     {
       "createdDate": "2026-08-27T22:12:58.945770",

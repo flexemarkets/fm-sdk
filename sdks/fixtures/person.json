@@ -1,6 +1,13 @@
 {
   "type": "Person",
   "why": "Roles is a list of strings and must never be null -- callers ask whether it contains a role.",
+  "source": {
+    "captured": {
+      "link": "usersJson",
+      "server": "4.3.1",
+      "on": "2026-08-28"
+    }
+  },
   "payload": {
     "id": 7,
     "accountId": 1,

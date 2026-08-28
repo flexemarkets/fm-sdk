@@ -1,6 +1,9 @@
 {
   "type": "Account",
   "why": "The state that pending was being confused with. These two fixtures are only meaningful as a pair.",
+  "source": {
+    "constructed": "the other half of that pair. Together they pin a distinction two SDKs collapsed; separately neither says anything."
+  },
   "payload": {
     "id": 6601,
     "name": "wile-e",

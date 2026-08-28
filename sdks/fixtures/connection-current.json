@@ -1,0 +1,30 @@
+{
+  "type": "ClientConnection",
+  "why": "The connection id arrives as `id`; it was `connectionId` and the SDKs still accept that, so nothing would have noticed the rename. This is the half that is captured from a running server, so the day the name moves again it is a failing check rather than a zero in somebody's connection list.",
+  "source": {
+    "captured": {
+      "path": "/v1/marketplaces/{marketplaceId}/connections",
+      "server": "4.3.1",
+      "on": "2026-08-28"
+    }
+  },
+  "payload": {
+    "createdDate": "2026-08-27T22:10:31.717571",
+    "description": "probe",
+    "established": "2026-08-27T22:10:31.71637",
+    "id": 526514,
+    "instance": "localhost.localdomain",
+    "lastModifiedDate": "2026-08-27T22:10:31.717571",
+    "marketplaceId": 4505,
+    "ownerId": 52,
+    "sessionId": 184235,
+    "terminated": "2026-08-27T22:10:31.767377"
+  },
+  "expect": {
+    "connectionId": 526514,
+    "marketplaceId": 4505,
+    "ownerId": 52,
+    "sessionId": 184235,
+    "description": "probe"
+  }
+}

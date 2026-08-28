@@ -1,6 +1,9 @@
 {
   "type": "Order",
   "why": "A cancel carries no side. The field must survive as null rather than defaulting to BUY, which would read as a live buy order.",
+  "source": {
+    "constructed": "a CANCEL row. No cancel exists in the data this was captured against, and a refresh pointed at an orders route would replace it with a LIMIT and destroy the case -- the whole point is that a cancel carries no side."
+  },
   "payload": {
     "id": 8802,
     "original": 8801,

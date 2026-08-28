@@ -1,6 +1,9 @@
 {
   "type": "Order",
   "why": "A value the SDK does not know parses to null rather than throwing. A server that adds a side should not stop an old client reading the orders it does understand.",
+  "source": {
+    "constructed": "a side value the SDK does not know, so that a server which adds one later degrades to null rather than throwing. No server sends this today, which is the point."
+  },
   "payload": {
     "id": 8803,
     "type": "SWAP",

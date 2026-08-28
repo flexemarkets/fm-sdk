@@ -1,6 +1,9 @@
 {
   "type": "OrdersSnapshot",
   "why": "The oldest spelling: Spring HATEOAS pluralising OrderDto. This is the name that broke silently the first time -- the server stopped sending it, every SDK kept reading it, and active-orders returned an empty list for months while the books filled from live deltas and looked plausible. The alias is kept for older servers; nothing proved it worked.",
+  "source": {
+    "constructed": "the oldest spelling of that envelope, from before the server stopped pluralising OrderDto. Kept for the same reason and just as deliberately not current."
+  },
   "payload": {
     "_embedded": {
       "orderDtoes": [

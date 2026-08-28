@@ -1,6 +1,9 @@
 {
   "type": "Order",
   "why": "consumer > 0 means consumed, 0 means split, null means available -- three states in one number, so the zero must not collapse to null.",
+  "source": {
+    "constructed": "the three states of `consumer` -- zero is a split, not an absence. Picking a row off a live route gets whichever state that server happens to hold, and the case is about a specific one."
+  },
   "payload": {
     "id": 8804,
     "consumer": 0,

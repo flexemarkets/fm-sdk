@@ -6,6 +6,7 @@ VENV_PY := $(PY_VENV)/bin/python
 VERSION := $(shell cat VERSION)
 
 .PHONY: all install build check test clean set-version set-spi-version spi-version \
+       check-fixtures check-fixtures-live \
        install-python install-typescript install-java install-mcp \
        build-python build-typescript build-java \
        check-parity check-sdks check-python check-typescript check-java check-mcp \
@@ -32,7 +33,7 @@ check: check-sdks check-mcp
 # Everything that gates a publish, which is everything but the MCP server --
 # that is a local tool, in no publish target, and a missing venv for it must
 # not stand between a fix and a registry.
-check-sdks: check-parity check-python check-typescript check-java \
+check-sdks: check-parity check-fixtures check-python check-typescript check-java \
        test-python test-typescript test-java
 
 # The three SDKs are hand-written and every type is declared three times, so
@@ -41,6 +42,27 @@ check-sdks: check-parity check-python check-typescript check-java \
 # installing three of them.
 check-parity:
 	$(PYTHON) scripts/check-parity.py
+
+# Every fixture says where its payload came from: a route it was captured from,
+# or why no live server produces it. Needs no server -- the half that does is
+# `check-fixtures-live`, below, which a release should run.
+#
+# check-parity holds the three SDKs to each other. Nothing held the fixtures to
+# fm-server, and being wrong together is the failure this repo actually has:
+# _embedded.orderDtoes became _embedded.orders, every SDK kept reading the old
+# name, and every suite stayed green because every suite compared the SDK to a
+# fixture rather than to the server.
+check-fixtures:
+	$(PYTHON) scripts/capture-fixtures.py --audit
+
+# Against a running fm-server: have the captured shapes moved? Not in check-sdks
+# because it needs a server, and a check that cannot run offline should not
+# stand between a fix and a registry. Run it before a release, and after any
+# fm-server change that touches a response body.
+#
+#   make check-fixtures-live ENDPOINT=http://localhost:8080/api/marketplaces/4505
+check-fixtures-live:
+	$(PYTHON) scripts/capture-fixtures.py --check $(if $(ENDPOINT),--endpoint $(ENDPOINT),)
 
 test: check
 

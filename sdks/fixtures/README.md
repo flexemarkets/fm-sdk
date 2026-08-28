@@ -44,6 +44,42 @@ to a string would run it back through the SDK's own timestamp parser, so a
 parser that is wrong in both directions would agree with itself. A number does
 not.
 
+## Where a payload came from
+
+Every fixture declares a `source`, and it is one of two things:
+
+```json
+"source": { "captured": { "path": "/v1/marketplaces/{marketplaceId}/connections",
+                          "server": "4.3.1", "on": "2026-08-28" } }
+"source": { "constructed": "why no live server produces this" }
+```
+
+A **captured** fixture names a route, and `scripts/capture-fixtures.py --check`
+re-fetches it and compares the *shape* — field names and JSON types, recursively
+— against what is stored. Use `link` instead of `path` for a route the API root
+advertises, so a link the root stops advertising is itself a finding. A
+**constructed** fixture is an envelope an older server sends, a value the SDK
+must tolerate, or a state this server has no example of. Both are legitimate;
+not saying which is not.
+
+This exists because a fixture is a *belief* about the server, and nothing
+compared the beliefs to the server. That is how `_embedded.orderDtoes` became
+`_embedded.orders` with every SDK still reading the old name, returning an empty
+book for months — every suite green, because every suite was asking the SDK to
+agree with a fixture rather than with fm-server. The check found a stale one on
+its first run: `connection` still claimed `connectionId`, which the server had
+replaced with `id`.
+
+```bash
+make check-fixtures                     # offline: every fixture declares a source
+make check-fixtures-live ENDPOINT=...   # against a server: has a shape moved?
+scripts/capture-fixtures.py --write     # refresh captured payloads for review
+```
+
+A field the server sends that a fixture omits is a note, not a failure — a case
+is allowed to be about one field. A field the fixture has and the server no
+longer sends, or one whose type changed, is the failure.
+
 ## Behaviour fixtures: `behaviour/`
 
 The documents above are one payload each, run through every parser that claims

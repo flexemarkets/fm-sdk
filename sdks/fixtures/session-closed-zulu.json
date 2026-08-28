@@ -1,6 +1,9 @@
 {
   "type": "Session",
   "why": "The other timestamp shape. Some routes carry an explicit Z; both must land on the same instant.",
+  "source": {
+    "constructed": "the explicit-Z timestamp shape some routes carry. Which shape a capture returns depends on the route it was pointed at, so pinning both means constructing one of them."
+  },
   "payload": {
     "marketplaceId": 3050,
     "id": 40,

@@ -1,6 +1,14 @@
 {
   "type": "Session",
   "why": "Timestamps again, on the type that has two parsers: fm-server sends sessions over REST and over the WebSocket, and both paths must produce the same Session.",
+  "source": {
+    "captured": {
+      "link": "sessionsJson",
+      "query": "marketplaceId={marketplaceId}",
+      "server": "4.3.1",
+      "on": "2026-08-28"
+    }
+  },
   "payload": {
     "marketplaceId": 3050,
     "allocationId": 12,

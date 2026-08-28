@@ -1,6 +1,9 @@
 {
   "type": "Market",
   "why": "Both tick grids. Transposing a price bound and a unit bound produces a market that posts cleanly and cannot be traded in.",
+  "source": {
+    "constructed": "both tick grids populated and a transposition visible. Live markets in a dev marketplace do not reliably carry all four bounds, and a capture that found a market without them would quietly weaken the case."
+  },
   "payload": {
     "id": 11,
     "marketplaceId": 3050,

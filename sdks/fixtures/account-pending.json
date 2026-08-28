@@ -1,6 +1,9 @@
 {
   "type": "Account",
   "why": "approval is a Boolean on the server: null until somebody decides. Python and TypeScript both read it as false -- a suspended account -- until 781b5ee.",
+  "source": {
+    "constructed": "an account awaiting a decision. A server with one is a server mid-signup, so this is built rather than found -- and it is half of a pair whose whole point is that pending and suspended are different."
+  },
   "payload": {
     "id": 6600,
     "name": "acme",

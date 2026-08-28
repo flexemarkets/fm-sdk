@@ -1,6 +1,9 @@
 {
   "type": "Holding",
   "why": "Positions arrive as `securities` on one route and `assets` on another, and short units as `shortUnits` or `initialShortUnits`. Out of market order on purpose: a holding sorts them.",
+  "source": {
+    "constructed": "one route spells positions `securities` and another `assets`. A capture records whichever route it was pointed at, which is exactly the half of the case that does not need pinning."
+  },
   "payload": {
     "marketplaceId": 3050,
     "sessionId": 41,

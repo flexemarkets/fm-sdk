@@ -1,6 +1,9 @@
 {
   "type": "OrdersSnapshot",
   "why": "The Spring HATEOAS CollectionModel envelope an older fm-server sends. Accepting the bare array must not stop this working, or fixing the new shape breaks every deployment still on the old one.",
+  "source": {
+    "constructed": "the Spring HATEOAS envelope an older fm-server sends. Deliberately not what this server sends -- it is the shape the SDK must still tolerate."
+  },
   "payload": {
     "_embedded": {
       "orders": [
