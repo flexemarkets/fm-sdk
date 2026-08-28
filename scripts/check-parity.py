@@ -39,8 +39,17 @@ JAVA = ROOT / "sdks/java/fm-sdk/src/main/java/fm"
 # package pulls those in and reports eighteen differences that are all correct.
 PYTHON_PKG = ROOT / "sdks/python/fm"
 TYPESCRIPT_SRC = ROOT / "sdks/typescript/src"
-PYTHON = [PYTHON_PKG / "types.py", PYTHON_PKG / "_hal.py"]
-TYPESCRIPT = [TYPESCRIPT_SRC / "types.ts", TYPESCRIPT_SRC / "hal.ts"]
+# trades is here for Trade, which is not a wire type -- the exchange sends no
+# such object, the SDKs assemble it from a pair of orders. It is compared
+# anyway, because the three assemble it identically on purpose and nothing else
+# would notice if one of them stopped. Java needs no listing: java_types rglobs
+# the package, so its record was already being read -- and read alone, which is
+# the shape of the miss. A type only Java declares falls out of the
+# intersection and is not compared at all, so `parity ok` said 18 shared types
+# both before Trade existed and after it existed in one language.
+PYTHON = [PYTHON_PKG / "types.py", PYTHON_PKG / "_hal.py", PYTHON_PKG / "trades.py"]
+TYPESCRIPT = [TYPESCRIPT_SRC / "types.ts", TYPESCRIPT_SRC / "hal.ts",
+              TYPESCRIPT_SRC / "trades.ts"]
 
 # What a full run compares. A list of modules cannot notice a type that moves
 # out of one of them: ApiRoot went to the private _hal module and the run
@@ -48,8 +57,8 @@ TYPESCRIPT = [TYPESCRIPT_SRC / "types.ts", TYPESCRIPT_SRC / "hal.ts"]
 # had already taught this once -- three types moved to fm.internal and vanished
 # from the comparison -- and rglob fixed it there, which a wire/not-wire split
 # rules out here. So the count is the guard, and lowering it is an edit someone
-# has to make on purpose.
-EXPECTED_SHARED = 18
+# has to make on purpose. It went 18 -> 19 when Trade was added to all three.
+EXPECTED_SHARED = 19
 
 # Divergences that are intended. Each needs a reason, so that adding one is a
 # decision someone wrote down rather than a way to silence the check.
