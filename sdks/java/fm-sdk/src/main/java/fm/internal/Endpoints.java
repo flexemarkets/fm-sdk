@@ -1,4 +1,4 @@
-package fm;
+package fm.internal;
 
 import java.io.IOException;
 import java.nio.file.Files;

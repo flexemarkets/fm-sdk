@@ -1,5 +1,8 @@
 package fm;
 
+import fm.internal.FrameUnreadable;
+import fm.internal.Reconnected;
+
 /**
  * The event stream dropped.
  *

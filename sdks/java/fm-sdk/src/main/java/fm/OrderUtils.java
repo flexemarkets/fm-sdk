@@ -15,7 +15,7 @@ package fm;
  * reads the same way, and is one fewer name to know. Two ways to ask one
  * question is one too many.
  */
-public class OrderUtils {
+final class OrderUtils {
     private OrderUtils() {}
 
     /**

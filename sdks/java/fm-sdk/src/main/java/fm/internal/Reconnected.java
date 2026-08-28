@@ -1,4 +1,4 @@
-package fm;
+package fm.internal;
 
 /**
  * The stream is back.

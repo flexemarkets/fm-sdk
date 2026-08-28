@@ -1,7 +1,6 @@
 package fm.internal;
 
 import fm.Flexemarkets;
-import fm.FrameUnreadable;
 import fm.GapEvent;
 import fm.Holding;
 import fm.Market;
@@ -13,7 +12,6 @@ import fm.MarketBook;
 import fm.MarketplaceBooks;
 import fm.OrdersUpdate;
 import fm.ReconnectEvent;
-import fm.Reconnected;
 import fm.Session;
 import fm.OrderSide;
 import fm.Snapshot;

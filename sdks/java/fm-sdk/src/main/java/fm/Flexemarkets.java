@@ -1,5 +1,6 @@
 package fm;
 
+import fm.internal.Endpoints;
 import fm.internal.HttpFlexemarkets;
 
 import java.io.IOException;

@@ -2,7 +2,7 @@
 
 from .client import Flexemarkets
 from .enums import OrderType, OrderSide
-from .events import NO_SEQ, OrdersUpdate, FrameUnreadable, Reconnected, StreamDropped
+from .events import NO_SEQ, OrdersUpdate, StreamDropped
 from .snapshot import Snapshot
 from .exceptions import (
     AccountNameConflictError,
@@ -34,7 +34,6 @@ from .types import (
     Session,
     TickGrid,
     Token,
-    Version,
 )
 
 __all__ = [
@@ -56,7 +55,6 @@ __all__ = [
     "Session",
     "TickGrid",
     "Token",
-    "Version",
     # orderbook & trades
     "MarketBook",
     "MarketplaceBooks",
@@ -70,8 +68,6 @@ __all__ = [
     "ReconnectEvent",
     # events
     "StreamDropped",
-    "FrameUnreadable",
-    "Reconnected",
     "OrdersUpdate",
     # snapshot
     "Snapshot",

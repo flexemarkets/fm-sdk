@@ -5,7 +5,6 @@ import fm.Allotment;
 import fm.Assets;
 import fm.ClientConnection;
 import fm.ConflictFailure;
-import fm.Endpoints;
 import fm.Flexemarkets;
 import fm.Holding;
 import fm.ManagerOtpBundle;

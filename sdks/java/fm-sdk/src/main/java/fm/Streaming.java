@@ -1,5 +1,6 @@
 package fm;
 
+import fm.internal.Reconnected;
 import java.util.concurrent.BlockingQueue;
 
 /**
