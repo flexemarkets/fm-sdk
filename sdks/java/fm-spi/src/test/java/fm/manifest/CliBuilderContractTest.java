@@ -24,32 +24,32 @@ import org.junit.jupiter.api.Test;
  */
 class CliBuilderContractTest {
 
-    private static ParameterSpec option(String name, String cli, String defaultValue) {
+    private static ParameterSpec _option(String name, String cli, String defaultValue) {
         return new ParameterSpec(name, cli, ParameterType.OPTION, ValueType.INTEGER,
                 null, null, false, defaultValue, null, null, null, null, null, null);
     }
 
-    private static ParameterSpec positional(String name, boolean required) {
+    private static ParameterSpec _positional(String name, boolean required) {
         return new ParameterSpec(name, name.toUpperCase(java.util.Locale.ROOT), ParameterType.POSITIONAL,
                 ValueType.FLOAT, null, null, required, null, null, null, null, null, null, null);
     }
 
-    private static ParameterSpec pairs(String name) {
+    private static ParameterSpec _pairs(String name) {
         return new ParameterSpec(name, "(SYMBOL SPREAD)...", ParameterType.POSITIONAL_PAIRS,
                 null, null, null, true, null, null, null, null, null, null, null);
     }
 
-    private static ParameterSpec platform(String name, String cli, String source) {
+    private static ParameterSpec _platform(String name, String cli, String source) {
         return new ParameterSpec(name, cli, ParameterType.OPTION, ValueType.STRING,
                 null, null, true, null, null, source, null, null, null, null);
     }
 
-    private static Manifest manifest() {
+    private static Manifest _manifest() {
         return new Manifest("fm-maker-mvo", "MVO Market Maker", "0.9.0", null, null, "jar",
                 new Manifest.Parameters(
-                        List.of(positional("penalty", true), option("interval", "-i", "2000")),
-                        List.of(pairs("symbolSpreads")),
-                        List.of(platform("credential", "-C", "session-token"))));
+                        List.of(_positional("penalty", true), _option("interval", "-i", "2000")),
+                        List.of(_pairs("symbolSpreads")),
+                        List.of(_platform("credential", "-C", "session-token"))));
     }
 
     // --- ownership --------------------------------------------------------------
@@ -61,7 +61,7 @@ class CliBuilderContractTest {
      */
     @Test
     void aParticipantCannotSupplyAManagerParameter() {
-        assertThatThrownBy(() -> CliBuilder.merge(manifest(),
+        assertThatThrownBy(() -> CliBuilder.merge(_manifest(),
                 Map.of(), Map.of("interval", "1"), Map.of()))
                 .isInstanceOf(CliBuilder.InvalidLaunchException.class);
     }
@@ -77,7 +77,7 @@ class CliBuilderContractTest {
      */
     @Test
     void aManagerMaySupplyAUserEligibleParameterTheyHaveNotExposed() {
-        Map<String, String> merged = CliBuilder.merge(manifest(),
+        Map<String, String> merged = CliBuilder.merge(_manifest(),
                 Map.of("penalty", "0.03", "symbolSpreads", "AAPL 0.5"),
                 Map.of(),
                 Map.of("credential", "a-token"));
@@ -105,14 +105,14 @@ class CliBuilderContractTest {
 
     @Test
     void nobodyButThePlatformSuppliesAPlatformParameter() {
-        assertThatThrownBy(() -> CliBuilder.merge(manifest(),
+        assertThatThrownBy(() -> CliBuilder.merge(_manifest(),
                 Map.of("credential", "stolen"), Map.of(), Map.of()))
                 .isInstanceOf(CliBuilder.InvalidLaunchException.class);
     }
 
     @Test
     void eachOwnerSuppliesItsOwnAndTheyCombine() {
-        Map<String, String> merged = CliBuilder.merge(manifest(),
+        Map<String, String> merged = CliBuilder.merge(_manifest(),
                 Map.of("penalty", "0.03"),
                 Map.of("symbolSpreads", "AAPL 0.5"),
                 Map.of("credential", "a-token"));
@@ -126,7 +126,7 @@ class CliBuilderContractTest {
     /** A declared default applies when nobody supplies a value. */
     @Test
     void aDeclaredDefaultFillsIn() {
-        assertThat(CliBuilder.merge(manifest(),
+        assertThat(CliBuilder.merge(_manifest(),
                 Map.of("penalty", "0.03"), Map.of("symbolSpreads", "AAPL 0.5"),
                 Map.of("credential", "a-token")))
                 .containsEntry("interval", "2000");
@@ -142,7 +142,7 @@ class CliBuilderContractTest {
      */
     @Test
     void argumentsComeOutOptionsThenPositionalsThenGroups() {
-        List<String> arguments = CliBuilder.arguments(manifest(),
+        List<String> arguments = CliBuilder.arguments(_manifest(),
                 Map.of("penalty", "0.03", "interval", "5000"),
                 Map.of("symbolSpreads", "AAPL 0.5 MSFT 0.25"),
                 Map.of("credential", "a-token"));
@@ -157,7 +157,7 @@ class CliBuilderContractTest {
 
     @Test
     void platformValuesAreSpeltAsTheManifestDeclares() {
-        assertThat(CliBuilder.arguments(manifest(),
+        assertThat(CliBuilder.arguments(_manifest(),
                 Map.of("penalty", "0.03"), Map.of("symbolSpreads", "AAPL 0.5"),
                 Map.of("credential", "a-token")))
                 .containsSequence("-C", "a-token");
@@ -166,7 +166,7 @@ class CliBuilderContractTest {
     /** Half a pair is a typo, not an argument list. */
     @Test
     void anIncompleteGroupIsRefused() {
-        assertThatThrownBy(() -> CliBuilder.arguments(manifest(),
+        assertThatThrownBy(() -> CliBuilder.arguments(_manifest(),
                 Map.of("penalty", "0.03"), Map.of("symbolSpreads", "AAPL 0.5 MSFT"),
                 Map.of("credential", "a-token")))
                 .isInstanceOf(CliBuilder.InvalidLaunchException.class)
@@ -203,7 +203,7 @@ class CliBuilderContractTest {
      */
     @Test
     void anUndeclaredBoundAdmitsEverything() {
-        ParameterSpec unbounded = positional("penalty", true);
+        ParameterSpec unbounded = _positional("penalty", true);
 
         assertThat(unbounded.withinHardBounds(new java.math.BigDecimal("-1e9"))).isTrue();
         assertThat(unbounded.withinHardBounds(new java.math.BigDecimal("1e9"))).isTrue();
@@ -212,7 +212,7 @@ class CliBuilderContractTest {
 
     @Test
     void aRequiredParameterWithNoValueIsRefused() {
-        assertThatThrownBy(() -> CliBuilder.arguments(manifest(),
+        assertThatThrownBy(() -> CliBuilder.arguments(_manifest(),
                 Map.of(), Map.of("symbolSpreads", "AAPL 0.5"),
                 Map.of("credential", "a-token")))
                 .isInstanceOf(CliBuilder.InvalidLaunchException.class)

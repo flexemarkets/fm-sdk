@@ -27,12 +27,12 @@ public enum ParameterType {
      */
     POSITIONAL_TRIPLES("positional-triples", 3);
 
-    private final String json;
-    private final int groupSize;
+    private final String _json;
+    private final int _groupSize;
 
     ParameterType(String json, int groupSize) {
-        this.json = json;
-        this.groupSize = groupSize;
+        this._json = json;
+        this._groupSize = groupSize;
     }
 
     /**
@@ -45,7 +45,7 @@ public enum ParameterType {
      *         not repeat.
      */
     public int groupSize() {
-        return groupSize;
+        return _groupSize;
     }
 
     /**
@@ -54,7 +54,7 @@ public enum ParameterType {
      * @return whether one declaration can contribute many arguments.
      */
     public boolean repeating() {
-        return groupSize > 1;
+        return _groupSize > 1;
     }
 
     /**
@@ -64,7 +64,7 @@ public enum ParameterType {
      */
     @JsonValue
     public String json() {
-        return json;
+        return _json;
     }
 
     /**
@@ -79,7 +79,7 @@ public enum ParameterType {
     @JsonCreator
     public static ParameterType of(String value) {
         for (ParameterType type : values()) {
-            if (type.json.equals(value)) {
+            if (type._json.equals(value)) {
                 return type;
             }
         }

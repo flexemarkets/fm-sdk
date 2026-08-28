@@ -24,10 +24,10 @@ public enum ValueType {
     /** {@code true} or {@code false}, in any case. */
     BOOLEAN("boolean");
 
-    private final String json;
+    private final String _json;
 
     ValueType(String json) {
-        this.json = json;
+        this._json = json;
     }
 
     /**
@@ -37,7 +37,7 @@ public enum ValueType {
      */
     @JsonValue
     public String json() {
-        return json;
+        return _json;
     }
 
     /**
@@ -52,7 +52,7 @@ public enum ValueType {
     @JsonCreator
     public static ValueType of(String value) {
         for (ValueType type : values()) {
-            if (type.json.equals(value)) {
+            if (type._json.equals(value)) {
                 return type;
             }
         }
