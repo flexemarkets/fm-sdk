@@ -102,11 +102,16 @@ class Trades:
 
     # -- update from WebSocket events --------------------------------------
 
-    def update(self, orders: list[Order]) -> None:
+    def update(self, orders: list[Order]) -> list[Trade]:
+        """Apply an orders update, and return the trades it added -- oldest
+        first, and empty for the many updates that move the book without
+        trading. What :class:`~fm.market_view.MarketView` hands to an
+        ``on_trade`` handler.
+        """
         with self._lock:
-            self._update(orders)
+            return self._update(orders)
 
-    def _update(self, orders: list[Order]) -> None:
+    def _update(self, orders: list[Order]) -> list[Trade]:
         found: list[Trade] = []
 
         for order in orders:
@@ -128,6 +133,7 @@ class Trades:
         # the placeholder below is only ever compared with itself.
         found.sort(key=lambda t: (t.at is None, t.at or _NO_TIME))
         self._container.extend(found)
+        return found
 
     # -- query -------------------------------------------------------------
 
@@ -173,9 +179,21 @@ class MarketplaceTrades:
             m.id: Trades(m, capacity) for m in markets
         }
 
-    def update(self, orders: list[Order]) -> None:
-        for t in self._trades.values():
-            t.update(orders)
+    def update(self, orders: list[Order]) -> dict[int, list[Trade]]:
+        """Apply an orders update to every tape, and return the trades each
+        market gained, keyed by market id, with markets that gained none left
+        out -- which is most of them on most updates.
+
+        :class:`~fm.market_view.MarketView` dispatches ``on_trade`` from this
+        rather than diffing tape sizes, since a full tape drops its oldest as it
+        takes a new one and the size does not move.
+        """
+        added: dict[int, list[Trade]] = {}
+        for market_id, tape in self._trades.items():
+            fresh = tape.update(orders)
+            if fresh:
+                added[market_id] = fresh
+        return added
 
     def most_recent_prices(self) -> list[list[int]]:
         return [

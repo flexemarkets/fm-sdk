@@ -28,7 +28,7 @@ import type { Market, Order } from "../src/types.js";
 const DIR = fileURLToPath(new URL("../../fixtures/behaviour/", import.meta.url));
 const FILES = readdirSync(DIR).filter((f) => f.endsWith(".json")).sort();
 
-interface Step { orders: Record<string, unknown>[]; clear?: boolean }
+interface Step { orders: Record<string, unknown>[]; clear?: boolean; adds?: number; note?: string }
 interface Fixture {
   type: string;
   market: { id: number; symbol: string };
@@ -48,10 +48,23 @@ function drive(doc: Fixture): OrderBook | Trades {
     ? new OrderBook(market(doc))
     : new Trades(market(doc));
 
-  for (const step of doc.steps) {
+  doc.steps.forEach((step, index) => {
     if (step.clear) aggregator.clear();
-    aggregator.update(step.orders.map(parseOrder) as Order[]);
-  }
+
+    const added = aggregator.update(step.orders.map(parseOrder) as Order[]);
+
+    // What update() reports it added is what MarketView dispatches onTrade
+    // from. A step that declares `adds` pins it — including the zero, which is
+    // the update a handler must stay silent through.
+    if (step.adds !== undefined) {
+      const count = added instanceof Map
+        ? [...added.values()].reduce((n, t) => n + t.length, 0)
+        : (added as unknown[]).length;
+      assert.equal(count, step.adds,
+        `step ${index} (${step.note ?? ""}) reported ${count} new trades, ` +
+          `expected ${step.adds}`);
+    }
+  });
   return aggregator;
 }
 

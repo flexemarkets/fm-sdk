@@ -85,6 +85,13 @@ class MarketViewHandle implements MarketView {
         return sub;
     }
 
+    @Override public Subscription onTrade(long marketId, Consumer<fm.Trade> handler) {
+        _check();
+        Subscription sub = shared.onTrade(marketId, handler);
+        mySubscriptions.add(sub);
+        return sub;
+    }
+
     @Override public Subscription onHoldingChange(Consumer<Holding> handler) {
         _check();
         Subscription sub = shared.onHoldingChange(handler);

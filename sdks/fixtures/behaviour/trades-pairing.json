@@ -1,13 +1,14 @@
 {
   "type": "Trades",
-  "why": "A trade is a pair of orders and the tape kept the resting one, so 'who took this trade' answered with the maker -- a real participant, at a real price, in a well-formed line. price and units come from the resting side, the time from the aggressor: the resting order here carries the LATER stamp, so reading the time off the wrong side fails on the value rather than on the ordering.",
+  "why": "A trade is a pair of orders and the tape kept the resting one, so 'who took this trade' answered with the maker -- a real participant, at a real price, in a well-formed line. price and units come from the resting side, the time from the aggressor: the resting order here carries the LATER stamp, so reading the time off the wrong side fails on the value rather than on the ordering. The second step is a resting order that crosses nothing: update() must report no new trades, because that is the update on which an onTrade handler must stay silent while the book moves under it.",
   "market": {
     "id": 7,
     "symbol": "A"
   },
   "deliveredIds": [
     102,
-    101
+    101,
+    110
   ],
   "steps": [
     {
@@ -46,6 +47,29 @@
           "sessionId": 1,
           "createdDate": "2026-08-28T09:58:00.000000",
           "lastModifiedDate": "2026-08-28T10:00:00.500000"
+        }
+      ],
+      "adds": 1
+    },
+    {
+      "note": "a bid arrives and rests -- the book moves, nothing trades",
+      "adds": 0,
+      "orders": [
+        {
+          "id": 110,
+          "original": 110,
+          "supplier": 110,
+          "consumer": null,
+          "type": "LIMIT",
+          "side": "BUY",
+          "symbol": "A",
+          "units": 3,
+          "price": 900,
+          "ownerId": 902,
+          "marketplaceId": 1,
+          "marketId": 7,
+          "sessionId": 1,
+          "lastModifiedDate": "2026-08-28T10:00:02.000000"
         }
       ]
     }

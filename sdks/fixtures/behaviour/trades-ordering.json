@@ -79,7 +79,8 @@
           "sessionId": 1,
           "lastModifiedDate": "2026-08-28T10:00:00.500000"
         }
-      ]
+      ],
+      "adds": 2
     }
   ],
   "expect": {

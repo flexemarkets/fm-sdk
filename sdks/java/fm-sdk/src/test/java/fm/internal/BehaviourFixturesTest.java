@@ -128,6 +128,7 @@ class BehaviourFixturesTest {
             book.update(orders(step));
         }
 
+
         JsonNode expect = doc.get("expect");
         expect.propertyNames().forEach(key -> {
             JsonNode want = expect.get(key);
@@ -147,11 +148,23 @@ class BehaviourFixturesTest {
 
     private void checkTrades(JsonNode doc) {
         Trades tape = new Trades(market(doc));
+        int index = 0;
         for (JsonNode step : doc.get("steps")) {
             if (step.path("clear").asBoolean(false)) {
                 tape.clear();
             }
-            tape.update(orders(step));
+
+            Trade[] added = tape.update(orders(step));
+
+            // What update() reports it added is what MarketView dispatches
+            // onTrade from. A step that declares `adds` pins it -- including
+            // the zero, which is the update a handler must stay silent through.
+            if (step.has("adds")) {
+                assertEquals(step.get("adds").asInt(), added.length,
+                        "step " + index + " (" + step.path("note").asString("") + ") "
+                        + "reported " + added.length + " new trades");
+            }
+            index++;
         }
 
         JsonNode expect = doc.get("expect");

@@ -86,7 +86,12 @@ export class Trades {
 
   // -- update from WebSocket events ------------------------------------------
 
-  update(orders: Order[]): void {
+  /**
+   * Apply an orders update, and return the trades it added — oldest first, and
+   * empty for the many updates that move the book without trading. What
+   * MarketView hands to an `onTrade` handler.
+   */
+  update(orders: Order[]): Trade[] {
     const found: Trade[] = [];
 
     for (const order of orders) {
@@ -104,6 +109,8 @@ export class Trades {
     // it delivered them in rather than being shuffled among themselves.
     found.sort((a, b) => time(a) - time(b));
     for (const trade of found) this._append(trade);
+
+    return found;
   }
 
   private _append(trade: Trade): void {
@@ -155,10 +162,24 @@ export class MarketplaceTrades {
     }
   }
 
-  update(orders: Order[]): void {
-    for (const t of this._trades.values()) {
-      t.update(orders);
+  /**
+   * Apply an orders update to every tape, and return the trades each market
+   * gained, keyed by market id, with markets that gained none left out — which
+   * is most of them on most updates.
+   *
+   * MarketView dispatches `onTrade` from this rather than diffing tape sizes,
+   * since a full tape drops its oldest as it takes a new one and the size does
+   * not move.
+   */
+  update(orders: Order[]): Map<number, Trade[]> {
+    const added = new Map<number, Trade[]>();
+
+    for (const [marketId, tape] of this._trades) {
+      const fresh = tape.update(orders);
+      if (fresh.length > 0) added.set(marketId, fresh);
     }
+
+    return added;
   }
 
   mostRecentPrices(): number[][] {

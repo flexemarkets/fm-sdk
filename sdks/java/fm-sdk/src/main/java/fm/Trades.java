@@ -114,8 +114,11 @@ public class Trades {
      * @param ordersUpdate orders as the stream delivered them; anything for
      *                     another market, and anything that is not one side of
      *                     a limit-against-limit match, is skipped
+     * @return the trades this update added, oldest first -- what
+     *         {@code MarketView} hands to an {@code onTrade} handler, and empty
+     *         for the many updates that move the book without trading
      */
-    public synchronized void update(Order[] ordersUpdate) {
+    public synchronized Trade[] update(Order[] ordersUpdate) {
         var found = new ArrayList<Trade>();
 
         for (var order : ordersUpdate) {
@@ -132,6 +135,8 @@ public class Trades {
         found.sort(Comparator.comparing(Trade::at,
             Comparator.nullsLast(Comparator.naturalOrder())));
         found.forEach(this::save);
+
+        return found.toArray(new Trade[0]);
     }
 
     /**

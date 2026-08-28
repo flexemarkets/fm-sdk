@@ -3,6 +3,7 @@ package fm;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
@@ -33,9 +34,23 @@ public class MarketplaceTrades {
      * Apply an orders update to every tape.
      *
      * @param orders orders as the stream delivered them
+     * @return the trades each market gained, keyed by market id, with markets
+     *         that gained none left out -- which is most of them on most
+     *         updates. {@code MarketView} dispatches {@code onTrade} from this
+     *         rather than diffing tape sizes, since a full tape drops its
+     *         oldest as it takes a new one and the size does not move.
      */
-    public void update(Order[] orders) {
-        collection.values().forEach(t -> t.update(orders));
+    public Map<Long, List<Trade>> update(Order[] orders) {
+        Map<Long, List<Trade>> added = new LinkedHashMap<>();
+
+        collection.forEach((marketId, tape) -> {
+            Trade[] fresh = tape.update(orders);
+            if (fresh.length > 0) {
+                added.put(marketId, List.of(fresh));
+            }
+        });
+
+        return added;
     }
 
     /**

@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 
 from .events import NO_SEQ, OrdersUpdate, FrameUnreadable, Reconnected, StreamDropped
 from .orderbook import OrderBook, OrderBooks
-from .trades import MarketplaceTrades, Trades
+from .trades import MarketplaceTrades, Trade, Trades
 from .types import Holding, Market, Order, Session
 
 if TYPE_CHECKING:
@@ -98,6 +98,7 @@ class MarketView:
         self._session_handlers: list[Callable[[Session], None]] = []
         self._holding_handlers: list[Callable[[Holding], None]] = []
         self._book_handlers: list[tuple[int, Callable[[OrderBook], None]]] = []
+        self._trade_handlers: list[tuple[int, Callable[[Trade], None]]] = []
         self._gap_handlers: list[Callable[[GapEvent], None]] = []
         self._reconnect_handlers: list[Callable[[ReconnectEvent], None]] = []
 
@@ -213,6 +214,37 @@ class MarketView:
         def cancel() -> None:
             try:
                 self._book_handlers.remove(entry)
+            except ValueError:
+                pass
+
+        return cancel
+
+    def on_trade(self, market_id: int, handler: Callable[[Trade], None]) -> Subscription:
+        """Register a handler that fires for each trade on *market_id*.
+
+        The missing member of the family :meth:`on_order_book_change` and
+        :meth:`on_session_change` belong to. Without it, "tell me when a trade
+        happens" is asked as "tell me when the book changed, then let me look"
+        -- which answers a different question, since a book changes on every
+        resting order and most changes are not trades.
+
+        Fires **once per trade**, oldest first, rather than coalescing a batch
+        the way :meth:`on_order_book_change` does. A trade is a discrete event
+        with its own price and counterparties; collapsing two into one callback
+        would lose one of them.
+
+        Live deltas only. A gap or a reconnect re-seeds the tape from the
+        server's snapshot, and those trades do not fire here -- they are not
+        new, they are what was missed. :meth:`on_gap` and :meth:`on_reconnect`
+        are how a caller learns that happened.
+        """
+        self._ensure_open()
+        entry = (market_id, handler)
+        self._trade_handlers.append(entry)
+
+        def cancel() -> None:
+            try:
+                self._trade_handlers.remove(entry)
             except ValueError:
                 pass
 
@@ -398,7 +430,18 @@ class MarketView:
         orders = event.orders
         touched = _market_ids_touched(orders)
         self._order_books.update(orders)
-        self._trades.update(orders)
+        traded = self._trades.update(orders)
+
+        # Trades first: the more specific event, and a book handler that then
+        # reads the tape sees the same trade the trade handler was just given.
+        # Both aggregators are already current either way -- what is ordered
+        # here is only which handler hears about it first.
+        for market_id, fresh in traded.items():
+            for entry_id, handler in self._trade_handlers:
+                if entry_id == market_id:
+                    for trade in fresh:
+                        handler(trade)
+
         for market_id in touched:
             book = self._order_books.get(market_id)
             if book is None:
@@ -513,6 +556,12 @@ class MarketViewHandle:
     ) -> Subscription:
         self._check()
         sub = self._shared.on_order_book_change(market_id, handler)
+        self._my_subscriptions.append(sub)
+        return sub
+
+    def on_trade(self, market_id: int, handler: Callable[[Trade], None]) -> Subscription:
+        self._check()
+        sub = self._shared.on_trade(market_id, handler)
         self._my_subscriptions.append(sub)
         return sub
 

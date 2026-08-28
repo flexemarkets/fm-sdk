@@ -83,6 +83,7 @@ public class DefaultMarketView implements MarketView {
     private final List<Consumer<Session>>                  sessionHandlers   = new CopyOnWriteArrayList<>();
     private final List<Consumer<Holding>>                  holdingHandlers   = new CopyOnWriteArrayList<>();
     private final List<OrderBookHandler>                   bookHandlers      = new CopyOnWriteArrayList<>();
+    private final List<TradeHandler>                       tradeHandlers     = new CopyOnWriteArrayList<>();
     private final List<Consumer<GapEvent>>                 gapHandlers       = new CopyOnWriteArrayList<>();
     private final List<Consumer<ReconnectEvent>>           reconnectHandlers = new CopyOnWriteArrayList<>();
 
@@ -226,6 +227,14 @@ public class DefaultMarketView implements MarketView {
     }
 
     @Override
+    public Subscription onTrade(long marketId, Consumer<fm.Trade> handler) {
+        _ensureOpen();
+        TradeHandler entry = new TradeHandler(marketId, handler);
+        tradeHandlers.add(entry);
+        return () -> tradeHandlers.remove(entry);
+    }
+
+    @Override
     public Subscription onHoldingChange(Consumer<Holding> handler) {
         _ensureOpen();
         holdingHandlers.add(handler);
@@ -363,7 +372,20 @@ public class DefaultMarketView implements MarketView {
         Order[] orders = update.orders();
         var touched = _marketIdsTouched(orders);
         orderBooks.update(orders);
-        trades.update(orders);
+        var traded = trades.update(orders);
+
+        // Trades first: the more specific event, and a book handler that then
+        // reads the tape sees the same trade the trade handler was just given.
+        // Both aggregators are already current either way -- what is ordered
+        // here is only which handler hears about it first.
+        for (var market : traded.entrySet()) {
+            for (var h : tradeHandlers) {
+                if (h.marketId == market.getKey()) {
+                    market.getValue().forEach(h.handler);
+                }
+            }
+        }
+
         for (long marketId : touched) {
             var book = orderBooks.get(marketId);
             if (book == null) continue;
@@ -404,4 +426,6 @@ public class DefaultMarketView implements MarketView {
     }
 
     private record OrderBookHandler(long marketId, Consumer<OrderBook> handler) {}
+
+    private record TradeHandler(long marketId, Consumer<fm.Trade> handler) {}
 }

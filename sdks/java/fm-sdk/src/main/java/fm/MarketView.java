@@ -130,6 +130,31 @@ public interface MarketView extends AutoCloseable {
     Subscription onOrderBookChange(long marketId, Consumer<OrderBook> handler);
 
     /**
+     * Register a handler that fires for each trade on {@code marketId}.
+     *
+     * <p>The missing member of the family {@link #onOrderBookChange} and
+     * {@link #onSessionChange} belong to. Without it, "tell me when a trade
+     * happens" is asked as "tell me when the book changed, then let me look" --
+     * which answers a different question, since a book changes on every resting
+     * order and most changes are not trades.
+     *
+     * <p>Fires <b>once per trade</b>, oldest first, rather than coalescing a
+     * batch the way {@link #onOrderBookChange} does. A trade is a discrete
+     * event with its own price and counterparties; collapsing two into one
+     * callback would lose one of them.
+     *
+     * <p>Live deltas only. A gap or a reconnect re-seeds the tape from the
+     * server's snapshot, and those trades do not fire here -- they are not new,
+     * they are what was missed. {@link #onGap} and {@link #onReconnect} are how
+     * a caller learns that happened.
+     *
+     * @param marketId the market to watch
+     * @param handler  called with each trade as it lands
+     * @return a handle that unsubscribes the handler
+     */
+    Subscription onTrade(long marketId, Consumer<Trade> handler);
+
+    /**
      * Register a handler for the caller's holding changes.
      *
      * @param handler called with the holding after each change

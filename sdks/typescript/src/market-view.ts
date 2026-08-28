@@ -12,7 +12,7 @@
 
 import type { Flexemarkets } from "./client.js";
 import { OrderBook, OrderBooks } from "./orderbook.js";
-import { MarketplaceTrades, type Trades } from "./trades.js";
+import { MarketplaceTrades, type Trade, type Trades } from "./trades.js";
 import { NO_SEQ, type EventListener, type FmEvent, type OrdersUpdate, type FrameUnreadable, type Reconnected, type StreamDropped } from "./stomp.js";
 import type { Holding, Market, Order, Session } from "./types.js";
 
@@ -93,6 +93,26 @@ export interface MarketView {
    */
   onOrderBookChange(marketId: number, handler: (b: OrderBook) => void): Subscription;
 
+  /**
+   * Register a handler that fires for each trade on `marketId`.
+   *
+   * The missing member of the family {@link onOrderBookChange} and
+   * {@link onSessionChange} belong to. Without it, "tell me when a trade
+   * happens" is asked as "tell me when the book changed, then let me look" —
+   * which answers a different question, since a book changes on every resting
+   * order and most changes are not trades.
+   *
+   * Fires **once per trade**, oldest first, rather than coalescing a batch the
+   * way {@link onOrderBookChange} does. A trade is a discrete event with its own
+   * price and counterparties; collapsing two into one callback would lose one.
+   *
+   * Live deltas only. A gap or a reconnect re-seeds the tape from the server's
+   * snapshot, and those trades do not fire here — they are not new, they are
+   * what was missed. {@link onGap} and {@link onReconnect} are how a caller
+   * learns that happened.
+   */
+  onTrade(marketId: number, handler: (t: Trade) => void): Subscription;
+
   /** Register a handler for the caller's holding changes. */
   onHoldingChange(handler: (h: Holding) => void): Subscription;
 
@@ -140,6 +160,7 @@ export class DefaultMarketView implements MarketView {
   private readonly _sessionHandlers: Array<(s: Session) => void> = [];
   private readonly _holdingHandlers: Array<(h: Holding) => void> = [];
   private readonly _bookHandlers: Array<{ marketId: number; handler: (b: OrderBook) => void }> = [];
+  private readonly _tradeHandlers: Array<{ marketId: number; handler: (t: Trade) => void }> = [];
   private readonly _gapHandlers: Array<(e: GapEvent) => void> = [];
   private readonly _reconnectHandlers: Array<(e: ReconnectEvent) => void> = [];
 
@@ -249,6 +270,16 @@ export class DefaultMarketView implements MarketView {
     return () => {
       const i = this._sessionHandlers.indexOf(handler);
       if (i >= 0) this._sessionHandlers.splice(i, 1);
+    };
+  }
+
+  onTrade(marketId: number, handler: (t: Trade) => void): Subscription {
+    this._ensureOpen();
+    const entry = { marketId, handler };
+    this._tradeHandlers.push(entry);
+    return () => {
+      const i = this._tradeHandlers.indexOf(entry);
+      if (i >= 0) this._tradeHandlers.splice(i, 1);
     };
   }
 
@@ -437,7 +468,18 @@ export class DefaultMarketView implements MarketView {
     const orders = update.orders;
     const touched = _marketIdsTouched(orders);
     this._orderBooks.update(orders);
-    this._trades.update(orders);
+    const traded = this._trades.update(orders);
+
+    // Trades first: the more specific event, and a book handler that then reads
+    // the tape sees the same trade the trade handler was just given. Both
+    // aggregators are already current either way — what is ordered here is only
+    // which handler hears about it first.
+    for (const [marketId, fresh] of traded) {
+      for (const h of this._tradeHandlers) {
+        if (h.marketId === marketId) for (const trade of fresh) h.handler(trade);
+      }
+    }
+
     for (const marketId of touched) {
       const book = this._orderBooks.get(marketId);
       if (!book) continue;
@@ -546,6 +588,13 @@ export class MarketViewHandle implements MarketView {
   onOrderBookChange(marketId: number, handler: (b: OrderBook) => void): Subscription {
     this._check();
     const sub = this._shared.onOrderBookChange(marketId, handler);
+    this._mySubscriptions.push(sub);
+    return sub;
+  }
+
+  onTrade(marketId: number, handler: (t: Trade) => void): Subscription {
+    this._check();
+    const sub = this._shared.onTrade(marketId, handler);
     this._mySubscriptions.push(sub);
     return sub;
   }

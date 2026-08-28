@@ -39,10 +39,20 @@ def _drive(doc: dict[str, Any]) -> Any:
     market = Market(id=doc["market"]["id"], symbol=doc["market"]["symbol"])
     aggregator = AGGREGATORS[doc["type"]](market)
 
-    for step in doc["steps"]:
+    for index, step in enumerate(doc["steps"]):
         if step.get("clear"):
             aggregator.clear()
-        aggregator.update([rest._parse_order(o) for o in step["orders"]])
+
+        added = aggregator.update([rest._parse_order(o) for o in step["orders"]])
+
+        # What update() reports it added is what MarketView dispatches on_trade
+        # from. A step that declares `adds` pins it -- including the zero, which
+        # is the update a handler must stay silent through.
+        if "adds" in step:
+            assert len(added) == step["adds"], (
+                f"step {index} ({step.get('note', '')!r}) reported "
+                f"{len(added)} new trades, expected {step['adds']}"
+            )
 
     return aggregator
 
