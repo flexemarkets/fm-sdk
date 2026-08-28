@@ -82,7 +82,7 @@ public class DefaultMarketView implements MarketView {
     // happens on robot startup / shutdown).
     private final List<Consumer<Session>>                  sessionHandlers   = new CopyOnWriteArrayList<>();
     private final List<Consumer<Holding>>                  holdingHandlers   = new CopyOnWriteArrayList<>();
-    private final List<OrderBookHandler>                   bookHandlers      = new CopyOnWriteArrayList<>();
+    private final List<MarketBookHandler>                  bookHandlers      = new CopyOnWriteArrayList<>();
     private final List<TradeHandler>                       tradeHandlers     = new CopyOnWriteArrayList<>();
     private final List<Consumer<GapEvent>>                 gapHandlers       = new CopyOnWriteArrayList<>();
     private final List<Consumer<ReconnectEvent>>           reconnectHandlers = new CopyOnWriteArrayList<>();
@@ -221,7 +221,7 @@ public class DefaultMarketView implements MarketView {
     @Override
     public Subscription onOrderBookChange(long marketId, Consumer<MarketBook> handler) {
         _ensureOpen();
-        OrderBookHandler entry = new OrderBookHandler(marketId, handler);
+        MarketBookHandler entry = new MarketBookHandler(marketId, handler);
         bookHandlers.add(entry);
         return () -> bookHandlers.remove(entry);
     }
@@ -425,7 +425,7 @@ public class DefaultMarketView implements MarketView {
         }
     }
 
-    private record OrderBookHandler(long marketId, Consumer<MarketBook> handler) {}
+    private record MarketBookHandler(long marketId, Consumer<MarketBook> handler) {}
 
     private record TradeHandler(long marketId, Consumer<fm.Trade> handler) {}
 }
