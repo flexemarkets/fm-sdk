@@ -1,5 +1,6 @@
 package fm;
 
+import static fm.OrderUtils.findOrder;
 import static fm.OrderUtils.isAvailable;
 import static fm.OrderUtils.isResting;
 import static fm.OrderUtils.isSplit;
@@ -87,7 +88,21 @@ public class OrderBook {
             if (!initialized) continue;
 
             if (OrderType.CANCEL == order.type()) {
-                remove(side, price, units);
+                // fm-server broadcasts a cancel as two rows: the CANCEL, and the LIMIT it
+                // consumed, which carries the cancel as its consumer. The resting branch
+                // below removes that limit, because a cancelled limit was on the book and
+                // isResting says so. Removing here as well takes the units off twice.
+                //
+                // Both removals landing on a level that held only the cancelled order left
+                // it empty either way, which is why this survived: the one test that
+                // covered a cancel used a single one-unit order. Give the level units from
+                // a second order and the cancel takes that one down with it.
+                //
+                // So remove only when the order being cancelled is not in this batch --
+                // which keeps a lone CANCEL working, and stops the pair double-counting.
+                if (findOrder(ordersUpdate, order.consumer()) == null) {
+                    remove(side, price, units);
+                }
                 continue;
             }
 

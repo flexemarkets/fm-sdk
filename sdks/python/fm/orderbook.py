@@ -8,7 +8,8 @@ from __future__ import annotations
 import threading
 from collections import defaultdict
 
-from .order_utils import is_available, is_cancel, is_resting, is_split, is_symbol, is_buy
+from .order_utils import (find_order, is_available, is_cancel, is_resting,
+                          is_split, is_symbol, is_buy)
 from .types import Market, Order
 
 
@@ -65,9 +66,21 @@ class OrderBook:
             if not self._initialized:
                 continue
 
-            # Remove CANCEL orders
             if is_cancel(order):
-                self._remove(side, price, units)
+                # fm-server broadcasts a cancel as two rows: the CANCEL, and the LIMIT it
+                # consumed, which carries the cancel as its consumer. The resting branch
+                # below removes that limit, because a cancelled limit was on the book and
+                # isResting says so. Removing here as well takes the units off twice.
+                #
+                # Both removals landing on a level that held only the cancelled order left
+                # it empty either way, which is why this survived: the one test that
+                # covered a cancel used a single one-unit order. Give the level units from
+                # a second order and the cancel takes that one down with it.
+                #
+                # So remove only when the order being cancelled is not in this batch --
+                # which keeps a lone CANCEL working, and stops the pair double-counting.
+                if find_order(orders, order.consumer) is None:
+                    self._remove(side, price, units)
                 continue
 
             # Remove split orders from book

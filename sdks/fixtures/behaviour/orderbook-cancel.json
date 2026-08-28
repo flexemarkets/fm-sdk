@@ -1,0 +1,97 @@
+{
+  "type": "OrderBook",
+  "why": "Cancelling one of two orders resting at the same price emptied the level. fm-server broadcasts a cancel as two rows -- the CANCEL, and the LIMIT it consumed -- and update() removed for both: once in the CANCEL branch, once because a cancelled limit reads as resting. Invisible for as long as it was because the only cancel test used a single one-unit order, where removing twice and removing once both leave the level empty. Two owners, five units each, is what tells them apart.",
+  "market": {
+    "id": 7,
+    "symbol": "A"
+  },
+  "deliveredIds": [
+    101,
+    102,
+    101,
+    103
+  ],
+  "steps": [
+    {
+      "note": "two bids at 1000, five units each, from different owners",
+      "orders": [
+        {
+          "id": 101,
+          "original": 101,
+          "supplier": 101,
+          "consumer": null,
+          "type": "LIMIT",
+          "side": "BUY",
+          "symbol": "A",
+          "units": 5,
+          "price": 1000,
+          "ownerId": 900,
+          "marketplaceId": 1,
+          "marketId": 7,
+          "sessionId": 1
+        },
+        {
+          "id": 102,
+          "original": 102,
+          "supplier": 102,
+          "consumer": null,
+          "type": "LIMIT",
+          "side": "BUY",
+          "symbol": "A",
+          "units": 5,
+          "price": 1000,
+          "ownerId": 901,
+          "marketplaceId": 1,
+          "marketId": 7,
+          "sessionId": 1
+        }
+      ]
+    },
+    {
+      "note": "cancel 101 only: the limit carrying its cancel as consumer, and the CANCEL row -- the pair fm-server sends",
+      "orders": [
+        {
+          "id": 101,
+          "original": 101,
+          "supplier": 101,
+          "consumer": 103,
+          "type": "LIMIT",
+          "side": "BUY",
+          "symbol": "A",
+          "units": 5,
+          "price": 1000,
+          "ownerId": 900,
+          "marketplaceId": 1,
+          "marketId": 7,
+          "sessionId": 1
+        },
+        {
+          "id": 103,
+          "original": 103,
+          "supplier": 101,
+          "consumer": 101,
+          "type": "CANCEL",
+          "side": "BUY",
+          "symbol": "A",
+          "units": 5,
+          "price": 1000,
+          "ownerId": 900,
+          "marketplaceId": 1,
+          "marketId": 7,
+          "sessionId": 1
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "bestBuyPrice": 1000,
+    "bestBuyUnits": 5,
+    "hasValueBuy": true,
+    "buyLevels": [
+      [
+        1000,
+        5
+      ]
+    ]
+  }
+}

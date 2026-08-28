@@ -93,6 +93,7 @@ What is in there now, and what each would let through if it went missing:
 | `trades-pairing` | the tape keeping the resting order and dropping the incoming one, so "who took this trade" names the maker |
 | `trades-ordering` | the tape built backwards from a newest-first snapshot, so the *last* trade is the oldest one retained |
 | `orderbook-levels` | the two sides coming back in the wrong sequence, so `levels[0]` is not the top of book |
+| `orderbook-cancel` | a cancel removing twice — it found this one, live in all three SDKs |
 | `orderbook-split` | a partial fill counted twice, taking the level negative |
 | `orderbook-gap-reseed` | `clear()` leaving the book initialised, so the first delta after a gap underflows |
 

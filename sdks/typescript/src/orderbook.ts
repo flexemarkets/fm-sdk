@@ -4,7 +4,9 @@
  * Port of fm.orderbook (Python) / fm.OrderBook (Java).
  */
 
-import { isAvailable, isBuy, isCancel, isResting, isSplit, isSymbol } from "./order-utils.js";
+import {
+  findOrder, isAvailable, isBuy, isCancel, isResting, isSplit, isSymbol,
+} from "./order-utils.js";
 import type { Market, Order } from "./types.js";
 
 /**
@@ -52,9 +54,22 @@ export class OrderBook {
       // During initialisation, disregard all non-available orders
       if (!this._initialized) continue;
 
-      // Remove CANCEL orders
       if (isCancel(order)) {
-        this._remove(side, price, units);
+        // fm-server broadcasts a cancel as two rows: the CANCEL, and the LIMIT it
+        // consumed, which carries the cancel as its consumer. The resting branch
+        // below removes that limit, because a cancelled limit was on the book and
+        // isResting says so. Removing here as well takes the units off twice.
+        //
+        // Both removals landing on a level that held only the cancelled order left
+        // it empty either way, which is why this survived: the one test that
+        // covered a cancel used a single one-unit order. Give the level units from
+        // a second order and the cancel takes that one down with it.
+        //
+        // So remove only when the order being cancelled is not in this batch --
+        // which keeps a lone CANCEL working, and stops the pair double-counting.
+        if (findOrder(orders, order.consumer) === null) {
+          this._remove(side, price, units);
+        }
         continue;
       }
 
