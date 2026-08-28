@@ -113,16 +113,22 @@ public interface Reading {
     List<Order> orders(long marketplaceId, String symbol);
 
     /**
-     * Trades in one market, most recent first.
+     * Trades in one market, in ascending order id.
      *
      * <p>Answered by a symbol-keyed route, so the orders come back without the
      * symbol on them and with the trade id in {@code original}; both are filled
      * in before returning, which is what makes the result usable as a trade
      * list rather than a set of half-populated orders.
      *
+     * <p>This is the FM-3 surface ({@code /api/orders-json/symbol-trades}) and
+     * its order is the server's, which sorts by order id and nothing else. It
+     * is neither chronological by trade time nor most-recent-first, which this
+     * said it was: the first element is the lowest id, not the latest trade.
+     * Sort by {@code lastModifiedDate} if you want time order.
+     *
      * @param marketplaceId the marketplace to read
      * @param symbol        the market's symbol
-     * @return that market's trades, most recent first
+     * @return that market's trades, in ascending order id
      */
     List<Order> trades(long marketplaceId, String symbol);
 

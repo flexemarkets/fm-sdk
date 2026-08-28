@@ -1282,6 +1282,20 @@ export class Flexemarkets {
     return (data as unknown as JsonObject[]).map(parseOrder);
   }
 
+  /**
+   * Trades in one market, in ascending order id.
+   *
+   * Answered by a symbol-keyed route, so the orders come back without the
+   * symbol on them and with the trade id in `original`; both are filled in
+   * before returning, which is what makes the result a trade list rather than
+   * a set of half-populated orders.
+   *
+   * This is the FM-3 surface (`/api/orders-json/symbol-trades`) and its order
+   * is the server's, which sorts by order id and nothing else. It is neither
+   * chronological by trade time nor most-recent-first — the first element is
+   * the lowest id, not the latest trade. Sort by `lastModifiedDate` if you
+   * want time order.
+   */
   async trades(marketplaceId: number, symbol: string): Promise<Order[]> {
     const url = uriParamMarketplaceIdParam(
       this._apiRoot,
