@@ -258,6 +258,25 @@
                                  means Central accepted and published it, which
                                  is the part the build can be held to. -->
                             <waitUntil>PUBLISHED</waitUntil>
+                            <!-- 90 minutes, up from the plugin's 30. The wait
+                                 above is on the portal finishing, and the
+                                 portal's queue is not ours to predict: 0.1.3
+                                 uploaded cleanly, published a few minutes past
+                                 the half hour, and the build failed at 30:06
+                                 having already shipped every artifact. The
+                                 timeout was measuring the queue, not the
+                                 release.
+
+                                 It fires on the last module in the reactor,
+                                 whichever that is. The plugin stages every
+                                 module into one directory and uploads the
+                                 bundle once, at the end, so examples/ticker
+                                 carries fm-sdk's deployment. That is why a
+                                 module which publishes nothing is where a
+                                 release goes red, and why dropping it from the
+                                 reactor would move the problem rather than fix
+                                 it: fm-sdk would simply be last instead. -->
+                            <waitMaxTime>5400</waitMaxTime>
                             <!-- This plugin bundles every reactor module and
                                  does NOT honour maven.deploy.skip (that flag
                                  only governs maven-deploy-plugin, a different

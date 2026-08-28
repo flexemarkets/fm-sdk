@@ -141,7 +141,24 @@
                         second run cannot work and reports the version as already
                         taken.
 
-                        skipPublishing stops the execution rather than emptying it.
+                        skipPublishing does NOT make this module inert, and what
+                        stood here said it did. This module is last in the reactor,
+                        and the plugin stages every module into one directory and
+                        uploads the bundle once, from the last one. So this execution
+                        carries fm-sdk's whole deployment and then blocks on the
+                        parent's waitUntil=PUBLISHED. When 0.1.3 sat in the portal's
+                        queue past the plugin's 30 minute default, the release was
+                        complete and the build exited 1, for a module that shipped
+                        nothing.
+
+                        So the fix is neither here nor in the reactor's membership:
+                        dropping this module makes fm-sdk last and moves the same
+                        wait onto it. It is waitMaxTime in the parent, and the
+                        workflow asking Central before it believes a red build.
+
+                        skipPublishing stays because it costs nothing and keeps this
+                        module's coordinates out of a deployment if the parent's
+                        excludeArtifacts is ever edited.
                     -->
                     <plugin>
                         <groupId>org.sonatype.central</groupId>

@@ -132,11 +132,48 @@ jobs:
           # (Central -> repo1 sync can lag ~15-30m, so a re-run within that
           # window may still attempt and be rejected by the Portal.)
           VERSION=$(cat VERSION)
-          if curl -sfI "https://repo1.maven.org/maven2/com/flexemarkets/fm-sdk/$VERSION/fm-sdk-$VERSION.pom" >/dev/null; then
+          POM="https://repo1.maven.org/maven2/com/flexemarkets/fm-sdk/$VERSION/fm-sdk-$VERSION.pom"
+
+          if curl -sfI "$POM" >/dev/null; then
             echo "maven: com.flexemarkets:fm-sdk:$VERSION already on Central — skipping."
-          else
-            mvn -B deploy -P release --file sdks/java/pom.xml
+            exit 0
           fi
+
+          # The question this job exists to answer is "did the release land",
+          # and mvn's exit code does not answer it. The publish plugin blocks
+          # until the portal reports PUBLISHED, so a slow queue fails a build
+          # whose artifacts have already shipped -- 0.1.3 went out that way,
+          # and took the GitHub Release job down with it as a skipped
+          # dependency. So: run it, and if it goes red, ask Central.
+          set +e
+          mvn -B deploy -P release --file sdks/java/pom.xml
+          STATUS=$?
+          set -e
+
+          if [ $STATUS -eq 0 ]; then
+            echo "maven: deploy reported success."
+            exit 0
+          fi
+
+          echo "maven: deploy exited $STATUS — checking whether it shipped anyway."
+
+          # repo1 lags Central by roughly 15-30 minutes, so give it 40 before
+          # concluding the deployment really did fail. A genuine failure --- a
+          # rejected bundle, bad signature, duplicate coordinate --- pays this
+          # wait too, which is the right trade for a job that runs on a tag.
+          for _ in $(seq 1 40); do
+            if curl -sfI "$POM" >/dev/null; then
+              echo "maven: $VERSION is on Central. The deploy timed out waiting," \
+                   "not publishing; treating the release as successful."
+              exit 0
+            fi
+            sleep 60
+          done
+
+          echo "maven: $VERSION is not on Central after 40 minutes. This is a real failure."
+          echo "Do NOT re-run without checking the portal first: every registry here is"
+          echo "append-only, and a partially landed version cannot be replaced, only renumbered."
+          exit $STATUS
 
   github-release:
     name: Create GitHub Release
