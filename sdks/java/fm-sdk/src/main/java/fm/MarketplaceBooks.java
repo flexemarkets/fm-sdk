@@ -18,7 +18,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * caller who does not want to drive the event queue themselves.
  */
 public class MarketplaceBooks {
-    private final Map<Long, MarketBook> books = new ConcurrentHashMap<>();
+    private final Map<Long, MarketBook> _books = new ConcurrentHashMap<>();
 
     /**
      * An empty book per market.
@@ -27,7 +27,7 @@ public class MarketplaceBooks {
      */
     public MarketplaceBooks(List<Market> markets) {
         for (var market : markets) {
-            books.put(market.id(), new MarketBook(market));
+            _books.put(market.id(), new MarketBook(market));
         }
     }
 
@@ -38,7 +38,7 @@ public class MarketplaceBooks {
      *               those carrying its own symbol
      */
     public void update(Order[] orders) {
-        books.values().forEach(b -> b.update(orders));
+        _books.values().forEach(b -> b.update(orders));
     }
 
     /**
@@ -48,7 +48,7 @@ public class MarketplaceBooks {
      * @return its book, or null if no book is kept for that market
      */
     public MarketBook get(long marketId) {
-        return books.get(marketId);
+        return _books.get(marketId);
     }
 
     /**
@@ -85,11 +85,11 @@ public class MarketplaceBooks {
      * @return the books, in no particular order
      */
     public Collection<MarketBook> collection() {
-        return books.values();
+        return _books.values();
     }
 
     /** Clear every contained book — see {@link MarketBook#clear()}. */
     public void clear() {
-        books.values().forEach(MarketBook::clear);
+        _books.values().forEach(MarketBook::clear);
     }
 }
