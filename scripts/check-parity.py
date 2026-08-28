@@ -453,6 +453,136 @@ def typescript_failures(path: Path) -> set[str]:
             re.findall(r"^export class (\w+) extends \w*(?:Error)\b", path.read_text(), re.M)}
 
 
+# --- documentation surface --------------------------------------------------
+#
+# The method check says the same method exists in all three. It says nothing
+# about whether a caller in each language is told the same thing about it, and
+# that is where the next gap was: `trades()` documented an ordering in Java --
+# "most recent first" -- that the route does not have (it answers in ascending
+# order id), while Python and TypeScript documented no ordering at all. One
+# wrong sentence, in the one SDK that had a sentence to be wrong.
+#
+# A checker cannot tell whether prose is true. What it can tell is whether a
+# claim is being made in only one language, which is what let this one sit
+# unread: nobody working on the Python or TypeScript method had a sentence in
+# front of them to contradict.
+#
+# Java documents all 55; Python and TypeScript far fewer. Failing on every gap
+# at once would need a 45-name exemption list, which is a way to silence a
+# check rather than a check. So this is a ratchet: the debt is a number, a method
+# newly documented in one SDK and not the others pushes it up and fails, and
+# closing one pushes it down and fails until the number is lowered to match.
+# Both directions are a one-line edit someone makes on purpose.
+DOC_DEBT = 45
+
+_PY_DOCSTRING_OPENERS = ('"""', "'''", 'r"""')
+
+
+def java_documented(directory: Path) -> set[str]:
+    """Methods on the role interfaces carrying a javadoc block."""
+    documented: set[str] = set()
+
+    for name in JAVA_SURFACE:
+        lines = (directory / name).read_text().splitlines()
+        for index, line in enumerate(lines):
+            match = re.search(r"\b(\w+)\s*\(", line)
+            if not match or line.strip().startswith(("*", "//", "@")):
+                continue
+            cursor = index - 1
+            while cursor >= 0 and lines[cursor].strip().startswith("@"):
+                cursor -= 1
+            if cursor >= 0 and lines[cursor].strip().endswith("*/"):
+                documented.add(match.group(1))
+
+    return documented
+
+
+def python_documented(path: Path) -> set[str]:
+    """Methods whose body opens with a docstring.
+
+    The signature is found first and then walked to its closing paren: most of
+    these wrap over several lines, and the docstring sits after the `:`, not
+    after the `def`. Reading only the opening line found ten of them and missed
+    the rest -- the same wrapped-signature trap _signature() documents.
+    """
+    lines = path.read_text().splitlines()
+    documented: set[str] = set()
+
+    for index, line in enumerate(lines):
+        match = re.match(r"    def ([a-z][a-z0-9_]*)\s*\(", line)
+        if not match:
+            continue
+        depth = 0
+        for cursor in range(index, min(len(lines), index + 25)):
+            depth += lines[cursor].count("(") - lines[cursor].count(")")
+            if depth > 0 or not lines[cursor].rstrip().endswith(":"):
+                continue
+            for after in range(cursor + 1, min(len(lines), cursor + 3)):
+                if not lines[after].strip():
+                    continue
+                if lines[after].strip().startswith(_PY_DOCSTRING_OPENERS):
+                    documented.add(match.group(1))
+                break
+            break
+
+    return documented
+
+
+def typescript_documented(path: Path) -> set[str]:
+    """Methods preceded by a block comment."""
+    lines = path.read_text().splitlines()
+    documented: set[str] = set()
+
+    for index, line in enumerate(lines):
+        match = re.match(r"  (?:async )?([a-zA-Z][a-zA-Z0-9_]*)\s*(?:<[^>]*>)?\(", line)
+        if match and index and lines[index - 1].strip().endswith("*/"):
+            documented.add(match.group(1))
+
+    return documented
+
+
+def check_docs(verbose: bool) -> list[str]:
+    java = java_methods(JAVA)
+    python = python_methods(PYTHON_PKG / "client.py")
+    typescript = typescript_methods(TYPESCRIPT_SRC / "client.ts")
+    shared = set(java) & set(python) & set(typescript)
+
+    documented = (
+        java_documented(JAVA),
+        python_documented(PYTHON_PKG / "client.py"),
+        typescript_documented(TYPESCRIPT_SRC / "client.ts"),
+    )
+    if not all(documented):
+        return ["doc parity: a parser found nothing; it is broken, not the SDKs"]
+
+    lopsided = sorted(
+        name for name in shared
+        if any(name in side for side in documented)
+        and not all(name in side for side in documented)
+    )
+
+    if verbose:
+        print(f"  documented:     java {len(shared & documented[0])}, "
+              f"python {len(shared & documented[1])}, "
+              f"typescript {len(shared & documented[2])} (of {len(shared)} shared)")
+
+    if len(lopsided) > DOC_DEBT:
+        listed = "\n".join(f"      {name}" for name in lopsided)
+        return [
+            f"{len(lopsided)} methods are documented in some SDKs and not others, "
+            f"up from {DOC_DEBT}. Document the new one everywhere, or say why not:\n"
+            + listed
+        ]
+
+    if len(lopsided) < DOC_DEBT:
+        return [
+            f"only {len(lopsided)} methods are now documented unevenly, down from "
+            f"{DOC_DEBT} -- lower DOC_DEBT to {len(lopsided)} so the ratchet holds"
+        ]
+
+    return []
+
+
 def check_failures(verbose: bool) -> list[str]:
     java = java_failures(JAVA)
     python = python_failures(PYTHON_PKG / "exceptions.py")
@@ -619,6 +749,19 @@ def main() -> int:
             "method that demands an extra argument in one SDK is one its callers have to "
             "invent a value for. If a difference is intended, record it in "
             "METHOD_EXEMPTIONS (missing) or ARITY_EXEMPTIONS (arguments), with the reason.",
+            file=sys.stderr,
+        )
+        return 1
+
+    doc_problems = check_docs(verbose)
+    if doc_problems:
+        print("\nparity: the SDKs document the same method unevenly:\n", file=sys.stderr)
+        for problem in doc_problems:
+            print(f"  - {problem}", file=sys.stderr)
+        print(
+            "\nA method documented in one SDK and not the others is a contract claim "
+            "only one set of callers can read -- and only one maintainer can notice is "
+            "wrong. See DOC_DEBT for why this is a ratchet rather than pass/fail.",
             file=sys.stderr,
         )
         return 1
