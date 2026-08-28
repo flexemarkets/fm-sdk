@@ -1,4 +1,4 @@
-package fm;
+package fm.event;
 
 import fm.model.Order;
 

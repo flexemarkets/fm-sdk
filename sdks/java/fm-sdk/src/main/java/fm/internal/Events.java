@@ -1,14 +1,17 @@
 package fm.internal;
 
+import fm.event.FrameUnreadable;
+import fm.event.OrdersUpdate;
+import fm.event.Reconnected;
+import fm.event.StreamDropped;
+import fm.event.Version;
 import fm.role.Streaming;
 import fm.model.Holding;
 import fm.model.Order;
 import fm.model.Session;
 import fm.Flexemarkets;
 import fm.MarketView;
-import fm.OrdersUpdate;
 import fm.Snapshot;
-import fm.StreamDropped;
 import fm.Subscription;
 import fm.error.ApiException;
 import fm.error.AuthenticationException;

@@ -1,5 +1,7 @@
 package fm;
 
+import fm.event.GapEvent;
+import fm.event.ReconnectEvent;
 import fm.model.Holding;
 import fm.model.Market;
 import fm.model.Order;

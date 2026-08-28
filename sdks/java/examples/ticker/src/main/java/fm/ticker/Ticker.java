@@ -1,5 +1,7 @@
 package fm.ticker;
 
+import fm.event.OrdersUpdate;
+import fm.event.StreamDropped;
 import fm.model.Holding;
 import fm.model.Market;
 import fm.model.Session;
@@ -16,10 +18,8 @@ import com.googlecode.lanterna.screen.TerminalScreen;
 import com.googlecode.lanterna.terminal.DefaultTerminalFactory;
 import com.googlecode.lanterna.terminal.Terminal;
 
-import fm.StreamDropped;
 import fm.Flexemarkets;
 import fm.MarketBook;
-import fm.OrdersUpdate;
 import fm.MarketplaceTrades;
 import fm.MarketplaceBooks;
 

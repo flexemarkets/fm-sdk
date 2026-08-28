@@ -13,6 +13,7 @@ export type {
   Order,
   ClientConnection,
   TickGrid,
+  Version,
   ConflictFailure,
 } from "./types.js";
 
@@ -81,6 +82,8 @@ export type { Trade } from "./trades.js";
 export type {
   StompFrame,
   StreamDropped,
+  Reconnected,
+  FrameUnreadable,
   FmEvent,
   EventCallback,
 } from "./stomp.js";

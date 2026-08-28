@@ -1,5 +1,7 @@
 package fm.internal;
 
+import fm.event.GapEvent;
+import fm.event.ReconnectEvent;
 import fm.model.Holding;
 import fm.model.Market;
 import fm.model.Order;
@@ -7,10 +9,8 @@ import fm.model.OrderSide;
 import fm.model.Session;
 import fm.model.Trade;
 import fm.Flexemarkets;
-import fm.GapEvent;
 import fm.MarketView;
 import fm.MarketBook;
-import fm.ReconnectEvent;
 import fm.MarketTrades;
 import fm.Subscription;
 

@@ -1,4 +1,4 @@
-package fm.internal;
+package fm.event;
 
 /**
  * The stream carried something the SDK could not read.

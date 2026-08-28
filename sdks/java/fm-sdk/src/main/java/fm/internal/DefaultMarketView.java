@@ -1,5 +1,11 @@
 package fm.internal;
 
+import fm.event.FrameUnreadable;
+import fm.event.GapEvent;
+import fm.event.OrdersUpdate;
+import fm.event.ReconnectEvent;
+import fm.event.Reconnected;
+import fm.event.StreamDropped;
 import fm.model.Holding;
 import fm.model.Market;
 import fm.model.Marketplace;
@@ -8,15 +14,11 @@ import fm.model.OrderSide;
 import fm.model.Session;
 import fm.model.Trade;
 import fm.Flexemarkets;
-import fm.GapEvent;
 import fm.MarketView;
 import fm.MarketplaceTrades;
 import fm.MarketBook;
 import fm.MarketplaceBooks;
-import fm.OrdersUpdate;
-import fm.ReconnectEvent;
 import fm.Snapshot;
-import fm.StreamDropped;
 import fm.Subscription;
 import fm.MarketTrades;
 

@@ -1,4 +1,4 @@
-package fm.internal;
+package fm.event;
 /**
  * The stream protocol version, as the server announces it on connect.
  *

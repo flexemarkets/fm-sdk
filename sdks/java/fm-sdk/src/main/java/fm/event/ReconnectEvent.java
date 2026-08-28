@@ -1,4 +1,4 @@
-package fm;
+package fm.event;
 
 /**
  * Fires when {@link MarketView} reacts to a {@code StreamDropped} —

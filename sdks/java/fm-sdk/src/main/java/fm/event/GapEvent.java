@@ -1,4 +1,4 @@
-package fm;
+package fm.event;
 
 /**
  * Fires when {@link MarketView} detects a sequence-gap in the

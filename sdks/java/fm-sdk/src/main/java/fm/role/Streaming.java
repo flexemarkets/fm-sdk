@@ -1,9 +1,9 @@
 package fm.role;
 
+import fm.event.Reconnected;
+import fm.event.StreamDropped;
 import fm.MarketView;
-import fm.StreamDropped;
 import fm.Subscription;
-import fm.internal.Reconnected;
 import java.util.concurrent.BlockingQueue;
 
 /**
