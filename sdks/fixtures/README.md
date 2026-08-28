@@ -44,31 +44,60 @@ to a string would run it back through the SDK's own timestamp parser, so a
 parser that is wrong in both directions would agree with itself. A number does
 not.
 
-## Behaviour fixtures: `trades/`
+## Behaviour fixtures: `behaviour/`
 
 The documents above are one payload each, run through every parser that claims
-to produce their type. `trades/pairing.json` is a different thing: a batch of
-orders and the trades the tape must build from them. It lives in a
-subdirectory because the runner globs `*.json` at the top level and maps `type`
-to a parser, and this case has no single type to map.
+to produce their type. They compare *parsed field values*, and say nothing about
+what `OrderBook` and `Trades` do with a sequence of them — which is where the
+three SDKs have actually been wrong *together*. A book that double-counts a
+cancel and a tape that holds its trades backwards both parse every field
+correctly.
 
-It pins two answers that were wrong in all three SDKs at once and looked right
-in each:
+So `behaviour/` holds inputs and answers rather than payloads and fields:
 
-- **which side is which.** A trade is a pair of orders, and the tape kept the
-  resting one — so "who took this trade" named the maker, at a real price, in a
-  well-formed line. `Trade` now keeps both, and the fixture asserts the
-  aggressor by id and owner.
-- **what order the tape is in.** `/v1/orders/recent-trades` answered
-  newest-first up to and including fm-server 4.3.1, and the tape appended in
-  array order, so it was reversed and the newest trade sat at the front. The
-  fixture is deliberately delivered newest-first, the way that server did —
-  the tape sorts by time regardless of what arrives, so it stays right against
-  a server on either side of that change.
+```json
+{
+  "type": "OrderBook",
+  "why": "why this case exists — what breaks without it",
+  "market": { "id": 7, "symbol": "A" },
+  "deliveredIds": [101, 102],
+  "steps": [
+    { "note": "what this step is", "clear": false, "orders": [ ... ] }
+  ],
+  "expect": { "bestBuyPrice": 1000, "buyLevels": [[1000, 10]] }
+}
+```
 
-Within each pair the resting order carries the *later* timestamp — so a tape
-that reads the trade's time off the wrong side fails on the value rather than
-on the ordering, which the ordering assertion alone would not catch.
+- `type` names the aggregator to drive: `OrderBook` or `Trades`.
+- `steps` are applied in order, each an `update()`. `"clear": true` calls
+  `clear()` first, which is how `MarketView` recovers from a sequence gap.
+- `expect` is checked against the aggregator's state at the end. Only the keys
+  a case is about need to appear.
+- `deliveredIds` is every order id across every step, in order. It exists
+  because a case can be silently destroyed by tidying its input: the
+  `trades-ordering` fixture is only a test at all because its orders arrive
+  newest-first, and sorting them would leave it green and meaningless.
+
+`OrderBook` reads `bestBuyPrice`, `bestBuyUnits`, `bestSellPrice`,
+`bestSellUnits`, `hasValueBuy`, `hasValueSell`, `buyLevels` and `sellLevels`;
+levels are `[price, units]` pairs in the order the SDK returns them, so the
+three are held to one sequence despite Java returning a `Map` and the other two
+a list. `Trades` reads `size`, `trades`, `last` and `drain`; a trade compares
+`price`, `units`, `restingId`, `aggressorId`, `restingOwnerId`,
+`aggressorOwnerId` and `at`.
+
+What is in there now, and what each would let through if it went missing:
+
+| | |
+|---|---|
+| `trades-pairing` | the tape keeping the resting order and dropping the incoming one, so "who took this trade" names the maker |
+| `trades-ordering` | the tape built backwards from a newest-first snapshot, so the *last* trade is the oldest one retained |
+| `orderbook-levels` | the two sides coming back in the wrong sequence, so `levels[0]` is not the top of book |
+| `orderbook-split` | a partial fill counted twice, taking the level negative |
+| `orderbook-gap-reseed` | `clear()` leaving the book initialised, so the first delta after a gap underflows |
+
+Both fixture families ban a shortcut worth naming: an instant is compared as
+`{"epochMilli": N}`, never as a string, for the reason the wire section gives.
 
 ## Adding one
 

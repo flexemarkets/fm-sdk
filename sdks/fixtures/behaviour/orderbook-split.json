@@ -1,0 +1,117 @@
+{
+  "type": "OrderBook",
+  "why": "A partial fill arrives as a split marker carrying the original size with consumer zero, plus children keyed to it by original and supplier: one matched, one resting the remainder. The marker removes the whole original, so the wasSplit latch has to stop the matched child being removed again -- without it the fill is counted twice and the level goes negative. Lineage shape taken from a real session, ids and owners renumbered.",
+  "market": {
+    "id": 7,
+    "symbol": "A"
+  },
+  "deliveredIds": [
+    201,
+    201,
+    202,
+    203,
+    204
+  ],
+  "steps": [
+    {
+      "note": "a 15-unit offer rests at 950",
+      "orders": [
+        {
+          "id": 201,
+          "original": 201,
+          "supplier": 201,
+          "consumer": null,
+          "type": "LIMIT",
+          "side": "SELL",
+          "symbol": "A",
+          "units": 15,
+          "price": 950,
+          "ownerId": 900,
+          "marketplaceId": 1,
+          "marketId": 7,
+          "sessionId": 1
+        }
+      ]
+    },
+    {
+      "note": "a 10-unit bid takes part of it: split marker, matched child, resting remainder, and the incoming order",
+      "orders": [
+        {
+          "id": 201,
+          "original": 201,
+          "supplier": 201,
+          "consumer": 0,
+          "type": "LIMIT",
+          "side": "SELL",
+          "symbol": "A",
+          "units": 15,
+          "price": 950,
+          "ownerId": 900,
+          "marketplaceId": 1,
+          "marketId": 7,
+          "sessionId": 1
+        },
+        {
+          "id": 202,
+          "original": 201,
+          "supplier": 201,
+          "consumer": 204,
+          "type": "LIMIT",
+          "side": "SELL",
+          "symbol": "A",
+          "units": 10,
+          "price": 950,
+          "ownerId": 900,
+          "marketplaceId": 1,
+          "marketId": 7,
+          "sessionId": 1
+        },
+        {
+          "id": 203,
+          "original": 201,
+          "supplier": 201,
+          "consumer": null,
+          "type": "LIMIT",
+          "side": "SELL",
+          "symbol": "A",
+          "units": 5,
+          "price": 950,
+          "ownerId": 900,
+          "marketplaceId": 1,
+          "marketId": 7,
+          "sessionId": 1
+        },
+        {
+          "id": 204,
+          "original": 204,
+          "supplier": 204,
+          "consumer": 202,
+          "type": "LIMIT",
+          "side": "BUY",
+          "symbol": "A",
+          "units": 10,
+          "price": 950,
+          "ownerId": 901,
+          "marketplaceId": 1,
+          "marketId": 7,
+          "sessionId": 1
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "bestSellPrice": 950,
+    "bestSellUnits": 5,
+    "sellLevels": [
+      [
+        950,
+        5
+      ]
+    ],
+    "buyLevels": [],
+    "bestBuyPrice": -1,
+    "bestBuyUnits": -1,
+    "hasValueBuy": false,
+    "hasValueSell": true
+  }
+}

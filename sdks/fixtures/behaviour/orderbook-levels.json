@@ -1,0 +1,109 @@
+{
+  "type": "OrderBook",
+  "why": "The aggregated book, and the order the two sides come back in: bids highest-first, offers lowest-first, so levels[0] is the top of book on either side. Java returns a Map and the other two a list of pairs, so nothing but this holds the three to the same sequence.",
+  "market": {
+    "id": 7,
+    "symbol": "A"
+  },
+  "deliveredIds": [
+    101,
+    102,
+    103,
+    104
+  ],
+  "steps": [
+    {
+      "note": "four resting orders, two of them at the same price",
+      "orders": [
+        {
+          "id": 101,
+          "original": 101,
+          "supplier": 101,
+          "consumer": null,
+          "type": "LIMIT",
+          "side": "BUY",
+          "symbol": "A",
+          "units": 10,
+          "price": 1000,
+          "ownerId": 900,
+          "marketplaceId": 1,
+          "marketId": 7,
+          "sessionId": 1
+        },
+        {
+          "id": 102,
+          "original": 102,
+          "supplier": 102,
+          "consumer": null,
+          "type": "LIMIT",
+          "side": "BUY",
+          "symbol": "A",
+          "units": 5,
+          "price": 950,
+          "ownerId": 901,
+          "marketplaceId": 1,
+          "marketId": 7,
+          "sessionId": 1
+        },
+        {
+          "id": 103,
+          "original": 103,
+          "supplier": 103,
+          "consumer": null,
+          "type": "LIMIT",
+          "side": "SELL",
+          "symbol": "A",
+          "units": 7,
+          "price": 1100,
+          "ownerId": 900,
+          "marketplaceId": 1,
+          "marketId": 7,
+          "sessionId": 1
+        },
+        {
+          "id": 104,
+          "original": 104,
+          "supplier": 104,
+          "consumer": null,
+          "type": "LIMIT",
+          "side": "SELL",
+          "symbol": "A",
+          "units": 3,
+          "price": 1050,
+          "ownerId": 901,
+          "marketplaceId": 1,
+          "marketId": 7,
+          "sessionId": 1
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "bestBuyPrice": 1000,
+    "bestBuyUnits": 10,
+    "bestSellPrice": 1050,
+    "bestSellUnits": 3,
+    "hasValueBuy": true,
+    "hasValueSell": true,
+    "buyLevels": [
+      [
+        1000,
+        10
+      ],
+      [
+        950,
+        5
+      ]
+    ],
+    "sellLevels": [
+      [
+        1050,
+        3
+      ],
+      [
+        1100,
+        7
+      ]
+    ]
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "type": "OrderBook",
+  "why": "MarketView's gap and reconnect recovery: refetch the snapshot, clear(), reapply. clear() must put the book back to just-constructed -- empty levels AND uninitialised -- or the first delta after it, which is a removal against levels that are no longer there, underflows the book into negative units it will never recover from.",
+  "market": {
+    "id": 7,
+    "symbol": "A"
+  },
+  "deliveredIds": [
+    101,
+    102,
+    201
+  ],
+  "steps": [
+    {
+      "note": "a book from before the gap",
+      "orders": [
+        {
+          "id": 101,
+          "original": 101,
+          "supplier": 101,
+          "consumer": null,
+          "type": "LIMIT",
+          "side": "BUY",
+          "symbol": "A",
+          "units": 10,
+          "price": 1000,
+          "ownerId": 900,
+          "marketplaceId": 1,
+          "marketId": 7,
+          "sessionId": 1
+        },
+        {
+          "id": 102,
+          "original": 102,
+          "supplier": 102,
+          "consumer": null,
+          "type": "LIMIT",
+          "side": "SELL",
+          "symbol": "A",
+          "units": 7,
+          "price": 1100,
+          "ownerId": 900,
+          "marketplaceId": 1,
+          "marketId": 7,
+          "sessionId": 1
+        }
+      ]
+    },
+    {
+      "note": "the gap: clear, then reseed from a fresh snapshot",
+      "clear": true,
+      "orders": [
+        {
+          "id": 201,
+          "original": 201,
+          "supplier": 201,
+          "consumer": null,
+          "type": "LIMIT",
+          "side": "BUY",
+          "symbol": "A",
+          "units": 3,
+          "price": 900,
+          "ownerId": 901,
+          "marketplaceId": 1,
+          "marketId": 7,
+          "sessionId": 1
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "bestBuyPrice": 900,
+    "bestBuyUnits": 3,
+    "bestSellPrice": -1,
+    "bestSellUnits": -1,
+    "buyLevels": [
+      [
+        900,
+        3
+      ]
+    ],
+    "sellLevels": []
+  }
+}
