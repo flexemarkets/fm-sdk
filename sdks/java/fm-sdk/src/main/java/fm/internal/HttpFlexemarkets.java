@@ -595,7 +595,7 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     public Order submitMarket(long marketplaceId, long marketId, OrderSide side, long units) {
         var limit = submitLimit(marketplaceId, marketId, side, units,
-                                marketableLimit(market(marketplaceId, marketId), side));
+                                marketableLimit(_market(marketplaceId, marketId), side));
 
         // Unconditional, and safe when the order filled completely: the exchange
         // consumes a CANCEL by itself when no units remain (Exchange's javadoc
@@ -617,7 +617,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     /** The market by id, from the marketplace's own list. */
-    private Market market(long marketplaceId, long marketId) {
+    private Market _market(long marketplaceId, long marketId) {
         for (var market : markets(marketplaceId)) {
             if (marketId == market.id()) {
                 return market;
@@ -868,7 +868,7 @@ public class HttpFlexemarkets implements Flexemarkets {
      * mode is silent in the shape that matters: the call succeeds, answering
      * for the wrong account.
      */
-    private HttpRequest.Builder request(String url, String accept) {
+    private HttpRequest.Builder _request(String url, String accept) {
         var builder = HttpRequest.newBuilder()
             .uri(URI.create(url))
             .header("Authorization", _bearerToken)
@@ -1036,7 +1036,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     private <T> T _get(String url, TypeReference<T> type) {
-        var request = request(url, "application/json")
+        var request = _request(url, "application/json")
             .GET()
             .build();
         return _send(request, type);
@@ -1050,7 +1050,7 @@ public class HttpFlexemarkets implements Flexemarkets {
      * is absent.
      */
     private <T> Snapshot<T> _getSnapshot(String url, TypeReference<T> type) {
-        var request = request(url, "application/json")
+        var request = _request(url, "application/json")
             .GET()
             .build();
         try {
@@ -1088,7 +1088,7 @@ public class HttpFlexemarkets implements Flexemarkets {
             throw new ApiException("Failed to serialize request body", e);
         }
 
-        var request = request(url, "application/json")
+        var request = _request(url, "application/json")
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(json))
             .build();
@@ -1102,7 +1102,7 @@ public class HttpFlexemarkets implements Flexemarkets {
      * carry the whole request.
      */
     private <T> T _patch(String url, TypeReference<T> type) {
-        var request = request(url, "application/json")
+        var request = _request(url, "application/json")
             .method("PATCH", HttpRequest.BodyPublishers.noBody())
             .build();
         return _send(request, type);
@@ -1110,7 +1110,7 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     /** DELETE, whose answer is a status and nothing worth parsing. */
     private void _delete(String url) {
-        var request = request(url, "application/json")
+        var request = _request(url, "application/json")
             .DELETE()
             .build();
         _sendDiscardingBody(request);
@@ -1122,7 +1122,7 @@ public class HttpFlexemarkets implements Flexemarkets {
      * would fail on the first line.
      */
     private String _getText(String url) {
-        var request = request(url, "text/csv, */*")
+        var request = _request(url, "text/csv, */*")
             .GET()
             .build();
         try {
@@ -1165,7 +1165,7 @@ public class HttpFlexemarkets implements Flexemarkets {
             body.write(content);
             body.write(tail);
 
-            var request = request(url, "application/json")
+            var request = _request(url, "application/json")
                 .header("Content-Type", "multipart/form-data; boundary=" + boundary)
                 .POST(HttpRequest.BodyPublishers.ofByteArray(body.toByteArray()))
                 .build();
@@ -1295,7 +1295,7 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     private ApiRoot _fetchApiRoot() {
         var url = server(endpointUrl());
-        var request = request(url, "application/json")
+        var request = _request(url, "application/json")
             .GET()
             .build();
         return rebase(_send(request, API_ROOT_TYPE), url);

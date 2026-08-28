@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Test;
  */
 class MarketBookTest {
 
-    private static Market market(long id, String symbol) {
+    private static Market _market(long id, String symbol) {
         return new Market(id, 0L, symbol, symbol, symbol, false, 0, 10_000, 1, 1, 100, 1);
     }
 
@@ -92,7 +92,7 @@ class MarketBookTest {
 
     @Test
     void restingCrossingAndCancellingMoveTheTopOfBook() {
-        var market = market(1, "N5");
+        var market = _market(1, "N5");
         var book = new MarketBook(market);
 
         assertThat(book.bestBuyPrice()).isEqualTo(-1L);
@@ -137,7 +137,7 @@ class MarketBookTest {
      */
     @Test
     void aPartialFillChainThenCancelDrainsTheBook() {
-        var market = market(1, "N10");
+        var market = _market(1, "N10");
         var book = new MarketBook(market);
 
         long price = 708;
@@ -193,7 +193,7 @@ class MarketBookTest {
      */
     @Test
     void aDroppedSplitMarkerLeavesGhostUnitsThatSurviveTheCancel() {
-        var market = market(1, "N10");
+        var market = _market(1, "N10");
         var book = new MarketBook(market);
 
         long price = 708;
@@ -249,7 +249,7 @@ class MarketBookTest {
      */
     @Test
     void sideGenericAccessorsAgreeWithTheFixedOnes() {
-        Market market = market(1L, "A");
+        Market market = _market(1L, "A");
         MarketBook book = new MarketBook(market);
         book.update(_toArray(
             _limitOf(market, 1L, OrderSide.BUY, 10, 100),
@@ -266,7 +266,7 @@ class MarketBookTest {
 
     @Test
     void sideGenericAccessorsReportAnEmptySide() {
-        Market market = market(1L, "A");
+        Market market = _market(1L, "A");
         MarketBook book = new MarketBook(market);
         book.update(_toArray(_limitOf(market, 1L, OrderSide.BUY, 10, 100)));
 
@@ -277,7 +277,7 @@ class MarketBookTest {
 
     @Test
     void marketplaceBooksAnswerForAnUnknownMarketRatherThanFailing() {
-        Market market = market(1L, "A");
+        Market market = _market(1L, "A");
         MarketplaceBooks books = new MarketplaceBooks(java.util.List.of(market));
         books.update(_toArray(_limitOf(market, 1L, OrderSide.BUY, 10, 100)));
 

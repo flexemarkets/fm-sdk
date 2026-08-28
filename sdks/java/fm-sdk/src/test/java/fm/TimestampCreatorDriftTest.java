@@ -71,7 +71,7 @@ class TimestampCreatorDriftTest {
         return found;
     }
 
-    private static Executable creator(Class<?> type) {
+    private static Executable _creator(Class<?> type) {
         return Stream.<Executable>concat(
                     Arrays.stream(type.getDeclaredMethods()),
                     Arrays.stream(type.getDeclaredConstructors()))
@@ -90,7 +90,7 @@ class TimestampCreatorDriftTest {
             }
             boolean holdsInstant = Arrays.stream(type.getRecordComponents())
                     .anyMatch(c -> c.getType() == Instant.class);
-            if (holdsInstant && creator(type) == null) {
+            if (holdsInstant && _creator(type) == null) {
                 missing.add(type.getSimpleName());
             }
         }
@@ -106,7 +106,7 @@ class TimestampCreatorDriftTest {
         var drifted = new ArrayList<String>();
 
         for (Class<?> type : _records()) {
-            Executable creator = creator(type);
+            Executable creator = _creator(type);
             if (creator == null) {
                 continue;
             }
