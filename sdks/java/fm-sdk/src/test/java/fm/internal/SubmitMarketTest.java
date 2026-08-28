@@ -1,9 +1,9 @@
 package fm.internal;
 
-import fm.ApiException;
 import fm.Flexemarkets;
 import fm.Market;
 import fm.OrderSide;
+import fm.error.ApiException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

@@ -1,4 +1,4 @@
-package fm;
+package fm.error;
 
 /**
  * A user could not be deleted because they still own marketplace data --

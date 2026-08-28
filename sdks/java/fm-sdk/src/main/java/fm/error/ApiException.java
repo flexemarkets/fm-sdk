@@ -1,4 +1,4 @@
-package fm;
+package fm.error;
 
 /**
  * The call could not be completed: the transport failed, or the response was

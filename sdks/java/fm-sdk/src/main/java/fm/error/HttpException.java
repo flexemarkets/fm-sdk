@@ -1,4 +1,4 @@
-package fm;
+package fm.error;
 
 /**
  * A response the SDK has no better name for, carrying its status and body.

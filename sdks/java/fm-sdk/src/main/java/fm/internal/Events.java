@@ -1,8 +1,6 @@
 package fm.internal;
 
-import fm.ApiException;
 import fm.Flexemarkets;
-import fm.FlexemarketsException;
 import fm.FrameUnreadable;
 import fm.Holding;
 import fm.MarketView;
@@ -10,11 +8,13 @@ import fm.Order;
 import fm.OrdersUpdate;
 import fm.Reconnected;
 import fm.Session;
-import fm.AuthenticationException;
 import fm.Snapshot;
 import fm.StreamDropped;
 import fm.Subscription;
 import fm.Version;
+import fm.error.ApiException;
+import fm.error.AuthenticationException;
+import fm.error.FlexemarketsException;
 
 import java.net.URI;
 import java.net.http.HttpClient;

@@ -1,4 +1,4 @@
-package fm;
+package fm.error;
 
 /**
  * The SDK could not be configured to make the call at all.

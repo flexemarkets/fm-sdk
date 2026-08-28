@@ -1,4 +1,7 @@
-package fm;
+package fm.error;
+
+import fm.Account;
+import fm.ConflictFailure;
 
 /**
  * An account name was taken, and the server proposed another.

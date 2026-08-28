@@ -1,4 +1,4 @@
-package fm;
+package fm.error;
 
 /** The server refused the credentials: a 401, or a token it would not accept. */
 public final class AuthenticationException extends FlexemarketsException {

@@ -1,6 +1,7 @@
 package fm;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import fm.error.ConflictException;
 /**
  * The server's structured account of why it refused a request as conflicting.
  *

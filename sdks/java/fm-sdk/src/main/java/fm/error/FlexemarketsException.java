@@ -1,4 +1,4 @@
-package fm;
+package fm.error;
 
 /**
  * The root of everything this SDK throws.

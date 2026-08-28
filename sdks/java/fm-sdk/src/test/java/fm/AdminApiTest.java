@@ -1,5 +1,9 @@
 package fm;
 
+import fm.error.AccountNameConflictException;
+import fm.error.ConflictException;
+import fm.error.FlexemarketsException;
+import fm.error.PersonHasMarketplaceDataException;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

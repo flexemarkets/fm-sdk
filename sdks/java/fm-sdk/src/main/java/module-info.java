@@ -18,6 +18,7 @@ module fm {
     requires com.fasterxml.jackson.annotation;
 
     exports fm;
+    exports fm.error;
 
     opens fm to tools.jackson.databind;
     opens fm.internal to tools.jackson.databind;
