@@ -142,8 +142,27 @@ def python_types(paths: list[Path]) -> dict[str, list[str]]:
     for path in paths:
         current: str | None = None
         decorated = False
+        quote: str | None = None
 
         for line in path.read_text().splitlines():
+            # Docstrings are prose, and a class's is a natural place to explain
+            # its fields. "...has always\n    used: an order that..." was read
+            # as a field called `used`, reported against Java, and the checker
+            # was confidently wrong about the SDKs -- the same way a comment
+            # inside a Java record's component list once was, which is why
+            # java_types strips block comments before it looks.
+            if quote is not None:
+                if quote in line:
+                    quote = None
+                continue
+            opener = re.match(r'\s*[rbuf]*("""|\'\'\')', line)
+            if opener:
+                mark = opener.group(1)
+                rest = line[opener.end():]
+                if mark not in rest:
+                    quote = mark
+                continue
+
             stripped = line.strip()
             header = re.match(r"class (\w+)", stripped)
             if header and not line.startswith((" ", "\t")):
