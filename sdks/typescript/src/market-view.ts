@@ -12,7 +12,7 @@
 
 import type { Flexemarkets } from "./client.js";
 import { MarketBook, MarketplaceBooks } from "./orderbook.js";
-import { MarketplaceTrades, type Trade, type Trades } from "./trades.js";
+import { MarketplaceTrades, type Trade, type MarketTrades } from "./trades.js";
 import { NO_SEQ, type EventListener, type FmEvent, type OrdersUpdate, type FrameUnreadable, type Reconnected, type StreamDropped } from "./stomp.js";
 import type { Holding, Market, Order, Session } from "./types.js";
 
@@ -70,7 +70,7 @@ export interface MarketView {
    * Each `Trade` on it carries both sides of its match — the resting
    * order that was taken and the aggressor that took it.
    */
-  trades(marketId: number): Trades | null;
+  trades(marketId: number): MarketTrades | null;
 
   /**
    * Most-recent session update observed. Null until the first
@@ -195,7 +195,7 @@ export class DefaultMarketView implements MarketView {
   private _seedComplete = false;
   private _seedBuffer: OrdersUpdate[] = [];
 
-  // 100 matches the default per-market Trades capacity. Plumb through to
+  // 100 matches the default per-market MarketTrades capacity. Plumb through to
   // observe() later if a caller needs deeper trade scrollback.
   private constructor(flexemarkets: Flexemarkets, marketplaceId: number, markets: Market[]) {
     this._flexemarkets = flexemarkets;
@@ -249,7 +249,7 @@ export class DefaultMarketView implements MarketView {
     return this._orderBooks.get(marketId) ?? null;
   }
 
-  trades(marketId: number): Trades | null {
+  trades(marketId: number): MarketTrades | null {
     this._ensureOpen();
     return this._trades.get(marketId);
   }
@@ -470,7 +470,7 @@ export class DefaultMarketView implements MarketView {
     this._orderBooks.update(orders);
     const traded = this._trades.update(orders);
 
-    // Trades first: the more specific event, and a book handler that then reads
+    // MarketTrades first: the more specific event, and a book handler that then reads
     // the tape sees the same trade the trade handler was just given. Both
     // aggregators are already current either way — what is ordered here is only
     // which handler hears about it first.
@@ -563,7 +563,7 @@ export class MarketViewHandle implements MarketView {
     return this._shared.orderBook(marketId);
   }
 
-  trades(marketId: number): Trades | null {
+  trades(marketId: number): MarketTrades | null {
     this._check();
     return this._shared.trades(marketId);
   }

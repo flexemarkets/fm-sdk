@@ -1,7 +1,7 @@
 """Every behaviour fixture, driven through this SDK's aggregators.
 
 The wire fixtures next door compare *parsed field values*: one payload in, one
-set of fields out. They say nothing about what MarketBook and Trades do with a
+set of fields out. They say nothing about what MarketBook and MarketTrades do with a
 sequence of them, which is where the three SDKs have actually been wrong
 together -- a book that double-counts a cancel and a tape that holds its trades
 backwards both parse every field correctly.
@@ -25,14 +25,14 @@ import pytest
 
 from fm import client as rest
 from fm.orderbook import MarketBook
-from fm.trades import Trades
+from fm.trades import MarketTrades
 from fm.types import Market
 
 FIXTURES = sorted(
     (Path(__file__).resolve().parents[2] / "fixtures" / "behaviour").glob("*.json")
 )
 
-AGGREGATORS = {"MarketBook": MarketBook, "Trades": Trades}
+AGGREGATORS = {"MarketBook": MarketBook, "MarketTrades": MarketTrades}
 
 
 def _drive(doc: dict[str, Any]) -> Any:
@@ -105,7 +105,7 @@ def _check_order_book(book: MarketBook, expect: dict[str, Any]) -> None:
         assert readers[key]() == want, key
 
 
-def _check_trades(tape: Trades, expect: dict[str, Any]) -> None:
+def _check_trades(tape: MarketTrades, expect: dict[str, Any]) -> None:
     held = tape.most_recent_trades()
 
     if "size" in expect:
@@ -134,7 +134,7 @@ def _check_trades(tape: Trades, expect: dict[str, Any]) -> None:
         assert tape.drain() == []
 
 
-CHECKS = {"MarketBook": _check_order_book, "Trades": _check_trades}
+CHECKS = {"MarketBook": _check_order_book, "MarketTrades": _check_trades}
 
 
 @pytest.mark.parametrize("path", FIXTURES, ids=lambda p: p.stem)

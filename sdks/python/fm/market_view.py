@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 
 from .events import NO_SEQ, OrdersUpdate, FrameUnreadable, Reconnected, StreamDropped
 from .orderbook import MarketBook, MarketplaceBooks
-from .trades import MarketplaceTrades, Trade, Trades
+from .trades import MarketplaceTrades, Trade, MarketTrades
 from .types import Holding, Market, Order, Session
 
 if TYPE_CHECKING:
@@ -87,7 +87,7 @@ class MarketView:
         self.marketplace_id = marketplace_id
         self.markets = list(markets)
         self._order_books = MarketplaceBooks(self.markets)
-        # 100 matches the default per-market Trades capacity. Plumb
+        # 100 matches the default per-market MarketTrades capacity. Plumb
         # through to observe() later if a caller needs deeper trade
         # scrollback.
         self._trades = MarketplaceTrades(self.markets, 100)
@@ -163,7 +163,7 @@ class MarketView:
         self._ensure_open()
         return self._order_books.get(market_id)
 
-    def trades(self, market_id: int) -> Optional[Trades]:
+    def trades(self, market_id: int) -> Optional[MarketTrades]:
         """Always-current trade tape for *market_id*, most recent last;
         ``None`` if the market isn't in this marketplace.
 
@@ -432,7 +432,7 @@ class MarketView:
         self._order_books.update(orders)
         traded = self._trades.update(orders)
 
-        # Trades first: the more specific event, and a book handler that then
+        # MarketTrades first: the more specific event, and a book handler that then
         # reads the tape sees the same trade the trade handler was just given.
         # Both aggregators are already current either way -- what is ordered
         # here is only which handler hears about it first.
@@ -533,7 +533,7 @@ class MarketViewHandle:
         self._check()
         return self._shared.order_book(market_id)
 
-    def trades(self, market_id: int) -> Optional[Trades]:
+    def trades(self, market_id: int) -> Optional[MarketTrades]:
         self._check()
         return self._shared.trades(market_id)
 

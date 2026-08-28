@@ -19,7 +19,7 @@ import fm.Side;
 import fm.Snapshot;
 import fm.StreamDropped;
 import fm.Subscription;
-import fm.Trades;
+import fm.MarketTrades;
 
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -114,8 +114,8 @@ public class DefaultMarketView implements MarketView {
         this.marketplaceId = marketplaceId;
         this.markets = List.copyOf(markets);
         this.orderBooks = new MarketplaceBooks(this.markets);
-        // 100 matches the default per-market Trades capacity — see
-        // Trades(Market) ctor. Plumb through to observe() later if a
+        // 100 matches the default per-market MarketTrades capacity — see
+        // MarketTrades(Market) ctor. Plumb through to observe() later if a
         // caller needs deeper trade scrollback.
         this.trades = new MarketplaceTrades(this.markets, 100);
 
@@ -161,7 +161,7 @@ public class DefaultMarketView implements MarketView {
 
         // Snapshot orders are all available (consumer == null), so
         // MarketBook.update treats them as adds — same code path WS
-        // deltas use. Trades snapshot feeds the tape via the same
+        // deltas use. MarketTrades snapshot feeds the tape via the same
         // update() entrypoint.
         if (!orders.body().isEmpty()) {
             this.orderBooks.update(orders.body().toArray(new Order[0]));
@@ -194,7 +194,7 @@ public class DefaultMarketView implements MarketView {
     }
 
     @Override
-    public Trades trades(long marketId) {
+    public MarketTrades trades(long marketId) {
         _ensureOpen();
         return trades.get(marketId);
     }
@@ -374,7 +374,7 @@ public class DefaultMarketView implements MarketView {
         orderBooks.update(orders);
         var traded = trades.update(orders);
 
-        // Trades first: the more specific event, and a book handler that then
+        // MarketTrades first: the more specific event, and a book handler that then
         // reads the tape sees the same trade the trade handler was just given.
         // Both aggregators are already current either way -- what is ordered
         // here is only which handler hears about it first.

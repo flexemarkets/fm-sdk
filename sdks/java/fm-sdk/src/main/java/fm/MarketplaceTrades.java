@@ -16,7 +16,7 @@ import java.util.stream.Stream;
  * one update, fanned at every tape, each keeping what belongs to it.
  */
 public class MarketplaceTrades {
-    private final Map<Long, Trades> collection = new ConcurrentHashMap<>();
+    private final Map<Long, MarketTrades> collection = new ConcurrentHashMap<>();
 
     /**
      * An empty tape per market.
@@ -26,7 +26,7 @@ public class MarketplaceTrades {
      */
     public MarketplaceTrades(List<Market> markets, int capacity) {
         for (var market : markets) {
-            collection.put(market.id(), new Trades(market, capacity));
+            collection.put(market.id(), new MarketTrades(market, capacity));
         }
     }
 
@@ -62,7 +62,7 @@ public class MarketplaceTrades {
      * @param marketId the market to look up
      * @return its tape, or null if no tape is kept for that market
      */
-    public Trades get(long marketId) {
+    public MarketTrades get(long marketId) {
         return collection.get(marketId);
     }
 
@@ -71,7 +71,7 @@ public class MarketplaceTrades {
      *
      * @return the tapes, in no particular order
      */
-    public Collection<Trades> collection() {
+    public Collection<MarketTrades> collection() {
         return collection.values();
     }
 
@@ -86,14 +86,14 @@ public class MarketplaceTrades {
      */
     public long[][] mostRecentPrices() {
         return collection.values().stream()
-            .sorted(Comparator.comparingLong(Trades::marketId))
-            .map(Trades::mostRecentTrades)
+            .sorted(Comparator.comparingLong(MarketTrades::marketId))
+            .map(MarketTrades::mostRecentTrades)
             .map(trades -> Stream.of(trades).mapToLong(Trade::price).toArray())
             .toArray(long[][]::new);
     }
 
-    /** Empty every per-market trade tape — see {@link Trades#clear()}. */
+    /** Empty every per-market trade tape — see {@link MarketTrades#clear()}. */
     public void clear() {
-        collection.values().forEach(Trades::clear);
+        collection.values().forEach(MarketTrades::clear);
     }
 }

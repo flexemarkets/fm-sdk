@@ -43,7 +43,7 @@ import java.util.stream.Stream;
  * <p>Synchronized for the same reason {@link MarketBook} is: the stream writes
  * on its thread while the caller reads on theirs.
  */
-public class Trades {
+public class MarketTrades {
     private final Market market;
     private final int capacity;
     private final ArrayDeque<Trade> container;
@@ -58,7 +58,7 @@ public class Trades {
      * @throws NullPointerException     if {@code market} is null
      * @throws IllegalArgumentException if {@code capacity} is less than one
      */
-    public Trades(Market market, int capacity) {
+    public MarketTrades(Market market, int capacity) {
         if (market == null) throw new NullPointerException("Market is required.");
         if (capacity < 1) throw new IllegalArgumentException("Capacity must be greater than zero.");
         this.market = market;
@@ -71,7 +71,7 @@ public class Trades {
      *
      * @param market the market whose trades to keep
      */
-    public Trades(Market market) {
+    public MarketTrades(Market market) {
         this(market, 100);
     }
 

@@ -91,7 +91,7 @@ public interface MarketView extends AutoCloseable {
      * @return that market's tape, current as of this call, or null when
      *         {@code marketId} is not in this marketplace
      */
-    Trades trades(long marketId);
+    MarketTrades trades(long marketId);
 
     /**
      * Most-recent session update observed. Null until the first

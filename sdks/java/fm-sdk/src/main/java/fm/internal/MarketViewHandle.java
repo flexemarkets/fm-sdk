@@ -8,7 +8,7 @@ import fm.MarketView;
 import fm.Order;
 import fm.MarketBook;
 import fm.ReconnectEvent;
-import fm.Trades;
+import fm.MarketTrades;
 import fm.Session;
 import fm.Side;
 import fm.Subscription;
@@ -56,7 +56,7 @@ class MarketViewHandle implements MarketView {
         return shared.orderBook(marketId);
     }
 
-    @Override public Trades trades(long marketId) {
+    @Override public MarketTrades trades(long marketId) {
         _check();
         return shared.trades(marketId);
     }

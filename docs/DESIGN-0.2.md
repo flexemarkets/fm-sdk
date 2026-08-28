@@ -57,7 +57,7 @@ queue so you must be able to name it — and says nothing about
 `MarketplaceTrades`. It was swept along with its neighbours. The draft may have
 been right about that one.
 
-`Trades` itself stays public: `MarketView.trades` returns it.
+`MarketTrades` itself stays public: `MarketView.trades` returns it.
 
 ---
 

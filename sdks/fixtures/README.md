@@ -84,7 +84,7 @@ longer sends, or one whose type changed, is the failure.
 
 The documents above are one payload each, run through every parser that claims
 to produce their type. They compare *parsed field values*, and say nothing about
-what `MarketBook` and `Trades` do with a sequence of them — which is where the
+what `MarketBook` and `MarketTrades` do with a sequence of them — which is where the
 three SDKs have actually been wrong *together*. A book that double-counts a
 cancel and a tape that holds its trades backwards both parse every field
 correctly.
@@ -104,7 +104,7 @@ So `behaviour/` holds inputs and answers rather than payloads and fields:
 }
 ```
 
-- `type` names the aggregator to drive: `MarketBook` or `Trades`.
+- `type` names the aggregator to drive: `MarketBook` or `MarketTrades`.
 - `steps` are applied in order, each an `update()`. `"clear": true` calls
   `clear()` first, which is how `MarketView` recovers from a sequence gap.
 - `expect` is checked against the aggregator's state at the end. Only the keys
@@ -118,7 +118,7 @@ So `behaviour/` holds inputs and answers rather than payloads and fields:
 `bestSellUnits`, `hasValueBuy`, `hasValueSell`, `buyLevels` and `sellLevels`;
 levels are `[price, units]` pairs in the order the SDK returns them, so the
 three are held to one sequence despite Java returning a `Map` and the other two
-a list. `Trades` reads `size`, `trades`, `last` and `drain`; a trade compares
+a list. `MarketTrades` reads `size`, `trades`, `last` and `drain`; a trade compares
 `price`, `units`, `restingId`, `aggressorId`, `restingOwnerId`,
 `aggressorOwnerId` and `at`.
 

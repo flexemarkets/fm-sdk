@@ -18,7 +18,7 @@ import fm.Order;
 import fm.MarketBook;
 import fm.Side;
 import fm.Trade;
-import fm.Trades;
+import fm.MarketTrades;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -31,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.fail;
  *
  * <p>{@link WireFixturesTest} next door compares <em>parsed field values</em>:
  * one payload in, one set of fields out. It says nothing about what
- * {@link MarketBook} and {@link Trades} do with a sequence of them, which is
+ * {@link MarketBook} and {@link MarketTrades} do with a sequence of them, which is
  * where the three SDKs have actually been wrong together — a book that
  * double-counts a cancel and a tape that holds its trades backwards both parse
  * every field correctly.
@@ -48,7 +48,7 @@ class BehaviourFixturesTest {
     private static final Path FIXTURES =
             Path.of("..", "..", "fixtures", "behaviour").toAbsolutePath().normalize();
 
-    private static final List<String> AGGREGATORS = List.of("MarketBook", "Trades");
+    private static final List<String> AGGREGATORS = List.of("MarketBook", "MarketTrades");
 
     private record Fixture(String name, JsonNode document) {
         @Override
@@ -114,7 +114,7 @@ class BehaviourFixturesTest {
 
         switch (doc.get("type").asString()) {
             case "MarketBook" -> checkOrderBook(doc);
-            case "Trades" -> checkTrades(doc);
+            case "MarketTrades" -> checkTrades(doc);
             default -> fail("no aggregator for type " + doc.get("type").asString());
         }
     }
@@ -147,7 +147,7 @@ class BehaviourFixturesTest {
     }
 
     private void checkTrades(JsonNode doc) {
-        Trades tape = new Trades(market(doc));
+        MarketTrades tape = new MarketTrades(market(doc));
         int index = 0;
         for (JsonNode step : doc.get("steps")) {
             if (step.path("clear").asBoolean(false)) {
