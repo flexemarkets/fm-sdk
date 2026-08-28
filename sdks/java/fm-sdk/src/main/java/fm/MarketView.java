@@ -193,7 +193,7 @@ public interface MarketView extends AutoCloseable {
      * @param price    the limit, which must sit on the market's price grid
      * @return the order as accepted, with its server-assigned id
      */
-    Order submitLimit(long marketId, Side side, long units, long price);
+    Order submitLimit(long marketId, OrderSide side, long units, long price);
 
     /**
      * Cancel a previously-submitted order.

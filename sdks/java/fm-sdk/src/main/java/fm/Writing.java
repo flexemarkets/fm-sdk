@@ -30,7 +30,7 @@ public interface Writing {
      * @param price         the limit price, in the cents the exchange counts in
      * @return the order as the server recorded it, carrying the id it assigned
      */
-    Order submitLimit(long marketplaceId, long marketId, Side side, long units, long price);
+    Order submitLimit(long marketplaceId, long marketId, OrderSide side, long units, long price);
 
     /**
      * Place a limit order naming the counterparty it is for.
@@ -57,7 +57,7 @@ public interface Writing {
      *                      ordinary untargeted order in a public market
      * @return the order as the server recorded it, carrying the id it assigned
      */
-    Order submitLimit(long marketplaceId, long marketId, Side side, long units, long price,
+    Order submitLimit(long marketplaceId, long marketId, OrderSide side, long units, long price,
                       Long ownerTargetId);
 
     /**
@@ -104,5 +104,5 @@ public interface Writing {
      * @param units         how many units to trade
      * @return the limit order as submitted, not as filled
      */
-    Order submitMarket(long marketplaceId, long marketId, Side side, long units);
+    Order submitMarket(long marketplaceId, long marketId, OrderSide side, long units);
 }

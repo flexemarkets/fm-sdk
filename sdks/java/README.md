@@ -66,7 +66,7 @@ import fm.Holding;
 import fm.Market;
 import fm.Order;
 import fm.Session;
-import fm.Side;
+import fm.OrderSide;
 
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -82,7 +82,7 @@ try (var fm = Flexemarkets.connect(null, null, "my-bot")) {
     Holding holding = fm.holding(marketplaceId);
 
     // Submit orders
-    Order order = fm.submitLimit(marketplaceId, markets.get(0).id(), Side.BUY, 1, 950);
+    Order order = fm.submitLimit(marketplaceId, markets.get(0).id(), OrderSide.BUY, 1, 950);
     fm.submitCancel(marketplaceId, markets.get(0).id(), order.id());
 
     // WebSocket events

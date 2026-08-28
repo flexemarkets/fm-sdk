@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
 
 /**
- * Side and OrderType, before anything uses them.
+ * OrderSide and OrderType, before anything uses them.
  *
  * <p>Both were Strings with constants beside them, which is a convention rather
  * than a rule: nothing stopped a caller writing "buy", "Buy" or "BYU". The
@@ -22,22 +22,22 @@ class SideAndOrderTypeTest {
 
     @Test
     void aSideIsReadWhateverItsCasing() {
-        assertThat(Side.of("BUY")).isEqualTo(Side.BUY);
-        assertThat(Side.of("buy")).isEqualTo(Side.BUY);
-        assertThat(Side.of(" Sell ")).isEqualTo(Side.SELL);
+        assertThat(OrderSide.of("BUY")).isEqualTo(OrderSide.BUY);
+        assertThat(OrderSide.of("buy")).isEqualTo(OrderSide.BUY);
+        assertThat(OrderSide.of(" Sell ")).isEqualTo(OrderSide.SELL);
     }
 
     @Test
     void anUnknownSideIsNullRatherThanAThrow() {
-        assertThat(Side.of("BYU")).isNull();
-        assertThat(Side.of(null)).isNull();
-        assertThat(Side.of("")).isNull();
+        assertThat(OrderSide.of("BYU")).isNull();
+        assertThat(OrderSide.of(null)).isNull();
+        assertThat(OrderSide.of("")).isNull();
     }
 
     @Test
     void contraPairsTheTwoSides() {
-        assertThat(Side.BUY.contra()).isEqualTo(Side.SELL);
-        assertThat(Side.SELL.contra()).isEqualTo(Side.BUY);
+        assertThat(OrderSide.BUY.contra()).isEqualTo(OrderSide.SELL);
+        assertThat(OrderSide.SELL.contra()).isEqualTo(OrderSide.BUY);
     }
 
     @Test

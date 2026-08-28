@@ -4,7 +4,7 @@
  * Port of fm.order_utils (Python) / fm.OrderUtils (Java).
  */
 
-import { Order, toOrderType, toSide, type Side } from "./types.js";
+import { Order, toOrderType, toSide, type OrderSide } from "./types.js";
 
 export function isCancel(order: Order): boolean {
   return toOrderType(order.type) === "CANCEL";
@@ -14,7 +14,7 @@ export function isLimit(order: Order): boolean {
   return toOrderType(order.type) === "LIMIT";
 }
 
-// These take `string` rather than `Side` on purpose: they are the lenient
+// These take `string` rather than `OrderSide` on purpose: they are the lenient
 // door. A caller holding a value off the wire, or out of a config file, can
 // ask without narrowing it first -- which is what the old toUpperCase()
 // comparison allowed and what removing it would quietly take away.
@@ -26,7 +26,7 @@ export function isSell(side: string | null | undefined): boolean {
   return toSide(side) === "SELL";
 }
 
-export function contra(side: string): Side {
+export function contra(side: string): OrderSide {
   return isBuy(side) ? "SELL" : "BUY";
 }
 

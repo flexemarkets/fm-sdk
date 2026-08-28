@@ -1,7 +1,7 @@
 """Flexemarkets Python SDK."""
 
 from .client import Flexemarkets
-from .enums import OrderType, Side
+from .enums import OrderType, OrderSide
 from .events import NO_SEQ, OrdersUpdate, FrameUnreadable, Reconnected, StreamDropped
 from .snapshot import Snapshot
 from .exceptions import (
@@ -40,7 +40,7 @@ from .types import (
 __all__ = [
     "Flexemarkets",
     # side and order type
-    "Side",
+    "OrderSide",
     "OrderType",
     # types
     "Account",

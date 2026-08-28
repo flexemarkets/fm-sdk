@@ -10,7 +10,7 @@ import fm.MarketBook;
 import fm.ReconnectEvent;
 import fm.MarketTrades;
 import fm.Session;
-import fm.Side;
+import fm.OrderSide;
 import fm.Subscription;
 
 import java.util.List;
@@ -113,7 +113,7 @@ class MarketViewHandle implements MarketView {
         return sub;
     }
 
-    @Override public Order submitLimit(long marketId, Side side, long units, long price) {
+    @Override public Order submitLimit(long marketId, OrderSide side, long units, long price) {
         _check();
         return shared.submitLimit(marketId, side, units, price);
     }

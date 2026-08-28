@@ -11,7 +11,7 @@ package fm;
  *
  * <p>isBuy, isSell, isCancel and isLimit used to live here too. They became
  * one-line comparisons the moment side and type became enums: {@code
- * Side.BUY == order.side()} says the same thing as {@code isBuy(order)},
+ * OrderSide.BUY == order.side()} says the same thing as {@code isBuy(order)},
  * reads the same way, and is one fewer name to know. Two ways to ask one
  * question is one too many.
  */

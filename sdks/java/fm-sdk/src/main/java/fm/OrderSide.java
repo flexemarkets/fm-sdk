@@ -16,7 +16,7 @@ import com.fasterxml.jackson.annotation.JsonCreator;
  * carries no side, so {@code Order.side()} is null for one. That is the
  * server's shape, not something an {@code UNSPECIFIED} constant would improve.
  */
-public enum Side {
+public enum OrderSide {
 
     /** Buying: the bid side of the book. */
     BUY,
@@ -32,7 +32,7 @@ public enum Side {
      *
      * @return SELL for BUY, and BUY for SELL
      */
-    public Side contra() {
+    public OrderSide contra() {
         return this == BUY ? SELL : BUY;
     }
 
@@ -50,7 +50,7 @@ public enum Side {
      *         unrecognised
      */
     @JsonCreator
-    public static Side of(String value) {
+    public static OrderSide of(String value) {
         if (null == value) {
             return null;
         }

@@ -18,7 +18,7 @@ export type {
 } from "./types.js";
 
 export {
-  Side,
+  OrderSide,
   OrderType,
   toSide,
   toOrderType,

@@ -27,7 +27,7 @@ import fm.OrderType;
 import fm.Person;
 import fm.PersonHasMarketplaceDataException;
 import fm.Session;
-import fm.Side;
+import fm.OrderSide;
 import fm.Snapshot;
 import fm.Subscription;
 import fm.TickGrid;
@@ -555,11 +555,11 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     private record ManagerOtpRequest(List<Long> userIds) {}
 
-    public Order submitLimit(long marketplaceId, long marketId, Side side, long units, long price) {
+    public Order submitLimit(long marketplaceId, long marketId, OrderSide side, long units, long price) {
         return submitLimit(marketplaceId, marketId, side, units, price, null);
     }
 
-    public Order submitLimit(long marketplaceId, long marketId, Side side, long units, long price,
+    public Order submitLimit(long marketplaceId, long marketId, OrderSide side, long units, long price,
                              Long ownerTargetId) {
         // A LinkedHashMap rather than Map.of: the target is absent for an
         // ordinary order, and Map.of rejects a null value rather than omitting
@@ -593,7 +593,7 @@ public class HttpFlexemarkets implements Flexemarkets {
         return post(uri(apiRoot, "orders"), order, ORDER_TYPE);
     }
 
-    public Order submitMarket(long marketplaceId, long marketId, Side side, long units) {
+    public Order submitMarket(long marketplaceId, long marketId, OrderSide side, long units) {
         var limit = submitLimit(marketplaceId, marketId, side, units,
                                 marketableLimit(market(marketplaceId, marketId), side));
 
@@ -643,10 +643,10 @@ public class HttpFlexemarkets implements Flexemarkets {
      * A tick of zero marks a fixed dimension, where the two bounds are equal
      * and there is one legal price.
      */
-    static long marketableLimit(Market market, Side side) {
+    static long marketableLimit(Market market, OrderSide side) {
         // The highest legal price is what priceRound gives for the ceiling, so
         // this is the grid rule rather than a fourth copy of it.
-        return Side.BUY == side ? market.priceRound(market.priceMaximum()) : market.priceMinimum();
+        return OrderSide.BUY == side ? market.priceRound(market.priceMaximum()) : market.priceMinimum();
     }
 
     // --- management ---------------------------------------------------------

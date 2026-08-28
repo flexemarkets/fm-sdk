@@ -61,7 +61,7 @@ public class MarketplaceBooks {
      *         failure -- the other SDKs raise there, and an absent market has
      *         nothing resting either way
      */
-    public boolean hasValue(long marketId, Side side) {
+    public boolean hasValue(long marketId, OrderSide side) {
         MarketBook book = get(marketId);
         return book != null && book.hasValue(side);
     }
@@ -74,7 +74,7 @@ public class MarketplaceBooks {
      * @return the best resting price, or -1 when that side is empty or the
      *         market is not in this marketplace
      */
-    public long bestPrice(long marketId, Side side) {
+    public long bestPrice(long marketId, OrderSide side) {
         MarketBook book = get(marketId);
         return book == null ? -1 : book.bestPrice(side);
     }

@@ -24,7 +24,7 @@ class MarketBookTest {
     }
 
     /** A resting limit, its id serving as original and supplier. */
-    private static Order limitOf(Market market, long orderId, Side side, long units, long price) {
+    private static Order limitOf(Market market, long orderId, OrderSide side, long units, long price) {
         return new Order(null, null, orderId, orderId, orderId, null,
                          OrderType.LIMIT, side, units, price, null, null,
                          market.marketplaceId(), 0L, market.symbol(), market.id(), null, null);
@@ -32,7 +32,7 @@ class MarketBookTest {
 
     /** The SDK's records are positional; this is the {@code toBuilder} the test was written against. */
     private static Order with(Order o, Long original, Long supplier, Long consumer,
-                              Side side, Long id, Long units) {
+                              OrderSide side, Long id, Long units) {
         return new Order(o.createdDate(), o.lastModifiedDate(),
                          id != null ? id : o.id(),
                          original != null ? original : o.original(),
@@ -49,7 +49,7 @@ class MarketBookTest {
         return orders;
     }
 
-    private static Side contra(Side side) {
+    private static OrderSide contra(OrderSide side) {
         return side.contra();
     }
 
@@ -100,7 +100,7 @@ class MarketBookTest {
         assertThat(book.bestBuyUnits()).isEqualTo(-1L);
         assertThat(book.bestSellUnits()).isEqualTo(-1L);
 
-        var sell = limitOf(market, 1, Side.SELL, 1, 100);
+        var sell = limitOf(market, 1, OrderSide.SELL, 1, 100);
         book.update(toArray(sell));
 
         assertThat(book.bestSellPrice()).isEqualTo(100L);
@@ -118,7 +118,7 @@ class MarketBookTest {
         assertThat(book.bestSellPrice()).as("crossed").isEqualTo(-1L);
         assertThat(book.bestSellUnits()).isEqualTo(-1L);
 
-        var buy = limitOf(market, 1, Side.BUY, 30, 900);
+        var buy = limitOf(market, 1, OrderSide.BUY, 30, 900);
         book.update(toArray(buy));
         assertThat(book.bestBuyPrice()).isEqualTo(900L);
 
@@ -143,7 +143,7 @@ class MarketBookTest {
         long price = 708;
         long nextId = 100;
         long originalId = nextId++;
-        book.update(toArray(limitOf(market, originalId, Side.BUY, 6, price)));
+        book.update(toArray(limitOf(market, originalId, OrderSide.BUY, 6, price)));
         assertThat(book.bestBuyUnits()).as("initial").isEqualTo(6L);
 
         long restingId = originalId;
@@ -155,13 +155,13 @@ class MarketBookTest {
             long crossId = nextId++;
             long remainingUnits = restingUnits - 1;
 
-            var splitMarker = with(limitOf(market, splitId, Side.BUY, restingUnits, price),
+            var splitMarker = with(limitOf(market, splitId, OrderSide.BUY, restingUnits, price),
                                    null, null, 0L, null, null, null);
-            var remainder = with(limitOf(market, remainderId, Side.BUY, remainingUnits, price),
+            var remainder = with(limitOf(market, remainderId, OrderSide.BUY, remainingUnits, price),
                                  originalId, splitId, null, null, null, null);
-            var matched = with(limitOf(market, matchId, Side.BUY, 1, price),
+            var matched = with(limitOf(market, matchId, OrderSide.BUY, 1, price),
                                originalId, splitId, crossId, null, null, null);
-            var cross = with(limitOf(market, crossId, Side.SELL, 1, price),
+            var cross = with(limitOf(market, crossId, OrderSide.SELL, 1, price),
                              crossId, crossId, matchId, null, null, null);
 
             book.update(toArray(splitMarker, remainder, matched, cross));
@@ -173,7 +173,7 @@ class MarketBookTest {
 
         assertThat(book.bestBuyUnits()).as("one unit left after five fills").isEqualTo(1L);
 
-        var cancelled = with(limitOf(market, restingId, Side.BUY, restingUnits, price),
+        var cancelled = with(limitOf(market, restingId, OrderSide.BUY, restingUnits, price),
                              originalId, restingId, null, null, null, null);
         book.update(cancelSet(cancelled));
 
@@ -199,7 +199,7 @@ class MarketBookTest {
         long price = 708;
         long nextId = 100;
         long originalId = nextId++;
-        book.update(toArray(limitOf(market, originalId, Side.BUY, 6, price)));
+        book.update(toArray(limitOf(market, originalId, OrderSide.BUY, 6, price)));
 
         int dropAtFill = 3;
 
@@ -212,13 +212,13 @@ class MarketBookTest {
             long crossId = nextId++;
             long remainingUnits = restingUnits - 1;
 
-            var splitMarker = with(limitOf(market, splitId, Side.BUY, restingUnits, price),
+            var splitMarker = with(limitOf(market, splitId, OrderSide.BUY, restingUnits, price),
                                    null, null, 0L, null, null, null);
-            var remainder = with(limitOf(market, remainderId, Side.BUY, remainingUnits, price),
+            var remainder = with(limitOf(market, remainderId, OrderSide.BUY, remainingUnits, price),
                                  originalId, splitId, null, null, null, null);
-            var matched = with(limitOf(market, matchId, Side.BUY, 1, price),
+            var matched = with(limitOf(market, matchId, OrderSide.BUY, 1, price),
                                originalId, splitId, crossId, null, null, null);
-            var cross = with(limitOf(market, crossId, Side.SELL, 1, price),
+            var cross = with(limitOf(market, crossId, OrderSide.SELL, 1, price),
                              crossId, crossId, matchId, null, null, null);
 
             book.update(i == dropAtFill
@@ -229,7 +229,7 @@ class MarketBookTest {
             restingUnits = remainingUnits;
         }
 
-        book.update(cancelSet(limitOf(market, restingId, Side.BUY, restingUnits, price)));
+        book.update(cancelSet(limitOf(market, restingId, OrderSide.BUY, restingUnits, price)));
 
         assertThat(book.bestBuyPrice())
             .as("a ghost bid survives the cancel, and only a re-seed clears it")
@@ -242,7 +242,7 @@ class MarketBookTest {
      *
      * <p>Python and TypeScript have carried {@code hasValue}, {@code bestPrice}
      * and {@code bestUnits} all along; Java shipped only the four fixed
-     * variants, so a caller holding a {@link Side} at runtime -- which is most
+     * variants, so a caller holding a {@link OrderSide} at runtime -- which is most
      * of them, since a side arrives on an order -- branched by hand to reach a
      * book that could already answer. The parity check could not see it: it
      * compared the client surface and stopped there.
@@ -252,41 +252,41 @@ class MarketBookTest {
         Market market = market(1L, "A");
         MarketBook book = new MarketBook(market);
         book.update(toArray(
-            limitOf(market, 1L, Side.BUY, 10, 100),
-            limitOf(market, 2L, Side.BUY, 5, 90),
-            limitOf(market, 3L, Side.SELL, 7, 110)));
+            limitOf(market, 1L, OrderSide.BUY, 10, 100),
+            limitOf(market, 2L, OrderSide.BUY, 5, 90),
+            limitOf(market, 3L, OrderSide.SELL, 7, 110)));
 
-        assertThat(book.bestPrice(Side.BUY)).isEqualTo(book.bestBuyPrice()).isEqualTo(100);
-        assertThat(book.bestPrice(Side.SELL)).isEqualTo(book.bestSellPrice()).isEqualTo(110);
-        assertThat(book.bestUnits(Side.BUY)).isEqualTo(book.bestBuyUnits()).isEqualTo(10);
-        assertThat(book.bestUnits(Side.SELL)).isEqualTo(book.bestSellUnits()).isEqualTo(7);
-        assertThat(book.hasValue(Side.BUY)).isTrue();
-        assertThat(book.hasValue(Side.SELL)).isTrue();
+        assertThat(book.bestPrice(OrderSide.BUY)).isEqualTo(book.bestBuyPrice()).isEqualTo(100);
+        assertThat(book.bestPrice(OrderSide.SELL)).isEqualTo(book.bestSellPrice()).isEqualTo(110);
+        assertThat(book.bestUnits(OrderSide.BUY)).isEqualTo(book.bestBuyUnits()).isEqualTo(10);
+        assertThat(book.bestUnits(OrderSide.SELL)).isEqualTo(book.bestSellUnits()).isEqualTo(7);
+        assertThat(book.hasValue(OrderSide.BUY)).isTrue();
+        assertThat(book.hasValue(OrderSide.SELL)).isTrue();
     }
 
     @Test
     void sideGenericAccessorsReportAnEmptySide() {
         Market market = market(1L, "A");
         MarketBook book = new MarketBook(market);
-        book.update(toArray(limitOf(market, 1L, Side.BUY, 10, 100)));
+        book.update(toArray(limitOf(market, 1L, OrderSide.BUY, 10, 100)));
 
-        assertThat(book.hasValue(Side.SELL)).isFalse();
-        assertThat(book.bestPrice(Side.SELL)).isEqualTo(-1);
-        assertThat(book.bestUnits(Side.SELL)).isEqualTo(-1);
+        assertThat(book.hasValue(OrderSide.SELL)).isFalse();
+        assertThat(book.bestPrice(OrderSide.SELL)).isEqualTo(-1);
+        assertThat(book.bestUnits(OrderSide.SELL)).isEqualTo(-1);
     }
 
     @Test
     void marketplaceBooksAnswerForAnUnknownMarketRatherThanFailing() {
         Market market = market(1L, "A");
         MarketplaceBooks books = new MarketplaceBooks(java.util.List.of(market));
-        books.update(toArray(limitOf(market, 1L, Side.BUY, 10, 100)));
+        books.update(toArray(limitOf(market, 1L, OrderSide.BUY, 10, 100)));
 
-        assertThat(books.bestPrice(1L, Side.BUY)).isEqualTo(100);
-        assertThat(books.hasValue(1L, Side.BUY)).isTrue();
+        assertThat(books.bestPrice(1L, OrderSide.BUY)).isEqualTo(100);
+        assertThat(books.hasValue(1L, OrderSide.BUY)).isTrue();
 
         // An absent market has nothing resting either way, so it is answered
         // rather than raised -- the other two SDKs raise here.
-        assertThat(books.hasValue(99L, Side.BUY)).isFalse();
-        assertThat(books.bestPrice(99L, Side.BUY)).isEqualTo(-1);
+        assertThat(books.hasValue(99L, OrderSide.BUY)).isFalse();
+        assertThat(books.bestPrice(99L, OrderSide.BUY)).isEqualTo(-1);
     }
 }

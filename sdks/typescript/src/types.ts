@@ -234,13 +234,13 @@ export interface Session {
  * The invalid case still cannot be written -- `"BYU"` is a type error -- which
  * is what the old `ORDER_SIDE_BUY` constant could only suggest.
  */
-export type Side = "BUY" | "SELL";
+export type OrderSide = "BUY" | "SELL";
 
 /** The members, for callers who prefer a name to a literal. */
-export const Side = {
+export const OrderSide = {
   BUY: "BUY",
   SELL: "SELL",
-} as const satisfies Record<string, Side>;
+} as const satisfies Record<string, OrderSide>;
 
 /**
  * What an order is: a bid or offer, or the withdrawal of one.
@@ -265,7 +265,7 @@ export const OrderType = {
  * Refusing an unrecognised value would cost the caller a whole response -- an
  * order list, a holdings snapshot -- over one field they may not read.
  */
-export function toSide(value: string | null | undefined): Side | null {
+export function toSide(value: string | null | undefined): OrderSide | null {
   const upper = value?.trim().toUpperCase();
   return upper === "BUY" || upper === "SELL" ? upper : null;
 }
@@ -282,7 +282,7 @@ export interface Order {
   supplier: number;
   consumer: number | null;
   type: OrderType | null;
-  side: Side | null;
+  side: OrderSide | null;
   units: number;
   price: number;
   ownerId: number | null;

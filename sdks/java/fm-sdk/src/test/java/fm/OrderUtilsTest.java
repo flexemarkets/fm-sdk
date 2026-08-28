@@ -18,7 +18,7 @@ import org.junit.jupiter.api.Test;
 class OrderUtilsTest {
 
     private static Order order(long id, long original, long supplier, OrderType type) {
-        return new Order(null, null, id, original, supplier, null, type, Side.BUY,
+        return new Order(null, null, id, original, supplier, null, type, OrderSide.BUY,
                 10L, 100L, null, 8L, 1L, 300L, "STK", 11L, null, null);
     }
 

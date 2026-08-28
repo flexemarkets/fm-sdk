@@ -23,7 +23,7 @@ public enum OrderType {
      * The type a response names, or null if it names none or one this version
      * does not know.
      *
-     * <p>Lenient for the reason {@link Side#of} gives: an unknown value should
+     * <p>Lenient for the reason {@link OrderSide#of} gives: an unknown value should
      * cost the caller one field, not the whole response. It matters more here —
      * the server has emitted {@code "MARKET"} on at least one path, which a
      * strict enum would have turned into a parse failure for every order in the

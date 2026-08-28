@@ -16,7 +16,7 @@ import tools.jackson.databind.JsonNode;
 import fm.Market;
 import fm.Order;
 import fm.MarketBook;
-import fm.Side;
+import fm.OrderSide;
 import fm.Trade;
 import fm.MarketTrades;
 
@@ -137,8 +137,8 @@ class BehaviourFixturesTest {
                 case "bestBuyUnits" -> assertEquals(want.asLong(), book.bestBuyUnits(), key);
                 case "bestSellPrice" -> assertEquals(want.asLong(), book.bestSellPrice(), key);
                 case "bestSellUnits" -> assertEquals(want.asLong(), book.bestSellUnits(), key);
-                case "hasValueBuy" -> assertEquals(want.asBoolean(), book.hasValue(Side.BUY), key);
-                case "hasValueSell" -> assertEquals(want.asBoolean(), book.hasValue(Side.SELL), key);
+                case "hasValueBuy" -> assertEquals(want.asBoolean(), book.hasValue(OrderSide.BUY), key);
+                case "hasValueSell" -> assertEquals(want.asBoolean(), book.hasValue(OrderSide.SELL), key);
                 case "buyLevels" -> assertEquals(expectedLevels(want), levels(book.buyLevels()), key);
                 case "sellLevels" -> assertEquals(expectedLevels(want), levels(book.sellLevels()), key);
                 default -> fail("fixture asks for unknown key " + key);

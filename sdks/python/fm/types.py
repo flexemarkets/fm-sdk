@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from .enums import OrderType, Side
+from .enums import OrderType, OrderSide
 
 from dataclasses import dataclass, field
 
@@ -250,7 +250,7 @@ class Order:
     supplier: int = 0
     consumer: int | None = None
     type: "OrderType | None" = None
-    side: "Side | None" = None
+    side: "OrderSide | None" = None
     units: int = 0
     price: int = 0
     owner_id: int | None = None

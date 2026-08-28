@@ -153,18 +153,18 @@ grid when it is omitted; Java requires both, having no default arguments.
 the connection is signed in as. Only the single-argument forms were renamed, so
 a blind replace of `.account(` is wrong. Match on the argument.
 
-### Side and order type are enums
+### OrderSide and order type are enums
 
 | Find | Replace |
 |---|---|
-| `Order.SIDE_BUY` | `Side.BUY` |
-| `Order.SIDE_SELL` | `Side.SELL` |
+| `Order.SIDE_BUY` | `OrderSide.BUY` |
+| `Order.SIDE_SELL` | `OrderSide.SELL` |
 | `Order.TYPE_LIMIT` | `OrderType.LIMIT` |
 | `Order.TYPE_CANCEL` | `OrderType.CANCEL` |
 | `OrderUtils.contra(side)` | `side.contra()` |
-| `OrderUtils.isBuy(sideString)` | `Side.BUY == side` |
-| `OrderUtils.isBuy(order)` | `Side.BUY == order.side()` |
-| `OrderUtils.isSell(order)` | `Side.SELL == order.side()` |
+| `OrderUtils.isBuy(sideString)` | `OrderSide.BUY == side` |
+| `OrderUtils.isBuy(order)` | `OrderSide.BUY == order.side()` |
+| `OrderUtils.isSell(order)` | `OrderSide.SELL == order.side()` |
 | `OrderUtils.isCancel(order)` | `OrderType.CANCEL == order.type()` |
 | `OrderUtils.isLimit(order)` | `OrderType.LIMIT == order.type()` |
 
@@ -173,12 +173,12 @@ a blind replace of `.account(` is wrong. Match on the argument.
 four above became one-line enum comparisons when side and type became types, and
 two ways to ask one question is one too many.
 
-`submitLimit`, `submitMarket` and `MarketView.submitLimit` take `Side`.
-`Order.side()` returns `Side` and `Order.type()` returns `OrderType`; both may
+`submitLimit`, `submitMarket` and `MarketView.submitLimit` take `OrderSide`.
+`Order.side()` returns `OrderSide` and `Order.type()` returns `OrderType`; both may
 be null — a cancel carries no side, and an unrecognised value parses to null
 rather than throwing.
 
-To convert a string of unknown provenance, use `Side.of(value)` or
+To convert a string of unknown provenance, use `OrderSide.of(value)` or
 `OrderType.of(value)`. Both are case-insensitive and return null for anything
 unrecognised.
 
@@ -216,13 +216,13 @@ code keeps working.
 | `.active_orders_v1(` | `.active_orders(` |
 | `.recent_trades_v1(` | `.recent_trades(` |
 | `.get_security(` | `.security(` |
-| `Order.SIDE_BUY` | `Side.BUY` |
-| `Order.SIDE_SELL` | `Side.SELL` |
+| `Order.SIDE_BUY` | `OrderSide.BUY` |
+| `Order.SIDE_SELL` | `OrderSide.SELL` |
 | `Order.TYPE_LIMIT` | `OrderType.LIMIT` |
 | `Order.TYPE_CANCEL` | `OrderType.CANCEL` |
 
-`Side` and `OrderType` are importable from `fm`. Passing a plain `"BUY"` still
-works — but compare with `==`, never `is`: `"BUY" is Side.BUY` is `False`.
+`OrderSide` and `OrderType` are importable from `fm`. Passing a plain `"BUY"` still
+works — but compare with `==`, never `is`: `"BUY" is OrderSide.BUY` is `False`.
 
 **`connect_with_token` is gone.** Use `connect(token, endpoint, description)`.
 See [token authentication](#7-token-authentication-never-worked) — this is a
@@ -260,14 +260,14 @@ signature mentions them.
 |---|---|
 | `.activeOrdersV1(` | `.activeOrders(` |
 | `.recentTradesV1(` | `.recentTrades(` |
-| `ORDER_SIDE_BUY` | `Side.BUY` |
-| `ORDER_SIDE_SELL` | `Side.SELL` |
+| `ORDER_SIDE_BUY` | `OrderSide.BUY` |
+| `ORDER_SIDE_SELL` | `OrderSide.SELL` |
 | `ORDER_TYPE_LIMIT` | `OrderType.LIMIT` |
 | `ORDER_TYPE_CANCEL` | `OrderType.CANCEL` |
 | `FlexemarketsOptions` | *(delete — no function ever accepted it)* |
 
-`Side` and `OrderType` are literal unions with same-named const objects, so
-`"BUY"` and `Side.BUY` are interchangeable.
+`OrderSide` and `OrderType` are literal unions with same-named const objects, so
+`"BUY"` and `OrderSide.BUY` are interchangeable.
 
 ### No longer exported from the package entry point
 

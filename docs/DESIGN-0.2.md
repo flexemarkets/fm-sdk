@@ -149,7 +149,7 @@ A plausible split:
 |---|---|---|
 | `fm.model` | the wire records — `Account`, `Allotment`, `Assets`, `ClientConnection`, `Holding`, `ManagerOtpBundle`, `Market`, `Marketplace`, `Order`, `Person`, `Security`, `Session`, `Token` | 13 |
 | `fm.event` | what arrives on a queue — `StreamDropped`, `FrameUnreadable`, `Reconnected`, `ReconnectEvent`, `GapEvent`, `OrdersUpdate`, `Version` | 7 |
-| `fm` | what you call and catch — the six roles, `Flexemarkets`, `MarketView`, `Subscription`, the eleven exceptions, `Endpoints`, the aggregators, `OrderUtils`, `Side`, `OrderType`, `TickGrid`, `Snapshot` | the rest |
+| `fm` | what you call and catch — the six roles, `Flexemarkets`, `MarketView`, `Subscription`, the eleven exceptions, `Endpoints`, the aggregators, `OrderUtils`, `OrderSide`, `OrderType`, `TickGrid`, `Snapshot` | the rest |
 
 Not obvious, and the cost is specific rather than general.
 

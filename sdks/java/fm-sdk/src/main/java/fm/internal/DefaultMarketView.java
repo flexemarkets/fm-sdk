@@ -15,7 +15,7 @@ import fm.OrdersUpdate;
 import fm.ReconnectEvent;
 import fm.Reconnected;
 import fm.Session;
-import fm.Side;
+import fm.OrderSide;
 import fm.Snapshot;
 import fm.StreamDropped;
 import fm.Subscription;
@@ -256,7 +256,7 @@ public class DefaultMarketView implements MarketView {
     }
 
     @Override
-    public Order submitLimit(long marketId, Side side, long units, long price) {
+    public Order submitLimit(long marketId, OrderSide side, long units, long price) {
         _ensureOpen();
         return flexemarkets.submitLimit(marketplaceId, marketId, side, units, price);
     }

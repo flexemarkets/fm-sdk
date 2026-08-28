@@ -48,7 +48,7 @@ public record Order(
     long supplier,
     Long consumer,
     OrderType type,
-    Side side,
+    OrderSide side,
     long units,
     long price,
     @JsonIgnore
@@ -76,7 +76,7 @@ public record Order(
             @JsonProperty("supplier") long supplier,
             @JsonProperty("consumer") Long consumer,
             @JsonProperty("type") OrderType type,
-            @JsonProperty("side") Side side,
+            @JsonProperty("side") OrderSide side,
             @JsonProperty("units") long units,
             @JsonProperty("price") long price,
             @JsonProperty("mine") Boolean mine,
