@@ -9,9 +9,11 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import org.junit.jupiter.api.Test;
@@ -33,6 +35,20 @@ import org.junit.jupiter.api.Test;
  * <p>This walks the compiled package and checks both.
  */
 class TimestampCreatorDriftTest {
+
+    /**
+     * Records that hold an {@link Instant} and are never built from the wire,
+     * with the reason each is not. Jackson is never asked to make one, so a
+     * creator on it would be a rite rather than a check.
+     *
+     * <p>Kept honest by {@link #nothingExemptedIsAWireType()}: a wire record
+     * carries {@code @JsonIgnoreProperties(ignoreUnknown = true)}, so listing
+     * one here fails rather than silencing the guard that would have caught it.
+     */
+    private static final Map<String, String> NOT_FROM_THE_WIRE = Map.of(
+            "Trade",
+            "assembled client-side by Trades from two Orders that were "
+                + "themselves parsed; the exchange sends no such object.");
 
     private static List<Class<?>> records() throws Exception {
         Path classes = Path.of("target", "classes", "fm");
@@ -69,6 +85,9 @@ class TimestampCreatorDriftTest {
         var missing = new ArrayList<String>();
 
         for (Class<?> type : records()) {
+            if (NOT_FROM_THE_WIRE.containsKey(type.getSimpleName())) {
+                continue;
+            }
             boolean holdsInstant = Arrays.stream(type.getRecordComponents())
                     .anyMatch(c -> c.getType() == Instant.class);
             if (holdsInstant && creator(type) == null) {
@@ -109,6 +128,24 @@ class TimestampCreatorDriftTest {
 
         assertThat(drifted)
                 .as("a creator that does not mirror its record drops or misbinds fields")
+                .isEmpty();
+    }
+
+    @Test
+    void nothingExemptedIsAWireType() throws Exception {
+        var wrongly = new ArrayList<String>();
+
+        for (Class<?> type : records()) {
+            if (NOT_FROM_THE_WIRE.containsKey(type.getSimpleName())
+                    && type.isAnnotationPresent(JsonIgnoreProperties.class)) {
+                wrongly.add(type.getSimpleName());
+            }
+        }
+
+        assertThat(wrongly)
+                .as("exempted from needing a creator, but annotated as something "
+                    + "the server sends -- the exemption is hiding the very drift "
+                    + "this class exists to catch")
                 .isEmpty();
     }
 }

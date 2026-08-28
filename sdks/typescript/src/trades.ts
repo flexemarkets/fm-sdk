@@ -1,22 +1,74 @@
 /**
  * Trade history maintained from WebSocket order events.
  *
- * Port of fm.trades (Python) / fm.Trades (Java).
+ * Port of fm.trades (Python) / fm.Trade and fm.Trades (Java).
  */
 
-import { isCancel, isConsumed, isSplit, isSymbol } from "./order-utils.js";
+import { findOrder, isConsumed, isLimit, isResting, isSymbol } from "./order-utils.js";
 import type { Market, Order } from "./types.js";
 
 /**
- * Bounded FIFO queue of executed trades for a single market.
+ * One trade: the resting order, the order that crossed it, and the numbers
+ * each side contributes.
  *
- * Updated incrementally from WebSocket ORDERS-UPDATE events.
- * Keeps the most recent `capacity` trades.
+ * A trade is not a distinct thing on the wire. The exchange expresses one as a
+ * pair of orders referring to each other, so every number a caller wants has to
+ * be read off one side or the other — and *which* side is the part that is easy
+ * to get wrong. Both sides are kept here, and the derived fields record the
+ * choice rather than leaving each caller to make it again:
+ *
+ * - `price` and `units` come from `resting`, which carries the terms the trade
+ *   happened on.
+ * - `at` comes from `aggressor`, because the trade happened when the incoming
+ *   order arrived, not when the quote it took was posted.
+ *
+ * The pairing rule is the one `TradesSummary` in fm-manager has always used: an
+ * order that is a consumed limit whose consumer is also a limit is one side of
+ * a match, and {@link isResting} says which side. Before this type existed the
+ * tape kept only the resting order, so "who took this trade" answered with the
+ * maker — a real participant, at a real price, in a complete-looking line that
+ * named the wrong person.
+ */
+export interface Trade {
+  resting: Order;
+  aggressor: Order;
+  price: number;
+  units: number;
+  at: Date | null;
+}
+
+/** A trade from its two sides, taking each derived field off the side that
+ *  carries it. */
+export function tradeOf(resting: Order, aggressor: Order): Trade {
+  return {
+    resting,
+    aggressor,
+    price: resting.price,
+    units: resting.units,
+    at: aggressor.lastModifiedDate,
+  };
+}
+
+/**
+ * Bounded FIFO queue of executed trades for a single market, newest last.
+ *
+ * Updated incrementally from WebSocket ORDERS-UPDATE events, and seeded from
+ * the `/v1/orders/recent-trades` snapshot. Keeps the most recent `capacity`
+ * trades.
+ *
+ * Each batch is sorted by the time the aggressor arrived before it is appended,
+ * which is what makes "newest last" true rather than merely intended. Up to and
+ * including fm-server 4.3.1 the snapshot MarketView seeds and re-seeds from — on
+ * open, on a sequence gap, and after a reconnect — arrived newest *first*, so a
+ * tape that appended in array order held its trades backwards and the caller
+ * asking for the latest one got the oldest it had retained. Later servers send
+ * it oldest-first; sorting here is what makes the tape's own contract
+ * independent of which one answered.
  */
 export class Trades {
   readonly market: Market;
   readonly capacity: number;
-  private readonly _container: Order[] = [];
+  private readonly _container: Trade[] = [];
 
   constructor(market: Market, capacity: number = 100) {
     if (capacity < 1) throw new Error("Capacity must be greater than zero.");
@@ -35,31 +87,27 @@ export class Trades {
   // -- update from WebSocket events ------------------------------------------
 
   update(orders: Order[]): void {
-    const consumers = new Map<number, Order>();
+    const found: Trade[] = [];
 
     for (const order of orders) {
       if (!isSymbol(this.market.symbol, order)) continue;
-      if (isCancel(order)) continue;
-      if (isSplit(order)) continue;
+      if (!isLimit(order) || !isConsumed(order)) continue;
 
-      if (isConsumed(order)) {
-        consumers.set(order.id, order);
-        const consumer = consumers.get(order.consumer!);
+      const aggressor = findOrder(orders, order.consumer);
+      if (aggressor === null || !isLimit(aggressor)) continue;
+      if (!isResting(orders, order)) continue;
 
-        if (consumer !== undefined) {
-          // The resting order is the one with the older original ID
-          if (order.original < consumer.original) {
-            this._append(order);
-          } else {
-            this._append(consumer);
-          }
-        }
-      }
+      found.push(tradeOf(order, aggressor));
     }
+
+    // Stable since ES2019, so trades the server did not stamp keep the order
+    // it delivered them in rather than being shuffled among themselves.
+    found.sort((a, b) => time(a) - time(b));
+    for (const trade of found) this._append(trade);
   }
 
-  private _append(order: Order): void {
-    this._container.push(order);
+  private _append(trade: Trade): void {
+    this._container.push(trade);
     while (this._container.length > this.capacity) {
       this._container.shift();
     }
@@ -67,15 +115,23 @@ export class Trades {
 
   // -- query -----------------------------------------------------------------
 
-  mostRecentTrades(): Order[] {
+  mostRecentTrades(): Trade[] {
     return [...this._container];
   }
 
-  mostRecentPrices(): number[] {
-    return this._container.map((o) => o.price);
+  /** The most recent trade — what a caller asking "what just happened" wants.
+   *  `null` when nothing has traded yet. */
+  last(): Trade | null {
+    return this._container.length > 0
+      ? this._container[this._container.length - 1]!
+      : null;
   }
 
-  drain(): Order[] {
+  mostRecentPrices(): number[] {
+    return this._container.map((t) => t.price);
+  }
+
+  drain(): Trade[] {
     const trades = [...this._container];
     this._container.length = 0;
     return trades;
@@ -123,4 +179,9 @@ export class MarketplaceTrades {
   clear(): void {
     for (const t of this._trades.values()) t.clear();
   }
+}
+
+/** Epoch millis for sorting, with unstamped trades last. */
+function time(trade: Trade): number {
+  return trade.at === null ? Number.POSITIVE_INFINITY : trade.at.getTime();
 }

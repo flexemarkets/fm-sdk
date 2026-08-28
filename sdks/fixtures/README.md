@@ -44,6 +44,32 @@ to a string would run it back through the SDK's own timestamp parser, so a
 parser that is wrong in both directions would agree with itself. A number does
 not.
 
+## Behaviour fixtures: `trades/`
+
+The documents above are one payload each, run through every parser that claims
+to produce their type. `trades/pairing.json` is a different thing: a batch of
+orders and the trades the tape must build from them. It lives in a
+subdirectory because the runner globs `*.json` at the top level and maps `type`
+to a parser, and this case has no single type to map.
+
+It pins two answers that were wrong in all three SDKs at once and looked right
+in each:
+
+- **which side is which.** A trade is a pair of orders, and the tape kept the
+  resting one — so "who took this trade" named the maker, at a real price, in a
+  well-formed line. `Trade` now keeps both, and the fixture asserts the
+  aggressor by id and owner.
+- **what order the tape is in.** `/v1/orders/recent-trades` answered
+  newest-first up to and including fm-server 4.3.1, and the tape appended in
+  array order, so it was reversed and the newest trade sat at the front. The
+  fixture is deliberately delivered newest-first, the way that server did —
+  the tape sorts by time regardless of what arrives, so it stays right against
+  a server on either side of that change.
+
+Within each pair the resting order carries the *later* timestamp — so a tape
+that reads the trade's time off the wrong side fails on the value rather than
+on the ordering, which the ordering assertion alone would not catch.
+
 ## Adding one
 
 Name it for the case, not the type — `account-pending`, not `account-2` — and

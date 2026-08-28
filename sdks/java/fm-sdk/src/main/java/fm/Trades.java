@@ -1,12 +1,13 @@
 package fm;
 
+import static fm.OrderUtils.findOrder;
 import static fm.OrderUtils.isConsumed;
-import static fm.OrderUtils.isSplit;
+import static fm.OrderUtils.isResting;
 import static fm.OrderUtils.isSymbol;
 
 import java.util.ArrayDeque;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.stream.Stream;
 
 
@@ -15,12 +16,29 @@ import java.util.stream.Stream;
  *
  * <p>The trade tape {@link MarketView} maintains. A trade is not a distinct
  * thing on the wire -- the exchange expresses one as a pair of orders referring
- * to each other -- so this reads an orders update, pairs the consumer with what
- * it consumed, and keeps the resting side, which is the one that carries the
- * price the trade happened at.
+ * to each other -- so this reads an orders update, pairs each consumed limit
+ * with the limit that consumed it, and keeps {@link Trade both} sides.
  *
- * <p>Cancels and split markers are skipped: neither is a trade, and counting
- * them would put prices on the tape that nobody paid.
+ * <p>Which side is which is decided by {@link OrderUtils#isResting}, the same
+ * rule {@code TradesSummary} in fm-manager applies. That matters more than it
+ * looks: the cheaper test of "whichever has the older original id" agrees on an
+ * ordinary match and disagrees exactly where an order was split, which is the
+ * case a caller is least able to check by eye.
+ *
+ * <p>Cancels and split markers never pair, so neither reaches the tape: a
+ * cancel is not a limit, and a split marker's consumer is zero rather than an
+ * order. Counting either would put prices on the tape that nobody paid.
+ *
+ * <p><b>Ordering.</b> Each batch is sorted by the time the aggressor arrived
+ * before it is appended, which is what makes "newest last" true rather than
+ * merely intended. Up to and including fm-server 4.3.1 the
+ * {@code /v1/orders/recent-trades} snapshot -- what {@link MarketView} seeds
+ * and re-seeds from, on open, on a sequence gap and after a reconnect --
+ * arrived newest <em>first</em>, so a tape that appended in array order held
+ * its trades backwards and the caller asking for the latest one got the oldest
+ * it had retained. Later servers send it oldest-first; sorting here is what
+ * makes the tape's own contract independent of which one answered, the way
+ * reading the snapshot's <em>shape</em> rather than assuming it is.
  *
  * <p>Synchronized for the same reason {@link OrderBook} is: the stream writes
  * on its thread while the caller reads on theirs.
@@ -28,7 +46,7 @@ import java.util.stream.Stream;
 public class Trades {
     private final Market market;
     private final int capacity;
-    private final ArrayDeque<Order> container;
+    private final ArrayDeque<Trade> container;
 
     /**
      * An empty tape for one market.
@@ -88,40 +106,51 @@ public class Trades {
     /**
      * Apply an orders update, keeping whatever trades it describes.
      *
+     * <p>Both sides of a match must be in the same array for it to be seen as
+     * one, which is how the server delivers them: an {@code ORDERS-UPDATE}
+     * carries the pair together, and the recent-trades snapshot carries both
+     * rows of each.
+     *
      * @param ordersUpdate orders as the stream delivered them; anything for
-     *                     another market, and any cancel or split marker, is
-     *                     skipped
+     *                     another market, and anything that is not one side of
+     *                     a limit-against-limit match, is skipped
      */
     public synchronized void update(Order[] ordersUpdate) {
-        Map<Long, Order> consumers = new ConcurrentHashMap<>();
+        var found = new ArrayList<Trade>();
 
         for (var order : ordersUpdate) {
             if (!isSymbol(market.symbol(), order)) continue;
-            if (OrderType.CANCEL == order.type()) continue;
-            if (isSplit(order)) continue;
+            if (OrderType.LIMIT != order.type() || !isConsumed(order)) continue;
 
-            if (isConsumed(order)) {
-                consumers.put(order.id(), order);
+            var aggressor = findOrder(ordersUpdate, order.consumer());
+            if (aggressor == null || OrderType.LIMIT != aggressor.type()) continue;
+            if (!isResting(ordersUpdate, order)) continue;
 
-                var consumer = consumers.get(order.consumer());
-                if (consumer != null) {
-                    if (order.original() < consumer.original()) {
-                        saveResting(order);
-                    } else {
-                        saveResting(consumer);
-                    }
-                }
-            }
+            found.add(Trade.of(order, aggressor));
         }
+
+        found.sort(Comparator.comparing(Trade::at,
+            Comparator.nullsLast(Comparator.naturalOrder())));
+        found.forEach(this::save);
     }
 
     /**
      * The tape, oldest first.
      *
-     * @return the retained trades as the resting order of each pair
+     * @return the retained trades, each carrying both of its sides
      */
-    public synchronized Order[] mostRecentTrades() {
-        return container.toArray(new Order[0]);
+    public synchronized Trade[] mostRecentTrades() {
+        return container.toArray(new Trade[0]);
+    }
+
+    /**
+     * The most recent trade, which is the one a caller asking "what just
+     * happened" wants.
+     *
+     * @return the newest retained trade, or null when nothing has traded yet
+     */
+    public synchronized Trade last() {
+        return container.peekLast();
     }
 
     /**
@@ -131,7 +160,7 @@ public class Trades {
      */
     public synchronized long[] mostRecentPrices() {
         return Stream.of(mostRecentTrades())
-            .mapToLong(Order::price)
+            .mapToLong(Trade::price)
             .toArray();
     }
 
@@ -142,10 +171,10 @@ public class Trades {
         container.clear();
     }
 
-    private void saveResting(Order order) {
+    private void save(Trade trade) {
         if (container.size() == capacity) {
             container.removeFirst();
         }
-        container.addLast(order);
+        container.addLast(trade);
     }
 }

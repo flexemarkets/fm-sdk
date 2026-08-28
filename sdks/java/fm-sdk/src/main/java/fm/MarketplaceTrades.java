@@ -73,7 +73,7 @@ public class MarketplaceTrades {
         return collection.values().stream()
             .sorted(Comparator.comparingLong(Trades::marketId))
             .map(Trades::mostRecentTrades)
-            .map(orders -> Stream.of(orders).mapToLong(Order::price).toArray())
+            .map(trades -> Stream.of(trades).mapToLong(Trade::price).toArray())
             .toArray(long[][]::new);
     }
 

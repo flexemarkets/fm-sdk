@@ -75,7 +75,8 @@ export {
 export { OrderBook, OrderBooks } from "./orderbook.js";
 
 // Trades
-export { Trades, MarketplaceTrades } from "./trades.js";
+export { Trades, MarketplaceTrades, tradeOf } from "./trades.js";
+export type { Trade } from "./trades.js";
 
 // Events
 export type {

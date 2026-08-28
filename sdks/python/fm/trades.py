@@ -1,22 +1,79 @@
 """Trade history maintained from WebSocket order events.
 
-Port of fm.trades.Trades and fm.trades.MarketplaceTrades.
+Port of fm.Trade, fm.Trades and fm.MarketplaceTrades.
 """
 
 from __future__ import annotations
 
 import threading
 from collections import deque
+from dataclasses import dataclass
+from datetime import datetime
 
-from .order_utils import is_cancel, is_consumed, is_split, is_symbol
+from .order_utils import find_order, is_consumed, is_limit, is_resting, is_symbol
 from .types import Market, Order
 
 
-class Trades:
-    """Bounded FIFO queue of executed trades for a single market.
+@dataclass
+class Trade:
+    """One trade: the resting order, the order that crossed it, and the
+    numbers each side contributes.
 
-    Updated incrementally from WebSocket ``ORDERS-UPDATE`` events.
-    Keeps the most recent *capacity* trades.
+    A trade is not a distinct thing on the wire. The exchange expresses one as
+    a pair of orders referring to each other, so every number a caller wants
+    has to be read off one side or the other -- and *which* side is the part
+    that is easy to get wrong. Both sides are kept here, and the derived
+    fields record the choice rather than leaving each caller to make it again:
+
+    * ``price`` and ``units`` come from ``resting``, which carries the terms
+      the trade happened on.
+    * ``at`` comes from ``aggressor``, because the trade happened when the
+      incoming order arrived, not when the quote it took was posted.
+
+    The pairing rule is the one ``TradesSummary`` in fm-manager has always
+    used: an order that is a consumed limit whose consumer is also a limit is
+    one side of a match, and :func:`~fm.order_utils.is_resting` says which
+    side. Before this type existed the tape kept only the resting order, so
+    "who took this trade" answered with the maker -- a real participant, at a
+    real price, in a complete-looking line that named the wrong person.
+    """
+
+    resting: Order
+    aggressor: Order
+    price: int = 0
+    units: int = 0
+    at: "datetime | None" = None
+
+    @staticmethod
+    def of(resting: Order, aggressor: Order) -> "Trade":
+        """A trade from its two sides, taking each derived field off the side
+        that carries it.
+        """
+        return Trade(
+            resting=resting,
+            aggressor=aggressor,
+            price=resting.price,
+            units=resting.units,
+            at=aggressor.last_modified_date,
+        )
+
+
+class Trades:
+    """Bounded FIFO queue of executed trades for a single market, newest last.
+
+    Updated incrementally from WebSocket ``ORDERS-UPDATE`` events, and seeded
+    from the ``/v1/orders/recent-trades`` snapshot. Keeps the most recent
+    *capacity* trades.
+
+    Each batch is sorted by the time the aggressor arrived before it is
+    appended, which is what makes "newest last" true rather than merely
+    intended. Up to and including fm-server 4.3.1 the snapshot
+    :class:`~fm.market_view.MarketView` seeds and re-seeds from -- on open, on
+    a sequence gap, and after a reconnect -- arrived newest *first*, so a tape
+    that appended in array order held its trades backwards and the caller
+    asking for the latest one got the oldest it had retained. Later servers
+    send it oldest-first; sorting here is what makes the tape's own contract
+    independent of which one answered.
     """
 
     def __init__(self, market: Market, capacity: int = 100):
@@ -24,7 +81,7 @@ class Trades:
             raise ValueError("Capacity must be greater than zero.")
         self._market = market
         self._capacity = capacity
-        self._container: deque[Order] = deque(maxlen=capacity)
+        self._container: deque[Trade] = deque(maxlen=capacity)
         self._lock = threading.Lock()
 
     @property
@@ -50,40 +107,46 @@ class Trades:
             self._update(orders)
 
     def _update(self, orders: list[Order]) -> None:
-        consumers: dict[int, Order] = {}
+        found: list[Trade] = []
 
         for order in orders:
             if not is_symbol(self._market.symbol, order):
                 continue
-
-            if is_cancel(order):
+            if not is_limit(order) or not is_consumed(order):
                 continue
 
-            if is_split(order):
+            aggressor = find_order(orders, order.consumer)
+            if aggressor is None or not is_limit(aggressor):
+                continue
+            if not is_resting(orders, order):
                 continue
 
-            if is_consumed(order):
-                consumers[order.id] = order
-                consumer = consumers.get(order.consumer)  # type: ignore[arg-type]
+            found.append(Trade.of(order, aggressor))
 
-                if consumer is not None:
-                    # The resting order is the one with the older original ID
-                    if order.original < consumer.original:
-                        self._container.append(order)
-                    else:
-                        self._container.append(consumer)
+        # Stable, and nothing without a timestamp is ever compared against
+        # something with one -- the tuple's first element separates them, so
+        # the placeholder below is only ever compared with itself.
+        found.sort(key=lambda t: (t.at is None, t.at or _NO_TIME))
+        self._container.extend(found)
 
     # -- query -------------------------------------------------------------
 
-    def most_recent_trades(self) -> list[Order]:
+    def most_recent_trades(self) -> list[Trade]:
         with self._lock:
             return list(self._container)
 
+    def last(self) -> "Trade | None":
+        """The most recent trade -- what a caller asking "what just happened"
+        wants. ``None`` when nothing has traded yet.
+        """
+        with self._lock:
+            return self._container[-1] if self._container else None
+
     def most_recent_prices(self) -> list[int]:
         with self._lock:
-            return [o.price for o in self._container]
+            return [t.price for t in self._container]
 
-    def drain(self) -> list[Order]:
+    def drain(self) -> list[Trade]:
         """Remove and return all trades from the queue."""
         with self._lock:
             trades = list(self._container)
@@ -132,3 +195,6 @@ class MarketplaceTrades:
         """
         for t in self._trades.values():
             t.clear()
+
+
+_NO_TIME = datetime.min

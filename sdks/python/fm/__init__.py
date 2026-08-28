@@ -19,7 +19,7 @@ from .exceptions import (
 )
 from .market_view import GapEvent, MarketView, ReconnectEvent, Subscription
 from .orderbook import OrderBook, OrderBooks
-from .trades import MarketplaceTrades, Trades
+from .trades import MarketplaceTrades, Trade, Trades
 from .types import (
     Account,
     Allotment,
@@ -62,6 +62,7 @@ __all__ = [
     "OrderBooks",
     "Trades",
     "MarketplaceTrades",
+    "Trade",
     # market view
     "MarketView",
     "Subscription",

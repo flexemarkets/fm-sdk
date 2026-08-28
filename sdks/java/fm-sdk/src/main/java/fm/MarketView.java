@@ -83,9 +83,9 @@ public interface MarketView extends AutoCloseable {
      * stream. Reads are atomic, on the same terms as the book.
      *
      * <p>A trade is not a distinct thing on the wire -- the exchange expresses
-     * one as a pair of orders referring to each other -- so the tape holds the
-     * resting side of each pair, which is the one carrying the price the trade
-     * happened at.
+     * one as a pair of orders referring to each other -- so the tape holds
+     * {@link Trade}, which keeps both: the resting order that carries the price
+     * the trade happened at, and the aggressor that came in and took it.
      *
      * @param marketId the market to read
      * @return that market's tape, current as of this call, or null when
