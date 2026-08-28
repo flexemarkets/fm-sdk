@@ -1,4 +1,8 @@
-package fm;
+package fm.internal;
+
+import fm.model.Order;
+import fm.model.OrderSide;
+import fm.model.OrderType;
 
 
 /**
@@ -15,7 +19,7 @@ package fm;
  * reads the same way, and is one fewer name to know. Two ways to ask one
  * question is one too many.
  */
-final class OrderUtils {
+public final class OrderUtils {
     private OrderUtils() {}
 
     /**

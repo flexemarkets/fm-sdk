@@ -1,5 +1,7 @@
-package fm;
+package fm.model;
 
+import fm.internal.OrderUtils;
+import fm.internal.Timestamps;
 import java.time.Instant;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonCreator;

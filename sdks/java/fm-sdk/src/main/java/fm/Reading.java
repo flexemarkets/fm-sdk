@@ -1,5 +1,13 @@
 package fm;
 
+import fm.model.Allotment;
+import fm.model.ClientConnection;
+import fm.model.Holding;
+import fm.model.Market;
+import fm.model.Marketplace;
+import fm.model.Order;
+import fm.model.Person;
+import fm.model.Session;
 import java.util.List;
 
 

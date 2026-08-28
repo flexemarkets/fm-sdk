@@ -1,5 +1,9 @@
 package fm;
 
+import fm.model.Market;
+import fm.model.Order;
+import fm.model.OrderSide;
+import fm.model.OrderType;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;

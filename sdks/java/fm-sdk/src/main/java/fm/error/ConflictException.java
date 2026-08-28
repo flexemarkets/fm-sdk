@@ -1,6 +1,7 @@
 package fm.error;
 
-import fm.ConflictFailure;
+import fm.model.ConflictFailure;
+
 
 /**
  * The server refused a request because it conflicts with what already exists.

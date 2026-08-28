@@ -1,5 +1,9 @@
 package fm.internal;
 
+import fm.model.Market;
+import fm.model.Order;
+import fm.model.OrderSide;
+import fm.model.Trade;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -13,11 +17,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import tools.jackson.databind.JsonNode;
 
-import fm.Market;
-import fm.Order;
 import fm.MarketBook;
-import fm.OrderSide;
-import fm.Trade;
 import fm.MarketTrades;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

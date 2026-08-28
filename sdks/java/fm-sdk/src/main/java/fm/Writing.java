@@ -1,5 +1,9 @@
 package fm;
 
+import fm.model.Market;
+import fm.model.Order;
+import fm.model.OrderSide;
+
 
 /**
  * Trading in a marketplace: submitting orders and cancelling them.

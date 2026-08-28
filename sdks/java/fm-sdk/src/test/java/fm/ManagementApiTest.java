@@ -1,5 +1,15 @@
 package fm;
 
+import fm.model.Allotment;
+import fm.model.Assets;
+import fm.model.ClientConnection;
+import fm.model.Holding;
+import fm.model.Market;
+import fm.model.Marketplace;
+import fm.model.Order;
+import fm.model.Person;
+import fm.model.Security;
+import fm.model.Session;
 import fm.error.ApiException;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

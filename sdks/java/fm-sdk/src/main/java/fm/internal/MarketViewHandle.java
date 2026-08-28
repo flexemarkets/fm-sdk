@@ -1,16 +1,17 @@
 package fm.internal;
 
+import fm.model.Holding;
+import fm.model.Market;
+import fm.model.Order;
+import fm.model.OrderSide;
+import fm.model.Session;
+import fm.model.Trade;
 import fm.Flexemarkets;
 import fm.GapEvent;
-import fm.Holding;
-import fm.Market;
 import fm.MarketView;
-import fm.Order;
 import fm.MarketBook;
 import fm.ReconnectEvent;
 import fm.MarketTrades;
-import fm.Session;
-import fm.OrderSide;
 import fm.Subscription;
 
 import java.util.List;
@@ -85,7 +86,7 @@ class MarketViewHandle implements MarketView {
         return sub;
     }
 
-    @Override public Subscription onTrade(long marketId, Consumer<fm.Trade> handler) {
+    @Override public Subscription onTrade(long marketId, Consumer<fm.model.Trade> handler) {
         _check();
         Subscription sub = _shared.onTrade(marketId, handler);
         _mySubscriptions.add(sub);

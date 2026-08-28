@@ -1,5 +1,15 @@
 package fm.internal;
 
+import fm.model.Account;
+import fm.model.ClientConnection;
+import fm.model.Holding;
+import fm.model.Market;
+import fm.model.Marketplace;
+import fm.model.Order;
+import fm.model.Person;
+import fm.model.Security;
+import fm.model.Session;
+import fm.model.Token;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
@@ -47,23 +57,23 @@ class WireFixturesTest {
 
     /** Wire type name -> the record the SDK deserializes it into. */
     private static final Map<String, Class<?>> TYPES = Map.of(
-            "Order", fm.Order.class,
-            "Session", fm.Session.class,
-            "Holding", fm.Holding.class,
-            "Account", fm.Account.class,
-            "Person", fm.Person.class,
-            "Market", fm.Market.class,
-            "Marketplace", fm.Marketplace.class,
-            "ClientConnection", fm.ClientConnection.class,
-            "Security", fm.Security.class,
-            "Token", fm.Token.class);
+            "Order", fm.model.Order.class,
+            "Session", fm.model.Session.class,
+            "Holding", fm.model.Holding.class,
+            "Account", fm.model.Account.class,
+            "Person", fm.model.Person.class,
+            "Market", fm.model.Market.class,
+            "Marketplace", fm.model.Marketplace.class,
+            "ClientConnection", fm.model.ClientConnection.class,
+            "Security", fm.model.Security.class,
+            "Token", fm.model.Token.class);
 
     /**
      * The snapshot envelope is not a record the mapper binds -- it is a shape
      * the SDK has to recognise, which is exactly why it has broken twice. The
      * fixtures for it run through the real unwrap.
      */
-    record OrdersSnapshot(java.util.List<fm.Order> orders) { }
+    record OrdersSnapshot(java.util.List<fm.model.Order> orders) { }
 
     /** Types the fixture run handles by a route other than {@link #TYPES}. */
     private static final java.util.Set<String> HANDLED_WITHOUT_A_TYPE =

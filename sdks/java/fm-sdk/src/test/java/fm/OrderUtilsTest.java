@@ -1,5 +1,9 @@
 package fm;
 
+import fm.model.Order;
+import fm.model.OrderSide;
+import fm.model.OrderType;
+import fm.internal.OrderUtils;
 import static org.assertj.core.api.Assertions.assertThat;
 
 

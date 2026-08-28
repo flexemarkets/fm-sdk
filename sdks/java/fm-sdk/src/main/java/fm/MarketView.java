@@ -1,5 +1,11 @@
 package fm;
 
+import fm.model.Holding;
+import fm.model.Market;
+import fm.model.Order;
+import fm.model.OrderSide;
+import fm.model.Session;
+import fm.model.Trade;
 import fm.internal.DefaultMarketView;
 
 import java.util.List;

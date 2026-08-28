@@ -1,4 +1,4 @@
-package fm;
+package fm.model;
 
 import java.util.Comparator;
 import java.util.List;

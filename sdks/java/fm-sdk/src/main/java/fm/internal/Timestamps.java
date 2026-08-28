@@ -1,4 +1,4 @@
-package fm;
+package fm.internal;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -24,7 +24,7 @@ import java.time.format.DateTimeParseException;
  * <p>So both spellings resolve to one {@link Instant} and the ambiguity stops
  * here.
  */
-final class Timestamps {
+public final class Timestamps {
 
     private Timestamps() {
     }
@@ -36,7 +36,7 @@ final class Timestamps {
      * enums give: one unparseable field should cost the caller that field, not
      * the whole response it arrived in.
      */
-    static Instant parse(String value) {
+    public static Instant parse(String value) {
         if (null == value || value.isBlank()) {
             return null;
         }

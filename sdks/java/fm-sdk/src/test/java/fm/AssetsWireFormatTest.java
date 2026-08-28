@@ -1,5 +1,9 @@
 package fm;
 
+import fm.model.Allotment;
+import fm.model.Assets;
+import fm.model.Holding;
+import fm.model.Security;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;

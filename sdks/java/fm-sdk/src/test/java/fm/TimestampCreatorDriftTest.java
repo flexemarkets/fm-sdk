@@ -1,5 +1,7 @@
 package fm;
 
+import fm.model.Order;
+import fm.model.Trade;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.lang.reflect.Executable;

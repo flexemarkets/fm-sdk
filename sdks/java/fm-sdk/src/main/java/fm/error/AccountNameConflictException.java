@@ -1,7 +1,8 @@
 package fm.error;
 
-import fm.Account;
-import fm.ConflictFailure;
+import fm.model.Account;
+import fm.model.ConflictFailure;
+
 
 /**
  * An account name was taken, and the server proposed another.

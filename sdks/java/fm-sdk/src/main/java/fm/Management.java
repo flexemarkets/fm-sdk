@@ -1,5 +1,8 @@
 package fm;
 
+import fm.model.Holding;
+import fm.model.Marketplace;
+import fm.model.Session;
 import java.nio.file.Path;
 import java.util.List;
 

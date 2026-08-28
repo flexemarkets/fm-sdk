@@ -1,19 +1,20 @@
 package fm.internal;
 
+import fm.model.Holding;
+import fm.model.Market;
+import fm.model.Marketplace;
+import fm.model.Order;
+import fm.model.OrderSide;
+import fm.model.Session;
+import fm.model.Trade;
 import fm.Flexemarkets;
 import fm.GapEvent;
-import fm.Holding;
-import fm.Market;
 import fm.MarketView;
-import fm.Marketplace;
 import fm.MarketplaceTrades;
-import fm.Order;
 import fm.MarketBook;
 import fm.MarketplaceBooks;
 import fm.OrdersUpdate;
 import fm.ReconnectEvent;
-import fm.Session;
-import fm.OrderSide;
 import fm.Snapshot;
 import fm.StreamDropped;
 import fm.Subscription;
@@ -225,7 +226,7 @@ public class DefaultMarketView implements MarketView {
     }
 
     @Override
-    public Subscription onTrade(long marketId, Consumer<fm.Trade> handler) {
+    public Subscription onTrade(long marketId, Consumer<fm.model.Trade> handler) {
         _ensureOpen();
         TradeHandler entry = new TradeHandler(marketId, handler);
         _tradeHandlers.add(entry);
@@ -425,5 +426,5 @@ public class DefaultMarketView implements MarketView {
 
     private record MarketBookHandler(long marketId, Consumer<MarketBook> handler) {}
 
-    private record TradeHandler(long marketId, Consumer<fm.Trade> handler) {}
+    private record TradeHandler(long marketId, Consumer<fm.model.Trade> handler) {}
 }

@@ -1,10 +1,14 @@
 package fm;
 
-import static fm.OrderUtils.findOrder;
-import static fm.OrderUtils.isAvailable;
-import static fm.OrderUtils.isResting;
-import static fm.OrderUtils.isSplit;
-import static fm.OrderUtils.isSymbol;
+import fm.model.Market;
+import fm.model.Order;
+import fm.model.OrderSide;
+import fm.model.OrderType;
+import static fm.internal.OrderUtils.findOrder;
+import static fm.internal.OrderUtils.isAvailable;
+import static fm.internal.OrderUtils.isResting;
+import static fm.internal.OrderUtils.isSplit;
+import static fm.internal.OrderUtils.isSymbol;
 
 import java.util.Collections;
 import java.util.Map;

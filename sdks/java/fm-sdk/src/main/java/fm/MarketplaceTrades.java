@@ -1,5 +1,8 @@
 package fm;
 
+import fm.model.Market;
+import fm.model.Order;
+import fm.model.Trade;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;

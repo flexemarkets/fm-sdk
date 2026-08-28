@@ -1,11 +1,11 @@
 package fm.internal;
 
+import fm.model.Holding;
+import fm.model.Order;
+import fm.model.Session;
 import fm.Flexemarkets;
-import fm.Holding;
 import fm.MarketView;
-import fm.Order;
 import fm.OrdersUpdate;
-import fm.Session;
 import fm.Snapshot;
 import fm.StreamDropped;
 import fm.Subscription;

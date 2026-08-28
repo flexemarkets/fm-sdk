@@ -1,5 +1,8 @@
 package fm.ticker;
 
+import fm.model.Holding;
+import fm.model.Market;
+import fm.model.Session;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -17,9 +20,6 @@ import fm.StreamDropped;
 import fm.Flexemarkets;
 import fm.MarketBook;
 import fm.OrdersUpdate;
-import fm.Holding;
-import fm.Market;
-import fm.Session;
 import fm.MarketplaceTrades;
 import fm.MarketplaceBooks;
 

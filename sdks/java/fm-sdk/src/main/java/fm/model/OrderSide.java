@@ -1,5 +1,6 @@
-package fm;
+package fm.model;
 
+import fm.internal.OrderUtils;
 import com.fasterxml.jackson.annotation.JsonCreator;
 
 /**

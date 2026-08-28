@@ -19,8 +19,10 @@ module fm {
 
     exports fm;
     exports fm.error;
+    exports fm.model;
 
     opens fm to tools.jackson.databind;
+    opens fm.model to tools.jackson.databind;
     opens fm.internal to tools.jackson.databind;
 
     uses fm.FlexemarketsProvider;

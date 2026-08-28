@@ -1,4 +1,4 @@
-package fm;
+package fm.model;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;

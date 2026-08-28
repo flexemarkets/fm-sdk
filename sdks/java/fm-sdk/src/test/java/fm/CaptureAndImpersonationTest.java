@@ -1,5 +1,6 @@
 package fm;
 
+import fm.model.Account;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.ByteArrayOutputStream;

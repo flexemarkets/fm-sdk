@@ -1,7 +1,7 @@
 package fm.internal;
 
 import fm.Flexemarkets;
-import fm.OrderSide;
+import fm.model.OrderSide;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

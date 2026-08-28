@@ -1,9 +1,14 @@
 package fm;
 
-import static fm.OrderUtils.findOrder;
-import static fm.OrderUtils.isConsumed;
-import static fm.OrderUtils.isResting;
-import static fm.OrderUtils.isSymbol;
+import fm.model.Market;
+import fm.model.Order;
+import fm.model.OrderType;
+import fm.internal.OrderUtils;
+import fm.model.Trade;
+import static fm.internal.OrderUtils.findOrder;
+import static fm.internal.OrderUtils.isConsumed;
+import static fm.internal.OrderUtils.isResting;
+import static fm.internal.OrderUtils.isSymbol;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;

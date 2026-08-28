@@ -1,5 +1,9 @@
 package fm;
 
+import fm.model.Account;
+import fm.model.Person;
+import fm.model.Token;
+
 
 /**
  * Who a connection is, and where it points.
