@@ -2,7 +2,7 @@
  * Every behaviour fixture, driven through this SDK's aggregators.
  *
  * The wire fixtures next door compare *parsed field values*: one payload in,
- * one set of fields out. They say nothing about what OrderBook and Trades do
+ * one set of fields out. They say nothing about what MarketBook and Trades do
  * with a sequence of them, which is where the three SDKs have actually been
  * wrong together — a book that double-counts a cancel and a tape that holds its
  * trades backwards both parse every field correctly.
@@ -21,7 +21,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { parseOrder } from "../src/client.js";
-import { OrderBook } from "../src/orderbook.js";
+import { MarketBook } from "../src/orderbook.js";
 import { Trades, type Trade } from "../src/trades.js";
 import type { Market, Order } from "../src/types.js";
 
@@ -37,15 +37,15 @@ interface Fixture {
   expect: Record<string, unknown>;
 }
 
-const AGGREGATOR_TYPES = new Set(["OrderBook", "Trades"]);
+const AGGREGATOR_TYPES = new Set(["MarketBook", "Trades"]);
 
 function market(doc: Fixture): Market {
   return { id: doc.market.id, symbol: doc.market.symbol } as Market;
 }
 
-function drive(doc: Fixture): OrderBook | Trades {
-  const aggregator = doc.type === "OrderBook"
-    ? new OrderBook(market(doc))
+function drive(doc: Fixture): MarketBook | Trades {
+  const aggregator = doc.type === "MarketBook"
+    ? new MarketBook(market(doc))
     : new Trades(market(doc));
 
   doc.steps.forEach((step, index) => {
@@ -96,7 +96,7 @@ function checkTrade(actual: Trade, expected: Record<string, any>, where: string)
   }
 }
 
-function checkOrderBook(book: OrderBook, expect: Record<string, any>): void {
+function checkOrderBook(book: MarketBook, expect: Record<string, any>): void {
   const readers: Record<string, () => unknown> = {
     bestBuyPrice: () => book.bestBuyPrice(),
     bestBuyUnits: () => book.bestBuyUnits(),
@@ -156,7 +156,7 @@ for (const file of FILES) {
     );
 
     const aggregator = drive(doc);
-    if (doc.type === "OrderBook") checkOrderBook(aggregator as OrderBook, doc.expect);
+    if (doc.type === "MarketBook") checkOrderBook(aggregator as MarketBook, doc.expect);
     else checkTrades(aggregator as Trades, doc.expect);
   });
 }

@@ -1,6 +1,6 @@
 """Order book maintained from WebSocket order events.
 
-Port of fm.orderbook.OrderBook and fm.orderbook.MarketplaceOrderBooks.
+Port of fm.orderbook.MarketBook and fm.orderbook.MarketplaceOrderBooks.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from .order_utils import (find_order, is_available, is_cancel, is_resting,
 from .types import Market, Order
 
 
-class OrderBook:
+class MarketBook:
     """Aggregated price-level order book for a single market.
 
     Updated incrementally from WebSocket ``ORDERS-UPDATE`` events.
@@ -194,14 +194,14 @@ class OrderBook:
 
 
 class OrderBooks:
-    """Container of :class:`OrderBook` instances, one per market.
+    """Container of :class:`MarketBook` instances, one per market.
 
     Port of ``MarketplaceOrderBooks``.
     """
 
     def __init__(self, markets: list[Market], depth: int = 0):
-        self._books: dict[int, OrderBook] = {
-            m.id: OrderBook(m, depth) for m in markets
+        self._books: dict[int, MarketBook] = {
+            m.id: MarketBook(m, depth) for m in markets
         }
 
     def update(self, orders: list[Order]) -> None:
@@ -214,10 +214,10 @@ class OrderBooks:
     def best_price(self, market_id: int, side: str) -> int:
         return self._books[market_id].best_price(side)
 
-    def collection(self) -> list[OrderBook]:
+    def collection(self) -> list[MarketBook]:
         return list(self._books.values())
 
-    def get(self, market_id: int) -> OrderBook | None:
+    def get(self, market_id: int) -> MarketBook | None:
         """Return the order book for *market_id*, or ``None`` if the
         market isn't part of this marketplace. Mirrors the Java + TS
         ``OrderBooks.get(marketId)`` signature so MarketView can do a
@@ -226,9 +226,9 @@ class OrderBooks:
         return self._books.get(market_id)
 
     def clear(self) -> None:
-        """Clear every contained book — see :meth:`OrderBook.clear`."""
+        """Clear every contained book — see :meth:`MarketBook.clear`."""
         for book in self._books.values():
             book.clear()
 
-    def __getitem__(self, market_id: int) -> OrderBook:
+    def __getitem__(self, market_id: int) -> MarketBook:
         return self._books[market_id]

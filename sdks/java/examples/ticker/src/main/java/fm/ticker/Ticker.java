@@ -15,7 +15,7 @@ import com.googlecode.lanterna.terminal.Terminal;
 
 import fm.StreamDropped;
 import fm.Flexemarkets;
-import fm.OrderBook;
+import fm.MarketBook;
 import fm.OrdersUpdate;
 import fm.Holding;
 import fm.Market;
@@ -165,7 +165,7 @@ public class Ticker {
         // Market rows
         row++;
         var sorted = orderBooks.collection().stream()
-                .sorted(Comparator.comparingLong(OrderBook::marketId)).toList();
+                .sorted(Comparator.comparingLong(MarketBook::marketId)).toList();
         for (var book : sorted) {
             var bid = book.bestBuyPrice();
             var ask = book.bestSellPrice();

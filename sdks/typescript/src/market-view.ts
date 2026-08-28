@@ -11,7 +11,7 @@
  */
 
 import type { Flexemarkets } from "./client.js";
-import { OrderBook, OrderBooks } from "./orderbook.js";
+import { MarketBook, OrderBooks } from "./orderbook.js";
 import { MarketplaceTrades, type Trade, type Trades } from "./trades.js";
 import { NO_SEQ, type EventListener, type FmEvent, type OrdersUpdate, type FrameUnreadable, type Reconnected, type StreamDropped } from "./stomp.js";
 import type { Holding, Market, Order, Session } from "./types.js";
@@ -59,7 +59,7 @@ export interface MarketView {
    * caller never sees a half-applied delta. Returns null if
    * `marketId` isn't in this marketplace.
    */
-  orderBook(marketId: number): OrderBook | null;
+  orderBook(marketId: number): MarketBook | null;
 
   /**
    * Always-current trade tape for `marketId`, most recent last. Returns null
@@ -91,7 +91,7 @@ export interface MarketView {
    * Register a handler that fires when the order book for
    * `marketId` changes. The handler receives the post-update book.
    */
-  onOrderBookChange(marketId: number, handler: (b: OrderBook) => void): Subscription;
+  onOrderBookChange(marketId: number, handler: (b: MarketBook) => void): Subscription;
 
   /**
    * Register a handler that fires for each trade on `marketId`.
@@ -159,7 +159,7 @@ export class DefaultMarketView implements MarketView {
 
   private readonly _sessionHandlers: Array<(s: Session) => void> = [];
   private readonly _holdingHandlers: Array<(h: Holding) => void> = [];
-  private readonly _bookHandlers: Array<{ marketId: number; handler: (b: OrderBook) => void }> = [];
+  private readonly _bookHandlers: Array<{ marketId: number; handler: (b: MarketBook) => void }> = [];
   private readonly _tradeHandlers: Array<{ marketId: number; handler: (t: Trade) => void }> = [];
   private readonly _gapHandlers: Array<(e: GapEvent) => void> = [];
   private readonly _reconnectHandlers: Array<(e: ReconnectEvent) => void> = [];
@@ -244,7 +244,7 @@ export class DefaultMarketView implements MarketView {
     for (const update of buffered) this._applyOrdersUpdate(update);
   }
 
-  orderBook(marketId: number): OrderBook | null {
+  orderBook(marketId: number): MarketBook | null {
     this._ensureOpen();
     return this._orderBooks.get(marketId) ?? null;
   }
@@ -283,7 +283,7 @@ export class DefaultMarketView implements MarketView {
     };
   }
 
-  onOrderBookChange(marketId: number, handler: (b: OrderBook) => void): Subscription {
+  onOrderBookChange(marketId: number, handler: (b: MarketBook) => void): Subscription {
     this._ensureOpen();
     const entry = { marketId, handler };
     this._bookHandlers.push(entry);
@@ -558,7 +558,7 @@ export class MarketViewHandle implements MarketView {
     return this._shared.markets;
   }
 
-  orderBook(marketId: number): OrderBook | null {
+  orderBook(marketId: number): MarketBook | null {
     this._check();
     return this._shared.orderBook(marketId);
   }
@@ -585,7 +585,7 @@ export class MarketViewHandle implements MarketView {
     return sub;
   }
 
-  onOrderBookChange(marketId: number, handler: (b: OrderBook) => void): Subscription {
+  onOrderBookChange(marketId: number, handler: (b: MarketBook) => void): Subscription {
     this._check();
     const sub = this._shared.onOrderBookChange(marketId, handler);
     this._mySubscriptions.push(sub);

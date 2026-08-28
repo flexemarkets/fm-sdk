@@ -1,5 +1,5 @@
 {
-  "type": "OrderBook",
+  "type": "MarketBook",
   "why": "The aggregated book, and the order the two sides come back in: bids highest-first, offers lowest-first, so levels[0] is the top of book on either side. Java returns a Map and the other two a list of pairs, so nothing but this holds the three to the same sequence.",
   "market": {
     "id": 7,

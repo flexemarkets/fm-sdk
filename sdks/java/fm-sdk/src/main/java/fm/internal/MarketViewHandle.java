@@ -6,7 +6,7 @@ import fm.Holding;
 import fm.Market;
 import fm.MarketView;
 import fm.Order;
-import fm.OrderBook;
+import fm.MarketBook;
 import fm.ReconnectEvent;
 import fm.Trades;
 import fm.Session;
@@ -51,7 +51,7 @@ class MarketViewHandle implements MarketView {
         return shared.markets();
     }
 
-    @Override public OrderBook orderBook(long marketId) {
+    @Override public MarketBook orderBook(long marketId) {
         _check();
         return shared.orderBook(marketId);
     }
@@ -78,7 +78,7 @@ class MarketViewHandle implements MarketView {
         return sub;
     }
 
-    @Override public Subscription onOrderBookChange(long marketId, Consumer<OrderBook> handler) {
+    @Override public Subscription onOrderBookChange(long marketId, Consumer<MarketBook> handler) {
         _check();
         Subscription sub = shared.onOrderBookChange(marketId, handler);
         mySubscriptions.add(sub);

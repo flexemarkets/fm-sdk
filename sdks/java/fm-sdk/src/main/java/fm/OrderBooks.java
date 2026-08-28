@@ -18,7 +18,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * caller who does not want to drive the event queue themselves.
  */
 public class OrderBooks {
-    private final Map<Long, OrderBook> books = new ConcurrentHashMap<>();
+    private final Map<Long, MarketBook> books = new ConcurrentHashMap<>();
 
     /**
      * An empty book per market.
@@ -27,7 +27,7 @@ public class OrderBooks {
      */
     public OrderBooks(List<Market> markets) {
         for (var market : markets) {
-            books.put(market.id(), new OrderBook(market));
+            books.put(market.id(), new MarketBook(market));
         }
     }
 
@@ -47,7 +47,7 @@ public class OrderBooks {
      * @param marketId the market to look up
      * @return its book, or null if no book is kept for that market
      */
-    public OrderBook get(long marketId) {
+    public MarketBook get(long marketId) {
         return books.get(marketId);
     }
 
@@ -62,7 +62,7 @@ public class OrderBooks {
      *         nothing resting either way
      */
     public boolean hasValue(long marketId, Side side) {
-        OrderBook book = get(marketId);
+        MarketBook book = get(marketId);
         return book != null && book.hasValue(side);
     }
 
@@ -75,7 +75,7 @@ public class OrderBooks {
      *         market is not in this marketplace
      */
     public long bestPrice(long marketId, Side side) {
-        OrderBook book = get(marketId);
+        MarketBook book = get(marketId);
         return book == null ? -1 : book.bestPrice(side);
     }
 
@@ -84,12 +84,12 @@ public class OrderBooks {
      *
      * @return the books, in no particular order
      */
-    public Collection<OrderBook> collection() {
+    public Collection<MarketBook> collection() {
         return books.values();
     }
 
-    /** Clear every contained book — see {@link OrderBook#clear()}. */
+    /** Clear every contained book — see {@link MarketBook#clear()}. */
     public void clear() {
-        books.values().forEach(OrderBook::clear);
+        books.values().forEach(MarketBook::clear);
     }
 }

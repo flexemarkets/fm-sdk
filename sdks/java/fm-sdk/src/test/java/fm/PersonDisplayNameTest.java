@@ -17,7 +17,7 @@ import org.junit.jupiter.params.provider.CsvSource;
  * <p>The same cases run in the Python and TypeScript suites. They are written
  * out rather than shared as a fixture because this is a pure function over one
  * record, not a sequence of updates over an aggregator — the behaviour fixtures
- * drive {@code OrderBook} and {@code Trades} and have nowhere to put it.
+ * drive {@code MarketBook} and {@code Trades} and have nowhere to put it.
  */
 class PersonDisplayNameTest {
 

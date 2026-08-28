@@ -9,7 +9,7 @@ import fm.MarketView;
 import fm.Marketplace;
 import fm.MarketplaceTrades;
 import fm.Order;
-import fm.OrderBook;
+import fm.MarketBook;
 import fm.OrderBooks;
 import fm.OrdersUpdate;
 import fm.ReconnectEvent;
@@ -160,7 +160,7 @@ public class DefaultMarketView implements MarketView {
         this.trades.clear();
 
         // Snapshot orders are all available (consumer == null), so
-        // OrderBook.update treats them as adds — same code path WS
+        // MarketBook.update treats them as adds — same code path WS
         // deltas use. Trades snapshot feeds the tape via the same
         // update() entrypoint.
         if (!orders.body().isEmpty()) {
@@ -188,7 +188,7 @@ public class DefaultMarketView implements MarketView {
     }
 
     @Override
-    public OrderBook orderBook(long marketId) {
+    public MarketBook orderBook(long marketId) {
         _ensureOpen();
         return orderBooks.get(marketId);
     }
@@ -219,7 +219,7 @@ public class DefaultMarketView implements MarketView {
     }
 
     @Override
-    public Subscription onOrderBookChange(long marketId, Consumer<OrderBook> handler) {
+    public Subscription onOrderBookChange(long marketId, Consumer<MarketBook> handler) {
         _ensureOpen();
         OrderBookHandler entry = new OrderBookHandler(marketId, handler);
         bookHandlers.add(entry);
@@ -425,7 +425,7 @@ public class DefaultMarketView implements MarketView {
         }
     }
 
-    private record OrderBookHandler(long marketId, Consumer<OrderBook> handler) {}
+    private record OrderBookHandler(long marketId, Consumer<MarketBook> handler) {}
 
     private record TradeHandler(long marketId, Consumer<fm.Trade> handler) {}
 }

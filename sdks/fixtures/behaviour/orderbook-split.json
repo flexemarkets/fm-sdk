@@ -1,5 +1,5 @@
 {
-  "type": "OrderBook",
+  "type": "MarketBook",
   "why": "A partial fill arrives as a split marker carrying the original size with consumer zero, plus children keyed to it by original and supplier: one matched, one resting the remainder. The marker removes the whole original, so the wasSplit latch has to stop the matched child being removed again -- without it the fill is counted twice and the level goes negative. Lineage shape taken from a real session, ids and owners renumbered.",
   "market": {
     "id": 7,

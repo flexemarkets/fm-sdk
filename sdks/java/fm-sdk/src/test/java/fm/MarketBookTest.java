@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test;
  * the API, which is why they were worth carrying rather than rewriting: what
  * makes a book wrong is a missed frame, not a missed method.
  */
-class OrderBookTest {
+class MarketBookTest {
 
     private static Market market(long id, String symbol) {
         return new Market(id, 0L, symbol, symbol, symbol, false, 0, 10_000, 1, 1, 100, 1);
@@ -93,7 +93,7 @@ class OrderBookTest {
     @Test
     void restingCrossingAndCancellingMoveTheTopOfBook() {
         var market = market(1, "N5");
-        var book = new OrderBook(market);
+        var book = new MarketBook(market);
 
         assertThat(book.bestBuyPrice()).isEqualTo(-1L);
         assertThat(book.bestSellPrice()).isEqualTo(-1L);
@@ -138,7 +138,7 @@ class OrderBookTest {
     @Test
     void aPartialFillChainThenCancelDrainsTheBook() {
         var market = market(1, "N10");
-        var book = new OrderBook(market);
+        var book = new MarketBook(market);
 
         long price = 708;
         long nextId = 100;
@@ -194,7 +194,7 @@ class OrderBookTest {
     @Test
     void aDroppedSplitMarkerLeavesGhostUnitsThatSurviveTheCancel() {
         var market = market(1, "N10");
-        var book = new OrderBook(market);
+        var book = new MarketBook(market);
 
         long price = 708;
         long nextId = 100;
@@ -250,7 +250,7 @@ class OrderBookTest {
     @Test
     void sideGenericAccessorsAgreeWithTheFixedOnes() {
         Market market = market(1L, "A");
-        OrderBook book = new OrderBook(market);
+        MarketBook book = new MarketBook(market);
         book.update(toArray(
             limitOf(market, 1L, Side.BUY, 10, 100),
             limitOf(market, 2L, Side.BUY, 5, 90),
@@ -267,7 +267,7 @@ class OrderBookTest {
     @Test
     void sideGenericAccessorsReportAnEmptySide() {
         Market market = market(1L, "A");
-        OrderBook book = new OrderBook(market);
+        MarketBook book = new MarketBook(market);
         book.update(toArray(limitOf(market, 1L, Side.BUY, 10, 100)));
 
         assertThat(book.hasValue(Side.SELL)).isFalse();

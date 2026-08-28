@@ -456,7 +456,7 @@ def typescript_failures(path: Path) -> set[str]:
 # --- read-side surface ------------------------------------------------------
 #
 # check_methods compares Flexemarkets and its roles: what a caller can ask the
-# server to do. It stops there. MarketView, OrderBook and Trades -- what a
+# server to do. It stops there. MarketView, MarketBook and Trades -- what a
 # caller does with the data that comes back -- were never compared, and that is
 # where the three drifted furthest. MarketView.trades(marketId) existed in Java
 # and in neither of the others, so "what was the last trade, and who took it"
@@ -476,8 +476,8 @@ def typescript_failures(path: Path) -> set[str]:
 READ_SURFACE = {
     "MarketView": ("MarketView.java", ("market_view.py", "MarketView"),
                    ("market-view.ts", "MarketView", "interface")),
-    "OrderBook": ("OrderBook.java", ("orderbook.py", "OrderBook"),
-                  ("orderbook.ts", "OrderBook", "class")),
+    "MarketBook": ("MarketBook.java", ("orderbook.py", "MarketBook"),
+                  ("orderbook.ts", "MarketBook", "class")),
     "OrderBooks": ("OrderBooks.java", ("orderbook.py", "OrderBooks"),
                    ("orderbook.ts", "OrderBooks", "class")),
     "Trades": ("Trades.java", ("trades.py", "Trades"),
@@ -916,7 +916,7 @@ def main() -> int:
         for problem in surface_problems:
             print(f"  - {problem}", file=sys.stderr)
         print(
-            "\nMarketView, OrderBook and Trades are what a caller does with the data "
+            "\nMarketView, MarketBook and Trades are what a caller does with the data "
             "the client returns. A member on one and not the others is work its callers "
             "have to do by hand -- which is how MarketView.trades sat in Java alone. "
             "If a difference is intended, record it in SURFACE_EXEMPTIONS with the "

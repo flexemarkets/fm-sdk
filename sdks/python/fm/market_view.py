@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Callable, Optional
 log = logging.getLogger(__name__)
 
 from .events import NO_SEQ, OrdersUpdate, FrameUnreadable, Reconnected, StreamDropped
-from .orderbook import OrderBook, OrderBooks
+from .orderbook import MarketBook, OrderBooks
 from .trades import MarketplaceTrades, Trade, Trades
 from .types import Holding, Market, Order, Session
 
@@ -97,7 +97,7 @@ class MarketView:
 
         self._session_handlers: list[Callable[[Session], None]] = []
         self._holding_handlers: list[Callable[[Holding], None]] = []
-        self._book_handlers: list[tuple[int, Callable[[OrderBook], None]]] = []
+        self._book_handlers: list[tuple[int, Callable[[MarketBook], None]]] = []
         self._trade_handlers: list[tuple[int, Callable[[Trade], None]]] = []
         self._gap_handlers: list[Callable[[GapEvent], None]] = []
         self._reconnect_handlers: list[Callable[[ReconnectEvent], None]] = []
@@ -156,7 +156,7 @@ class MarketView:
 
     # -- read-side accessors ----------------------------------------------
 
-    def order_book(self, market_id: int) -> Optional[OrderBook]:
+    def order_book(self, market_id: int) -> Optional[MarketBook]:
         """Always-current order book for *market_id*; ``None`` if the
         market isn't in this marketplace.
         """
@@ -205,7 +205,7 @@ class MarketView:
         return cancel
 
     def on_order_book_change(
-        self, market_id: int, handler: Callable[[OrderBook], None]
+        self, market_id: int, handler: Callable[[MarketBook], None]
     ) -> Subscription:
         self._ensure_open()
         entry = (market_id, handler)
@@ -529,7 +529,7 @@ class MarketViewHandle:
         self._check()
         return self._shared.markets
 
-    def order_book(self, market_id: int) -> Optional[OrderBook]:
+    def order_book(self, market_id: int) -> Optional[MarketBook]:
         self._check()
         return self._shared.order_book(market_id)
 
@@ -552,7 +552,7 @@ class MarketViewHandle:
         return sub
 
     def on_order_book_change(
-        self, market_id: int, handler: Callable[[OrderBook], None]
+        self, market_id: int, handler: Callable[[MarketBook], None]
     ) -> Subscription:
         self._check()
         sub = self._shared.on_order_book_change(market_id, handler)

@@ -25,7 +25,7 @@ import java.util.TreeMap;
  * <p>Every accessor is synchronized, because the stream updates the book on its
  * own thread while the caller reads it on theirs.
  */
-public class OrderBook {
+public class MarketBook {
     private final Market market;
     private final TreeMap<Long, Long> buys;
     private final TreeMap<Long, Long> sells;
@@ -37,7 +37,7 @@ public class OrderBook {
      * @param market the market this book is for; its symbol is what
      *               {@link #update} filters on
      */
-    public OrderBook(Market market) {
+    public MarketBook(Market market) {
         this.market = market;
         this.buys = new TreeMap<>(Collections.reverseOrder());
         this.sells = new TreeMap<>();

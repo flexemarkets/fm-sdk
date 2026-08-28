@@ -40,7 +40,7 @@ import java.util.stream.Stream;
  * makes the tape's own contract independent of which one answered, the way
  * reading the snapshot's <em>shape</em> rather than assuming it is.
  *
- * <p>Synchronized for the same reason {@link OrderBook} is: the stream writes
+ * <p>Synchronized for the same reason {@link MarketBook} is: the stream writes
  * on its thread while the caller reads on theirs.
  */
 public class Trades {

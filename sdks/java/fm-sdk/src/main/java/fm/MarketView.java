@@ -73,7 +73,7 @@ public interface MarketView extends AutoCloseable {
      * @return that market's book, current as of this call, or null when
      *         {@code marketId} is not in this marketplace
      */
-    OrderBook orderBook(long marketId);
+    MarketBook orderBook(long marketId);
 
     /**
      * Always-current trade tape for {@code marketId}, most recent last.
@@ -127,7 +127,7 @@ public interface MarketView extends AutoCloseable {
      * @param handler  called with that market's book after each change
      * @return a handle that unsubscribes the handler
      */
-    Subscription onOrderBookChange(long marketId, Consumer<OrderBook> handler);
+    Subscription onOrderBookChange(long marketId, Consumer<MarketBook> handler);
 
     /**
      * Register a handler that fires for each trade on {@code marketId}.
