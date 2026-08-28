@@ -21,6 +21,27 @@ class Person:
     created_date: "datetime | None" = None
     last_modified_date: "datetime | None" = None
 
+    def display_name(self) -> "str | None":
+        """The best human label this record carries: the trimmed full name, or
+        the email when there is no name.
+
+        Every consumer of :meth:`~fm.Flexemarkets.users` was writing this,
+        because none of the three fields it reads can be relied on alone --
+        ``first_name`` and ``last_name`` are each optional, and a person with
+        neither still has to appear somewhere in a report.
+
+        Deliberately not ``"Name <email>"``: that is a presentation choice, and
+        a caller who wants it can compose one from this and ``email``.
+
+        Returns the full name, else the email, else ``None`` -- and ``None``
+        only for a record carrying neither, which fm-server does not produce
+        since email is the account key.
+        """
+        name = f"{(self.first_name or '').strip()} {(self.last_name or '').strip()}".strip()
+        if name:
+            return name
+        return self.email.strip() if self.email and self.email.strip() else None
+
 
 @dataclass
 class Account:

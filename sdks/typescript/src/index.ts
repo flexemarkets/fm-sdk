@@ -35,6 +35,7 @@ export {
   tickRound,
   gridRound,
   unitGrid,
+  displayName,
 } from "./types.js";
 
 // Client

@@ -34,6 +34,33 @@ public record Person(
     Boolean accountOwner) {
 
     /**
+     * The best human label this record carries: the trimmed full name, or the
+     * email when there is no name.
+     *
+     * <p>Every consumer of {@code users()} was writing this, because none of
+     * the three fields it reads can be relied on alone -- {@code firstName} and
+     * {@code lastName} are each optional, and a person with neither still has
+     * to appear somewhere in a report.
+     *
+     * <p>Deliberately not "Name &lt;email&gt;": that is a presentation choice,
+     * and a caller who wants it can compose one from this and {@link #email}.
+     *
+     * @return the full name, else the email, else null -- and null only for a
+     *         record carrying neither, which fm-server does not produce since
+     *         email is the account key
+     */
+    public String displayName() {
+        String first = firstName == null ? "" : firstName.trim();
+        String last = lastName == null ? "" : lastName.trim();
+        String name = (first + " " + last).trim();
+
+        if (!name.isEmpty()) {
+            return name;
+        }
+        return email == null || email.isBlank() ? null : email.trim();
+    }
+
+    /**
      * Substitutes zero for an absent id or account id, so a caller never has
      * to unbox a null on either.
      */

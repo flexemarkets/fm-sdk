@@ -296,6 +296,33 @@ export interface Order {
   lastModifiedDate: Date | null;
 }
 
+/**
+ * The best human label a person record carries: the trimmed full name, or the
+ * email when there is no name.
+ *
+ * Every consumer of `users()` was writing this, because none of the three
+ * fields it reads can be relied on alone — `firstName` and `lastName` are each
+ * optional, and a person with neither still has to appear somewhere in a
+ * report.
+ *
+ * Deliberately not `"Name <email>"`: that is a presentation choice, and a
+ * caller who wants it can compose one from this and `email`.
+ *
+ * A function rather than a method because `Person` is a plain wire interface
+ * here — Java puts this on the record and Python on the dataclass, which is
+ * each language's own idiom for the same thing.
+ *
+ * @returns the full name, else the email, else null — and null only for a
+ *   record carrying neither, which fm-server does not produce since email is
+ *   the account key.
+ */
+export function displayName(person: Person): string | null {
+  const name = `${(person.firstName ?? "").trim()} ${(person.lastName ?? "").trim()}`.trim();
+  if (name) return name;
+  const email = (person.email ?? "").trim();
+  return email ? email : null;
+}
+
 export interface ClientConnection {
   marketplaceId: number;
   connectionId: number;
