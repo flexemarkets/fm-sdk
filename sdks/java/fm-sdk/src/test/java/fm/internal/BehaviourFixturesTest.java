@@ -67,11 +67,11 @@ class BehaviourFixturesTest {
         }
     }
 
-    private static Market market(JsonNode doc) {
+    private static Market _market(JsonNode doc) {
         return HttpFlexemarkets.MAPPER.treeToValue(doc.get("market"), Market.class);
     }
 
-    private static Order[] orders(JsonNode step) {
+    private static Order[] _orders(JsonNode step) {
         List<Order> parsed = new ArrayList<>();
         for (JsonNode node : step.get("orders")) {
             parsed.add(HttpFlexemarkets.MAPPER.treeToValue(node, Order.class));
@@ -79,13 +79,13 @@ class BehaviourFixturesTest {
         return parsed.toArray(new Order[0]);
     }
 
-    private static List<List<Long>> levels(Map<Long, Long> book) {
+    private static List<List<Long>> _levels(Map<Long, Long> book) {
         List<List<Long>> flattened = new ArrayList<>();
         book.forEach((price, units) -> flattened.add(List.of(price, units)));
         return flattened;
     }
 
-    private static List<List<Long>> expectedLevels(JsonNode node) {
+    private static List<List<Long>> _expectedLevels(JsonNode node) {
         List<List<Long>> wanted = new ArrayList<>();
         for (JsonNode level : node) {
             wanted.add(List.of(level.get(0).asLong(), level.get(1).asLong()));
@@ -113,19 +113,19 @@ class BehaviourFixturesTest {
                 + "because its input arrives newest first.");
 
         switch (doc.get("type").asString()) {
-            case "MarketBook" -> checkOrderBook(doc);
-            case "MarketTrades" -> checkTrades(doc);
+            case "MarketBook" -> _checkOrderBook(doc);
+            case "MarketTrades" -> _checkTrades(doc);
             default -> fail("no aggregator for type " + doc.get("type").asString());
         }
     }
 
-    private void checkOrderBook(JsonNode doc) {
-        MarketBook book = new MarketBook(market(doc));
+    private void _checkOrderBook(JsonNode doc) {
+        MarketBook book = new MarketBook(_market(doc));
         for (JsonNode step : doc.get("steps")) {
             if (step.path("clear").asBoolean(false)) {
                 book.clear();
             }
-            book.update(orders(step));
+            book.update(_orders(step));
         }
 
 
@@ -139,22 +139,22 @@ class BehaviourFixturesTest {
                 case "bestSellUnits" -> assertEquals(want.asLong(), book.bestSellUnits(), key);
                 case "hasValueBuy" -> assertEquals(want.asBoolean(), book.hasValue(OrderSide.BUY), key);
                 case "hasValueSell" -> assertEquals(want.asBoolean(), book.hasValue(OrderSide.SELL), key);
-                case "buyLevels" -> assertEquals(expectedLevels(want), levels(book.buyLevels()), key);
-                case "sellLevels" -> assertEquals(expectedLevels(want), levels(book.sellLevels()), key);
+                case "buyLevels" -> assertEquals(_expectedLevels(want), _levels(book.buyLevels()), key);
+                case "sellLevels" -> assertEquals(_expectedLevels(want), _levels(book.sellLevels()), key);
                 default -> fail("fixture asks for unknown key " + key);
             }
         });
     }
 
-    private void checkTrades(JsonNode doc) {
-        MarketTrades tape = new MarketTrades(market(doc));
+    private void _checkTrades(JsonNode doc) {
+        MarketTrades tape = new MarketTrades(_market(doc));
         int index = 0;
         for (JsonNode step : doc.get("steps")) {
             if (step.path("clear").asBoolean(false)) {
                 tape.clear();
             }
 
-            Trade[] added = tape.update(orders(step));
+            Trade[] added = tape.update(_orders(step));
 
             // What update() reports it added is what MarketView dispatches
             // onTrade from. A step that declares `adds` pins it -- including
@@ -179,7 +179,7 @@ class BehaviourFixturesTest {
             assertEquals(wanted.size(), held.length,
                     "tape holds " + held.length + " trades, expected " + wanted.size());
             for (int i = 0; i < held.length; i++) {
-                checkTrade(held[i], wanted.get(i), "trades[" + i + "]");
+                _checkTrade(held[i], wanted.get(i), "trades[" + i + "]");
             }
         }
 
@@ -188,7 +188,7 @@ class BehaviourFixturesTest {
                 assertNull(tape.last());
             } else {
                 assertNotNull(tape.last(), "last() is null but the tape is not empty");
-                checkTrade(tape.last(), expect.get("last"), "last()");
+                _checkTrade(tape.last(), expect.get("last"), "last()");
             }
         }
 
@@ -201,7 +201,7 @@ class BehaviourFixturesTest {
         }
     }
 
-    private void checkTrade(Trade trade, JsonNode expected, String where) {
+    private void _checkTrade(Trade trade, JsonNode expected, String where) {
         expected.propertyNames().forEach(key -> {
             JsonNode want = expected.get(key);
             switch (key) {

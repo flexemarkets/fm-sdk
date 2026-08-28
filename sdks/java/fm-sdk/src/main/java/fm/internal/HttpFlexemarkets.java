@@ -174,18 +174,18 @@ public class HttpFlexemarkets implements Flexemarkets {
         java.util.regex.Pattern.compile("st=(\\d+)");
 
     private final Properties properties;
-    private final HttpClient httpClient;
-    private final String bearerToken;
-    private final Token token;
+    private final HttpClient _httpClient;
+    private final String _bearerToken;
+    private final Token _token;
     private final Account account;
-    private final Person user;
-    private final ApiRoot apiRoot;
+    private final Person _user;
+    private final ApiRoot _apiRoot;
 
-    private final String impersonateAccount;
-    private final boolean capture;
+    private final String _impersonateAccount;
+    private final boolean _capture;
 
-    private Events events;
-    private volatile boolean closed;
+    private Events _events;
+    private volatile boolean _closed;
 
     HttpFlexemarkets(Properties properties) {
         this.properties = properties;
@@ -195,28 +195,28 @@ public class HttpFlexemarkets implements Flexemarkets {
         // as the response -- which then fails as a JSON parse error, nowhere
         // near the cause. NORMAL declines to follow HTTPS back down to HTTP, so
         // an endpoint cannot be quietly downgraded.
-        this.httpClient = HttpClient.newBuilder()
+        this._httpClient = HttpClient.newBuilder()
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .build();
 
         var impersonate = properties.getProperty("impersonate-account");
-        this.impersonateAccount = impersonate == null || impersonate.isBlank() ? null : impersonate;
-        this.capture = Boolean.parseBoolean(properties.getProperty("capture"));
+        this._impersonateAccount = impersonate == null || impersonate.isBlank() ? null : impersonate;
+        this._capture = Boolean.parseBoolean(properties.getProperty("capture"));
 
-        this.token = signIn();
-        this.account = token.account();
-        this.user = token.person();
-        this.bearerToken = "Bearer " + token.token();
+        this._token = _signIn();
+        this.account = _token.account();
+        this._user = _token.person();
+        this._bearerToken = "Bearer " + _token.token();
 
-        this.apiRoot = fetchApiRoot();
+        this._apiRoot = _fetchApiRoot();
     }
 
 
     public Account account() { return account; }
     public long accountId() { return account.id(); }
     public String accountName() { return account.name(); }
-    public Person user() { return user; }
-    public long userId() { return user.id(); }
+    public Person user() { return _user; }
+    public long userId() { return _user.id(); }
 
     public String endpointUrl() {
         return properties.getProperty("endpoint");
@@ -229,25 +229,25 @@ public class HttpFlexemarkets implements Flexemarkets {
     // --- REST APIs ---
 
     public List<Marketplace> marketplaces() {
-        return get(uriParam(apiRoot, "marketplaces", "format=application/json"), MARKETPLACES_TYPE);
+        return _get(uriParam(_apiRoot, "marketplaces", "format=application/json"), MARKETPLACES_TYPE);
     }
 
     public Marketplace marketplace(long marketplaceId) {
-        return get(uriId(apiRoot, "marketplaces", marketplaceId), MARKETPLACE_TYPE);
+        return _get(uriId(_apiRoot, "marketplaces", marketplaceId), MARKETPLACE_TYPE);
     }
 
     public List<Market> markets(long marketplaceId) {
-        return get(uriIdSegmentParam(apiRoot, "marketplaces", marketplaceId, "markets", "format=application/json"), MARKETS_TYPE);
+        return _get(uriIdSegmentParam(_apiRoot, "marketplaces", marketplaceId, "markets", "format=application/json"), MARKETS_TYPE);
     }
 
     @Override
     public List<String> symbols(long marketplaceId) {
-        return get(uriIdSegment(apiRoot, "marketplaces", marketplaceId, "symbols"), SYMBOLS_TYPE);
+        return _get(uriIdSegment(_apiRoot, "marketplaces", marketplaceId, "symbols"), SYMBOLS_TYPE);
     }
 
     @Override
     public Token token() {
-        return token;
+        return _token;
     }
 
     // isAdmin/isManager/hasRole are the interface's defaults: roles come from
@@ -255,15 +255,15 @@ public class HttpFlexemarkets implements Flexemarkets {
     // nothing here the default could not do.
 
     public List<Session> sessions(long marketplaceId) {
-        return get(v1("/marketplaces/" + marketplaceId + "/sessions"), SESSIONS_TYPE);
+        return _get(_v1("/marketplaces/" + marketplaceId + "/sessions"), SESSIONS_TYPE);
     }
 
     public Session session(long marketplaceId) {
-        return get(uriIdSegment(apiRoot, "marketplaces", marketplaceId, "currentSession"), SESSION_TYPE);
+        return _get(uriIdSegment(_apiRoot, "marketplaces", marketplaceId, "currentSession"), SESSION_TYPE);
     }
 
     public List<Order> orders(long marketplaceId) {
-        return get(uriIdSegment(apiRoot, "marketplaces", marketplaceId, "orders"), ORDERS_TYPE);
+        return _get(uriIdSegment(_apiRoot, "marketplaces", marketplaceId, "orders"), ORDERS_TYPE);
     }
 
     /**
@@ -275,8 +275,8 @@ public class HttpFlexemarkets implements Flexemarkets {
      * seq is less than or equal.
      */
     public Snapshot<List<Order>> activeOrders(long marketplaceId) {
-        var url = v1("/marketplaces/" + marketplaceId + "/orders/active");
-        return _unwrapOrders(getSnapshot(url, SNAPSHOT_TYPE));
+        var url = _v1("/marketplaces/" + marketplaceId + "/orders/active");
+        return _unwrapOrders(_getSnapshot(url, SNAPSHOT_TYPE));
     }
 
     /**
@@ -287,7 +287,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     public Snapshot<List<Order>> recentTrades(long marketplaceId, int size) {
         var url = server(endpointUrl()) + "/v1/marketplaces/" + marketplaceId
                 + "/orders/recent-trades?size=" + size;
-        return _unwrapOrders(getSnapshot(url, SNAPSHOT_TYPE));
+        return _unwrapOrders(_getSnapshot(url, SNAPSHOT_TYPE));
     }
 
     /**
@@ -337,7 +337,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     public List<Holding> holdings(long marketplaceId) {
-        return get(uriIdSegment(apiRoot, "marketplaces", marketplaceId, "holdings"), HOLDINGS_TYPE);
+        return _get(uriIdSegment(_apiRoot, "marketplaces", marketplaceId, "holdings"), HOLDINGS_TYPE);
     }
 
     /** Comma-separated ids, matching the server's {@code ?sessions=} filter. */
@@ -347,19 +347,19 @@ public class HttpFlexemarkets implements Flexemarkets {
             return holdings(marketplaceId);
         }
         var ids = sessionIds.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(","));
-        return get(uriIdSegmentParam(apiRoot, "marketplaces", marketplaceId, "holdings", "sessions=" + ids),
+        return _get(uriIdSegmentParam(_apiRoot, "marketplaces", marketplaceId, "holdings", "sessions=" + ids),
                    HOLDINGS_TYPE);
     }
 
     public Holding holding(long marketplaceId) {
-        return get(uriIdSegment(apiRoot, "marketplaces", marketplaceId, "currentHolding"), new TypeReference<>() {});
+        return _get(uriIdSegment(_apiRoot, "marketplaces", marketplaceId, "currentHolding"), new TypeReference<>() {});
     }
 
     public List<ClientConnection> connections(long marketplaceId) {
         // Canonical path is /marketplaces/{id}/connections ("/agents" is the
         // retained pre-FM-4 alias); format=application/json yields a plain list
         // (vs the HAL _embedded form).
-        return get(uriIdSegmentParam(apiRoot, "marketplaces", marketplaceId, "connections", "format=application/json"), CONNECTIONS_TYPE);
+        return _get(uriIdSegmentParam(_apiRoot, "marketplaces", marketplaceId, "connections", "format=application/json"), CONNECTIONS_TYPE);
     }
 
     /** {@code sessions=} here, unlike the two routes above. */
@@ -368,7 +368,7 @@ public class HttpFlexemarkets implements Flexemarkets {
         if (sessionIds == null || sessionIds.isEmpty()) {
             return downloadHoldings(marketplaceId);
         }
-        return getText(uriIdSegmentParam(apiRoot, "marketplaces", marketplaceId,
+        return _getText(uriIdSegmentParam(_apiRoot, "marketplaces", marketplaceId,
                         "holdings/downloads", "sessions=" + _ids(sessionIds)));
     }
 
@@ -385,17 +385,17 @@ public class HttpFlexemarkets implements Flexemarkets {
         if (sessionIds == null || sessionIds.isEmpty()) {
             return orders(marketplaceId);
         }
-        var url = uriParam(apiRoot, "sessionOrdersJson", "marketplaceId=" + marketplaceId)
+        var url = uriParam(_apiRoot, "sessionOrdersJson", "marketplaceId=" + marketplaceId)
                 + "&sessionIds=" + _ids(sessionIds);
-        return get(url, ORDERS_TYPE);
+        return _get(url, ORDERS_TYPE);
     }
 
     /** The symbol is filled in; the ids are left alone. See {@link #trades}. */
     @Override
     public List<Order> orders(long marketplaceId, String symbol) {
-        var url = uriParam(apiRoot, "symbolOrdersJson", "marketplaceId=" + marketplaceId)
+        var url = uriParam(_apiRoot, "symbolOrdersJson", "marketplaceId=" + marketplaceId)
                 + "&symbol=" + symbol;
-        return get(url, ORDERS_TYPE).stream()
+        return _get(url, ORDERS_TYPE).stream()
                 .map(o -> new Order(o.createdDate(), o.lastModifiedDate(), o.id(),
                                     o.original(), o.supplier(), o.consumer(), o.type(), o.side(),
                                     o.units(), o.price(), o.mine(), o.ownerId(), o.marketplaceId(),
@@ -413,9 +413,9 @@ public class HttpFlexemarkets implements Flexemarkets {
      */
     @Override
     public List<Order> trades(long marketplaceId, String symbol) {
-        var url = uriParam(apiRoot, "symbolTradesJson", "marketplaceId=" + marketplaceId)
+        var url = uriParam(_apiRoot, "symbolTradesJson", "marketplaceId=" + marketplaceId)
                 + "&symbol=" + symbol;
-        return get(url, ORDERS_TYPE).stream()
+        return _get(url, ORDERS_TYPE).stream()
                 .map(o -> new Order(o.createdDate(), o.lastModifiedDate(), o.original(),
                                     o.original(), o.supplier(), o.consumer(), o.type(), o.side(),
                                     o.units(), o.price(), o.mine(), o.ownerId(), o.marketplaceId(),
@@ -440,7 +440,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     public Token signup(String accountName, String email, String password,
                         String firstName, String lastName) {
         try {
-            return post(uri(apiRoot, "accounts"),
+            return _post(uri(_apiRoot, "accounts"),
                         new SignUp(accountName, email, password, firstName, lastName),
                         TOKEN_TYPE);
         } catch (ConflictException e) {
@@ -455,45 +455,45 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     @Override
     public Account approveAccount(String accountName) {
-        var approval = post(server(endpointUrl()) + "/approvals",
+        var approval = _post(server(endpointUrl()) + "/approvals",
                             new ApproveAccount(accountName, true), APPROVAL_TYPE);
         return approval == null ? null : approval.account();
     }
 
     @Override
     public Account accountById(long accountId) {
-        return get(uriId(apiRoot, "accounts", accountId), ACCOUNT_TYPE);
+        return _get(uriId(_apiRoot, "accounts", accountId), ACCOUNT_TYPE);
     }
 
     @Override
     public Person userById(long userId) {
-        return get(v1("/users/" + userId), PERSON_TYPE);
+        return _get(_v1("/users/" + userId), PERSON_TYPE);
     }
 
     @Override
     public List<String> identifiers(long marketplaceId) {
-        return get(uriIdSegment(apiRoot, "marketplaces", marketplaceId, "privateTraders"), SYMBOLS_TYPE);
+        return _get(uriIdSegment(_apiRoot, "marketplaces", marketplaceId, "privateTraders"), SYMBOLS_TYPE);
     }
 
     @Override
     public void deleteMyAccount() {
-        delete(server(endpointUrl()) + "/accounts/me");
+        _delete(server(endpointUrl()) + "/accounts/me");
     }
 
     @Override
     public List<Account> accounts() {
-        return get(uriParam(apiRoot, "accounts", "format=application/json"), ACCOUNTS_TYPE);
+        return _get(uriParam(_apiRoot, "accounts", "format=application/json"), ACCOUNTS_TYPE);
     }
 
     @Override
     public void deleteAccount(long accountId) {
-        delete(uriId(apiRoot, "accounts", accountId));
+        _delete(uriId(_apiRoot, "accounts", accountId));
     }
 
     @Override
     public Person createUser(String email, String password, String firstName,
                              String lastName, String... roles) {
-        return post(v1("/users"),
+        return _post(_v1("/users"),
                     new CreateUser(email, password, firstName, lastName, roles),
                     PERSON_TYPE);
     }
@@ -501,7 +501,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     @Override
     public void deleteUser(long userId) {
         try {
-            delete(v1("/users/" + userId));
+            _delete(_v1("/users/" + userId));
         } catch (ConflictException e) {
             // The user still owns orders or allotments. Deleting them would
             // orphan it, so the server refuses and the caller has to decide
@@ -513,14 +513,14 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     @Override
     public void deleteMarketplace(long marketplaceId) {
-        delete(uriId(apiRoot, "marketplaces", marketplaceId));
+        _delete(uriId(_apiRoot, "marketplaces", marketplaceId));
     }
 
     /** Unit bounds are fixed at 1/100/1, as fm-lib-net sends them. */
     @Override
     public Market createMarket(long marketplaceId, String symbol, String name,
                                TickGrid price, TickGrid units, boolean privateMarket) {
-        return post(uriIdSegment(apiRoot, "marketplaces", marketplaceId, "markets"),
+        return _post(uriIdSegment(_apiRoot, "marketplaces", marketplaceId, "markets"),
                     new CreateMarket(symbol, name,
                                      price.minimum(), price.maximum(), price.tick(),
                                      units.minimum(), units.maximum(), units.tick(),
@@ -530,7 +530,7 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     @Override
     public ManagerOtpBundle managerOtpBundle(List<Long> userIds) {
-        return post(server(endpointUrl()) + "/otp/manager",
+        return _post(server(endpointUrl()) + "/otp/manager",
                     new ManagerOtpRequest(userIds), OTP_BUNDLE_TYPE);
     }
 
@@ -573,11 +573,11 @@ public class HttpFlexemarkets implements Flexemarkets {
         order.put("side",          side);
         order.put("units",         units);
         order.put("price",         price);
-        order.put("clientDescription", clientDescription());
+        order.put("clientDescription", _clientDescription());
         if (null != ownerTargetId) {
             order.put("ownerTargetId", ownerTargetId);
         }
-        return post(uri(apiRoot, "orders"), order, ORDER_TYPE);
+        return _post(uri(_apiRoot, "orders"), order, ORDER_TYPE);
     }
 
     public Order submitCancel(long marketplaceId, long marketId, long originalId) {
@@ -588,9 +588,9 @@ public class HttpFlexemarkets implements Flexemarkets {
             "id",               originalId,
             "original",         originalId,
             "supplier",         originalId,
-            "clientDescription", clientDescription()
+            "clientDescription", _clientDescription()
         );
-        return post(uri(apiRoot, "orders"), order, ORDER_TYPE);
+        return _post(uri(_apiRoot, "orders"), order, ORDER_TYPE);
     }
 
     public Order submitMarket(long marketplaceId, long marketId, OrderSide side, long units) {
@@ -653,23 +653,23 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     @Override
     public Session openSession(long marketplaceId) {
-        return patch(uriIdSegment(apiRoot, "marketplaces", marketplaceId, "open"), SESSION_TYPE);
+        return _patch(uriIdSegment(_apiRoot, "marketplaces", marketplaceId, "open"), SESSION_TYPE);
     }
 
     @Override
     public Session pauseSession(long marketplaceId) {
-        return patch(uriIdSegment(apiRoot, "marketplaces", marketplaceId, "pause"), SESSION_TYPE);
+        return _patch(uriIdSegment(_apiRoot, "marketplaces", marketplaceId, "pause"), SESSION_TYPE);
     }
 
     @Override
     public Session closeSession(long marketplaceId) {
-        return patch(uriIdSegment(apiRoot, "marketplaces", marketplaceId, "close"), SESSION_TYPE);
+        return _patch(uriIdSegment(_apiRoot, "marketplaces", marketplaceId, "close"), SESSION_TYPE);
     }
 
     /** {@code usersJson} rather than {@code users}: the latter is the HAL form. */
     @Override
     public List<Person> users() {
-        return get(uri(apiRoot, "usersJson"), PERSONS_TYPE);
+        return _get(uri(_apiRoot, "usersJson"), PERSONS_TYPE);
     }
 
     /** Not on the API root -- allotments are a V1 route, addressed from the server. */
@@ -677,7 +677,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     public List<Allotment> allotments(long marketplaceId, long allocationId) {
         var url = server(endpointUrl()) + "/v1/marketplaces/" + marketplaceId
                 + "/allotments?allocation=" + allocationId;
-        return List.copyOf(get(url, ALLOTMENTS_TYPE));
+        return List.copyOf(_get(url, ALLOTMENTS_TYPE));
     }
 
     /** V1 route, addressed from the server rather than through a HAL link. */
@@ -689,26 +689,26 @@ public class HttpFlexemarkets implements Flexemarkets {
         } catch (JacksonException e) {
             throw new ApiException("Marketplace definition is not valid JSON", e);
         }
-        return post(v1("/marketplaces"), definition, MARKETPLACE_TYPE);
+        return _post(_v1("/marketplaces"), definition, MARKETPLACE_TYPE);
     }
 
     @Override
     public List<Holding> allocate(long marketplaceId, List<Holding> holdings) {
         var allotments = holdings.stream().map(h -> _toAllotment(marketplaceId, h)).toList();
-        return _toHoldings(post(
-                uriIdSegment(apiRoot, "marketplaces", marketplaceId, "allocations"),
+        return _toHoldings(_post(
+                uriIdSegment(_apiRoot, "marketplaces", marketplaceId, "allocations"),
                 allotments, ALLOTMENTS_TYPE));
     }
 
     @Override
     public String downloadHoldings(long marketplaceId) {
-        return getText(uriIdSegment(apiRoot, "marketplaces", marketplaceId, "holdings/downloads"));
+        return _getText(uriIdSegment(_apiRoot, "marketplaces", marketplaceId, "holdings/downloads"));
     }
 
     @Override
     public List<Holding> uploadHoldings(long marketplaceId, Path csv) {
-        return _toHoldings(postMultipart(
-                uriIdSegment(apiRoot, "marketplaces", marketplaceId, "holdings/uploads"),
+        return _toHoldings(_postMultipart(
+                uriIdSegment(_apiRoot, "marketplaces", marketplaceId, "holdings/uploads"),
                 "file", csv, ALLOTMENTS_TYPE));
     }
 
@@ -751,8 +751,8 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     public void listen(long marketplaceId, BlockingQueue<Object> queue) {
-        events = new Events(wsUrl(), bearerToken, marketplaceId, clientDescription(), MAPPER, queue);
-        events.connect();
+        _events = new Events(_wsUrl(), _bearerToken, marketplaceId, _clientDescription(), MAPPER, queue);
+        _events.connect();
     }
 
     /**
@@ -769,13 +769,13 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     Events _connectEvents(long marketplaceId, BlockingQueue<Object> queue) {
-        var ev = new Events(wsUrl(), bearerToken, marketplaceId, clientDescription(), MAPPER, queue);
+        var ev = new Events(_wsUrl(), _bearerToken, marketplaceId, _clientDescription(), MAPPER, queue);
         ev.connect();
         return ev;
     }
 
-    private final java.util.Map<Long, SharedMarketView> sharedViews = new java.util.HashMap<>();
-    private final Object viewLock = new Object();
+    private final java.util.Map<Long, SharedMarketView> _sharedViews = new java.util.HashMap<>();
+    private final Object _viewLock = new Object();
 
     private static final class SharedMarketView {
         final DefaultMarketView view;
@@ -797,8 +797,8 @@ public class HttpFlexemarkets implements Flexemarkets {
      */
     public MarketView observe(long marketplaceId) {
         DefaultMarketView shared;
-        synchronized (viewLock) {
-            SharedMarketView entry = sharedViews.get(marketplaceId);
+        synchronized (_viewLock) {
+            SharedMarketView entry = _sharedViews.get(marketplaceId);
             if (entry == null) {
                 // Hold the lock while constructing — observe() should
                 // be a cold-path operation, and we'd rather block
@@ -808,7 +808,7 @@ public class HttpFlexemarkets implements Flexemarkets {
                 // dozen-ms first call is acceptable.
                 shared = new DefaultMarketView(this, marketplaceId, markets(marketplaceId));
                 entry = new SharedMarketView(shared);
-                sharedViews.put(marketplaceId, entry);
+                _sharedViews.put(marketplaceId, entry);
             }
             entry.refCount++;
             shared = entry.view;
@@ -818,11 +818,11 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     void _releaseSharedView(long marketplaceId) {
         DefaultMarketView toClose = null;
-        synchronized (viewLock) {
-            SharedMarketView entry = sharedViews.get(marketplaceId);
+        synchronized (_viewLock) {
+            SharedMarketView entry = _sharedViews.get(marketplaceId);
             if (entry == null) return;
             if (--entry.refCount <= 0) {
-                sharedViews.remove(marketplaceId);
+                _sharedViews.remove(marketplaceId);
                 toClose = entry.view;
             }
         }
@@ -830,30 +830,30 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     public void reconnect() throws InterruptedException {
-        if (events != null) {
-            events.reconnect();
+        if (_events != null) {
+            _events.reconnect();
         }
     }
 
     @Override
     public void close() {
-        if (closed) return;
-        closed = true;
-        if (events != null) {
-            events.close();
+        if (_closed) return;
+        _closed = true;
+        if (_events != null) {
+            _events.close();
         }
         // Force-close any remaining shared MarketViews. Well-behaved
         // callers close their handles first; this is the safety net.
         java.util.List<DefaultMarketView> toClose;
-        synchronized (viewLock) {
-            toClose = new java.util.ArrayList<>(sharedViews.size());
-            for (var entry : sharedViews.values()) toClose.add(entry.view);
-            sharedViews.clear();
+        synchronized (_viewLock) {
+            toClose = new java.util.ArrayList<>(_sharedViews.size());
+            for (var entry : _sharedViews.values()) toClose.add(entry.view);
+            _sharedViews.clear();
         }
         for (var v : toClose) {
             try { v.close(); } catch (Throwable ignored) { /* best-effort */ }
         }
-        httpClient.close();
+        _httpClient.close();
     }
 
     // --- HTTP helpers ---
@@ -871,12 +871,12 @@ public class HttpFlexemarkets implements Flexemarkets {
     private HttpRequest.Builder request(String url, String accept) {
         var builder = HttpRequest.newBuilder()
             .uri(URI.create(url))
-            .header("Authorization", bearerToken)
+            .header("Authorization", _bearerToken)
             .header("Accept", accept)
             .header("User-Agent", FM_SDK_CLIENT);
 
-        if (impersonateAccount != null) {
-            builder.header(HEADER_IMPERSONATION, impersonateAccount);
+        if (_impersonateAccount != null) {
+            builder.header(HEADER_IMPERSONATION, _impersonateAccount);
         }
 
         // What the previous call cost, carried on this one. A round trip is not
@@ -887,7 +887,7 @@ public class HttpFlexemarkets implements Flexemarkets {
         // Taken rather than read, so a figure is reported once. Sending the
         // same measurement on every subsequent request would weight a single
         // slow call by however many quiet ones followed it.
-        var timing = lastTiming.getAndSet(null);
+        var timing = _lastTiming.getAndSet(null);
 
         if (timing != null) {
             builder.header(HEADER_CLIENT_TIMING, timing.header());
@@ -936,15 +936,15 @@ public class HttpFlexemarkets implements Flexemarkets {
      * writes to stdout and stdout is what gets pasted into a bug report;
      * fm-lib-net printed both in full, which this deliberately does not.
      */
-    private HttpResponse<String> exchange(HttpRequest request) throws IOException, InterruptedException {
+    private HttpResponse<String> _exchange(HttpRequest request) throws IOException, InterruptedException {
         var started = System.nanoTime();
-        var response = dispatch(request);
+        var response = _dispatch(request);
 
         // Only a completed call is a measurement. A request that threw took an
         // unknown amount of an unknown thing -- a refused connection is not a
         // slow network -- so nothing is recorded and the next request simply
         // carries no header.
-        recordTiming(System.nanoTime() - started, response);
+        _recordTiming(System.nanoTime() - started, response);
 
         return response;
     }
@@ -956,7 +956,7 @@ public class HttpFlexemarkets implements Flexemarkets {
      * the response carrying the answer has already been written by the time the
      * answer exists.
      */
-    private final java.util.concurrent.atomic.AtomicReference<Timing> lastTiming =
+    private final java.util.concurrent.atomic.AtomicReference<Timing> _lastTiming =
         new java.util.concurrent.atomic.AtomicReference<>();
 
     /**
@@ -968,18 +968,18 @@ public class HttpFlexemarkets implements Flexemarkets {
      * then charges the whole trip to itself, which overstates its own share and
      * can never hide a slow link behind it.
      */
-    private void recordTiming(long roundTripNanos, HttpResponse<String> response) {
+    private void _recordTiming(long roundTripNanos, HttpResponse<String> response) {
         var serverNanos = response.headers().firstValue(HEADER_SERVER_TIMING)
-            .map(HttpFlexemarkets::serviceNanos)
+            .map(HttpFlexemarkets::_serviceNanos)
             .orElse(-1L);
 
         var networkNanos = serverNanos < 0 ? -1L : Math.max(0, roundTripNanos - serverNanos);
 
-        lastTiming.set(new Timing(roundTripNanos, networkNanos));
+        _lastTiming.set(new Timing(roundTripNanos, networkNanos));
     }
 
     /** The {@code st=} field of a Server-Timing header, or -1 if it has none. */
-    private static long serviceNanos(String header) {
+    private static long _serviceNanos(String header) {
         var matcher = SERVER_TIMING_ST.matcher(header);
 
         if (!matcher.find()) {
@@ -993,21 +993,21 @@ public class HttpFlexemarkets implements Flexemarkets {
         }
     }
 
-    private HttpResponse<String> dispatch(HttpRequest request) throws IOException, InterruptedException {
-        if (!capture) {
-            return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    private HttpResponse<String> _dispatch(HttpRequest request) throws IOException, InterruptedException {
+        if (!_capture) {
+            return _httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         }
 
         var out = System.out;
         out.printf("> %s %s%n", request.method(), request.uri());
-        printCapturedHeaders(out, ">", request.headers().map());
+        _printCapturedHeaders(out, ">", request.headers().map());
         out.println(">");
 
-        var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        var response = _httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
         out.printf("< %s%n", response.statusCode());
-        printCapturedHeaders(out, "<", response.headers().map());
-        if (isCredentialRoute(request)) {
+        _printCapturedHeaders(out, "<", response.headers().map());
+        if (_isCredentialRoute(request)) {
             out.printf("<%n[body withheld: credential document]%n");
         } else if (response.body() != null && !response.body().isEmpty()) {
             out.printf("<%n%s%n", response.body());
@@ -1019,13 +1019,13 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     /** Routes whose body is a credential rather than a document about one. */
-    private static boolean isCredentialRoute(HttpRequest request) {
+    private static boolean _isCredentialRoute(HttpRequest request) {
         var path = request.uri().getPath();
 
         return path.endsWith("/tokens") || path.endsWith("/refresh") || path.contains("/otp");
     }
 
-    private static void printCapturedHeaders(java.io.PrintStream out, String prefix,
+    private static void _printCapturedHeaders(java.io.PrintStream out, String prefix,
                                              Map<String, List<String>> headers) {
         headers.keySet().stream().sorted().forEach(name -> {
             var value = "authorization".equalsIgnoreCase(name)
@@ -1035,11 +1035,11 @@ public class HttpFlexemarkets implements Flexemarkets {
         });
     }
 
-    private <T> T get(String url, TypeReference<T> type) {
+    private <T> T _get(String url, TypeReference<T> type) {
         var request = request(url, "application/json")
             .GET()
             .build();
-        return send(request, type);
+        return _send(request, type);
     }
 
     /**
@@ -1049,12 +1049,12 @@ public class HttpFlexemarkets implements Flexemarkets {
      * delta stream. Returns {@link Snapshot#NO_SEQ} when the header
      * is absent.
      */
-    private <T> Snapshot<T> getSnapshot(String url, TypeReference<T> type) {
+    private <T> Snapshot<T> _getSnapshot(String url, TypeReference<T> type) {
         var request = request(url, "application/json")
             .GET()
             .build();
         try {
-            var response = exchange(request);
+            var response = _exchange(request);
             var statusCode = response.statusCode();
             if (statusCode >= 200 && statusCode < 300) {
                 T body = MAPPER.readValue(response.body(), type);
@@ -1063,7 +1063,7 @@ public class HttpFlexemarkets implements Flexemarkets {
                         .orElse(Snapshot.NO_SEQ);
                 return new Snapshot<>(body, asOfSeq);
             }
-            throw failureFor(statusCode, response.body());
+            throw _failureFor(statusCode, response.body());
         } catch (FlexemarketsException e) {
             throw e;
         } catch (IOException e) {
@@ -1074,7 +1074,7 @@ public class HttpFlexemarkets implements Flexemarkets {
         }
     }
 
-    private <T> T post(String url, Object body, TypeReference<T> type) {
+    private <T> T _post(String url, Object body, TypeReference<T> type) {
         String json;
 
         // Only the write is guarded. The catch used to cover send() as well, so
@@ -1093,7 +1093,7 @@ public class HttpFlexemarkets implements Flexemarkets {
             .POST(HttpRequest.BodyPublishers.ofString(json))
             .build();
 
-        return send(request, type);
+        return _send(request, type);
     }
 
     /**
@@ -1101,19 +1101,19 @@ public class HttpFlexemarkets implements Flexemarkets {
      * ({@code /open}, {@code /pause}, {@code /close}): the verb and the path
      * carry the whole request.
      */
-    private <T> T patch(String url, TypeReference<T> type) {
+    private <T> T _patch(String url, TypeReference<T> type) {
         var request = request(url, "application/json")
             .method("PATCH", HttpRequest.BodyPublishers.noBody())
             .build();
-        return send(request, type);
+        return _send(request, type);
     }
 
     /** DELETE, whose answer is a status and nothing worth parsing. */
-    private void delete(String url) {
+    private void _delete(String url) {
         var request = request(url, "application/json")
             .DELETE()
             .build();
-        sendDiscardingBody(request);
+        _sendDiscardingBody(request);
     }
 
     /**
@@ -1121,17 +1121,17 @@ public class HttpFlexemarkets implements Flexemarkets {
      * other than JSON. The holdings download is a CSV, and parsing it as JSON
      * would fail on the first line.
      */
-    private String getText(String url) {
+    private String _getText(String url) {
         var request = request(url, "text/csv, */*")
             .GET()
             .build();
         try {
-            var response = exchange(request);
+            var response = _exchange(request);
             var statusCode = response.statusCode();
             if (statusCode >= 200 && statusCode < 300) {
                 return response.body();
             }
-            throw failureFor(statusCode, response.body());
+            throw _failureFor(statusCode, response.body());
         } catch (FlexemarketsException e) {
             throw e;
         } catch (IOException e) {
@@ -1150,7 +1150,7 @@ public class HttpFlexemarkets implements Flexemarkets {
      * would cost more than the twenty lines. The parts are written as bytes,
      * not through a string, so the file's own encoding survives.
      */
-    private <T> T postMultipart(String url, String partName, Path file, TypeReference<T> type) {
+    private <T> T _postMultipart(String url, String partName, Path file, TypeReference<T> type) {
         var boundary = "fm-sdk-" + java.util.UUID.randomUUID();
         try {
             var head = ("--" + boundary + "\r\n"
@@ -1169,22 +1169,22 @@ public class HttpFlexemarkets implements Flexemarkets {
                 .header("Content-Type", "multipart/form-data; boundary=" + boundary)
                 .POST(HttpRequest.BodyPublishers.ofByteArray(body.toByteArray()))
                 .build();
-            return send(request, type);
+            return _send(request, type);
         } catch (IOException e) {
             throw new ApiException("Failed to read " + file, e);
         }
     }
 
-    private <T> T send(HttpRequest request, TypeReference<T> type) {
+    private <T> T _send(HttpRequest request, TypeReference<T> type) {
         try {
-            var response = exchange(request);
+            var response = _exchange(request);
             var statusCode = response.statusCode();
 
             if (statusCode >= 200 && statusCode < 300) {
                 return MAPPER.readValue(response.body(), type);
             }
 
-            throw failureFor(statusCode, response.body());
+            throw _failureFor(statusCode, response.body());
         } catch (FlexemarketsException e) {
             throw e;
         } catch (JacksonException e) {
@@ -1210,16 +1210,16 @@ public class HttpFlexemarkets implements Flexemarkets {
      * including 409 -- deleting a user who still owns something is a conflict,
      * and it says which.
      */
-    private void sendDiscardingBody(HttpRequest request) {
+    private void _sendDiscardingBody(HttpRequest request) {
         try {
-            var response = exchange(request);
+            var response = _exchange(request);
             var statusCode = response.statusCode();
 
             if (statusCode >= 200 && statusCode < 300) {
                 return;
             }
 
-            throw failureFor(statusCode, response.body());
+            throw _failureFor(statusCode, response.body());
         } catch (FlexemarketsException e) {
             throw e;
         } catch (IOException e) {
@@ -1230,7 +1230,7 @@ public class HttpFlexemarkets implements Flexemarkets {
         }
     }
 
-    private Token signIn() {
+    private Token _signIn() {
         var endpoint = server(endpointUrl()) + "/tokens";
         var account = properties.getProperty("account");
         var email = properties.getProperty("email");
@@ -1278,9 +1278,9 @@ public class HttpFlexemarkets implements Flexemarkets {
         }
 
         try {
-            var response = exchange(request);
+            var response = _exchange(request);
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw failureFor(response.statusCode(), response.body());
+                throw _failureFor(response.statusCode(), response.body());
             }
             return MAPPER.readValue(response.body(), TOKEN_TYPE);
         } catch (FlexemarketsException e) {
@@ -1293,12 +1293,12 @@ public class HttpFlexemarkets implements Flexemarkets {
         }
     }
 
-    private ApiRoot fetchApiRoot() {
+    private ApiRoot _fetchApiRoot() {
         var url = server(endpointUrl());
         var request = request(url, "application/json")
             .GET()
             .build();
-        return rebase(send(request, API_ROOT_TYPE), url);
+        return rebase(_send(request, API_ROOT_TYPE), url);
     }
 
     /**
@@ -1324,7 +1324,7 @@ public class HttpFlexemarkets implements Flexemarkets {
             return apiRoot;
         }
 
-        String origin = httpOrigin(endpoint);
+        String origin = _httpOrigin(endpoint);
         if (null == origin) {
             return apiRoot;
         }
@@ -1338,7 +1338,7 @@ public class HttpFlexemarkets implements Flexemarkets {
                 return;
             }
 
-            String named = httpOrigin(link.href());
+            String named = _httpOrigin(link.href());
             if (null != named && !named.equals(origin)) {
                 moved.add(named);
             }
@@ -1369,7 +1369,7 @@ public class HttpFlexemarkets implements Flexemarkets {
      * this exists to correct.
      */
     private static String rebase(String href, String origin) {
-        String named = httpOrigin(href);
+        String named = _httpOrigin(href);
         return null == named || named.equals(origin) ? href : origin + href.substring(named.length());
     }
 
@@ -1378,7 +1378,7 @@ public class HttpFlexemarkets implements Flexemarkets {
      * URL, or null for anything else — a relative href, or a scheme the SDK has
      * no business rewriting.
      */
-    private static String httpOrigin(String url) {
+    private static String _httpOrigin(String url) {
         if (null == url) {
             return null;
         }
@@ -1397,11 +1397,11 @@ public class HttpFlexemarkets implements Flexemarkets {
         return pathStart < 0 ? url : url.substring(0, pathStart);
     }
 
-    private String clientDescription() {
+    private String _clientDescription() {
         return properties.getProperty("client-description", "Unspecified client");
     }
 
-    private String wsUrl() {
+    private String _wsUrl() {
         return server(endpointUrl()).replaceFirst("http", "ws") + "/events";
     }
 
@@ -1414,7 +1414,7 @@ public class HttpFlexemarkets implements Flexemarkets {
      * API root first, which is the point of it. Every call that moves here
      * loses a HAL dependency as well as a version.
      */
-    private String v1(String path) {
+    private String _v1(String path) {
         return server(endpointUrl()) + "/v1" + path;
     }
 
@@ -1597,12 +1597,12 @@ public class HttpFlexemarkets implements Flexemarkets {
      * <p>A status with a meaning a caller can act on gets its own type. What is
      * left is HttpException, carrying the status so a caller can still ask.
      */
-    private static FlexemarketsException failureFor(int statusCode, String body) {
+    private static FlexemarketsException _failureFor(int statusCode, String body) {
         return switch (statusCode) {
-            case 400 -> new InvalidArgumentException("Invalid request: " + detail(body));
-            case 401 -> new AuthenticationException("Authentication failed: " + detail(body));
-            case 403 -> new AuthorizationException("Not permitted: " + detail(body));
-            case 409 -> new ConflictException("Conflict: " + body, tryParseConflict(body));
+            case 400 -> new InvalidArgumentException("Invalid request: " + _detail(body));
+            case 401 -> new AuthenticationException("Authentication failed: " + _detail(body));
+            case 403 -> new AuthorizationException("Not permitted: " + _detail(body));
+            case 409 -> new ConflictException("Conflict: " + body, _tryParseConflict(body));
             default -> statusCode >= 500
                     ? new ConnectionFailedException("Server error " + statusCode + ": " + body)
                     : new HttpException(statusCode, body);
@@ -1622,7 +1622,7 @@ public class HttpFlexemarkets implements Flexemarkets {
      * <p>Falls back to the raw body, because a failure that does not parse is
      * exactly when the caller most needs to see what actually came back.
      */
-    private static String detail(String body) {
+    private static String _detail(String body) {
         if (body == null || body.isBlank()) {
             return "(no response body)";
         }
@@ -1636,7 +1636,7 @@ public class HttpFlexemarkets implements Flexemarkets {
         }
     }
 
-    private static ConflictFailure tryParseConflict(String body) {
+    private static ConflictFailure _tryParseConflict(String body) {
         try {
             return MAPPER.readValue(body, CONFLICT_TYPE);
         } catch (Exception e) {
@@ -1658,14 +1658,14 @@ public class HttpFlexemarkets implements Flexemarkets {
      * @throws IOException if a named credential file cannot be read
      */
     public static Properties loadProperties(String credential, String endpoint, String clientDescription) throws IOException {
-        var properties = setDefaultProperties();
+        var properties = _setDefaultProperties();
 
         if (credential != null) {
-            loadCredential(properties, credential);
+            _loadCredential(properties, credential);
         }
 
         if (endpoint != null) {
-            loadEndpoint(properties, endpoint);
+            _loadEndpoint(properties, endpoint);
         }
 
         // Last, because an endpoint arrives from three places and only one of
@@ -1674,7 +1674,7 @@ public class HttpFlexemarkets implements Flexemarkets {
         // setDefaultProperties on every connection -- or in a file named by -E
         // reached the HTTP client as "1234". Normalising here covers all three,
         // and is a no-op on the form the argument path already produced.
-        expandBareMarketplaceId(properties);
+        _expandBareMarketplaceId(properties);
 
         if (clientDescription != null) {
             properties.setProperty("client-description", clientDescription);
@@ -1685,7 +1685,7 @@ public class HttpFlexemarkets implements Flexemarkets {
         return properties;
     }
 
-    private static Properties setDefaultProperties() {
+    private static Properties _setDefaultProperties() {
         var properties = new Properties();
 
         properties.setProperty("account", "");
@@ -1699,14 +1699,14 @@ public class HttpFlexemarkets implements Flexemarkets {
         for (var file : List.of("credential", "endpoint")) {
             var filePath = Path.of(System.getProperty("user.home"), ".fm", file);
             var before = properties.getProperty("endpoint");
-            loadConfiguration(properties, filePath);
-            noteEndpointSource(properties, before, abbreviate(filePath));
+            _loadConfiguration(properties, filePath);
+            _noteEndpointSource(properties, before, _abbreviate(filePath));
         }
 
         return properties;
     }
 
-    private static void loadCredential(Properties properties, String credential) {
+    private static void _loadCredential(Properties properties, String credential) {
         var credentialPath = Path.of(credential);
 
         properties.setProperty("account", "");
@@ -1714,21 +1714,21 @@ public class HttpFlexemarkets implements Flexemarkets {
         properties.setProperty("password", "");
 
         if (Files.isRegularFile(credentialPath)) {
-            loadConfiguration(properties, credentialPath);
-        } else if (isValidToken(credential)) {
+            _loadConfiguration(properties, credentialPath);
+        } else if (_isValidToken(credential)) {
             properties.setProperty("token", credential);
         } else {
             throw new IllegalArgumentException("Invalid credential: '%s' is not a file or token.".formatted(credential));
         }
     }
 
-    private static void loadEndpoint(Properties properties, String endpoint) {
+    private static void _loadEndpoint(Properties properties, String endpoint) {
         // A bare marketplace id (e.g. "2540") resolves to that marketplace on the
         // default production host. Development environments give a full URL when
         // localhost is wanted. Checked before the URL branch: a bare number is a
         // valid relative URI, so isValidUrl would otherwise swallow it.
-        if (isMarketplaceId(endpoint)) {
-            properties.setProperty("endpoint", marketplaceEndpoint(endpoint));
+        if (_isMarketplaceId(endpoint)) {
+            properties.setProperty("endpoint", _marketplaceEndpoint(endpoint));
             properties.setProperty("endpoint-source", ENDPOINT_ARGUMENT);
             return;
         }
@@ -1737,9 +1737,9 @@ public class HttpFlexemarkets implements Flexemarkets {
 
         if (Files.isRegularFile(endpointPath)) {
             var before = properties.getProperty("endpoint");
-            loadConfiguration(properties, endpointPath);
-            noteEndpointSource(properties, before, abbreviate(endpointPath));
-        } else if (isValidUrl(endpoint)) {
+            _loadConfiguration(properties, endpointPath);
+            _noteEndpointSource(properties, before, _abbreviate(endpointPath));
+        } else if (_isValidUrl(endpoint)) {
             properties.setProperty("endpoint", endpoint);
             properties.setProperty("endpoint-source", ENDPOINT_ARGUMENT);
         } else {
@@ -1757,42 +1757,42 @@ public class HttpFlexemarkets implements Flexemarkets {
      * whether one carried an endpoint at all is only visible as a change in
      * the value.
      */
-    private static void noteEndpointSource(Properties properties, String before, String source) {
+    private static void _noteEndpointSource(Properties properties, String before, String source) {
         if (!Objects.equals(before, properties.getProperty("endpoint"))) {
             properties.setProperty("endpoint-source", source);
         }
     }
 
     /** A path under the home directory, written the way its owner would write it. */
-    private static String abbreviate(Path path) {
+    private static String _abbreviate(Path path) {
         var home = Path.of(System.getProperty("user.home"));
         return path.startsWith(home) ? "~/" + home.relativize(path) : path.toString();
     }
 
-    private static boolean isMarketplaceId(String endpoint) {
+    private static boolean _isMarketplaceId(String endpoint) {
         return endpoint != null && endpoint.matches("\\d+");
     }
 
     /** Expand an endpoint that is still a bare marketplace id, wherever it came from. */
-    private static void expandBareMarketplaceId(Properties properties) {
+    private static void _expandBareMarketplaceId(Properties properties) {
         var endpoint = properties.getProperty("endpoint");
-        if (endpoint != null && isMarketplaceId(endpoint.trim())) {
-            properties.setProperty("endpoint", marketplaceEndpoint(endpoint.trim()));
+        if (endpoint != null && _isMarketplaceId(endpoint.trim())) {
+            properties.setProperty("endpoint", _marketplaceEndpoint(endpoint.trim()));
         }
     }
 
     /** A bare marketplace id resolves to that marketplace on the default production host. */
-    private static String marketplaceEndpoint(String marketplaceId) {
+    private static String _marketplaceEndpoint(String marketplaceId) {
         return Endpoints.DEFAULT_HOST + "/api/marketplaces/" + marketplaceId;
     }
 
-    private static void loadConfiguration(Properties properties, Path filePath) {
+    private static void _loadConfiguration(Properties properties, Path filePath) {
         try (var input = Files.newInputStream(filePath)) {
             properties.load(input);
         } catch (IOException ignored) {}
     }
 
-    private static boolean isValidUrl(String url) {
+    private static boolean _isValidUrl(String url) {
         try {
             new URI(url);
             return true;
@@ -1801,7 +1801,7 @@ public class HttpFlexemarkets implements Flexemarkets {
         }
     }
 
-    private static boolean isValidToken(String token) {
+    private static boolean _isValidToken(String token) {
         return token != null && !token.isBlank()
             && (token.matches("^\\$2[abxy]?\\$\\d{2}\\$[./A-Za-z0-9]{53}$")
                 || token.matches("^[A-Za-z0-9-_]+\\.[A-Za-z0-9-_]+\\.[A-Za-z0-9-_]+$"));

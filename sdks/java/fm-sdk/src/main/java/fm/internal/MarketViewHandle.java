@@ -32,114 +32,114 @@ import java.util.function.Consumer;
  * gone.
  */
 class MarketViewHandle implements MarketView {
-    private final DefaultMarketView shared;
-    private final Runnable onClose;
-    private final List<Subscription> mySubscriptions = new CopyOnWriteArrayList<>();
-    private volatile boolean closed;
+    private final DefaultMarketView _shared;
+    private final Runnable _onClose;
+    private final List<Subscription> _mySubscriptions = new CopyOnWriteArrayList<>();
+    private volatile boolean _closed;
 
     MarketViewHandle(DefaultMarketView shared, Runnable onClose) {
-        this.shared = shared;
-        this.onClose = onClose;
+        this._shared = shared;
+        this._onClose = onClose;
     }
 
     @Override public long marketplaceId() {
-        return shared.marketplaceId();
+        return _shared.marketplaceId();
     }
 
     @Override public List<Market> markets() {
         _check();
-        return shared.markets();
+        return _shared.markets();
     }
 
     @Override public MarketBook orderBook(long marketId) {
         _check();
-        return shared.orderBook(marketId);
+        return _shared.orderBook(marketId);
     }
 
     @Override public MarketTrades trades(long marketId) {
         _check();
-        return shared.trades(marketId);
+        return _shared.trades(marketId);
     }
 
     @Override public Session session() {
         _check();
-        return shared.session();
+        return _shared.session();
     }
 
     @Override public Holding holding() {
         _check();
-        return shared.holding();
+        return _shared.holding();
     }
 
     @Override public Subscription onSessionChange(Consumer<Session> handler) {
         _check();
-        Subscription sub = shared.onSessionChange(handler);
-        mySubscriptions.add(sub);
+        Subscription sub = _shared.onSessionChange(handler);
+        _mySubscriptions.add(sub);
         return sub;
     }
 
     @Override public Subscription onOrderBookChange(long marketId, Consumer<MarketBook> handler) {
         _check();
-        Subscription sub = shared.onOrderBookChange(marketId, handler);
-        mySubscriptions.add(sub);
+        Subscription sub = _shared.onOrderBookChange(marketId, handler);
+        _mySubscriptions.add(sub);
         return sub;
     }
 
     @Override public Subscription onTrade(long marketId, Consumer<fm.Trade> handler) {
         _check();
-        Subscription sub = shared.onTrade(marketId, handler);
-        mySubscriptions.add(sub);
+        Subscription sub = _shared.onTrade(marketId, handler);
+        _mySubscriptions.add(sub);
         return sub;
     }
 
     @Override public Subscription onHoldingChange(Consumer<Holding> handler) {
         _check();
-        Subscription sub = shared.onHoldingChange(handler);
-        mySubscriptions.add(sub);
+        Subscription sub = _shared.onHoldingChange(handler);
+        _mySubscriptions.add(sub);
         return sub;
     }
 
     @Override public Subscription onGap(Consumer<GapEvent> handler) {
         _check();
-        Subscription sub = shared.onGap(handler);
-        mySubscriptions.add(sub);
+        Subscription sub = _shared.onGap(handler);
+        _mySubscriptions.add(sub);
         return sub;
     }
 
     @Override public Subscription onReconnect(Consumer<ReconnectEvent> handler) {
         _check();
-        Subscription sub = shared.onReconnect(handler);
-        mySubscriptions.add(sub);
+        Subscription sub = _shared.onReconnect(handler);
+        _mySubscriptions.add(sub);
         return sub;
     }
 
     @Override public Order submitLimit(long marketId, OrderSide side, long units, long price) {
         _check();
-        return shared.submitLimit(marketId, side, units, price);
+        return _shared.submitLimit(marketId, side, units, price);
     }
 
     @Override public Order submitCancel(long marketId, long originalId) {
         _check();
-        return shared.submitCancel(marketId, originalId);
+        return _shared.submitCancel(marketId, originalId);
     }
 
     @Override public void close() {
-        if (closed) return;
-        closed = true;
+        if (_closed) return;
+        _closed = true;
         // Close subscriptions this handle registered so handlers
         // don't fire after the handle is gone. Subscription.close()
         // is idempotent per the contract.
-        for (var sub : mySubscriptions) {
+        for (var sub : _mySubscriptions) {
             try { sub.close(); } catch (Throwable ignored) { /* best-effort */ }
         }
-        mySubscriptions.clear();
-        onClose.run();
+        _mySubscriptions.clear();
+        _onClose.run();
     }
 
     private void _check() {
-        if (closed) {
+        if (_closed) {
             throw new IllegalStateException(
-                    "MarketView handle for marketplace " + shared.marketplaceId() + " is closed");
+                    "MarketView handle for marketplace " + _shared.marketplaceId() + " is closed");
         }
     }
 }

@@ -50,66 +50,66 @@ class ApiRootRebasingTest {
     private static final String TOKEN =
             "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl";
 
-    private HttpServer origin;
-    private HttpServer decoy;
+    private HttpServer _origin;
+    private HttpServer _decoy;
 
-    private final List<String> originRequests = new ArrayList<>();
-    private final List<String> decoyRequests = new ArrayList<>();
+    private final List<String> _originRequests = new ArrayList<>();
+    private final List<String> _decoyRequests = new ArrayList<>();
 
     @BeforeEach
     void startServers() throws IOException {
         // Started first: the origin has to know the decoy's port to name it.
-        decoy = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        decoy.createContext("/", exchange -> {
-            decoyRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
-            respond(exchange, 401, "{\"error\":\"not this host\"}");
+        _decoy = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        _decoy.createContext("/", exchange -> {
+            _decoyRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
+            _respond(exchange, 401, "{\"error\":\"not this host\"}");
         });
-        decoy.start();
+        _decoy.start();
 
-        origin = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        _origin = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 
-        origin.createContext("/api/tokens", exchange -> {
-            originRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
-            respond(exchange, 200, """
+        _origin.createContext("/api/tokens", exchange -> {
+            _originRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
+            _respond(exchange, 200, """
                 {"token":"%s",
                  "person":{"id":7,"accountId":1,"email":"dev@dev","firstName":"Dev","lastName":"User"},
                  "account":{"id":1,"name":"dev"}}
                 """.formatted(TOKEN));
         });
 
-        origin.createContext("/api/marketplaces/1/markets", exchange -> {
-            originRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
-            respond(exchange, 200, "[{\"id\":11,\"symbol\":\"STK\",\"name\":\"Stock\"}]");
+        _origin.createContext("/api/marketplaces/1/markets", exchange -> {
+            _originRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
+            _respond(exchange, 200, "[{\"id\":11,\"symbol\":\"STK\",\"name\":\"Stock\"}]");
         });
 
-        origin.createContext("/api/marketplaces/1/open", exchange -> {
-            originRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
-            respond(exchange, 200, "{\"id\":99,\"marketplaceId\":1}");
+        _origin.createContext("/api/marketplaces/1/open", exchange -> {
+            _originRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
+            _respond(exchange, 200, "{\"id\":99,\"marketplaceId\":1}");
         });
 
-        origin.createContext("/api", exchange -> {
-            originRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
-            respond(exchange, 200, """
+        _origin.createContext("/api", exchange -> {
+            _originRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
+            _respond(exchange, 200, """
                 {"_links":{
                    "marketplaces":{"href":"%s/api/marketplaces{?page,size,sort*}","templated":true},
                    "accounts":{"href":"%s/api/accounts"}}}
-                """.formatted(decoyBase(), decoyBase()));
+                """.formatted(_decoyBase(), _decoyBase()));
         });
 
-        origin.start();
+        _origin.start();
     }
 
     @AfterEach
     void stopServers() {
-        if (origin != null) {
-            origin.stop(0);
+        if (_origin != null) {
+            _origin.stop(0);
         }
-        if (decoy != null) {
-            decoy.stop(0);
+        if (_decoy != null) {
+            _decoy.stop(0);
         }
     }
 
-    private static void respond(HttpExchange exchange, int status, String body) throws IOException {
+    private static void _respond(HttpExchange exchange, int status, String body) throws IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
         exchange.sendResponseHeaders(status, bytes.length);
@@ -118,23 +118,23 @@ class ApiRootRebasingTest {
         }
     }
 
-    private String decoyBase() {
-        return "http://127.0.0.1:" + decoy.getAddress().getPort();
+    private String _decoyBase() {
+        return "http://127.0.0.1:" + _decoy.getAddress().getPort();
     }
 
-    private String endpoint() {
-        return "http://127.0.0.1:" + origin.getAddress().getPort() + "/api/marketplaces/1";
+    private String _endpoint() {
+        return "http://127.0.0.1:" + _origin.getAddress().getPort() + "/api/marketplaces/1";
     }
 
     /** The defect: a read goes through a link, and the link named the wrong host. */
     @Test
     void aReadThroughALinkStaysOnTheHostThatWasDialled() throws Exception {
-        try (Flexemarkets fm = Flexemarkets.connect(TOKEN, endpoint(), "rebase-test")) {
+        try (Flexemarkets fm = Flexemarkets.connect(TOKEN, _endpoint(), "rebase-test")) {
             assertThat(fm.markets(1L)).extracting(Market::symbol).containsExactly("STK");
         }
 
-        assertThat(originRequests).contains("GET /api/marketplaces/1/markets");
-        assertThat(decoyRequests).as("nothing was sent to the host the links named").isEmpty();
+        assertThat(_originRequests).contains("GET /api/marketplaces/1/markets");
+        assertThat(_decoyRequests).as("nothing was sent to the host the links named").isEmpty();
     }
 
     /**
@@ -143,12 +143,12 @@ class ApiRootRebasingTest {
      */
     @Test
     void aWriteThroughALinkStaysOnTheHostThatWasDialled() throws Exception {
-        try (Flexemarkets fm = Flexemarkets.connect(TOKEN, endpoint(), "rebase-test")) {
+        try (Flexemarkets fm = Flexemarkets.connect(TOKEN, _endpoint(), "rebase-test")) {
             assertThat(fm.openSession(1L).id()).isEqualTo(99L);
         }
 
-        assertThat(originRequests).contains("PATCH /api/marketplaces/1/open");
-        assertThat(decoyRequests).as("nothing was sent to the host the links named").isEmpty();
+        assertThat(_originRequests).contains("PATCH /api/marketplaces/1/open");
+        assertThat(_decoyRequests).as("nothing was sent to the host the links named").isEmpty();
     }
 
     /**
@@ -158,8 +158,8 @@ class ApiRootRebasingTest {
      */
     @Test
     void aRewriteSaysSoAndNamesBothOrigins() {
-        String reported = onStandardError(() -> HttpFlexemarkets.rebase(
-                rootNaming("http://api.example.com"), "https://api.example.com/api"));
+        String reported = _onStandardError(() -> HttpFlexemarkets.rebase(
+                _rootNaming("http://api.example.com"), "https://api.example.com/api"));
 
         assertThat(reported)
                 .contains("http://api.example.com")
@@ -170,18 +170,18 @@ class ApiRootRebasingTest {
     /** A correctly configured server is not nagged at. */
     @Test
     void aRootThatAlreadyAgreesIsSilent() {
-        String reported = onStandardError(() -> HttpFlexemarkets.rebase(
-                rootNaming("https://api.example.com"), "https://api.example.com/api"));
+        String reported = _onStandardError(() -> HttpFlexemarkets.rebase(
+                _rootNaming("https://api.example.com"), "https://api.example.com/api"));
 
         assertThat(reported).isEmpty();
     }
 
-    private static ApiRoot rootNaming(String origin) {
+    private static ApiRoot _rootNaming(String origin) {
         return new ApiRoot(Map.of(
                 "marketplaces", new ApiRoot.LinkObject(origin + "/api/marketplaces")));
     }
 
-    private static String onStandardError(Runnable action) {
+    private static String _onStandardError(Runnable action) {
         PrintStream original = System.err;
         var captured = new ByteArrayOutputStream();
         try {

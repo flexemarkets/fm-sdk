@@ -68,29 +68,29 @@ import java.util.function.Consumer;
  */
 public class DefaultMarketView implements MarketView {
 
-    private final Flexemarkets flexemarkets;
-    private final long marketplaceId;
-    private final List<Market> markets;
+    private final Flexemarkets _flexemarkets;
+    private final long _marketplaceId;
+    private final List<Market> _markets;
 
     private final MarketplaceBooks _books;
     private final MarketplaceTrades _trades;
-    private final AtomicReference<Session> session = new AtomicReference<>();
-    private final AtomicReference<Holding> holding = new AtomicReference<>();
+    private final AtomicReference<Session> _session = new AtomicReference<>();
+    private final AtomicReference<Holding> _holding = new AtomicReference<>();
 
     // CopyOnWriteArrayList because handler arrays are read once per
     // dispatch (hot path) and mutated rarely (register / unregister
     // happens on robot startup / shutdown).
-    private final List<Consumer<Session>>                  sessionHandlers   = new CopyOnWriteArrayList<>();
-    private final List<Consumer<Holding>>                  holdingHandlers   = new CopyOnWriteArrayList<>();
-    private final List<MarketBookHandler>                  bookHandlers      = new CopyOnWriteArrayList<>();
-    private final List<TradeHandler>                       tradeHandlers     = new CopyOnWriteArrayList<>();
-    private final List<Consumer<GapEvent>>                 gapHandlers       = new CopyOnWriteArrayList<>();
-    private final List<Consumer<ReconnectEvent>>           reconnectHandlers = new CopyOnWriteArrayList<>();
+    private final List<Consumer<Session>>                  _sessionHandlers   = new CopyOnWriteArrayList<>();
+    private final List<Consumer<Holding>>                  _holdingHandlers   = new CopyOnWriteArrayList<>();
+    private final List<MarketBookHandler>                  _bookHandlers      = new CopyOnWriteArrayList<>();
+    private final List<TradeHandler>                       _tradeHandlers     = new CopyOnWriteArrayList<>();
+    private final List<Consumer<GapEvent>>                 _gapHandlers       = new CopyOnWriteArrayList<>();
+    private final List<Consumer<ReconnectEvent>>           _reconnectHandlers = new CopyOnWriteArrayList<>();
 
-    private final BlockingQueue<Object> queue = new ArrayBlockingQueue<>(10_000);
-    private final Subscription events;
-    private final Thread dispatcher;
-    private volatile boolean closed;
+    private final BlockingQueue<Object> _queue = new ArrayBlockingQueue<>(10_000);
+    private final Subscription _events;
+    private final Thread _dispatcher;
+    private volatile boolean _closed;
 
     /**
      * Highest ORDERS-UPDATE seq this view has applied so far. Deltas
@@ -100,7 +100,7 @@ public class DefaultMarketView implements MarketView {
      * from the snapshot's {@code asOfSeq}; {@link Snapshot#NO_SEQ}
      * disables filtering (older fm-server).
      */
-    private long lastAppliedSeq;
+    private long _lastAppliedSeq;
 
     /**
      * A view over one marketplace's markets, seeded but not yet observing.
@@ -110,14 +110,14 @@ public class DefaultMarketView implements MarketView {
      * @param markets       its markets, which fix the books and tapes kept
      */
     public DefaultMarketView(Flexemarkets flexemarkets, long marketplaceId, List<Market> markets) {
-        this.flexemarkets = flexemarkets;
-        this.marketplaceId = marketplaceId;
-        this.markets = List.copyOf(markets);
-        this._books = new MarketplaceBooks(this.markets);
+        this._flexemarkets = flexemarkets;
+        this._marketplaceId = marketplaceId;
+        this._markets = List.copyOf(markets);
+        this._books = new MarketplaceBooks(this._markets);
         // 100 matches the default per-market MarketTrades capacity — see
         // MarketTrades(Market) ctor. Plumb through to observe() later if a
         // caller needs deeper trade scrollback.
-        this._trades = new MarketplaceTrades(this.markets, 100);
+        this._trades = new MarketplaceTrades(this._markets, 100);
 
         // Subscribe WS first so deltas start landing in the queue,
         // then fetch the REST snapshot, apply it, and only THEN start
@@ -130,9 +130,9 @@ public class DefaultMarketView implements MarketView {
         // singleton events field and prevent multiple shared views
         // on different marketplaces from coexisting in one
         // Flexemarkets.
-        this.events = flexemarkets.subscribe(marketplaceId, queue);
+        this._events = flexemarkets.subscribe(marketplaceId, _queue);
         _seedFromSnapshot();
-        this.dispatcher = Thread.startVirtualThread(this::_drain);
+        this._dispatcher = Thread.startVirtualThread(this::_drain);
     }
 
     /**
@@ -150,8 +150,8 @@ public class DefaultMarketView implements MarketView {
      * via a server-side publish lock.
      */
     private void _seedFromSnapshot() {
-        Snapshot<List<Order>> orders = flexemarkets.activeOrders(marketplaceId);
-        Snapshot<List<Order>> trades = flexemarkets.recentTrades(marketplaceId);
+        Snapshot<List<Order>> orders = _flexemarkets.activeOrders(_marketplaceId);
+        Snapshot<List<Order>> trades = _flexemarkets.recentTrades(_marketplaceId);
 
         // Clear before reseeding so a resync (Phase 2b) doesn't
         // double-add against existing price levels. Initial seed
@@ -173,18 +173,18 @@ public class DefaultMarketView implements MarketView {
         // Use the orders snapshot's seq as the watermark — orders and
         // trades flow through the same delta stream, so they share a
         // single seq. The trades snapshot's seq is informational.
-        this.lastAppliedSeq = orders.asOfSeq();
+        this._lastAppliedSeq = orders.asOfSeq();
     }
 
     @Override
     public long marketplaceId() {
-        return marketplaceId;
+        return _marketplaceId;
     }
 
     @Override
     public List<Market> markets() {
         _ensureOpen();
-        return markets;
+        return _markets;
     }
 
     @Override
@@ -202,77 +202,77 @@ public class DefaultMarketView implements MarketView {
     @Override
     public Session session() {
         _ensureOpen();
-        return session.get();
+        return _session.get();
     }
 
     @Override
     public Holding holding() {
         _ensureOpen();
-        return holding.get();
+        return _holding.get();
     }
 
     @Override
     public Subscription onSessionChange(Consumer<Session> handler) {
         _ensureOpen();
-        sessionHandlers.add(handler);
-        return () -> sessionHandlers.remove(handler);
+        _sessionHandlers.add(handler);
+        return () -> _sessionHandlers.remove(handler);
     }
 
     @Override
     public Subscription onOrderBookChange(long marketId, Consumer<MarketBook> handler) {
         _ensureOpen();
         MarketBookHandler entry = new MarketBookHandler(marketId, handler);
-        bookHandlers.add(entry);
-        return () -> bookHandlers.remove(entry);
+        _bookHandlers.add(entry);
+        return () -> _bookHandlers.remove(entry);
     }
 
     @Override
     public Subscription onTrade(long marketId, Consumer<fm.Trade> handler) {
         _ensureOpen();
         TradeHandler entry = new TradeHandler(marketId, handler);
-        tradeHandlers.add(entry);
-        return () -> tradeHandlers.remove(entry);
+        _tradeHandlers.add(entry);
+        return () -> _tradeHandlers.remove(entry);
     }
 
     @Override
     public Subscription onHoldingChange(Consumer<Holding> handler) {
         _ensureOpen();
-        holdingHandlers.add(handler);
-        return () -> holdingHandlers.remove(handler);
+        _holdingHandlers.add(handler);
+        return () -> _holdingHandlers.remove(handler);
     }
 
     @Override
     public Subscription onGap(Consumer<GapEvent> handler) {
         _ensureOpen();
-        gapHandlers.add(handler);
-        return () -> gapHandlers.remove(handler);
+        _gapHandlers.add(handler);
+        return () -> _gapHandlers.remove(handler);
     }
 
     @Override
     public Subscription onReconnect(Consumer<ReconnectEvent> handler) {
         _ensureOpen();
-        reconnectHandlers.add(handler);
-        return () -> reconnectHandlers.remove(handler);
+        _reconnectHandlers.add(handler);
+        return () -> _reconnectHandlers.remove(handler);
     }
 
     @Override
     public Order submitLimit(long marketId, OrderSide side, long units, long price) {
         _ensureOpen();
-        return flexemarkets.submitLimit(marketplaceId, marketId, side, units, price);
+        return _flexemarkets.submitLimit(_marketplaceId, marketId, side, units, price);
     }
 
     @Override
     public Order submitCancel(long marketId, long originalId) {
         _ensureOpen();
-        return flexemarkets.submitCancel(marketplaceId, marketId, originalId);
+        return _flexemarkets.submitCancel(_marketplaceId, marketId, originalId);
     }
 
     @Override
     public void close() {
-        if (closed) return;
-        closed = true;
-        dispatcher.interrupt();
-        try { events.close(); } catch (Throwable ignored) { /* best-effort */ }
+        if (_closed) return;
+        _closed = true;
+        _dispatcher.interrupt();
+        try { _events.close(); } catch (Throwable ignored) { /* best-effort */ }
         // The Flexemarkets instance is owned by the caller; we don't
         // close it. If observe(...) was the only consumer, the caller
         // can close Flexemarkets themselves.
@@ -280,22 +280,22 @@ public class DefaultMarketView implements MarketView {
 
     private void _drain() {
         try {
-            while (!closed && !Thread.currentThread().isInterrupted()) {
-                Object event = queue.poll(1, TimeUnit.SECONDS);
+            while (!_closed && !Thread.currentThread().isInterrupted()) {
+                Object event = _queue.poll(1, TimeUnit.SECONDS);
                 if (event == null) continue;
 
                 if (event instanceof OrdersUpdate update) {
                     _processOrdersUpdate(update);
                 } else if (event instanceof Session s) {
-                    session.set(s);
-                    for (var h : sessionHandlers) h.accept(s);
+                    _session.set(s);
+                    for (var h : _sessionHandlers) h.accept(s);
                 } else if (event instanceof Holding h) {
-                    holding.set(h);
-                    for (var hh : holdingHandlers) hh.accept(h);
+                    _holding.set(h);
+                    for (var hh : _holdingHandlers) hh.accept(h);
                 } else if (event instanceof StreamDropped error) {
                     // The subscription restores itself; nothing to do but say so.
                     System.err.println("[MarketView] WS transport error on marketplace "
-                            + marketplaceId + ": " + error.failure().getMessage());
+                            + _marketplaceId + ": " + error.failure().getMessage());
                 } else if (event instanceof Reconnected) {
                     _reseedAfterReconnect();
                 } else if (event instanceof FrameUnreadable ex) {
@@ -303,7 +303,7 @@ public class DefaultMarketView implements MarketView {
                     // visibility; reconnecting won't help with a
                     // malformed frame, so we leave the view as-is.
                     System.err.println("[MarketView] WS error on marketplace "
-                            + marketplaceId + ": " + ex.message());
+                            + _marketplaceId + ": " + ex.message());
                 }
                 // VERSION and SESSION-LIST aren't reflected in the
                 // public surface yet; ignore.
@@ -330,13 +330,13 @@ public class DefaultMarketView implements MarketView {
         ReconnectEvent event;
         try {
             _seedFromSnapshot();
-            event = new ReconnectEvent(marketplaceId, true, null);
+            event = new ReconnectEvent(_marketplaceId, true, null);
         } catch (Throwable t) {
             System.err.println("[MarketView] Reseed failed on marketplace "
-                    + marketplaceId + "; view is stale: " + t.getMessage());
-            event = new ReconnectEvent(marketplaceId, false, t.getMessage());
+                    + _marketplaceId + "; view is stale: " + t.getMessage());
+            event = new ReconnectEvent(_marketplaceId, false, t.getMessage());
         }
-        for (var h : reconnectHandlers) {
+        for (var h : _reconnectHandlers) {
             try { h.accept(event); } catch (Throwable ignored) { /* don't let one bad handler stop dispatch */ }
         }
     }
@@ -350,22 +350,22 @@ public class DefaultMarketView implements MarketView {
      */
     private void _processOrdersUpdate(OrdersUpdate update) {
         if (update.seq() != Snapshot.NO_SEQ
-                && lastAppliedSeq != Snapshot.NO_SEQ
-                && update.seq() > lastAppliedSeq + 1) {
-            long expectedSeq = lastAppliedSeq + 1;
+                && _lastAppliedSeq != Snapshot.NO_SEQ
+                && update.seq() > _lastAppliedSeq + 1) {
+            long expectedSeq = _lastAppliedSeq + 1;
             System.err.println("[MarketView] ORDERS-UPDATE seq gap on marketplace "
-                    + marketplaceId + " — expected " + expectedSeq
+                    + _marketplaceId + " — expected " + expectedSeq
                     + ", got " + update.seq() + "; resyncing from snapshot");
-            GapEvent event = new GapEvent(marketplaceId, expectedSeq, update.seq());
-            for (var h : gapHandlers) {
+            GapEvent event = new GapEvent(_marketplaceId, expectedSeq, update.seq());
+            for (var h : _gapHandlers) {
                 try { h.accept(event); } catch (Throwable ignored) { /* don't let one bad handler stop recovery */ }
             }
             _seedFromSnapshot();
         }
 
         if (update.seq() != Snapshot.NO_SEQ
-                && lastAppliedSeq != Snapshot.NO_SEQ
-                && update.seq() <= lastAppliedSeq) {
+                && _lastAppliedSeq != Snapshot.NO_SEQ
+                && update.seq() <= _lastAppliedSeq) {
             return;
         }
 
@@ -379,7 +379,7 @@ public class DefaultMarketView implements MarketView {
         // Both aggregators are already current either way -- what is ordered
         // here is only which handler hears about it first.
         for (var market : traded.entrySet()) {
-            for (var h : tradeHandlers) {
+            for (var h : _tradeHandlers) {
                 if (h.marketId == market.getKey()) {
                     market.getValue().forEach(h.handler);
                 }
@@ -389,12 +389,12 @@ public class DefaultMarketView implements MarketView {
         for (long marketId : touched) {
             var book = _books.get(marketId);
             if (book == null) continue;
-            for (var h : bookHandlers) {
+            for (var h : _bookHandlers) {
                 if (h.marketId == marketId) h.handler.accept(book);
             }
         }
         if (update.seq() != Snapshot.NO_SEQ) {
-            lastAppliedSeq = update.seq();
+            _lastAppliedSeq = update.seq();
         }
     }
 
@@ -420,8 +420,8 @@ public class DefaultMarketView implements MarketView {
     }
 
     private void _ensureOpen() {
-        if (closed) {
-            throw new IllegalStateException("MarketView for marketplace " + marketplaceId + " is closed");
+        if (_closed) {
+            throw new IllegalStateException("MarketView for marketplace " + _marketplaceId + " is closed");
         }
     }
 

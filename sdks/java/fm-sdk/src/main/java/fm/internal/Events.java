@@ -85,12 +85,12 @@ public class Events implements Subscription {
     private static final TypeReference<Holding>    HOLDING_TYPE  = new TypeReference<>() {};
     private static final TypeReference<Order[]>    ORDERS_TYPE   = new TypeReference<>() {};
 
-    private final String wsUrl;
-    private final String bearerToken;
-    private final long marketplaceId;
-    private final String clientDescription;
-    private final ObjectMapper mapper;
-    private final BlockingQueue<Object> queue;
+    private final String _wsUrl;
+    private final String _bearerToken;
+    private final long _marketplaceId;
+    private final String _clientDescription;
+    private final ObjectMapper _mapper;
+    private final BlockingQueue<Object> _queue;
 
     /**
      * How often a heartbeat goes out, under the 30s this client ADVERTISES in
@@ -109,8 +109,8 @@ public class Events implements Subscription {
      */
     static final long HEROKU_IDLE_TIMEOUT_MS = 55_000;
 
-    private volatile WebSocket webSocket;
-    private volatile boolean closed;
+    private volatile WebSocket _webSocket;
+    private volatile boolean _closed;
 
     /**
      * Sends the heartbeats this client promises.
@@ -123,27 +123,27 @@ public class Events implements Subscription {
      * socket alive, and the advertisement was a claim this client could not
      * back. A daemon thread, so it can never hold a JVM open.
      */
-    private final ScheduledExecutorService heartbeats =
+    private final ScheduledExecutorService _heartbeats =
             Executors.newSingleThreadScheduledExecutor(r -> {
                 var thread = new Thread(r, "fm-sdk-stomp-heartbeat");
                 thread.setDaemon(true);
                 return thread;
             });
-    private volatile ScheduledFuture<?> heartbeat;
+    private volatile ScheduledFuture<?> _heartbeat;
 
     /** One reconnect at a time: onClose and onError can both fire for one drop. */
-    private final java.util.concurrent.atomic.AtomicBoolean reconnecting =
+    private final java.util.concurrent.atomic.AtomicBoolean _reconnecting =
             new java.util.concurrent.atomic.AtomicBoolean();
-    private final AtomicInteger subscriptionId = new AtomicInteger(0);
+    private final AtomicInteger _subscriptionId = new AtomicInteger(0);
 
     Events(String wsUrl, String bearerToken, long marketplaceId, String clientDescription,
            ObjectMapper mapper, BlockingQueue<Object> queue) {
-        this.wsUrl = wsUrl;
-        this.bearerToken = bearerToken;
-        this.marketplaceId = marketplaceId;
-        this.clientDescription = clientDescription;
-        this.mapper = mapper;
-        this.queue = queue;
+        this._wsUrl = wsUrl;
+        this._bearerToken = bearerToken;
+        this._marketplaceId = marketplaceId;
+        this._clientDescription = clientDescription;
+        this._mapper = mapper;
+        this._queue = queue;
     }
 
     void connect() {
@@ -154,16 +154,16 @@ public class Events implements Subscription {
             // NORMAL rather than the JDK's default of NEVER, for the same reason
             // the REST client uses it: an edge that upgrades plain HTTP to HTTPS
             // answers the handshake with a 301 the client must follow.
-            this.webSocket = HttpClient.newBuilder()
+            this._webSocket = HttpClient.newBuilder()
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .build()
                 .newWebSocketBuilder()
-                .header("Authorization", bearerToken)
+                .header("Authorization", _bearerToken)
                 .subprotocols("v12.stomp", "v11.stomp", "v10.stomp")
-                .buildAsync(URI.create(wsUrl), listener)
+                .buildAsync(URI.create(_wsUrl), listener)
                 .join();
 
-            sendStompConnect();
+            _sendStompConnect();
 
             if (!connectedLatch.await(10, TimeUnit.SECONDS)) {
                 throw new ApiException("STOMP CONNECTED frame not received within timeout");
@@ -177,11 +177,11 @@ public class Events implements Subscription {
             // chosen api-version; only the /app destination flips.
             // Mirrors fm-ui's web-socket.service.ts and fm-robots'
             // EventParser pattern.
-            subscribe("/user/queue/marketplaces/" + marketplaceId);
-            subscribe("/topic/marketplaces/" + marketplaceId);
-            subscribe("/app" + API_VERSION_PREFIX + "/marketplaces/" + marketplaceId);
+            _subscribe("/user/queue/marketplaces/" + _marketplaceId);
+            _subscribe("/topic/marketplaces/" + _marketplaceId);
+            _subscribe("/app" + API_VERSION_PREFIX + "/marketplaces/" + _marketplaceId);
 
-            startHeartbeats();
+            _startHeartbeats();
         } catch (FlexemarketsException e) {
             throw e;
         } catch (Exception e) {
@@ -202,9 +202,9 @@ public class Events implements Subscription {
      * from recovering a drop, and only the recovery moved in here.
      */
     void reconnect() throws InterruptedException {
-        while (!closed) {
+        while (!_closed) {
             try {
-                closeWebSocket();
+                _closeWebSocket();
                 connect();
                 return;
             } catch (Exception e) {
@@ -220,9 +220,9 @@ public class Events implements Subscription {
                 // other failure keeps the existing retry: a server restart or
                 // a network drop IS a blip and recovering from it is the whole
                 // point of this loop.
-                if (isAuthRefusal(e)) {
-                    closed = true;
-                    queue.offer(new StreamDropped(new AuthenticationException(
+                if (_isAuthRefusal(e)) {
+                    _closed = true;
+                    _queue.offer(new StreamDropped(new AuthenticationException(
                         "WebSocket refused: the token was rejected. It has expired or was "
                         + "signed for another server; reconnecting cannot fix it.", e)));
                     return;
@@ -241,7 +241,7 @@ public class Events implements Subscription {
      * a token that is valid but not permitted here will not become permitted
      * by being presented again.
      */
-    private static boolean isAuthRefusal(Throwable failure) {
+    private static boolean _isAuthRefusal(Throwable failure) {
         for (var cause = failure; cause != null; cause = cause.getCause()) {
             if (cause instanceof WebSocketHandshakeException handshake) {
                 var status = handshake.getResponse().statusCode();
@@ -260,36 +260,36 @@ public class Events implements Subscription {
      * consumers know their state needs reseeding.
      */
     private void _reconnectInBackground() {
-        if (closed || !reconnecting.compareAndSet(false, true)) {
+        if (_closed || !_reconnecting.compareAndSet(false, true)) {
             return;
         }
         Thread.startVirtualThread(() -> {
             try {
                 reconnect();
-                if (!closed) {
-                    queue.offer(new Reconnected(marketplaceId));
+                if (!_closed) {
+                    _queue.offer(new Reconnected(_marketplaceId));
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             } finally {
-                reconnecting.set(false);
+                _reconnecting.set(false);
             }
         });
     }
 
     @Override
     public void close() {
-        if (closed) return;
-        closed = true;
-        closeWebSocket();
-        heartbeats.shutdownNow();
+        if (_closed) return;
+        _closed = true;
+        _closeWebSocket();
+        _heartbeats.shutdownNow();
     }
 
-    private void closeWebSocket() {
-        stopHeartbeats();
-        if (webSocket != null) {
+    private void _closeWebSocket() {
+        _stopHeartbeats();
+        if (_webSocket != null) {
             try {
-                webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "").join();
+                _webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "").join();
             } catch (Exception ignored) {}
         }
     }
@@ -307,48 +307,48 @@ public class Events implements Subscription {
      * reconnects -- raising from a scheduled task would kill the schedule and
      * report a fault the transport is already handling.
      */
-    private void startHeartbeats() {
-        stopHeartbeats();
-        heartbeat = heartbeats.scheduleAtFixedRate(() -> {
-            var socket = webSocket;
-            if (closed || socket == null) return;
+    private void _startHeartbeats() {
+        _stopHeartbeats();
+        _heartbeat = _heartbeats.scheduleAtFixedRate(() -> {
+            var socket = _webSocket;
+            if (_closed || socket == null) return;
             try {
                 socket.sendText("\n", true);
             } catch (Exception ignored) {}
         }, HEARTBEAT_INTERVAL_SECONDS, HEARTBEAT_INTERVAL_SECONDS, TimeUnit.SECONDS);
     }
 
-    private void stopHeartbeats() {
-        var running = heartbeat;
+    private void _stopHeartbeats() {
+        var running = _heartbeat;
         if (running != null) {
             running.cancel(false);
-            heartbeat = null;
+            _heartbeat = null;
         }
     }
 
     // --- STOMP frame encoding/decoding ---
 
-    private void sendStompConnect() {
-        var frame = stompFrame("CONNECT",
+    private void _sendStompConnect() {
+        var frame = _stompFrame("CONNECT",
             List.of(
                 "accept-version:1.2",
                 "heart-beat:" + ADVERTISED_HEARTBEAT_MS + "," + ADVERTISED_HEARTBEAT_MS,
-                "agent-description:" + clientDescription,
-                "marketplace-id:" + marketplaceId
+                "agent-description:" + _clientDescription,
+                "marketplace-id:" + _marketplaceId
             ),
             null);
-        webSocket.sendText(frame, true);
+        _webSocket.sendText(frame, true);
     }
 
-    private void subscribe(String destination) {
-        var id = "sub-" + subscriptionId.getAndIncrement();
-        var frame = stompFrame("SUBSCRIBE",
+    private void _subscribe(String destination) {
+        var id = "sub-" + _subscriptionId.getAndIncrement();
+        var frame = _stompFrame("SUBSCRIBE",
             List.of("id:" + id, "destination:" + destination),
             null);
-        webSocket.sendText(frame, true);
+        _webSocket.sendText(frame, true);
     }
 
-    private static String stompFrame(String command, List<String> headers, String body) {
+    private static String _stompFrame(String command, List<String> headers, String body) {
         var sb = new StringBuilder();
         sb.append(command).append('\n');
         for (var header : headers) {
@@ -362,7 +362,7 @@ public class Events implements Subscription {
         return sb.toString();
     }
 
-    private void dispatchStompMessage(String frame) {
+    private void _dispatchStompMessage(String frame) {
         var lines = frame.split("\n", -1);
         if (lines.length < 2) return;
 
@@ -373,7 +373,7 @@ public class Events implements Subscription {
         }
 
         if ("ERROR".equals(command)) {
-            queue.offer(new FrameUnreadable("STOMP ERROR: " + frame, null));
+            _queue.offer(new FrameUnreadable("STOMP ERROR: " + frame, null));
             return;
         }
 
@@ -424,18 +424,18 @@ public class Events implements Subscription {
             // that did `case Order[] orders` — they need to switch to
             // `case OrdersUpdate update` and read update.orders().
             Object event = switch (messageType) {
-                case MESSAGE_TYPE_VERSION        -> mapper.readValue(body, VERSION_TYPE);
-                case MESSAGE_TYPE_SESSION_LIST   -> mapper.readValue(body, SESSIONS_TYPE);
-                case MESSAGE_TYPE_SESSION_UPDATE -> mapper.readValue(body, SESSION_TYPE);
-                case MESSAGE_TYPE_HOLDING_UPDATE -> mapper.readValue(body, HOLDING_TYPE);
-                case MESSAGE_TYPE_ORDERS_UPDATE  -> new OrdersUpdate(mapper.readValue(body, ORDERS_TYPE), seq);
+                case MESSAGE_TYPE_VERSION        -> _mapper.readValue(body, VERSION_TYPE);
+                case MESSAGE_TYPE_SESSION_LIST   -> _mapper.readValue(body, SESSIONS_TYPE);
+                case MESSAGE_TYPE_SESSION_UPDATE -> _mapper.readValue(body, SESSION_TYPE);
+                case MESSAGE_TYPE_HOLDING_UPDATE -> _mapper.readValue(body, HOLDING_TYPE);
+                case MESSAGE_TYPE_ORDERS_UPDATE  -> new OrdersUpdate(_mapper.readValue(body, ORDERS_TYPE), seq);
                 default -> null;
             };
             if (event != null) {
-                queue.offer(event);
+                _queue.offer(event);
             }
         } catch (Exception e) {
-            queue.offer(new FrameUnreadable("Failed to parse STOMP message: " + messageType, e));
+            _queue.offer(new FrameUnreadable("Failed to parse STOMP message: " + messageType, e));
         }
     }
 
@@ -443,7 +443,7 @@ public class Events implements Subscription {
 
     private class StompListener implements WebSocket.Listener {
         private final CountDownLatch connectedLatch;
-        private final StringBuilder buffer = new StringBuilder();
+        private final StringBuilder _buffer = new StringBuilder();
 
         StompListener(CountDownLatch connectedLatch) {
             this.connectedLatch = connectedLatch;
@@ -456,17 +456,17 @@ public class Events implements Subscription {
 
         @Override
         public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
-            buffer.append(data);
+            _buffer.append(data);
             if (last) {
-                var frame = buffer.toString();
-                buffer.setLength(0);
+                var frame = _buffer.toString();
+                _buffer.setLength(0);
 
                 if (frame.startsWith("CONNECTED")) {
                     connectedLatch.countDown();
                 }
 
                 // Dispatch in a virtual thread to avoid blocking the WS receive thread
-                Thread.startVirtualThread(() -> dispatchStompMessage(frame));
+                Thread.startVirtualThread(() -> _dispatchStompMessage(frame));
             }
             webSocket.request(1);
             return CompletableFuture.completedFuture(null);
@@ -481,8 +481,8 @@ public class Events implements Subscription {
 
         @Override
         public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
-            if (!closed) {
-                queue.offer(new StreamDropped(
+            if (!_closed) {
+                _queue.offer(new StreamDropped(
                     new Exception("WebSocket closed: %d %s".formatted(statusCode, reason))));
                 _reconnectInBackground();
             }
@@ -491,7 +491,7 @@ public class Events implements Subscription {
 
         @Override
         public void onError(WebSocket webSocket, Throwable error) {
-            queue.offer(new StreamDropped(error));
+            _queue.offer(new StreamDropped(error));
             _reconnectInBackground();
         }
     }

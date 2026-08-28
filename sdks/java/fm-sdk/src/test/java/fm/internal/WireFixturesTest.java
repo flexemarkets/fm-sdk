@@ -104,12 +104,12 @@ class WireFixturesTest {
         assertNotNull(parsed, fixture.name() + ": deserialized to null");
 
         fixture.expect().propertyStream().forEach(entry ->
-                check(read(parsed, entry.getKey()), entry.getValue(),
+                _check(_read(parsed, entry.getKey()), entry.getValue(),
                       fixture.name() + "." + entry.getKey()));
     }
 
     /** The value of one record component, by its wire name. */
-    private static Object read(Object parsed, String name) {
+    private static Object _read(Object parsed, String name) {
         Method accessor;
         try {
             accessor = parsed.getClass().getMethod(name);
@@ -123,7 +123,7 @@ class WireFixturesTest {
         }
     }
 
-    private static void check(Object actual, JsonNode expected, String where) {
+    private static void _check(Object actual, JsonNode expected, String where) {
         if (expected.isObject() && expected.has("epochMilli") && expected.size() == 1) {
             assertNotNull(actual, where + ": expected an instant, got null");
             var instant = assertInstanceOf(Instant.class, actual,
@@ -148,10 +148,10 @@ class WireFixturesTest {
                 if (want.isObject()) {
                     int index = i;
                     want.propertyStream().forEach(e ->
-                            check(read(list.get(index), e.getKey()), e.getValue(),
+                            _check(_read(list.get(index), e.getKey()), e.getValue(),
                                   where + "[" + index + "]." + e.getKey()));
                 } else {
-                    check(list.get(i), want, where + "[" + i + "]");
+                    _check(list.get(i), want, where + "[" + i + "]");
                 }
             }
             return;
@@ -159,7 +159,7 @@ class WireFixturesTest {
 
         if (expected.isObject()) {
             expected.propertyStream().forEach(e ->
-                    check(read(actual, e.getKey()), e.getValue(), where + "." + e.getKey()));
+                    _check(_read(actual, e.getKey()), e.getValue(), where + "." + e.getKey()));
             return;
         }
 
