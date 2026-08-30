@@ -48,11 +48,14 @@ npm install @flexemarkets/fm-sdk
 
 ## Configuration
 
-All SDKs share the same configuration mechanism:
+All SDKs share the same configuration mechanism. Highest priority first:
 
-1. **Default config files** — `~/.fm/credential` and `~/.fm/endpoint` (Java `.properties` format)
-2. **Environment variable** — `FM_API_URL` overrides the endpoint
-3. **Connect arguments** — pass `credential` / `endpoint` directly to `connect()`
+1. **Connect arguments** — pass `credential` / `endpoint` directly to `connect()`
+2. **Default config files** — `~/.fm/credential` and `~/.fm/endpoint` (Java `.properties` format)
+3. **Environment variable** — `FM_API_URL`, otherwise `https://api.flexemarkets.com`
+
+An `endpoint` in either config file therefore beats `FM_API_URL`; only the
+connect argument (`-E/--endpoint` on the command line tools) beats the files.
 
 ### Credential file (`~/.fm/credential`)
 
