@@ -34,11 +34,15 @@ import fm.TickGrid;
 import fm.Token;
 
 import java.io.IOException;
+import java.net.ConnectException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.UnknownHostException;
 import java.net.http.HttpClient;
+import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.channels.UnresolvedAddressException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -48,8 +52,11 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.concurrent.BlockingQueue;
+
+import javax.net.ssl.SSLException;
 
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
@@ -159,6 +166,9 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     /** The server's own handling time, which it reports back on every response. */
     private static final String HEADER_SERVER_TIMING = "Server-Timing";
+
+    /** How the endpoint argument is spelled, for a message that tells you what to change. */
+    private static final String ENDPOINT_ARGUMENT = "-E/--endpoint";
 
     private static final java.util.regex.Pattern SERVER_TIMING_ST =
         java.util.regex.Pattern.compile("st=(\\d+)");
@@ -1045,7 +1055,7 @@ public class HttpFlexemarkets implements Flexemarkets {
         } catch (FlexemarketsException e) {
             throw e;
         } catch (IOException e) {
-            throw new ApiException("Snapshot request failed", e);
+            throw transportFailure("Snapshot request failed", request, e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new ApiException("Snapshot request interrupted", e);
@@ -1113,7 +1123,7 @@ public class HttpFlexemarkets implements Flexemarkets {
         } catch (FlexemarketsException e) {
             throw e;
         } catch (IOException e) {
-            throw new ApiException("HTTP request failed", e);
+            throw transportFailure("HTTP request failed", request, e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new ApiException("HTTP request interrupted", e);
@@ -1173,7 +1183,7 @@ public class HttpFlexemarkets implements Flexemarkets {
             // to say which SDK call had produced it.
             throw new ApiException("Failed to parse the response body", e);
         } catch (IOException e) {
-            throw new ApiException("HTTP request failed", e);
+            throw transportFailure("HTTP request failed", request, e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new ApiException("HTTP request interrupted", e);
@@ -1201,7 +1211,7 @@ public class HttpFlexemarkets implements Flexemarkets {
         } catch (FlexemarketsException e) {
             throw e;
         } catch (IOException e) {
-            throw new ApiException("HTTP request failed", e);
+            throw transportFailure("HTTP request failed", request, e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new ApiException("HTTP request interrupted", e);
@@ -1264,7 +1274,7 @@ public class HttpFlexemarkets implements Flexemarkets {
         } catch (FlexemarketsException e) {
             throw e;
         } catch (IOException e) {
-            throw new ApiException("Sign-in request failed", e);
+            throw transportFailure("Sign-in request failed", request, e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new ApiException("Sign-in request interrupted", e);
@@ -1467,6 +1477,104 @@ public class HttpFlexemarkets implements Flexemarkets {
 
 
     /**
+     * The exception an exchange that never completed deserves.
+     *
+     * <p>Named for the transport, not for whichever call happened to be
+     * first. A stale {@code ~/.fm/endpoint} pointing at a local server that
+     * was not running reported "Sign-in request failed" -- which reads as a
+     * rejected password, and sent the reader to their credential. Nothing was
+     * wrong with the credential, and nothing in the message named the address
+     * actually dialled or said where that address had come from.
+     *
+     * <p>So a server that could not be reached says so, in those terms. Any
+     * other {@code IOException} did happen against a server that answered, and
+     * keeps the caller's wording -- with the underlying message appended,
+     * which the caller's wording alone never carried.
+     */
+    private FlexemarketsException transportFailure(String what, HttpRequest request, IOException e) {
+        var reason = unreachableReason(e);
+
+        if (null == reason) {
+            return new ApiException(what + ": " + e, e);
+        }
+
+        var source = properties.getProperty("endpoint-source");
+
+        return new ApiException(
+            "Cannot reach the server at %s (%s).%s".formatted(
+                origin(request.uri()),
+                reason,
+                null == source ? "" : " That address came from " + source + "."),
+            e);
+    }
+
+    /**
+     * Why the server could not be reached, or null if it was.
+     *
+     * <p>The JDK's connect failures carry no message at all -- every exception
+     * in the chain answers null -- so the phrasing has to come from the types.
+     * The chain is worth walking for one distinction in particular: a name
+     * that does not resolve and a host that will not answer both surface as
+     * {@code ConnectException}, and only the root cause tells them apart. It
+     * is the difference between a misspelled endpoint and a server that is not
+     * running.
+     *
+     * <p>What is left stays deliberately vague. {@code ConnectException} is
+     * refused connections in practice, but it is not only refused connections,
+     * and a message that guesses wrong here is the very thing this replaced.
+     */
+    private static String unreachableReason(IOException e) {
+        if (unresolvedAddress(e)) {
+            return "unknown host";
+        }
+
+        var phrase = switch (e) {
+            case HttpConnectTimeoutException ignored -> "connection timed out";
+            case ConnectException ignored            -> "refused or unreachable";
+            case SSLException ignored                -> "TLS handshake failed";
+            default                                  -> null;
+        };
+
+        if (null == phrase) {
+            return null;
+        }
+
+        var detail = deepestMessage(e);
+        return null == detail ? phrase : phrase + ": " + detail;
+    }
+
+    /** Whether the failure is DNS: the host name never became an address. */
+    private static boolean unresolvedAddress(Throwable t) {
+        for (Throwable cause = t; null != cause; cause = cause.getCause()) {
+            if (cause instanceof UnknownHostException || cause instanceof UnresolvedAddressException) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The innermost cause that has something to say. */
+    private static String deepestMessage(Throwable t) {
+        String message = null;
+
+        for (Throwable cause = t; null != cause; cause = cause.getCause()) {
+            var candidate = cause.getMessage();
+            if (null != candidate && !candidate.isBlank()) {
+                message = candidate;
+            }
+        }
+
+        return message;
+    }
+
+    /** Scheme and authority: where the request went, without the path. */
+    private static String origin(URI uri) {
+        return null == uri.getScheme() || null == uri.getRawAuthority()
+                ? uri.toString()
+                : uri.getScheme() + "://" + uri.getRawAuthority();
+    }
+
+    /**
      * The exception a non-2xx response deserves.
      *
      * <p>One place, because this mapping was written out four times and the
@@ -1574,10 +1682,13 @@ public class HttpFlexemarkets implements Flexemarkets {
 
         var envUrl = System.getenv("FM_API_URL");
         properties.setProperty("endpoint", envUrl != null ? envUrl : Endpoints.DEFAULT_HOST);
+        properties.setProperty("endpoint-source", envUrl != null ? "$FM_API_URL" : "the default host");
 
         for (var file : List.of("credential", "endpoint")) {
             var filePath = Path.of(System.getProperty("user.home"), ".fm", file);
+            var before = properties.getProperty("endpoint");
             loadConfiguration(properties, filePath);
+            noteEndpointSource(properties, before, abbreviate(filePath));
         }
 
         return properties;
@@ -1606,18 +1717,44 @@ public class HttpFlexemarkets implements Flexemarkets {
         // valid relative URI, so isValidUrl would otherwise swallow it.
         if (isMarketplaceId(endpoint)) {
             properties.setProperty("endpoint", marketplaceEndpoint(endpoint));
+            properties.setProperty("endpoint-source", ENDPOINT_ARGUMENT);
             return;
         }
 
         var endpointPath = Path.of(endpoint);
 
         if (Files.isRegularFile(endpointPath)) {
+            var before = properties.getProperty("endpoint");
             loadConfiguration(properties, endpointPath);
+            noteEndpointSource(properties, before, abbreviate(endpointPath));
         } else if (isValidUrl(endpoint)) {
             properties.setProperty("endpoint", endpoint);
+            properties.setProperty("endpoint-source", ENDPOINT_ARGUMENT);
         } else {
             throw new IllegalArgumentException("Invalid endpoint: '%s' is not a marketplace id, file, or URL.".formatted(endpoint));
         }
+    }
+
+    /**
+     * Where the endpoint in hand came from, for a failure to name.
+     *
+     * <p>An endpoint arrives from four places -- the argument,
+     * {@code $FM_API_URL}, {@code ~/.fm/endpoint}, {@code ~/.fm/credential} --
+     * and which one won is exactly what someone staring at an address they did
+     * not type needs to know. The files are read for their whole contents, so
+     * whether one carried an endpoint at all is only visible as a change in
+     * the value.
+     */
+    private static void noteEndpointSource(Properties properties, String before, String source) {
+        if (!Objects.equals(before, properties.getProperty("endpoint"))) {
+            properties.setProperty("endpoint-source", source);
+        }
+    }
+
+    /** A path under the home directory, written the way its owner would write it. */
+    private static String abbreviate(Path path) {
+        var home = Path.of(System.getProperty("user.home"));
+        return path.startsWith(home) ? "~/" + home.relativize(path) : path.toString();
     }
 
     private static boolean isMarketplaceId(String endpoint) {
