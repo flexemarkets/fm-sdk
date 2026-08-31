@@ -42,17 +42,44 @@
 # built from had to be recovered afterwards by reading `chore:` messages and
 # diffing poms. Those tags have since been back-filled -- every published
 # version has one, so the history is whole and this paragraph is a record of
-# why the check exists rather than a description of the present. The Release
-# workflow cannot make the mistake, being triggered by the tag, so this check
-# exists for the local `make publish` path, which is how those six went
-# out.
+# why the check exists rather than a description of the present. Those six went
+# out through the local `make publish` path, which is what this was written for.
 #
-# Usage: scripts/check-publish.sh [all|npm|pypi|java|spi]
+# It is no longer only that path. The Release workflow publishes all three
+# registries on a tag push, and for a long time ran none of this — so the
+# careful ordering below was reachable only by the person who chose to type
+# `make publish`, and bypassed entirely by the tool that pushes tags. It runs
+# here now, in two parts, because CI holds its credentials differently:
+#
+#   --no-credentials   the release record and the registry availability, which
+#                      are facts about git and the registries and true in any
+#                      environment. The workflow runs this once, before any job
+#                      uploads anything, which is the whole point of the gate.
+#   (default)          those plus the credentials, run inside the job that
+#                      actually holds them. Nothing is skipped overall; the two
+#                      halves are checked where each can be seen.
+#
+# Under GitHub Actions the credentials are not files. npm and PyPI publish
+# through OIDC trusted publishing, where the credential is the workflow's
+# ability to mint an id-token and there is no login, no token and no OTP to
+# answer; Maven Central's is a pair of secrets in the environment. So the
+# credential checks ask what that environment can actually answer.
+#
+# Usage: scripts/check-publish.sh [all|npm|pypi|java|spi] [--no-credentials]
 # Exit:  0 when the named registry could publish the current version, 1 otherwise.
 
 set -uo pipefail
 
-TARGET="${1:-all}"
+TARGET=""
+CHECK_CREDENTIALS=1
+
+for arg in "$@"; do
+    case "$arg" in
+        --no-credentials) CHECK_CREDENTIALS=0 ;;
+        *)                TARGET="$arg" ;;
+    esac
+done
+TARGET="${TARGET:-all}"
 
 case "$TARGET" in
     all|npm|pypi|java|spi) ;;
@@ -89,7 +116,41 @@ wants() { [[ "$TARGET" == "all" || "$TARGET" == "$1" ]]; }
 # Credentials
 # ---------------------------------------------------------------------------
 
+# Under GitHub Actions, npm and PyPI publish through OIDC trusted publishing:
+# there is no stored token and no login, and the credential is the job's
+# ability to mint an id-token. That ability is granted by `permissions:
+# id-token: write` and shows up as these two variables. A job without them
+# cannot publish, and would fail at the upload rather than here — which is
+# exactly the failure this file exists to move earlier.
+oidc_available() {
+    [[ -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" && -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]]
+}
+
+in_ci() {
+    [[ -n "${GITHUB_ACTIONS:-}" ]]
+}
+
 check_npm_credentials() {
+    if in_ci; then
+        # npm's trusted publishing needs 11.5.1 or newer; an older npm ignores
+        # the id-token and falls back to a token that is not there.
+        local npm_version
+        npm_version=$(npm --version 2>/dev/null)
+        # 11.5.1 or newer, equality included: the oldest npm that can publish
+        # this way. `sort -V` puts the lower first, so the floor sorting first
+        # is the version being at or above it.
+        if ! oidc_available; then
+            fail "npm" "no OIDC token available for trusted publishing"
+            hints+=("npm: the publishing job needs 'permissions: id-token: write'. Without it npm publish falls back to a NODE_AUTH_TOKEN that this workflow does not set.")
+        elif [[ "$(printf '11.5.1\n%s\n' "$npm_version" | sort -V | head -1)" == "11.5.1" ]]; then
+            pass "npm" "OIDC trusted publishing (npm $npm_version)"
+        else
+            fail "npm" "npm $npm_version is older than 11.5.1"
+            hints+=("npm: trusted publishing needs npm >= 11.5.1. An older npm ignores the id-token and looks for a token that is not set, so the publish fails after the other registries have uploaded.")
+        fi
+        return
+    fi
+
     if ! npm_user=$(npm whoami 2>/dev/null); then
         fail "npm" "not logged in — run: npm login"
         hints+=("npm: a browser session on npmjs.com is not a publishing credential; npm login writes the token this needs.")
@@ -137,6 +198,16 @@ check_npm_credentials() {
 }
 
 check_pypi_credentials() {
+    if in_ci; then
+        if oidc_available; then
+            pass "pypi" "OIDC trusted publishing"
+        else
+            fail "pypi" "no OIDC token available for trusted publishing"
+            hints+=("pypi: the publishing job needs 'permissions: id-token: write'. pypa/gh-action-pypi-publish has no other credential in this workflow.")
+        fi
+        return
+    fi
+
     if [[ -n "${TWINE_USERNAME:-}" && -n "${TWINE_PASSWORD:-}" ]]; then
         pass "pypi" "TWINE_USERNAME/TWINE_PASSWORD set"
     elif [[ -f "$HOME/.pypirc" ]]; then
@@ -148,6 +219,25 @@ check_pypi_credentials() {
 }
 
 check_java_credentials() {
+    # In CI the credential is a pair of secrets, and setup-java turns them into
+    # the settings.xml the plugin reads. Checking the secrets rather than the
+    # file is what lets this run in a gate job that has not set up Java yet --
+    # and an empty secret is the failure worth catching, because maven answers
+    # it with a 401 after the other two registries have already uploaded.
+    if in_ci; then
+        local missing=()
+        [[ -n "${MAVEN_USERNAME:-}" ]]  || missing+=("MAVEN_USERNAME")
+        [[ -n "${MAVEN_PASSWORD:-}" ]]  || missing+=("MAVEN_PASSWORD")
+        [[ -n "${GPG_PASSPHRASE:-}" ]]  || missing+=("GPG_PASSPHRASE")
+        if (( ${#missing[@]} )); then
+            fail "maven central" "unset in this job: ${missing[*]}"
+            hints+=("maven: the deploy needs MAVEN_USERNAME, MAVEN_PASSWORD and GPG_PASSPHRASE in the job env. A secret that is missing or scoped to an environment this job does not name arrives empty, and Central answers that with a 401 -- after npm and PyPI have uploaded.")
+        else
+            pass "maven central" "portal credentials and signing passphrase present"
+        fi
+        return
+    fi
+
     # The release profile publishes through central-publishing-maven-plugin with
     # publishingServerId 'central', so settings.xml needs a matching server entry.
     if grep -q '<id>central</id>' "$HOME/.m2/settings.xml" 2>/dev/null; then
@@ -361,11 +451,17 @@ if check_git_worktree; then
 fi
 echo ""
 
-echo "Credentials:"
-wants npm  && check_npm_credentials
-wants pypi && check_pypi_credentials
-wants java && check_java_credentials
-wants spi  && check_java_credentials
+if (( CHECK_CREDENTIALS )); then
+    echo "Credentials:"
+    wants npm  && check_npm_credentials
+    wants pypi && check_pypi_credentials
+    wants java && check_java_credentials
+    wants spi  && check_java_credentials
+else
+    # Not skipped, deferred: each publishing job runs the full check for its own
+    # registry before it uploads, in the only place its credential exists.
+    echo "Credentials: checked by each publishing job, which is where they live."
+fi
 
 echo ""
 echo "Version availability:"

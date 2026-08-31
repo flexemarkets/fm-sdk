@@ -27,9 +27,36 @@ jobs:
           fi
           echo "version=$TAG_VERSION" >> $GITHUB_OUTPUT
 
+  # The gate `make publish` has always had, which this workflow did not.
+  #
+  # Every registry here is append-only, so a release that lands on one and
+  # fails on another cannot be repaired -- only renumbered and published
+  # again. The local path checks all three before sending a byte to any of
+  # them; pushing a tag went straight to the uploads, and the three jobs
+  # below run in parallel, so any one of them failing leaves the others
+  # already shipped.
+  #
+  # This runs the half that is true anywhere: the release is recorded in git,
+  # and no registry already holds this version. The credentials are checked
+  # inside each publishing job, which is the only place they exist.
+  gate:
+    name: Gate — every registry ready
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # The release-record checks read the tag and compare it to HEAD, so
+          # the tag and its history both have to be here.
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Check the release record and every registry
+        run: make check-publish-release
+
   publish-python:
     name: Publish Python to PyPI
-    needs: validate
+    needs: [validate, gate]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -51,6 +78,9 @@ jobs:
       - name: Build distribution
         run: python -m build sdks/python
 
+      - name: Check this job can publish
+        run: make check-publish-python
+
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
@@ -61,7 +91,7 @@ jobs:
 
   publish-typescript:
     name: Publish TypeScript to npm
-    needs: validate
+    needs: [validate, gate]
     runs-on: ubuntu-latest
     environment: npm
     permissions:
@@ -87,6 +117,11 @@ jobs:
         run: npm run build
         working-directory: sdks/typescript
 
+      # After the npm upgrade above, so the version floor is checked against the
+      # npm that will actually run the publish.
+      - name: Check this job can publish
+        run: make check-publish-typescript
+
       - name: Publish to npm
         working-directory: sdks/typescript
         run: |
@@ -102,7 +137,7 @@ jobs:
 
   publish-java:
     name: Publish Java to Maven Central
-    needs: validate
+    needs: [validate, gate]
     runs-on: ubuntu-latest
     environment: maven
     steps:
@@ -118,6 +153,17 @@ jobs:
           server-password: MAVEN_PASSWORD
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
           gpg-passphrase: GPG_PASSPHRASE
+
+      # Same env as the deploy below, deliberately: a secret that is missing or
+      # scoped to an environment this job does not name arrives empty, and
+      # Central answers that with a 401 -- by which point npm and PyPI have
+      # uploaded and the version is spent.
+      - name: Check this job can publish
+        env:
+          MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.MAVEN_PASSWORD }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: make check-publish-java
 
       - name: Publish to Maven Central
         env:

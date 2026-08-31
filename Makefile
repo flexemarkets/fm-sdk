@@ -15,7 +15,7 @@ VERSION := $(shell cat VERSION)
        ticker-python ticker-typescript ticker-java \
        mcp-server \
        publish publish-python publish-typescript publish-java \
-       check-publish check-publish-python check-publish-typescript check-publish-java \
+       check-publish check-publish-release check-publish-python check-publish-typescript check-publish-java \
        publish-spi check-publish-spi
 
 # ---------------------------------------------------------------------------
@@ -262,6 +262,14 @@ build-release-typescript:
 
 check-publish:
 	@scripts/check-publish.sh all
+
+# The pre-flight half, for the Release workflow's gate job: the release record
+# and whether all three registries will accept this version. No credentials,
+# because the gate runs before the jobs that hold them -- each of those runs
+# check-publish-<its registry> in full before it uploads, so nothing is skipped,
+# only checked where it can be seen.
+check-publish-release:
+	@scripts/check-publish.sh all --no-credentials
 
 check-publish-python:
 	@scripts/check-publish.sh pypi
