@@ -33,6 +33,34 @@ public interface Writing {
     Order submitLimit(long marketplaceId, long marketId, Side side, long units, long price);
 
     /**
+     * Place a limit order naming the counterparty it is for.
+     *
+     * <p>What a private market requires. A private market matches a LIMIT order
+     * only against one whose owner and target are its own target and owner, so
+     * an order with no target never trades there — the server refuses it
+     * outright rather than resting it. Without this there is no call in this
+     * SDK that trades in a private market at all.
+     *
+     * <p>The target is an owner id, not a name. The server takes a name as a
+     * fallback for clients that still send one, but says itself that it is
+     * ambiguous: an allotment name is a display label, and the {@code ----}
+     * sentinel is shared by every hidden participant. So the id is what this
+     * asks for, and resolving a name to one is the caller's business —
+     * the caller is the one holding the allotment the name came from.
+     *
+     * @param marketplaceId the marketplace to trade in
+     * @param marketId      the market within it
+     * @param side          which way round the order goes
+     * @param units         how many units to trade
+     * @param price         the limit price, in the cents the exchange counts in
+     * @param ownerTargetId the counterparty this order is for; null for an
+     *                      ordinary untargeted order in a public market
+     * @return the order as the server recorded it, carrying the id it assigned
+     */
+    Order submitLimit(long marketplaceId, long marketId, Side side, long units, long price,
+                      Long ownerTargetId);
+
+    /**
      * Cancel a resting order.
      *
      * <p>The exchange expresses a cancel as an order of its own, naming the one

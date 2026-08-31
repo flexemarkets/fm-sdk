@@ -551,6 +551,7 @@ class AdminApiTest {
     void aTradingClientIsNotAnAdministrator() {
         Writing trader = new Writing() {
             public Order submitLimit(long m, long k, Side s, long u, long p) { return null; }
+            public Order submitLimit(long m, long k, Side s, long u, long p, Long t) { return null; }
             public Order submitCancel(long m, long k, long o) { return null; }
             public Order submitMarket(long m, long k, Side s, long u) { return null; }
         };

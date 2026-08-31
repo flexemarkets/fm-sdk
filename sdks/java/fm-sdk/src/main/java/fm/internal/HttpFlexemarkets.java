@@ -556,15 +556,27 @@ public class HttpFlexemarkets implements Flexemarkets {
     private record ManagerOtpRequest(List<Long> userIds) {}
 
     public Order submitLimit(long marketplaceId, long marketId, Side side, long units, long price) {
-        var order = Map.of(
-            "marketplaceId", marketplaceId,
-            "marketId",      marketId,
-            "type",          OrderType.LIMIT,
-            "side",          side,
-            "units",         units,
-            "price",         price,
-            "clientDescription", clientDescription()
-        );
+        return submitLimit(marketplaceId, marketId, side, units, price, null);
+    }
+
+    public Order submitLimit(long marketplaceId, long marketId, Side side, long units, long price,
+                             Long ownerTargetId) {
+        // A LinkedHashMap rather than Map.of: the target is absent for an
+        // ordinary order, and Map.of rejects a null value rather than omitting
+        // the key. Omitting it is the point -- an order carrying
+        // "ownerTargetId": null is a private order with no target, which the
+        // server refuses.
+        var order = new LinkedHashMap<String, Object>();
+        order.put("marketplaceId", marketplaceId);
+        order.put("marketId",      marketId);
+        order.put("type",          OrderType.LIMIT);
+        order.put("side",          side);
+        order.put("units",         units);
+        order.put("price",         price);
+        order.put("clientDescription", clientDescription());
+        if (null != ownerTargetId) {
+            order.put("ownerTargetId", ownerTargetId);
+        }
         return post(uri(apiRoot, "orders"), order, ORDER_TYPE);
     }
 
