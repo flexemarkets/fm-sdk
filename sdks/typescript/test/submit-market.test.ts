@@ -155,3 +155,9 @@ test("a fixed price market has only its floor", () => {
 test("side is read without regard to case", () => {
   assert.equal(marketableLimit(market(100, 200, 25), "buy"), 200);
 });
+
+// A market order that names no side used to price at the bottom of the range -- the most aggressive sell the market accepts -- because the branch was the complement of buy rather than a test for sell. submitMarket takes the side straight from its caller, so a missing argument crossed the wrong side of the book at the worst price rather than failing.
+test("a sideless market order is refused rather than priced as a sell", () => {
+  assert.throws(() => marketableLimit(market(100, 200, 25), null as unknown as string),
+                /must name its side/);
+});

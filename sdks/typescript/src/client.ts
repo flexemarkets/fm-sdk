@@ -388,7 +388,18 @@ function parseApiRoot(data: JsonObject): ApiRoot {
  * where the two bounds are equal and there is one legal price.
  */
 export function marketableLimit(market: Market, side: string): number {
-  if (side?.toUpperCase() !== "BUY" || market.priceTick <= 0) {
+  // The side must be named. This was `side?.toUpperCase() !== "BUY"`, the
+  // complement of buy rather than a test for sell, so a null side priced the
+  // order at the bottom of the range -- the most aggressive *sell* this market
+  // accepts. submitMarket is public API and takes the side straight from its
+  // caller, so that turned a missing argument into a real order crossing the
+  // wrong side of the book.
+  const resolved = side?.toUpperCase();
+  if (resolved !== "BUY" && resolved !== "SELL") {
+    throw new Error(`A market order must name its side; got: ${side}`);
+  }
+
+  if (resolved !== "BUY" || market.priceTick <= 0) {
     return market.priceMinimum;
   }
 

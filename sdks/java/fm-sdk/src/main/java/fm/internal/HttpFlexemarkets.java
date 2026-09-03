@@ -643,11 +643,25 @@ public class HttpFlexemarkets implements Flexemarkets {
      * highest legal price is the last tick at or below {@code priceMaximum}.
      * A tick of zero marks a fixed dimension, where the two bounds are equal
      * and there is one legal price.
+     *
+     * <p>The side must be named. This was {@code BUY == side ? ... : priceMinimum},
+     * the complement of buy rather than a test for sell, so a null side priced
+     * the order at the bottom of the range -- the most aggressive *sell* this
+     * market accepts. {@code submitMarket} is public API and takes the side
+     * straight from its caller, so that turned a missing argument into a real
+     * order crossing the wrong side of the book.
+     *
+     * @throws IllegalArgumentException if the side is null
      */
     static long marketableLimit(Market market, OrderSide side) {
         // The highest legal price is what priceRound gives for the ceiling, so
         // this is the grid rule rather than a fourth copy of it.
-        return OrderSide.BUY == side ? market.priceRound(market.priceMaximum()) : market.priceMinimum();
+        return switch (side) {
+            case BUY  -> market.priceRound(market.priceMaximum());
+            case SELL -> market.priceMinimum();
+            case null -> throw new IllegalArgumentException(
+                "A market order must name its side; got: null");
+        };
     }
 
     // --- management ---------------------------------------------------------

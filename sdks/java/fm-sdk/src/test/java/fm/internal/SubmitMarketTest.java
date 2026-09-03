@@ -6,6 +6,7 @@ import fm.Flexemarkets;
 import fm.error.ApiException;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -220,4 +221,14 @@ class SubmitMarketTest {
         assertThat(HttpFlexemarkets.marketableLimit(_market(150, 150, 0), OrderSide.SELL))
                 .isEqualTo(150L);
     }
+
+    /**
+     * A market order that names no side used to price at the bottom of the range -- the most aggressive sell the market accepts -- because the branch was the complement of buy rather than a test for sell. submitMarket takes the side straight from its caller, so a missing argument crossed the wrong side of the book at the worst price rather than failing.
+     */
+    @Test
+    void aSidelessMarketOrderIsRefusedRatherThanPricedAsASell() {
+        assertThatExceptionOfType(IllegalArgumentException.class).isThrownBy(
+            () -> HttpFlexemarkets.marketableLimit(_market(100, 200, 25), null));
+    }
+
 }

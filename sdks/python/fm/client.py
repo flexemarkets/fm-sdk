@@ -318,8 +318,19 @@ def _marketable_limit(market: Market, side: str) -> int:
     legal when the range is a whole number of ticks. The highest legal price is
     the last tick at or below ``price_maximum``. A tick of zero marks a fixed
     dimension, where the two bounds are equal and there is one legal price.
+
+    The side must be named. This was ``is not OrderSide.BUY``, the complement
+    of buy rather than a test for sell, so a ``None`` side priced the order at
+    the bottom of the range -- the most aggressive *sell* this market accepts.
+    ``submit_market`` is public API and takes the side straight from its
+    caller, so that turned a missing argument into a real order crossing the
+    wrong side of the book.
     """
-    if OrderSide.of(side) is not OrderSide.BUY or market.price_tick <= 0:
+    resolved = OrderSide.of(side)
+    if resolved is None:
+        raise ValueError(f"A market order must name its side; got: {side!r}")
+
+    if resolved is not OrderSide.BUY or market.price_tick <= 0:
         return market.price_minimum
 
     span = market.price_maximum - market.price_minimum

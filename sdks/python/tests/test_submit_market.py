@@ -148,3 +148,9 @@ def test_a_fixed_price_market_has_only_its_floor():
 
 def test_side_is_read_without_regard_to_case():
     assert _marketable_limit(_market(100, 200, 25), "buy") == 200
+
+
+def test_a_sideless_market_order_is_refused_rather_than_priced_as_a_sell():
+    """A market order that names no side used to price at the bottom of the range -- the most aggressive sell the market accepts -- because the branch was the complement of buy rather than a test for sell. submitMarket takes the side straight from its caller, so a missing argument crossed the wrong side of the book at the worst price rather than failing."""
+    with pytest.raises(ValueError, match="must name its side"):
+        _marketable_limit(_market(100, 200, 25), None)
