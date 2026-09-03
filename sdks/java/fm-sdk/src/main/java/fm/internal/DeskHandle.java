@@ -14,6 +14,7 @@ import fm.Book;
 import fm.Tape;
 import fm.Subscription;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
@@ -60,6 +61,16 @@ class DeskHandle implements Desk {
     @Override public Tape tape(long marketId) {
         _check();
         return _shared.tape(marketId);
+    }
+
+    @Override public Collection<Book> books() {
+        _check();
+        return _shared.books();
+    }
+
+    @Override public Collection<Tape> tapes() {
+        _check();
+        return _shared.tapes();
     }
 
     @Override public Session session() {

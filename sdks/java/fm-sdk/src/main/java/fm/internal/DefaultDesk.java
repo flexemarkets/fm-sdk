@@ -22,6 +22,7 @@ import fm.Snapshot;
 import fm.Subscription;
 import fm.Tape;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -198,6 +199,18 @@ public class DefaultDesk implements Desk {
     public Tape tape(long marketId) {
         _ensureOpen();
         return _trades.get(marketId);
+    }
+
+    @Override
+    public Collection<Book> books() {
+        _ensureOpen();
+        return List.copyOf(_books.collection());
+    }
+
+    @Override
+    public Collection<Tape> tapes() {
+        _ensureOpen();
+        return List.copyOf(_trades.collection());
     }
 
     @Override

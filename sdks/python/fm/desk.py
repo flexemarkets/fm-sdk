@@ -176,6 +176,20 @@ class Desk:
         self._ensure_open()
         return self._trades.get(market_id)
 
+    def books(self) -> list[Book]:
+        """Every book this desk keeps, one per market.
+
+        The whole-marketplace read that :meth:`book` answers one market at a
+        time. A caller scanning for the best opportunity across markets wants
+        this rather than :meth:`markets` zipped against :meth:`book`.
+        """
+        return list(self._books.collection())
+
+    def tapes(self) -> list[Tape]:
+        """Every tape this desk keeps, one per market."""
+        self._ensure_open()
+        return list(self._trades.collection())
+
     def session(self) -> Optional[Session]:
         """Most-recent session update observed. ``None`` until the
         first SESSION-UPDATE frame lands.
@@ -536,6 +550,14 @@ class DeskHandle:
     def tape(self, market_id: int) -> Optional[Tape]:
         self._check()
         return self._shared.tape(market_id)
+
+    def books(self) -> list[Book]:
+        self._check()
+        return self._shared.books()
+
+    def tapes(self) -> list[Tape]:
+        self._check()
+        return self._shared.tapes()
 
     def session(self) -> Optional[Session]:
         self._check()

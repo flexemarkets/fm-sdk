@@ -10,6 +10,7 @@ import fm.model.Session;
 import fm.model.Trade;
 import fm.internal.DefaultDesk;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -100,6 +101,26 @@ public interface Desk extends AutoCloseable {
      *         {@code marketId} is not in this marketplace
      */
     Tape tape(long marketId);
+
+    /**
+     * Every book this desk keeps, one per market.
+     *
+     * <p>The whole-marketplace read that {@link #book} answers one market at a
+     * time. A caller scanning for the best opportunity across markets wants
+     * this rather than {@link #markets} zipped against {@link #book}.
+     *
+     * @return the books, in no particular order; a snapshot of the collection,
+     *         though each book in it stays live
+     */
+    Collection<Book> books();
+
+    /**
+     * Every tape this desk keeps, one per market.
+     *
+     * @return the tapes, in no particular order; a snapshot of the collection,
+     *         though each tape in it stays live
+     */
+    Collection<Tape> tapes();
 
     /**
      * Most-recent session update observed. Null until the first

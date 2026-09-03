@@ -73,6 +73,18 @@ export interface Desk {
   tape(marketId: number): Tape | null;
 
   /**
+   * Every book this desk keeps, one per market.
+   *
+   * The whole-marketplace read that {@link book} answers one market at a time.
+   * A caller scanning for the best opportunity across markets wants this
+   * rather than {@link markets} zipped against {@link book}.
+   */
+  books(): Book[];
+
+  /** Every tape this desk keeps, one per market. */
+  tapes(): Tape[];
+
+  /**
    * Most-recent session update observed. Null until the first
    * SESSION-UPDATE frame lands.
    */
@@ -252,6 +264,16 @@ export class DefaultDesk implements Desk {
   tape(marketId: number): Tape | null {
     this._ensureOpen();
     return this._trades.get(marketId);
+  }
+
+  books(): Book[] {
+    this._ensureOpen();
+    return [...this._books.collection()];
+  }
+
+  tapes(): Tape[] {
+    this._ensureOpen();
+    return [...this._trades.collection()];
   }
 
   session(): Session | null {
@@ -566,6 +588,16 @@ export class DeskHandle implements Desk {
   tape(marketId: number): Tape | null {
     this._check();
     return this._shared.tape(marketId);
+  }
+
+  books(): Book[] {
+    this._check();
+    return this._shared.books();
+  }
+
+  tapes(): Tape[] {
+    this._check();
+    return this._shared.tapes();
   }
 
   session(): Session | null {
