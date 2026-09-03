@@ -51,7 +51,17 @@ function drive(doc: Fixture): MarketBook | MarketTrades {
   doc.steps.forEach((step, index) => {
     if (step.clear) aggregator.clear();
 
-    const added = aggregator.update(step.orders.map(parseOrder) as Order[]);
+    const orders = step.orders.map(parseOrder) as Order[];
+
+    // A step that declares `refused` must raise rather than apply: an order that names no side cannot be placed on a book, and guessing one files it under the offer side silently. The step after it asserts the book was left alone.
+    if (step.refused !== undefined) {
+      assert.throws(() => aggregator.update(orders), (e: Error) =>
+        e.message.includes(step.refused as string),
+        `step ${index} (${step.note ?? ""}) must be refused, not guessed at`);
+      return;
+    }
+
+    const added = aggregator.update(orders);
 
     // What update() reports it added is what MarketView dispatches onTrade
     // from. A step that declares `adds` pins it — including the zero, which is

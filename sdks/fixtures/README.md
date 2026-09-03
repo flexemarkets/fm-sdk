@@ -107,6 +107,11 @@ So `behaviour/` holds inputs and answers rather than payloads and fields:
 - `type` names the aggregator to drive: `MarketBook` or `MarketTrades`.
 - `steps` are applied in order, each an `update()`. `"clear": true` calls
   `clear()` first, which is how `MarketView` recovers from a sequence gap.
+- `"refused": "<text>"` on a step means that `update()` must raise rather than
+  apply, with `<text>` somewhere in the message. Use it for input the SDK
+  cannot act on and must not guess at — an order that names no side. The
+  remaining steps and `expect` still run, so a fixture can also pin that the
+  refusal left the aggregator alone rather than half-applying.
 - `expect` is checked against the aggregator's state at the end. Only the keys
   a case is about need to appear.
 - `deliveredIds` is every order id across every step, in order. It exists

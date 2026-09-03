@@ -17,6 +17,7 @@ See ``sdks/fixtures/README.md``.
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -43,7 +44,15 @@ def _drive(doc: dict[str, Any]) -> Any:
         if step.get("clear"):
             aggregator.clear()
 
-        added = aggregator.update([rest._parse_order(o) for o in step["orders"]])
+        orders = [rest._parse_order(o) for o in step["orders"]]
+
+        # A step that declares `refused` must raise rather than apply: an order that names no side cannot be placed on a book, and guessing one files it under the offer side silently. The step after it asserts the book was left alone.
+        if "refused" in step:
+            with pytest.raises(ValueError, match=re.escape(step["refused"])):
+                aggregator.update(orders)
+            continue
+
+        added = aggregator.update(orders)
 
         # What update() reports it added is what MarketView dispatches on_trade
         # from. A step that declares `adds` pins it -- including the zero, which

@@ -21,6 +21,7 @@ import fm.MarketBook;
 import fm.MarketTrades;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -121,11 +122,26 @@ class BehaviourFixturesTest {
 
     private void _checkOrderBook(JsonNode doc) {
         MarketBook book = new MarketBook(_market(doc));
+        int index = 0;
         for (JsonNode step : doc.get("steps")) {
             if (step.path("clear").asBoolean(false)) {
                 book.clear();
             }
+
+            // A step that declares `refused` must raise rather than apply: an order that names no side cannot be placed on a book, and guessing one files it under the offer side silently. The step after it asserts the book was left alone.
+            if (step.has("refused")) {
+                var thrown = assertThrows(IllegalArgumentException.class,
+                        () -> book.update(_orders(step)),
+                        "step " + index + " (" + step.path("note").asString("") + ") "
+                        + "must be refused, not guessed at");
+                assertTrue(thrown.getMessage().contains(step.get("refused").asString()),
+                        "refusal said: " + thrown.getMessage());
+                index++;
+                continue;
+            }
+
             book.update(_orders(step));
+            index++;
         }
 
 
