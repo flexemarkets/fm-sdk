@@ -1,6 +1,6 @@
 package fm.model;
 
-import fm.internal.OrderUtils;
+import fm.Orders;
 import fm.internal.Timestamps;
 import java.time.Instant;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -13,7 +13,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
  * <p>The exchange has no separate trade: a trade is a pair of orders
  * referring to each other, and a cancel is an order that consumes a resting
  * one. So most questions about an order are questions about its
- * relationships, which is why {@link OrderUtils} takes the surrounding
+ * relationships, which is why {@link Orders} takes the surrounding
  * orders rather than just this one.
  *
  * @param createdDate       when the order arrived
@@ -25,7 +25,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
  *                          submission
  * @param consumer          the order that consumed it: null if none has,
  *                          zero if it was split -- see
- *                          {@link OrderUtils#isConsumed}
+ *                          {@link Orders#isConsumed}
  * @param type              LIMIT or CANCEL, or null if the server named one
  *                          this version does not know
  * @param side              which way round it goes, or null for a cancel

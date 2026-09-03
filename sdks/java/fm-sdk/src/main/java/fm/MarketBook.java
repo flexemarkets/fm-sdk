@@ -4,11 +4,11 @@ import fm.model.Market;
 import fm.model.Order;
 import fm.model.OrderSide;
 import fm.model.OrderType;
-import static fm.internal.OrderUtils.findOrder;
-import static fm.internal.OrderUtils.isAvailable;
-import static fm.internal.OrderUtils.isResting;
-import static fm.internal.OrderUtils.isSplit;
-import static fm.internal.OrderUtils.isSymbol;
+import static fm.Orders.findOrder;
+import static fm.Orders.isAvailable;
+import static fm.Orders.isResting;
+import static fm.Orders.isSplit;
+import static fm.Orders.isSymbol;
 
 import java.util.Collections;
 import java.util.Map;

@@ -1,5 +1,6 @@
-package fm.internal;
+package fm;
 
+import fm.model.Market;
 import fm.model.Order;
 import fm.model.OrderSide;
 import fm.model.OrderType;
@@ -19,8 +20,8 @@ import fm.model.OrderType;
  * reads the same way, and is one fewer name to know. Two ways to ask one
  * question is one too many.
  */
-public final class OrderUtils {
-    private OrderUtils() {}
+public final class Orders {
+    private Orders() {}
 
     /**
      * Whether the order still rests unconsumed.
@@ -42,6 +43,53 @@ public final class OrderUtils {
      * @param order the order to test; null answers false
      * @return true if it has a consumer other than zero
      */
+    /**
+     * True once an order has a consumer: traded against, whole or in part.
+     *
+     * <p>The positive complement of {@link #isAvailable}, and named for what a
+     * position keeps rather than for the mechanism. A split leaves a remainder
+     * order behind, so from the position's point of view the original is
+     * finished either way — which is why this is one predicate and not
+     * {@code isConsumed(o) || isSplit(o)} spelled out at every call site.
+     */
+    public static boolean isConsumedOrSplit(Order order) {
+        return null != order && null != order.consumer();
+    }
+
+    /**
+     * True if {@code rhs} was supplied by {@code lhs} — the two sides of one
+     * trade.
+     *
+     * <p>Exactly the kind of question this class exists for: it cannot be
+     * answered by either order alone, only by the reference between them.
+     */
+    public static boolean isSupplier(Order lhs, Order rhs) {
+        return null != lhs && null != rhs && 0 == Long.compare(lhs.id(), rhs.supplier());
+    }
+
+    /**
+     * A limit order ready to submit.
+     *
+     * <p>{@link Order} is a record of nineteen components because it is what
+     * the server returns; a caller building one to send sets seven of them and
+     * leaves the rest to the exchange. Naming those seven at the call site
+     * beats a constructor of mostly nulls, and the alternative — every
+     * consumer writing this factory — is how it came to exist twice already.
+     */
+    public static Order limit(Market market, OrderSide side, long units, long price) {
+        return new Order(
+                null, null,          // createdDate, lastModifiedDate
+                0L, 0L, 0L, null,    // id, original, supplier, consumer
+                OrderType.LIMIT, side,
+                units, price,
+                null, null,          // mine, ownerId
+                market.marketplaceId(),
+                0L,                  // sessionId
+                market.symbol(),
+                market.id(),
+                null, null);         // ownerTarget, clientDescription
+    }
+
     public static boolean isConsumed(Order order) {
         if (order != null) {
             var consumer = order.consumer();

@@ -3,12 +3,11 @@ package fm;
 import fm.model.Market;
 import fm.model.Order;
 import fm.model.OrderType;
-import fm.internal.OrderUtils;
 import fm.model.Trade;
-import static fm.internal.OrderUtils.findOrder;
-import static fm.internal.OrderUtils.isConsumed;
-import static fm.internal.OrderUtils.isResting;
-import static fm.internal.OrderUtils.isSymbol;
+import static fm.Orders.findOrder;
+import static fm.Orders.isConsumed;
+import static fm.Orders.isResting;
+import static fm.Orders.isSymbol;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -24,7 +23,7 @@ import java.util.stream.Stream;
  * to each other -- so this reads an orders update, pairs each consumed limit
  * with the limit that consumed it, and keeps {@link Trade both} sides.
  *
- * <p>Which side is which is decided by {@link OrderUtils#isResting}, the same
+ * <p>Which side is which is decided by {@link Orders#isResting}, the same
  * rule {@code TradesSummary} in fm-manager applies. That matters more than it
  * looks: the cheaper test of "whichever has the older original id" agrees on an
  * ordinary match and disagrees exactly where an order was split, which is the

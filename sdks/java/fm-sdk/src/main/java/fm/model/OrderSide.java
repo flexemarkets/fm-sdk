@@ -1,6 +1,6 @@
 package fm.model;
 
-import fm.internal.OrderUtils;
+import fm.Orders;
 import com.fasterxml.jackson.annotation.JsonCreator;
 
 /**
@@ -28,7 +28,7 @@ public enum OrderSide {
     /**
      * The other side. What a maker quotes against, and what a taker lifts.
      *
-     * <p>Replaces {@code OrderUtils.contra(String)}, which had to spell the
+     * <p>Replaces {@code Orders.contra(String)}, which had to spell the
      * pairing out and could be handed something that was neither.
      *
      * @return SELL for BUY, and BUY for SELL

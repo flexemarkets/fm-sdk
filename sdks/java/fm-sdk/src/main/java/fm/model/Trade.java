@@ -1,6 +1,6 @@
 package fm.model;
 
-import fm.internal.OrderUtils;
+import fm.Orders;
 import java.time.Instant;
 
 
@@ -25,7 +25,7 @@ import java.time.Instant;
  *
  * <p>The pairing rule is the one {@code TradesSummary} in fm-manager has always
  * used: an order that is a consumed limit whose consumer is also a limit is one
- * side of a match, and {@link OrderUtils#isResting} says which side. Before
+ * side of a match, and {@link Orders#isResting} says which side. Before
  * this type existed the tape kept only the resting order, so "who took this
  * trade" answered with the maker -- a real participant, at a real price, in a
  * complete-looking line that named the wrong person.
