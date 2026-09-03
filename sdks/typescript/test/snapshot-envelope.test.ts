@@ -6,9 +6,9 @@
  * `_embedded.orders`. So `activeOrders` and `recentTrades` returned an empty
  * array always, in all three SDKs, for their whole life.
  *
- * Not cosmetic: `MarketView` seeds its books from `activeOrders`, so the seed
+ * Not cosmetic: `Desk` seeds its books from `activeOrders`, so the seed
  * was always empty and the books filled from live deltas afterwards — which
- * looks plausible until you open a view on a marketplace that already has
+ * looks plausible until you open a desk on a marketplace that already has
  * resting orders and see nothing.
  *
  * Nothing caught it because nothing tested it.

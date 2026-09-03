@@ -18,7 +18,7 @@ import java.util.TreeMap;
 /**
  * One market's resting interest, aggregated to price levels.
  *
- * <p>Kept current by feeding it {@link #update}; {@link MarketView} does that
+ * <p>Kept current by feeding it {@link #update}; {@link Desk} does that
  * for a caller who does not want to drive the event queue themselves.
  *
  * <p>Levels are quantity by price, buys highest-first and sells lowest-first,
@@ -207,7 +207,7 @@ public class Book {
     /**
      * The buy side, aggregated to price levels.
      *
-     * @return units by price, highest price first; a snapshot, not a view
+     * @return units by price, highest price first; a snapshot, not a desk
      */
     public synchronized Map<Long, Long> buyLevels() {
         return Collections.unmodifiableMap(new TreeMap<>(_buys));
@@ -216,7 +216,7 @@ public class Book {
     /**
      * The sell side, aggregated to price levels.
      *
-     * @return units by price, lowest price first; a snapshot, not a view
+     * @return units by price, lowest price first; a snapshot, not a desk
      */
     public synchronized Map<Long, Long> sellLevels() {
         return Collections.unmodifiableMap(new TreeMap<>(_sells));
@@ -224,7 +224,7 @@ public class Book {
 
     /**
      * Reset the book to its just-constructed state — empty levels and
-     * {@code initialized=false}. Used by {@code MarketView}'s Phase 2b
+     * {@code initialized=false}. Used by {@code Desk}'s Phase 2b
      * gap-recovery flow: on a detected gap the caller refetches the
      * REST snapshot, calls {@link #clear()}, then replays the snapshot
      * via {@link #update(Order[])} so the next delta with

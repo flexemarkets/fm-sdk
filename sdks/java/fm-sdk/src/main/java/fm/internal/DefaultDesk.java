@@ -14,7 +14,7 @@ import fm.model.OrderSide;
 import fm.model.Session;
 import fm.model.Trade;
 import fm.Flexemarkets;
-import fm.MarketView;
+import fm.Desk;
 import fm.Tapes;
 import fm.Book;
 import fm.Books;
@@ -32,13 +32,13 @@ import java.util.function.Consumer;
 
 
 /**
- * Skeleton {@link MarketView} that wraps an existing
+ * Skeleton {@link Desk} that wraps an existing
  * {@link Flexemarkets} client. Phase 1 of the SDK roadmap (see
  * {@code project_fm_sdk_canonical_client}).
  *
  * <p><b>What this does today:</b>
  * <ul>
- *   <li>Captures the marketplace's markets at observe-time.</li>
+ *   <li>Captures the marketplace's markets when the desk is opened.</li>
  *   <li>Calls {@code flexemarkets.listen(marketplaceId, queue)} to
  *       drive a WS subscription, draining the queue in a background
  *       thread.</li>
@@ -56,7 +56,7 @@ import java.util.function.Consumer;
  *   <li>Sequence-gap recovery (the {@code seq} header on
  *       ORDERS-UPDATE frames is ignored today).</li>
  *   <li>Per-{@code (marketplaceId, identity)} sharing — every
- *       {@code observe(...)} call returns a fresh view with its own
+ *       {@code desk(...)} call returns a fresh desk with its own
  *       WS connection. Sharing is a Phase 2 unlock.</li>
  *   <li>Reconnect handling — a {@link StreamDropped} from the
  *       queue currently terminates the dispatcher with no automatic
@@ -67,7 +67,7 @@ import java.util.function.Consumer;
  * (today's fm-maker / fm-taker) can already use this. Robots that do
  * (studies, MVO variants) should wait for Phase 2.
  */
-public class DefaultMarketView implements MarketView {
+public class DefaultDesk implements Desk {
 
     private final Flexemarkets _flexemarkets;
     private final long _marketplaceId;
@@ -94,7 +94,7 @@ public class DefaultMarketView implements MarketView {
     private volatile boolean _closed;
 
     /**
-     * Highest ORDERS-UPDATE seq this view has applied so far. Deltas
+     * Highest ORDERS-UPDATE seq this desk has applied so far. Deltas
      * with {@code seq <= lastAppliedSeq} are skipped — they've already
      * been folded into the local state (either via the initial REST
      * snapshot or via a previously-applied delta). Initial value comes
@@ -104,19 +104,19 @@ public class DefaultMarketView implements MarketView {
     private long _lastAppliedSeq;
 
     /**
-     * A view over one marketplace's markets, seeded but not yet observing.
+     * A desk on one marketplace's markets, seeded but not yet listening.
      *
      * @param flexemarkets  the connection to read and stream through
      * @param marketplaceId the marketplace to follow
      * @param markets       its markets, which fix the books and tapes kept
      */
-    public DefaultMarketView(Flexemarkets flexemarkets, long marketplaceId, List<Market> markets) {
+    public DefaultDesk(Flexemarkets flexemarkets, long marketplaceId, List<Market> markets) {
         this._flexemarkets = flexemarkets;
         this._marketplaceId = marketplaceId;
         this._markets = List.copyOf(markets);
         this._books = new Books(this._markets);
         // 100 matches the default per-market Tape capacity — see
-        // Tape(Market) ctor. Plumb through to observe() later if a
+        // Tape(Market) ctor. Plumb through to desk() later if a
         // caller needs deeper trade scrollback.
         this._trades = new Tapes(this._markets, 100);
 
@@ -128,7 +128,7 @@ public class DefaultMarketView implements MarketView {
         //
         // Phase 2d: own the Events instance directly rather than
         // calling flexemarkets.listen() — that would clobber the
-        // singleton events field and prevent multiple shared views
+        // singleton events field and prevent multiple shared desks
         // on different marketplaces from coexisting in one
         // Flexemarkets.
         this._events = flexemarkets.subscribe(marketplaceId, _queue);
@@ -275,7 +275,7 @@ public class DefaultMarketView implements MarketView {
         _dispatcher.interrupt();
         try { _events.close(); } catch (Throwable ignored) { /* best-effort */ }
         // The Flexemarkets instance is owned by the caller; we don't
-        // close it. If observe(...) was the only consumer, the caller
+        // close it. If desk(...) was the only consumer, the caller
         // can close Flexemarkets themselves.
     }
 
@@ -295,15 +295,15 @@ public class DefaultMarketView implements MarketView {
                     for (var hh : _holdingHandlers) hh.accept(h);
                 } else if (event instanceof StreamDropped error) {
                     // The subscription restores itself; nothing to do but say so.
-                    System.err.println("[MarketView] WS transport error on marketplace "
+                    System.err.println("[Desk] WS transport error on marketplace "
                             + _marketplaceId + ": " + error.failure().getMessage());
                 } else if (event instanceof Reconnected) {
                     _reseedAfterReconnect();
                 } else if (event instanceof FrameUnreadable ex) {
                     // STOMP ERROR / parse failure. Logged for
                     // visibility; reconnecting won't help with a
-                    // malformed frame, so we leave the view as-is.
-                    System.err.println("[MarketView] WS error on marketplace "
+                    // malformed frame, so we leave the desk as-is.
+                    System.err.println("[Desk] WS error on marketplace "
                             + _marketplaceId + ": " + ex.message());
                 }
                 // VERSION and SESSION-LIST aren't reflected in the
@@ -318,13 +318,13 @@ public class DefaultMarketView implements MarketView {
      * Converge state after the subscription has restored itself.
      *
      * <p>A reconnect is just the largest possible gap, so the same snapshot
-     * reseed that recovers from a missed sequence recovers from this. The view
+     * reseed that recovers from a missed sequence recovers from this. The desk
      * no longer performs the reconnect: whether the stream is up belongs to the
      * subscription, and driving its retry loop from this thread meant the
      * dispatcher sat blocked in sleeps while events queued behind it.
      *
      * <p>A failure here is a failed <em>reseed</em>, not a failed reconnect —
-     * the stream is live and the view is stale, which is worth telling handlers
+     * the stream is live and the desk is stale, which is worth telling handlers
      * apart from a dead connection.
      */
     private void _reseedAfterReconnect() {
@@ -333,8 +333,8 @@ public class DefaultMarketView implements MarketView {
             _seedFromSnapshot();
             event = new ReconnectEvent(_marketplaceId, true, null);
         } catch (Throwable t) {
-            System.err.println("[MarketView] Reseed failed on marketplace "
-                    + _marketplaceId + "; view is stale: " + t.getMessage());
+            System.err.println("[Desk] Reseed failed on marketplace "
+                    + _marketplaceId + "; desk is stale: " + t.getMessage());
             event = new ReconnectEvent(_marketplaceId, false, t.getMessage());
         }
         for (var h : _reconnectHandlers) {
@@ -354,7 +354,7 @@ public class DefaultMarketView implements MarketView {
                 && _lastAppliedSeq != Snapshot.NO_SEQ
                 && update.seq() > _lastAppliedSeq + 1) {
             long expectedSeq = _lastAppliedSeq + 1;
-            System.err.println("[MarketView] ORDERS-UPDATE seq gap on marketplace "
+            System.err.println("[Desk] ORDERS-UPDATE seq gap on marketplace "
                     + _marketplaceId + " — expected " + expectedSeq
                     + ", got " + update.seq() + "; resyncing from snapshot");
             GapEvent event = new GapEvent(_marketplaceId, expectedSeq, update.seq());
@@ -422,7 +422,7 @@ public class DefaultMarketView implements MarketView {
 
     private void _ensureOpen() {
         if (_closed) {
-            throw new IllegalStateException("MarketView for marketplace " + _marketplaceId + " is closed");
+            throw new IllegalStateException("Desk for marketplace " + _marketplaceId + " is closed");
         }
     }
 

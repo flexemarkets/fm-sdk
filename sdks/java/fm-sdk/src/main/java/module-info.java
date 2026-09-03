@@ -4,7 +4,7 @@
  * <p>One package is exported: {@code fm}. Everything under {@code fm.internal}
  * is implementation -- it was public only because the classpath gave no way to
  * say otherwise, and a caller could import {@code HttpFlexemarkets} or
- * {@code DefaultMarketView} and bind to a shape that is free to change. On the
+ * {@code DefaultDesk} and bind to a shape that is free to change. On the
  * module path they can no longer reach it.
  *
  * <p>{@code fm.internal} is <em>opened</em> to Jackson rather than exported:

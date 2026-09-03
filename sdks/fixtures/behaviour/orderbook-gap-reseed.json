@@ -1,6 +1,6 @@
 {
   "type": "Book",
-  "why": "MarketView's gap and reconnect recovery: refetch the snapshot, clear(), reapply. clear() must put the book back to just-constructed -- empty levels AND uninitialised -- or the first delta after it, which is a removal against levels that are no longer there, underflows the book into negative units it will never recover from.",
+  "why": "Desk's gap and reconnect recovery: refetch the snapshot, clear(), reapply. clear() must put the book back to just-constructed -- empty levels AND uninitialised -- or the first delta after it, which is a removal against levels that are no longer there, underflows the book into negative units it will never recover from.",
   "market": {
     "id": 7,
     "symbol": "A"

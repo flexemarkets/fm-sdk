@@ -32,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThatNoException;
  * </ol>
  *
  * <p>The smoke test deliberately stays read-only: it picks the
- * endpoint's marketplace, opens a {@link MarketView}, verifies the
+ * endpoint's marketplace, opens a {@link Desk}, verifies the
  * accessors don't throw, and closes. No orders submitted; no
  * marketplaces created. That keeps the test cheap and idempotent —
  * running it 100 times in a row leaves zero residue on the server.
@@ -74,16 +74,16 @@ public class FlexemarketsLiveServerTest {
 
     @Test
     @EnabledIf("liveServerReady")
-    void observesEndpointMarketplaceWithoutThrowing() throws Exception {
-        try (var fm = _connect("fm-sdk-live-test/observe")) {
+    void opensADeskOnTheEndpointMarketplaceWithoutThrowing() throws Exception {
+        try (var fm = _connect("fm-sdk-live-test/desk")) {
             long marketplaceId = fm.endpointMarketplaceId();
             // Use try-with-resources for the handle so the refcount
             // unwinds even if an assertion fails mid-test.
-            try (MarketView view = (MarketView) fm.observe(marketplaceId)) {
-                assertThat(view.marketplaceId()).isEqualTo(marketplaceId);
-                assertThat(view.markets()).isNotEmpty();
-                for (Market m : view.markets()) {
-                    Book book = view.book(m.id());
+            try (Desk desk = (Desk) fm.desk(marketplaceId)) {
+                assertThat(desk.marketplaceId()).isEqualTo(marketplaceId);
+                assertThat(desk.markets()).isNotEmpty();
+                for (Market m : desk.markets()) {
+                    Book book = desk.book(m.id());
                     assertThat(book).isNotNull();
                     // bestBuyPrice / bestSellPrice return -1 when empty;
                     // either way they shouldn't throw, which is the real
@@ -97,18 +97,18 @@ public class FlexemarketsLiveServerTest {
 
     @Test
     @EnabledIf("liveServerReady")
-    void sharesViewAcrossMultipleObserveCallsForSameMarketplace() throws Exception {
-        try (var fm = _connect("fm-sdk-live-test/sharedObserve")) {
+    void sharesOneDeskAcrossRepeatCallsForSameMarketplace() throws Exception {
+        try (var fm = _connect("fm-sdk-live-test/sharedDesk")) {
             long marketplaceId = fm.endpointMarketplaceId();
-            MarketView a = fm.observe(marketplaceId);
-            MarketView b = fm.observe(marketplaceId);
+            Desk a = fm.desk(marketplaceId);
+            Desk b = fm.desk(marketplaceId);
             try {
                 // Both handles see the same marketplace + market list —
                 // the contract isn't that they're equal references, it's
                 // that they expose the same state coherently.
                 assertThat(a.marketplaceId()).isEqualTo(b.marketplaceId());
                 assertThat(a.markets()).usingRecursiveComparison().isEqualTo(b.markets());
-                // Closing one handle must NOT close the shared view —
+                // Closing one handle must NOT close the shared desk —
                 // 'b' should still be usable.
                 a.close();
                 assertThatNoException().isThrownBy(b::markets);
@@ -123,8 +123,8 @@ public class FlexemarketsLiveServerTest {
     void closingFlexemarketsForceClosesRemainingShared() throws Exception {
         Flexemarkets fm = _connect("fm-sdk-live-test/forceClose");
         long marketplaceId = fm.endpointMarketplaceId();
-        MarketView view = fm.observe(marketplaceId);
-        // Intentionally don't close 'view' — Flexemarkets.close() must
+        Desk desk = fm.desk(marketplaceId);
+        // Intentionally don't close 'desk' — Flexemarkets.close() must
         // sweep it up so the WS subscription is released.
         assertThatNoException().isThrownBy(fm::close);
     }

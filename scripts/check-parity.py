@@ -456,15 +456,15 @@ def typescript_failures(path: Path) -> set[str]:
 # --- read-side surface ------------------------------------------------------
 #
 # check_methods compares Flexemarkets and its roles: what a caller can ask the
-# server to do. It stops there. MarketView, Book and Tape -- what a
+# server to do. It stops there. Desk, Book and Tape -- what a
 # caller does with the data that comes back -- were never compared, and that is
-# where the three drifted furthest. MarketView.tape(marketId) existed in Java
+# where the three drifted furthest. Desk.tape(marketId) existed in Java
 # and in neither of the others, so "what was the last trade, and who took it"
 # had no answer at all in Python or TypeScript, for the whole life of the type,
 # while this script reported three SDKs in agreement.
 #
 # Construction is excluded on purpose: static factories are per-language idiom
-# -- Java's MarketView.over, TypeScript's static open -- and comparing them
+# -- Java's Desk.over, TypeScript's static open -- and comparing them
 # reports three correct SDKs as three different ones. So is privacy: a helper
 # spelled `_add` in two languages and `private` in the third is one decision,
 # not three.
@@ -474,8 +474,8 @@ def typescript_failures(path: Path) -> set[str]:
 # Python's plain attribute, TypeScript's getter are one member, and a check
 # that cannot say so reports idiom as divergence and is worse than nothing.
 READ_SURFACE = {
-    "MarketView": ("MarketView.java", ("market_view.py", "MarketView"),
-                   ("market-view.ts", "MarketView", "interface")),
+    "Desk": ("Desk.java", ("desk.py", "Desk"),
+                   ("desk.ts", "Desk", "interface")),
     "Book": ("Book.java", ("orderbook.py", "Book"),
                   ("orderbook.ts", "Book", "class")),
     "Books": ("Books.java", ("orderbook.py", "Books"),
@@ -528,7 +528,7 @@ def _python_surface(path: Path, name: str) -> set[str]:
     """Public members of a Python class: its methods, its properties, and the
     attributes it assigns in __init__.
 
-    The last of those is not optional. MarketView publishes marketplace_id and
+    The last of those is not optional. Desk publishes marketplace_id and
     markets as plain attributes, where Java and TypeScript use accessors --
     read methods alone and the two of them are reported as missing from Python,
     which is idiom being called divergence.
@@ -916,9 +916,9 @@ def main() -> int:
         for problem in surface_problems:
             print(f"  - {problem}", file=sys.stderr)
         print(
-            "\nMarketView, Book and Tape are what a caller does with the data "
+            "\nDesk, Book and Tape are what a caller does with the data "
             "the client returns. A member on one and not the others is work its callers "
-            "have to do by hand -- which is how MarketView.tape sat in Java alone. "
+            "have to do by hand -- which is how Desk.tape sat in Java alone. "
             "If a difference is intended, record it in SURFACE_EXEMPTIONS with the "
             "reason.",
             file=sys.stderr,

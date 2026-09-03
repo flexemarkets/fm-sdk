@@ -68,7 +68,7 @@ class Tape:
     Each batch is sorted by the time the aggressor arrived before it is
     appended, which is what makes "newest last" true rather than merely
     intended. Up to and including fm-server 4.3.1 the snapshot
-    :class:`~fm.market_view.MarketView` seeds and re-seeds from -- on open, on
+    :class:`~fm.desk.Desk` seeds and re-seeds from -- on open, on
     a sequence gap, and after a reconnect -- arrived newest *first*, so a tape
     that appended in array order held its trades backwards and the caller
     asking for the latest one got the oldest it had retained. Later servers
@@ -105,7 +105,7 @@ class Tape:
     def update(self, orders: list[Order]) -> list[Trade]:
         """Apply an orders update, and return the trades it added -- oldest
         first, and empty for the many updates that move the book without
-        trading. What :class:`~fm.market_view.MarketView` hands to an
+        trading. What :class:`~fm.desk.Desk` hands to an
         ``on_trade`` handler.
         """
         with self._lock:
@@ -161,7 +161,7 @@ class Tape:
 
     def clear(self) -> None:
         """Empty the trade tape — used by
-        :class:`~fm.market_view.MarketView`'s gap-recovery flow before
+        :class:`~fm.desk.Desk`'s gap-recovery flow before
         reseeding from the ``/v1/orders/recent-trades`` snapshot.
         """
         with self._lock:
@@ -184,7 +184,7 @@ class Tapes:
         market gained, keyed by market id, with markets that gained none left
         out -- which is most of them on most updates.
 
-        :class:`~fm.market_view.MarketView` dispatches ``on_trade`` from this
+        :class:`~fm.desk.Desk` dispatches ``on_trade`` from this
         rather than diffing tape sizes, since a full tape drops its oldest as it
         takes a new one and the size does not move.
         """
@@ -209,7 +209,7 @@ class Tapes:
 
     def get(self, market_id: int) -> "Tape | None":
         """That market's tape, or ``None`` when the market is not in this
-        marketplace -- the lookup :class:`~fm.market_view.MarketView` needs,
+        marketplace -- the lookup :class:`~fm.desk.Desk` needs,
         where an unknown id is an answer rather than a ``KeyError``.
         """
         return self._trades.get(market_id)

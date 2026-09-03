@@ -3,7 +3,7 @@ package fm;
 /**
  * REST snapshot response bundle: parsed body + the {@code x-fm-as-of-seq}
  * header value the snapshot was read at. Returned by {@code Flexemarkets}
- * V1 snapshot methods so {@link MarketView} (and any other caller that
+ * V1 snapshot methods so {@link Desk} (and any other caller that
  * mixes REST snapshots with WS deltas) can reconcile the two streams:
  * apply deltas whose seq is greater than {@link #asOfSeq()} and skip
  * those whose seq is less than or equal.

@@ -18,7 +18,7 @@ import java.util.stream.Stream;
 /**
  * One market's recent trades, newest last, bounded to a capacity.
  *
- * <p>The trade tape {@link MarketView} maintains. A trade is not a distinct
+ * <p>The trade tape {@link Desk} maintains. A trade is not a distinct
  * thing on the wire -- the exchange expresses one as a pair of orders referring
  * to each other -- so this reads an orders update, pairs each consumed limit
  * with the limit that consumed it, and keeps {@link Trade both} sides.
@@ -36,7 +36,7 @@ import java.util.stream.Stream;
  * <p><b>Ordering.</b> Each batch is sorted by the time the aggressor arrived
  * before it is appended, which is what makes "newest last" true rather than
  * merely intended. Up to and including fm-server 4.3.1 the
- * {@code /v1/orders/recent-trades} snapshot -- what {@link MarketView} seeds
+ * {@code /v1/orders/recent-trades} snapshot -- what {@link Desk} seeds
  * and re-seeds from, on open, on a sequence gap and after a reconnect --
  * arrived newest <em>first</em>, so a tape that appended in array order held
  * its trades backwards and the caller asking for the latest one got the oldest
@@ -119,7 +119,7 @@ public class Tape {
      *                     another market, and anything that is not one side of
      *                     a limit-against-limit match, is skipped
      * @return the trades this update added, oldest first -- what
-     *         {@code MarketView} hands to an {@code onTrade} handler, and empty
+     *         {@code Desk} hands to an {@code onTrade} handler, and empty
      *         for the many updates that move the book without trading
      */
     public synchronized Trade[] update(Order[] ordersUpdate) {
@@ -188,7 +188,7 @@ public class Tape {
         return drained;
     }
 
-    /** Empty the trade tape — used by {@code MarketView}'s gap-recovery
+    /** Empty the trade tape — used by {@code Desk}'s gap-recovery
      *  flow before reseeding from the {@code /v1/orders/recent-trades}
      *  snapshot. */
     public synchronized void clear() {

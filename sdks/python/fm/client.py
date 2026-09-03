@@ -18,14 +18,14 @@ from .timestamps import parse as _timestamp
 
 if TYPE_CHECKING:
     from .events import EventListener
-    from .market_view import MarketView
+    from .desk import Desk
 
 
 @dataclass
 class _SharedView:
-    """Refcount registry entry — see ``Flexemarkets.observe``."""
+    """Refcount registry entry — see ``Flexemarkets.desk``."""
 
-    view: "MarketView"
+    desk: "Desk"
     ref_count: int = 0
 
 
@@ -294,9 +294,9 @@ def _embedded_orders(body: Any) -> list[dict[str, Any]]:
     * ``_embedded.orderDtoes`` -- HATEOAS pluralising ``OrderDto``
 
     Each move broke every SDK at once, and neither was caught: the first
-    returned an empty list forever, so ``MarketView``'s books seeded from live
+    returned an empty list forever, so ``Desk``'s books seeded from live
     deltas instead and looked plausible; the second raised ``AttributeError``
-    from ``.get`` on a list, which took ``observe()`` down with it.
+    from ``.get`` on a list, which took ``desk()`` down with it.
 
     Reading the shape rather than assuming one is the fix that generalises.
     Accepting both *names* was the fix last time, and it did not survive the
@@ -670,7 +670,7 @@ class Flexemarkets:
 
         self._event_listener = None
 
-        # Phase 2d shared-view registry, keyed by marketplace_id.
+        # Phase 2d shared-desk registry, keyed by marketplace_id.
         self._shared_views: dict[int, _SharedView] = {}
         self._view_lock = threading.Lock()
 
@@ -1159,7 +1159,7 @@ class Flexemarkets:
         """The active-orders snapshot: every resting limit order on the
         marketplace's current session, plus the ``x-fm-as-of-seq``
         sequence the snapshot was read at. Used by
-        :class:`~fm.market_view.MarketView` Phase 2a seeding —
+        :class:`~fm.desk.Desk` Phase 2a seeding —
         clients apply WS deltas whose seq is greater than the
         returned value and skip those whose seq is less than or
         equal.
@@ -1180,7 +1180,7 @@ class Flexemarkets:
         oldest first. Either way it is the newest ``size`` trades that come
         back -- only their order differs. :class:`~fm.trades.Tape` sorts
         what it is given, so a caller seeding a tape through
-        :class:`~fm.market_view.MarketView` is unaffected; a caller reading
+        :class:`~fm.desk.Desk` is unaffected; a caller reading
         this list directly should not assume one.
         """
         url = f"{_server(self._endpoint)}/v1/marketplaces/{marketplace_id}/orders/recent-trades?size={size}"
@@ -1393,13 +1393,13 @@ class Flexemarkets:
 
         Unlike :meth:`listen`, several of these coexist: each has its own
         stream and its own lifetime. That is what lets more than one
-        :class:`~fm.market_view.MarketView` live in one connection without
+        :class:`~fm.desk.Desk` live in one connection without
         trampling each other -- the mechanism was already here for exactly
         that, as the private ``_connect_events``, but a caller who wanted a
         second stream of their own had no way to ask for one.
 
         Returns a callable rather than an object with ``close()``, matching
-        what ``MarketView``'s ``on_*`` handlers already return here. Java
+        what ``Desk``'s ``on_*`` handlers already return here. Java
         returns a ``Subscription``; both names describe the same lifetime.
         """
         listener = self._connect_events(marketplace_id, event_queue)
@@ -1408,10 +1408,10 @@ class Flexemarkets:
     def _connect_events(
         self, marketplace_id: int, event_queue: queue.Queue[object]
     ) -> "EventListener":
-        """Internal helper used by :class:`~fm.market_view.MarketView`
+        """Internal helper used by :class:`~fm.desk.Desk`
         (Phase 2d) to own its own subscription rather than clobbering
         the singleton ``_event_listener``. Lets multiple
-        ``observe(marketplace_id)`` calls coexist within one
+        ``desk(marketplace_id)`` calls coexist within one
         Flexemarkets instance without trampling each other's WS
         connections.
         """
@@ -1433,32 +1433,32 @@ class Flexemarkets:
         if self._event_listener is not None:
             self._event_listener.reconnect()
 
-    def observe(self, marketplace_id: int) -> "MarketView":
-        """Open a stateful :class:`~fm.market_view.MarketView` on this
+    def desk(self, marketplace_id: int) -> "Desk":
+        """Open a stateful :class:`~fm.desk.Desk` on this
         marketplace.
 
         Multiple calls for the same ``marketplace_id`` share a single
-        underlying view + WS subscription + materialized state within
+        underlying desk + WS subscription + materialized state within
         this Flexemarkets instance — each call returns a fresh handle,
         the handles refcount, and the shared resources tear down on
         the last close.
 
         Sharing is intentionally per-Flexemarkets (i.e. per-bearer).
-        Two callers with different identities each get their own view
+        Two callers with different identities each get their own desk
         — multi-tenant WS multiplexing is a server-side concern, not
         a client-side one.
         """
-        from .market_view import MarketView, MarketViewHandle
+        from .desk import Desk, DeskHandle
 
         with self._view_lock:
             entry = self._shared_views.get(marketplace_id)
             if entry is None:
-                view = MarketView(self, marketplace_id, self.markets(marketplace_id))
-                entry = _SharedView(view=view, ref_count=0)
+                desk = Desk(self, marketplace_id, self.markets(marketplace_id))
+                entry = _SharedView(desk=desk, ref_count=0)
                 self._shared_views[marketplace_id] = entry
             entry.ref_count += 1
-            shared = entry.view
-        return MarketViewHandle(
+            shared = entry.desk
+        return DeskHandle(
             shared, lambda: self._release_shared_view(marketplace_id)
         )
 
@@ -1470,7 +1470,7 @@ class Flexemarkets:
             entry.ref_count -= 1
             if entry.ref_count <= 0:
                 self._shared_views.pop(marketplace_id, None)
-                to_close: Optional["MarketView"] = entry.view
+                to_close: Optional["Desk"] = entry.desk
             else:
                 to_close = None
         if to_close is not None:
@@ -1482,12 +1482,12 @@ class Flexemarkets:
         if hasattr(self, "_event_listener") and self._event_listener is not None:
             self._event_listener.close()
             self._event_listener = None
-        # Force-close any remaining shared MarketViews — safety net for
+        # Force-close any remaining shared Desks — safety net for
         # callers who didn't close their handles first.
         with self._view_lock:
-            views = [entry.view for entry in self._shared_views.values()]
+            desks = [entry.desk for entry in self._shared_views.values()]
             self._shared_views.clear()
-        for v in views:
+        for v in desks:
             try:
                 v.close()
             except Exception:

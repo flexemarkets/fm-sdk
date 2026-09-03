@@ -58,7 +58,7 @@ export function tradeOf(resting: Order, aggressor: Order): Trade {
  *
  * Each batch is sorted by the time the aggressor arrived before it is appended,
  * which is what makes "newest last" true rather than merely intended. Up to and
- * including fm-server 4.3.1 the snapshot MarketView seeds and re-seeds from — on
+ * including fm-server 4.3.1 the snapshot Desk seeds and re-seeds from — on
  * open, on a sequence gap, and after a reconnect — arrived newest *first*, so a
  * tape that appended in array order held its trades backwards and the caller
  * asking for the latest one got the oldest it had retained. Later servers send
@@ -89,7 +89,7 @@ export class Tape {
   /**
    * Apply an orders update, and return the trades it added — oldest first, and
    * empty for the many updates that move the book without trading. What
-   * MarketView hands to an `onTrade` handler.
+   * Desk hands to an `onTrade` handler.
    */
   update(orders: Order[]): Trade[] {
     const found: Trade[] = [];
@@ -144,7 +144,7 @@ export class Tape {
     return trades;
   }
 
-  /** Empty the trade tape — used by MarketView's gap-recovery flow. */
+  /** Empty the trade tape — used by Desk's gap-recovery flow. */
   clear(): void {
     this._container.length = 0;
   }
@@ -167,7 +167,7 @@ export class Tapes {
    * gained, keyed by market id, with markets that gained none left out — which
    * is most of them on most updates.
    *
-   * MarketView dispatches `onTrade` from this rather than diffing tape sizes,
+   * Desk dispatches `onTrade` from this rather than diffing tape sizes,
    * since a full tape drops its oldest as it takes a new one and the size does
    * not move.
    */
@@ -193,7 +193,7 @@ export class Tapes {
   }
 
   /** That market's tape, or null when the market is not in this marketplace —
-   *  the lookup MarketView needs, where an unknown id is an answer rather than
+   *  the lookup Desk needs, where an unknown id is an answer rather than
    *  a crash on the next property read. */
   get(marketId: number): Tape | null {
     return this._trades.get(marketId) ?? null;

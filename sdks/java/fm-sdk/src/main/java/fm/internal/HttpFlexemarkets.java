@@ -18,7 +18,7 @@ import fm.model.Session;
 import fm.model.TickGrid;
 import fm.model.Token;
 import fm.Flexemarkets;
-import fm.MarketView;
+import fm.Desk;
 import fm.Snapshot;
 import fm.Subscription;
 import fm.error.AccountNameConflictException;
@@ -270,7 +270,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     /**
      * The active-orders snapshot: every resting limit order on the
      * marketplace's current session, plus the {@code x-fm-as-of-seq}
-     * sequence the snapshot was read at. Used by {@link MarketView}
+     * sequence the snapshot was read at. Used by {@link Desk}
      * for snapshot seeding — clients apply WS deltas whose
      * seq is greater than the returned value and skip those whose
      * seq is less than or equal.
@@ -300,10 +300,10 @@ public class HttpFlexemarkets implements Flexemarkets {
      * {@code _embedded.orderDtoes}, HATEOAS pluralising {@code OrderDto}.
      *
      * <p>Each move broke every SDK at once and neither was caught. The first
-     * returned an empty list forever, so {@link fm.MarketView}'s books seeded
+     * returned an empty list forever, so {@link fm.Desk}'s books seeded
      * from live deltas instead and looked plausible. The second threw
      * {@code MismatchedInputException} binding an array to the envelope bean,
-     * which took {@code observe()} down with it.
+     * which took {@code desk()} down with it.
      *
      * <p>Reading the shape rather than assuming one is the fix that
      * generalises. Accepting both <em>names</em> was the fix last time, and it
@@ -771,9 +771,9 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     /**
-     * Package-private helper used by {@link DefaultMarketView} (Phase 2d)
+     * Package-private helper used by {@link DefaultDesk} (Phase 2d)
      * to own its own {@link Events} subscription rather than clobbering
-     * {@link #events}. Lets multiple {@code observe(marketplaceId)}
+     * {@link #events}. Lets multiple {@code desk(marketplaceId)}
      * calls — for the same or different marketplaces — coexist within
      * one {@code Flexemarkets} instance without trampling each other's
      * WS connections.
@@ -789,56 +789,56 @@ public class HttpFlexemarkets implements Flexemarkets {
         return ev;
     }
 
-    private final java.util.Map<Long, SharedMarketView> _sharedViews = new java.util.HashMap<>();
+    private final java.util.Map<Long, SharedDesk> _sharedViews = new java.util.HashMap<>();
     private final Object _viewLock = new Object();
 
-    private static final class SharedMarketView {
-        final DefaultMarketView view;
+    private static final class SharedDesk {
+        final DefaultDesk desk;
         int refCount;
-        SharedMarketView(DefaultMarketView v) { this.view = v; this.refCount = 0; }
+        SharedDesk(DefaultDesk v) { this.desk = v; this.refCount = 0; }
     }
 
     /**
-     * Open a stateful {@link MarketView} on this marketplace. Multiple
+     * Open a stateful {@link Desk} on this marketplace. Multiple
      * calls for the same {@code marketplaceId} share a single
-     * underlying view + WS subscription within this {@code Flexemarkets}
+     * underlying desk + WS subscription within this {@code Flexemarkets}
      * instance — each call returns a fresh handle, the handles
      * refcount, and the shared resources tear down on the last close.
      *
      * <p>Sharing is intentionally per-{@code Flexemarkets} (i.e.
      * per-bearer). Two callers with different identities each get
-     * their own view — multi-tenant WS multiplexing is a server-side
+     * their own desk — multi-tenant WS multiplexing is a server-side
      * concern, not a client-side one.
      */
-    public MarketView observe(long marketplaceId) {
-        DefaultMarketView shared;
+    public Desk desk(long marketplaceId) {
+        DefaultDesk shared;
         synchronized (_viewLock) {
-            SharedMarketView entry = _sharedViews.get(marketplaceId);
+            SharedDesk entry = _sharedViews.get(marketplaceId);
             if (entry == null) {
-                // Hold the lock while constructing — observe() should
+                // Hold the lock while constructing — desk() should
                 // be a cold-path operation, and we'd rather block
-                // duplicate observers than race two parallel WS
-                // subscriptions into existence. The DefaultMarketView
+                // duplicate desks than race two parallel WS
+                // subscriptions into existence. The DefaultDesk
                 // constructor itself blocks on REST snapshots, so a
                 // dozen-ms first call is acceptable.
-                shared = new DefaultMarketView(this, marketplaceId, markets(marketplaceId));
-                entry = new SharedMarketView(shared);
+                shared = new DefaultDesk(this, marketplaceId, markets(marketplaceId));
+                entry = new SharedDesk(shared);
                 _sharedViews.put(marketplaceId, entry);
             }
             entry.refCount++;
-            shared = entry.view;
+            shared = entry.desk;
         }
-        return new MarketViewHandle(shared, () -> _releaseSharedView(marketplaceId));
+        return new DeskHandle(shared, () -> _releaseSharedView(marketplaceId));
     }
 
     void _releaseSharedView(long marketplaceId) {
-        DefaultMarketView toClose = null;
+        DefaultDesk toClose = null;
         synchronized (_viewLock) {
-            SharedMarketView entry = _sharedViews.get(marketplaceId);
+            SharedDesk entry = _sharedViews.get(marketplaceId);
             if (entry == null) return;
             if (--entry.refCount <= 0) {
                 _sharedViews.remove(marketplaceId);
-                toClose = entry.view;
+                toClose = entry.desk;
             }
         }
         if (toClose != null) toClose.close();
@@ -857,12 +857,12 @@ public class HttpFlexemarkets implements Flexemarkets {
         if (_events != null) {
             _events.close();
         }
-        // Force-close any remaining shared MarketViews. Well-behaved
+        // Force-close any remaining shared Desks. Well-behaved
         // callers close their handles first; this is the safety net.
-        java.util.List<DefaultMarketView> toClose;
+        java.util.List<DefaultDesk> toClose;
         synchronized (_viewLock) {
             toClose = new java.util.ArrayList<>(_sharedViews.size());
-            for (var entry : _sharedViews.values()) toClose.add(entry.view);
+            for (var entry : _sharedViews.values()) toClose.add(entry.desk);
             _sharedViews.clear();
         }
         for (var v : toClose) {
@@ -1060,7 +1060,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     /**
      * GET helper that returns the parsed body bundled with the
      * {@code x-fm-as-of-seq} response header so callers (notably
-     * {@link MarketView}) can correlate the snapshot with the WS
+     * {@link Desk}) can correlate the snapshot with the WS
      * delta stream. Returns {@link Snapshot#NO_SEQ} when the header
      * is absent.
      */

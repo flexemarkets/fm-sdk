@@ -7,7 +7,7 @@
  * until someone noticed and called `fm.reconnect()`, and nothing was ever
  * delivered to say it had come back.
  *
- * `MarketView` papered over this by reconnecting on `StreamDropped` itself, so
+ * `Desk` papered over this by reconnecting on `StreamDropped` itself, so
  * the gap only showed for callers using the raw callback -- which is the whole
  * point of `listen()` being public.
  *

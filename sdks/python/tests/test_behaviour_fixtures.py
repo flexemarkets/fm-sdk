@@ -54,7 +54,7 @@ def _drive(doc: dict[str, Any]) -> Any:
 
         added = aggregator.update(orders)
 
-        # What update() reports it added is what MarketView dispatches on_trade
+        # What update() reports it added is what Desk dispatches on_trade
         # from. A step that declares `adds` pins it -- including the zero, which
         # is the update a handler must stay silent through.
         if "adds" in step:

@@ -5,9 +5,9 @@ server's old ``OrderDto`` -- long after the server started sending
 ``_embedded.orders``. So ``active_orders`` and ``recent_trades`` returned an
 empty list always, in all three SDKs, for their whole life.
 
-That is not a cosmetic miss. ``MarketView`` seeds its books from
+That is not a cosmetic miss. ``Desk`` seeds its books from
 ``active_orders``: the seed was always empty, and the books filled from live
-deltas afterwards, which looks plausible until you open a view on a marketplace
+deltas afterwards, which looks plausible until you open a desk on a marketplace
 that already has resting orders and see nothing.
 
 Nothing caught it because nothing tested it -- the only mention of

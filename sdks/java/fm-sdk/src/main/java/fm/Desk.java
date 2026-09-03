@@ -8,22 +8,22 @@ import fm.model.Order;
 import fm.model.OrderSide;
 import fm.model.Session;
 import fm.model.Trade;
-import fm.internal.DefaultMarketView;
+import fm.internal.DefaultDesk;
 
 import java.util.List;
 import java.util.function.Consumer;
 
 
 /**
- * Always-current view of a single marketplace, hiding the transport
+ * Always-current state for a single marketplace, hiding the transport
  * details (WebSocket subscribe, snapshot+delta reconciliation,
  * sequence-gap recovery, reconnect) behind a small read-side surface.
  *
- * <p>Obtained via {@code Flexemarkets.observe(marketplaceId)}. The
+ * <p>Obtained via {@code Flexemarkets.desk(marketplaceId)}. The
  * returned instance owns a WebSocket subscription that stays live
  * until {@link #close()}. Per-{@code (marketplaceId, identity)}
  * sharing means two callers asking for the same marketplace under
- * the same client identity receive the same {@code MarketView}
+ * the same client identity receive the same {@code Desk}
  * instance — one WS connection, one materialized book, multiple
  * readers — and the underlying resources are released when the last
  * caller closes.
@@ -36,40 +36,40 @@ import java.util.function.Consumer;
  * reconnected and re-seeded. Both are observable —
  * {@link #onGap(java.util.function.Consumer)} and
  * {@link #onReconnect(java.util.function.Consumer)} — so a caller who
- * wants to know that its view went stale can be told rather than
+ * wants to know that its desk went stale can be told rather than
  * having to infer it.
  */
-public interface MarketView extends AutoCloseable {
+public interface Desk extends AutoCloseable {
 
     /**
-     * A view over any connection, maintained from its event stream.
+     * A desk on any connection, maintained from its event stream.
      *
      * <p>The way a host that supplies its own {@link Flexemarkets} gets one.
      * A factory rather than a public constructor so the implementing class
      * stays an implementation detail: naming it in the published API would
-     * commit to it for good, and callers only ever want "a view over this".
+     * commit to it for good, and callers only ever want "a desk on this".
      *
-     * @param flexemarkets the connected client the view reads and writes through
+     * @param flexemarkets the connected client the desk reads and writes through
      * @param marketplaceId the marketplace to track
-     * @param markets     the marketplace's markets, as read once at observe-time
-     * @return a live view, already seeded and receiving updates
+     * @param markets     the marketplace's markets, as read once when the desk was opened
+     * @return a live desk, already seeded and receiving updates
      */
-    static MarketView over(Flexemarkets flexemarkets, long marketplaceId,
+    static Desk over(Flexemarkets flexemarkets, long marketplaceId,
                            java.util.List<Market> markets) {
-        return new DefaultMarketView(flexemarkets, marketplaceId, markets);
+        return new DefaultDesk(flexemarkets, marketplaceId, markets);
     }
 
     /**
-     * The marketplace this view tracks.
+     * The marketplace this desk tracks.
      *
      * @return the marketplace's id
      */
     long marketplaceId();
 
     /**
-     * Markets in this marketplace, captured at observe-time.
+     * Markets in this marketplace, captured when the desk was opened.
      *
-     * @return the markets, as captured when the view was opened
+     * @return the markets, as captured when the desk was opened
      */
     List<Market> markets();
 
@@ -87,7 +87,7 @@ public interface MarketView extends AutoCloseable {
      * Always-current trade tape for {@code marketId}, most recent last.
      *
      * <p>Maintained alongside {@link #book}: seeded from the server's
-     * recent trades when the view opens, then kept current from the same delta
+     * recent trades when the desk opens, then kept current from the same delta
      * stream. Reads are atomic, on the same terms as the book.
      *
      * <p>A trade is not a distinct thing on the wire -- the exchange expresses
@@ -171,7 +171,7 @@ public interface MarketView extends AutoCloseable {
     Subscription onHoldingChange(Consumer<Holding> handler);
 
     /**
-     * Register a handler that fires when {@link MarketView} detects a
+     * Register a handler that fires when {@link Desk} detects a
      * gap in the ORDERS-UPDATE seq stream. Use this to wire your own
      * telemetry — by default the SDK logs the gap to stderr but
      * otherwise hides the recovery flow.
@@ -185,9 +185,9 @@ public interface MarketView extends AutoCloseable {
      * Register a handler that fires after the SDK reacts to a
      * transport error — either when the reconnect + resnapshot has
      * completed successfully, or when the attempt has failed and the
-     * view is left stale.
+     * desk is left stale.
      *
-     * @param handler called after the stream is restored and the view reseeded
+     * @param handler called after the stream is restored and the desk reseeded
      * @return a handle that unsubscribes the handler
      */
     Subscription onReconnect(Consumer<ReconnectEvent> handler);

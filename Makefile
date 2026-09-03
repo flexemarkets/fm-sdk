@@ -203,7 +203,7 @@ mcp-server:
 # Gated on purpose. The three uploads cannot be undone and cannot be replaced,
 # so a run that succeeds on PyPI and fails on Central burns the version on one
 # and leaves it unusable on the other. check-publish verifies every credential
-# and every registry's view of this version before the first byte is sent.
+# and every registry's desk of this version before the first byte is sent.
 #
 # npm goes FIRST, and the order is load-bearing. It is the only registry that
 # can stop and ask a human something -- a 2FA one-time password -- and when it

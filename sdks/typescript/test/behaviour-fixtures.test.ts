@@ -63,7 +63,7 @@ function drive(doc: Fixture): Book | Tape {
 
     const added = aggregator.update(orders);
 
-    // What update() reports it added is what MarketView dispatches onTrade
+    // What update() reports it added is what Desk dispatches onTrade
     // from. A step that declares `adds` pins it — including the zero, which is
     // the update a handler must stay silent through.
     if (step.adds !== undefined) {

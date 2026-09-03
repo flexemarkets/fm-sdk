@@ -118,7 +118,7 @@ class OrdersTest {
     }
 
     /**
-     * An order is finished from a position's point of view as soon as it has a
+     * An order is finished from a position's point of desk as soon as it has a
      * consumer, whether it traded whole or was split and left a remainder.
      */
     @Test

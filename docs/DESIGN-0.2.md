@@ -28,19 +28,19 @@ anyone, and are still cheap to revisit.
 
 ## Proposed
 
-### 1. `MarketView` exposes the trade tape — *landed*
+### 1. `Desk` exposes the trade tape — *landed*
 
-`DefaultMarketView` built a `Tapes`, seeded it with a REST call to
-`recentTrades` on every `observe()`, and fed it on every delta. The
-`MarketView` interface had no accessor for it: the tape was constructed,
-cleared and updated, and never read. Every observer paid a network round trip
+`DefaultDesk` built a `Tapes`, seeded it with a REST call to
+`recentTrades` on every `desk()`, and fed it on every delta. The
+`Desk` interface had no accessor for it: the tape was constructed,
+cleared and updated, and never read. Every desk paid a network round trip
 and per-update work for something unreachable through the supported entry
 point.
 
-`MarketView.tape(long marketId)` now answers it, mirroring
+`Desk.tape(long marketId)` now answers it, mirroring
 `book(long marketId)` — same shape, same null-for-unknown-market rule,
 same atomicity. `Tapes` gained the `get(long)` lookup that
-`Books` already had, so either aggregator reaches one market's view the
+`Books` already had, so either aggregator reaches one market's desk the
 same way.
 
 Forces 0.2 because it adds a method to a published interface.
@@ -48,8 +48,8 @@ Forces 0.2 because it adds a method to a published interface.
 ### 2. `Tapes` moves to `fm.internal`
 
 Zero references in fm-robots and fm-server. Inside the SDK its only use is
-`DefaultMarketView`'s private field, and with item 1 landed a caller reaches a
-tape through `MarketView.trades` without ever naming the aggregate.
+`DefaultDesk`'s private field, and with item 1 landed a caller reaches a
+tape through `Desk.trades` without ever naming the aggregate.
 
 `Books` is not in the same position and stays public: `Taker`, `TakerMvo`
 and `Venture` each construct one directly, and `fm.robot.Books` takes one as a
@@ -64,7 +64,7 @@ queue so you must be able to name it — and says nothing about
 `Tapes`. It was swept along with its neighbours. The draft may have
 been right about that one.
 
-`Tape` itself stays public: `MarketView.trades` returns it.
+`Tape` itself stays public: `Desk.trades` returns it.
 
 ---
 
@@ -82,7 +82,7 @@ tabulated further down:
 |---|---|---|
 | `fm.model` | the wire records — `Account`, `Allotment`, `Assets`, `ClientConnection`, `Holding`, `ManagerOtpBundle`, `Market`, `Marketplace`, `Order`, `Person`, `Security`, `Session`, `Token` | 13 |
 | `fm.event` | what arrives on a queue — `StreamDropped`, `FrameUnreadable`, `Reconnected`, `ReconnectEvent`, `GapEvent`, `OrdersUpdate`, `Version` | 7 |
-| `fm` | what you call and catch — the six roles, `Flexemarkets`, `MarketView`, `Subscription`, the eleven exceptions, `Endpoints`, the aggregators, `OrderUtils`, `OrderSide`, `OrderType`, `TickGrid`, `Snapshot` | the rest |
+| `fm` | what you call and catch — the six roles, `Flexemarkets`, `Desk`, `Subscription`, the eleven exceptions, `Endpoints`, the aggregators, `OrderUtils`, `OrderSide`, `OrderType`, `TickGrid`, `Snapshot` | the rest |
 
 Not obvious, and the cost is specific rather than general.
 
@@ -209,8 +209,8 @@ call a package-private static over loose bounds.
 
 Two types whose names are one concept apart and whose meanings are two layers
 apart. `Reconnected` is a queue event on the raw stream — the transport is
-back. `ReconnectEvent` is the payload of `MarketView.onReconnect`, carrying
-`success` and `reason` because the view also re-seeds over REST and that can
+back. `ReconnectEvent` is the payload of `Desk.onReconnect`, carrying
+`success` and `reason` because the desk also re-seeds over REST and that can
 fail. Both are needed; the names do not say which is which. A rename is
 breaking, so it belongs here rather than in a patch.
 

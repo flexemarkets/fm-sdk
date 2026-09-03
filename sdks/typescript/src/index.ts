@@ -88,8 +88,8 @@ export type {
   EventCallback,
 } from "./stomp.js";
 
-// MarketView
-export type { MarketView, Subscription, GapEvent, ReconnectEvent } from "./market-view.js";
+// Desk
+export type { Desk, Subscription, GapEvent, ReconnectEvent } from "./desk.js";
 export type { Snapshot } from "./snapshot.js";
 export { NO_SEQ } from "./stomp.js";
 export type { OrdersUpdate } from "./stomp.js";

@@ -2,7 +2,7 @@ package fm.role;
 
 import fm.Flexemarkets;
 import fm.Tape;
-import fm.MarketView;
+import fm.Desk;
 import fm.Snapshot;
 import fm.model.Allotment;
 import fm.model.ClientConnection;
@@ -241,7 +241,7 @@ public interface Reading {
      * fm-server 4.3.1 this answered newest first, later versions answer oldest
      * first. Either way it is the newest {@code size} trades that come back —
      * only their order differs. {@link Tape} sorts what it is given, so a
-     * caller seeding a tape through {@link MarketView} is unaffected; a caller
+     * caller seeding a tape through {@link Desk} is unaffected; a caller
      * reading this list directly should not assume one.
      *
      * @param marketplaceId the marketplace to read
@@ -257,7 +257,7 @@ public interface Reading {
      * fm-server 4.3.1 this answered newest first, later versions answer oldest
      * first. Either way it is the newest {@code size} trades that come back —
      * only their order differs. {@link Tape} sorts what it is given, so a
-     * caller seeding a tape through {@link MarketView} is unaffected; a caller
+     * caller seeding a tape through {@link Desk} is unaffected; a caller
      * reading this list directly should not assume one.
      *
      * @param marketplaceId the marketplace to read

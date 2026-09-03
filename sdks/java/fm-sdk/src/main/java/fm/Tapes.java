@@ -39,7 +39,7 @@ public class Tapes {
      * @param orders orders as the stream delivered them
      * @return the trades each market gained, keyed by market id, with markets
      *         that gained none left out -- which is most of them on most
-     *         updates. {@code MarketView} dispatches {@code onTrade} from this
+     *         updates. {@code Desk} dispatches {@code onTrade} from this
      *         rather than diffing tape sizes, since a full tape drops its
      *         oldest as it takes a new one and the size does not move.
      */
@@ -60,7 +60,7 @@ public class Tapes {
      * One market's tape.
      *
      * <p>The counterpart to {@link Books#get}, so a caller holding either
-     * aggregator reaches one market's view the same way.
+     * aggregator reaches one market's desk the same way.
      *
      * @param marketId the market to look up
      * @return its tape, or null if no tape is kept for that market

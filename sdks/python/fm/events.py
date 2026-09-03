@@ -142,7 +142,7 @@ class Reconnected:
     whatever happened while the socket was down was not delivered.
 
     Carries the marketplace because one client can hold several
-    subscriptions, and "we are back" does not say which view to reseed.
+    subscriptions, and "we are back" does not say which desk to reseed.
     """
 
     marketplace_id: int

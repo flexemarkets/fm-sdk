@@ -172,7 +172,7 @@ class Book:
     def clear(self) -> None:
         """Reset to just-constructed state — empty levels,
         ``_initialized = False``. Used by
-        :class:`~fm.market_view.MarketView`'s Phase 2b gap-recovery
+        :class:`~fm.desk.Desk`'s Phase 2b gap-recovery
         flow: refetch snapshot, clear, reapply via update so the next
         delta with ``is_available=False`` doesn't underflow against
         stale price levels.
@@ -234,7 +234,7 @@ class Books:
     def get(self, market_id: int) -> Book | None:
         """Return the order book for *market_id*, or ``None`` if the
         market isn't part of this marketplace. Mirrors the Java + TS
-        ``Books.get(marketId)`` signature so MarketView can do a
+        ``Books.get(marketId)`` signature so Desk can do a
         null-tolerant lookup.
         """
         return self._books.get(market_id)

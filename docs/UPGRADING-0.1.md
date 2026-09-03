@@ -88,7 +88,7 @@ rename identically.
 ### Types that moved to `fm.internal`
 
 Two public types no caller could reach — nothing on `Flexemarkets`, the roles
-or `MarketView` returns or accepts either:
+or `Desk` returns or accepts either:
 
 | type | was |
 |---|---|
@@ -104,21 +104,21 @@ in four places — and `Version` arrives on your event queue, so you need to be
 able to name it. They are still `fm.Books`, `fm.Tapes` and
 `fm.Version`. No import changes.
 
-`MarketView` remains the easier way to a maintained order book: it keeps the
-books and the trade history for you, and `observe(marketplaceId)` is one call.
+`Desk` remains the easier way to a maintained order book: it keeps the
+books and the trade history for you, and `desk(marketplaceId)` is one call.
 Building the aggregators yourself stays supported for code that wants to drive
 the event queue directly.
 
 ### The implementation is no longer importable
 
 `fm.HttpFlexemarkets` and `fm.Events` moved to `fm.internal`, along with
-`DefaultMarketView` and `MarketViewHandle`. They were public by accident of
+`DefaultDesk` and `DeskHandle`. They were public by accident of
 sharing a package with the interface they implement — `HttpFlexemarkets` was a
 public class nobody could construct.
 
 Nothing should be importing them. If something does, it is reaching past the
-contract: `Flexemarkets.connect` builds the client and `MarketView.over` builds
-the view, and those are the supported ways to get one. Do not import from
+contract: `Flexemarkets.connect` builds the client and `Desk.over` builds
+the desk, and those are the supported ways to get one. Do not import from
 `fm.internal` to restore the old code — that is the same reach with a longer
 name.
 
@@ -173,7 +173,7 @@ a blind replace of `.account(` is wrong. Match on the argument.
 four above became one-line enum comparisons when side and type became types, and
 two ways to ask one question is one too many.
 
-`submitLimit`, `submitMarket` and `MarketView.submitLimit` take `OrderSide`.
+`submitLimit`, `submitMarket` and `Desk.submitLimit` take `OrderSide`.
 `Order.side()` returns `OrderSide` and `Order.type()` returns `OrderType`; both may
 be null — a cancel carries no side, and an unrecognised value parses to null
 rather than throwing.
@@ -245,7 +245,7 @@ fm.create_market(5, "STK", "Stock", TickGrid(0, 10_000, 1), TickGrid(10, 500, 10
 |---|---|
 | `from fm import ApiRoot` | nothing — HAL is private (`fm._hal`) and is going away |
 | `from fm import EventListener` | `listen()` returns a callable that stops it |
-| `from fm import MarketViewHandle` | `fm.observe(marketplace_id)` returns one |
+| `from fm import DeskHandle` | `fm.desk(marketplace_id)` returns one |
 
 These matched Java, where the same three are unreachable. Nothing in a public
 signature mentions them.
@@ -276,7 +276,7 @@ signature mentions them.
 | `ApiRoot` | nothing — HAL is private (`src/hal.ts`) and is going away |
 | `getLink` | it had no callers in any SDK; `root.links[name]` was always the body |
 | `EventListener` | `listen()` returns a function that stops it |
-| `DefaultMarketView`, `MarketViewHandle` | `fm.observe(marketplaceId)` returns one |
+| `DefaultDesk`, `DeskHandle` | `fm.desk(marketplaceId)` returns one |
 
 `Version`, `Books` and `Tapes` are still exported.
 
@@ -499,7 +499,7 @@ if isinstance(event, Reconnected):
 `Reconnected` carries `marketplace_id` / `marketplaceId`, since one client can
 hold several subscriptions. `fm.reconnect()` still exists and still works.
 
-Code using `observe()` needs no change: `MarketView` reseeds and fires
+Code using `desk()` needs no change: `Desk` reseeds and fires
 `on_reconnect` / `onReconnect` exactly as before.
 
 TypeScript's discriminants changed with the type names — the `kind` tag was

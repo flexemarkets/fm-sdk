@@ -35,7 +35,7 @@ dirty build and `mvn -q` both report a false zero.
 |---|---|
 | wire types | the same fields, with the same names, in all three |
 | client surface | the same methods on `Flexemarkets` and its roles, with the same required arguments |
-| read-side surface | the same members on `MarketView`, `Book`, `Tape` and their containers |
+| read-side surface | the same members on `Desk`, `Book`, `Tape` and their containers |
 | documentation | a ratchet: a method documented in one SDK and not the others |
 | failure types | the same exceptions catchable in each |
 

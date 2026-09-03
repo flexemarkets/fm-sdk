@@ -48,7 +48,7 @@ public final class Orders {
      *
      * <p>The positive complement of {@link #isAvailable}, and named for what a
      * position keeps rather than for the mechanism. A split leaves a remainder
-     * order behind, so from the position's point of view the original is
+     * order behind, so from the position's point of desk the original is
      * finished either way — which is why this is one predicate and not
      * {@code isConsumed(o) || isSplit(o)} spelled out at every call site.
      */

@@ -171,7 +171,7 @@ export class Book {
 
   /**
    * Reset to just-constructed state — empty levels, initialized=false.
-   * Used by MarketView's Phase 2b gap-recovery: refetch the snapshot,
+   * Used by Desk's Phase 2b gap-recovery: refetch the snapshot,
    * clear(), reapply via update(), so the next delta with
    * isAvailable=false doesn't underflow against stale levels.
    */

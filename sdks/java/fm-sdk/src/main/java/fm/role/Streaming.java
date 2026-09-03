@@ -2,12 +2,12 @@ package fm.role;
 
 import fm.event.Reconnected;
 import fm.event.StreamDropped;
-import fm.MarketView;
+import fm.Desk;
 import fm.Subscription;
 import java.util.concurrent.BlockingQueue;
 
 /**
- * The marketplace's event stream, and the views built on it.
+ * The marketplace's event stream, and the desks built on it.
  *
  * <p>Named for what it does rather than for what it carries, because
  * {@code Events} is already the STOMP client this sits above.
@@ -40,7 +40,7 @@ public interface Streaming {
      *
      * <p>Unlike {@link #listen}, several of these coexist: each has its own
      * stream and its own lifetime. That is what lets more than one
-     * {@link MarketView} live in one connection without trampling each other.
+     * {@link Desk} live in one connection without trampling each other.
      *
      * @param marketplaceId the marketplace to stream
      * @param queue         where events are delivered
@@ -49,12 +49,12 @@ public interface Streaming {
     Subscription subscribe(long marketplaceId, BlockingQueue<Object> queue);
 
     /**
-     * A maintained view of the order books, kept current from the event stream.
+     * A maintained desk of the order books, kept current from the event stream.
      *
-     * @param marketplaceId the marketplace to observe
-     * @return a view that keeps itself current until closed
+     * @param marketplaceId the marketplace to open a desk on
+     * @return a desk that keeps itself current until closed
      */
-    MarketView observe(long marketplaceId);
+    Desk desk(long marketplaceId);
 
     /**
      * Re-establish the subscription by hand.

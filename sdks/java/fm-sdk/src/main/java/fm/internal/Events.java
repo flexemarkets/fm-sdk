@@ -10,7 +10,7 @@ import fm.model.Holding;
 import fm.model.Order;
 import fm.model.Session;
 import fm.Flexemarkets;
-import fm.MarketView;
+import fm.Desk;
 import fm.Snapshot;
 import fm.Subscription;
 import fm.error.ApiException;
@@ -42,7 +42,7 @@ import tools.jackson.databind.ObjectMapper;
  * subscription, delivering onto a caller's queue.
  *
  * <p>Internal because it is the implementation. A caller reaches this through
- * {@code listen}, {@code subscribe} or {@code observe}, and holds the
+ * {@code listen}, {@code subscribe} or {@code desk}, and holds the
  * {@link Subscription} rather than this type.
  */
 public class Events implements Subscription {
@@ -396,7 +396,7 @@ public class Events implements Subscription {
                 messageType = line.substring(MESSAGE_TYPE.length() + 1).trim();
             } else if (line.startsWith(SEQ + ":")) {
                 // Per-marketplace ORDERS-UPDATE sequence number stamped
-                // by fm-server (commit c6eea6eca). Used by MarketView /
+                // by fm-server (commit c6eea6eca). Used by Desk /
                 // Phase 2a snapshot reconciliation. Parse defensively —
                 // a malformed value just falls back to NO_SEQ.
                 try {

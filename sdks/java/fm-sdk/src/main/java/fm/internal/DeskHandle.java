@@ -9,7 +9,7 @@ import fm.model.OrderSide;
 import fm.model.Session;
 import fm.model.Trade;
 import fm.Flexemarkets;
-import fm.MarketView;
+import fm.Desk;
 import fm.Book;
 import fm.Tape;
 import fm.Subscription;
@@ -20,9 +20,9 @@ import java.util.function.Consumer;
 
 
 /**
- * Reader-side handle on a refcounted {@link DefaultMarketView}.
- * Returned by {@link Flexemarkets#observe(long)}; multiple handles for
- * the same {@code marketplaceId} share one underlying view + WS
+ * Reader-side handle on a refcounted {@link DefaultDesk}.
+ * Returned by {@link Flexemarkets#desk(long)}; multiple handles for
+ * the same {@code marketplaceId} share one underlying desk + WS
  * subscription + materialized state. Each handle's {@link #close()}
  * decrements the shared refcount and tears down the shared resources
  * on the last close.
@@ -32,13 +32,13 @@ import java.util.function.Consumer;
  * handler doesn't keep firing into stale state after the handle is
  * gone.
  */
-class MarketViewHandle implements MarketView {
-    private final DefaultMarketView _shared;
+class DeskHandle implements Desk {
+    private final DefaultDesk _shared;
     private final Runnable _onClose;
     private final List<Subscription> _mySubscriptions = new CopyOnWriteArrayList<>();
     private volatile boolean _closed;
 
-    MarketViewHandle(DefaultMarketView shared, Runnable onClose) {
+    DeskHandle(DefaultDesk shared, Runnable onClose) {
         this._shared = shared;
         this._onClose = onClose;
     }
@@ -140,7 +140,7 @@ class MarketViewHandle implements MarketView {
     private void _check() {
         if (_closed) {
             throw new IllegalStateException(
-                    "MarketView handle for marketplace " + _shared.marketplaceId() + " is closed");
+                    "Desk handle for marketplace " + _shared.marketplaceId() + " is closed");
         }
     }
 }

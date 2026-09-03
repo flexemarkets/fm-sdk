@@ -6,7 +6,7 @@ reseeds. Python emitted ``StreamDropped`` and stopped: the stream stayed dead
 until someone noticed and called ``fm.reconnect()``, and nothing was ever put
 on the queue to say it had come back.
 
-``MarketView`` papered over this by reconnecting on ``StreamDropped`` itself,
+``Desk`` papered over this by reconnecting on ``StreamDropped`` itself,
 so the gap only showed for callers using the raw queue -- which is the whole
 point of ``listen()`` being public.
 
@@ -88,7 +88,7 @@ def test_reconnected_carries_the_marketplace_it_belongs_to() -> None:
     """Matching Java's ``Reconnected(long marketplaceId)``.
 
     One Flexemarkets can hold several subscriptions, so a bare "we are back"
-    does not tell a consumer which view to reseed.
+    does not tell a consumer which desk to reseed.
     """
     q: queue.Queue[object] = queue.Queue()
     listener = _Listener(q)

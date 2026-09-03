@@ -17,7 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * carrying a symbol no book recognises is silently dropped, which is worth
  * knowing when a book comes back unexpectedly empty.
  *
- * <p>Building these by hand is supported -- {@link MarketView} does it for a
+ * <p>Building these by hand is supported -- {@link Desk} does it for a
  * caller who does not want to drive the event queue themselves.
  */
 public class Books {

@@ -1,16 +1,16 @@
 package fm.event;
 
 /**
- * Fires when {@link MarketView} reacts to a {@code StreamDropped} —
+ * Fires when {@link Desk} reacts to a {@code StreamDropped} —
  * either after the reconnect + resnapshot completes successfully, or
- * after the reconnect attempt has failed and the view is left stale.
+ * after the reconnect attempt has failed and the desk is left stale.
  *
- * <p>Subscribe via {@link MarketView#onReconnect(java.util.function.Consumer)}.
+ * <p>Subscribe via {@link Desk#onReconnect(java.util.function.Consumer)}.
  *
  * @param marketplaceId the marketplace the reconnect ran for
  * @param success       {@code true} if the reconnect + REST snapshot
  *                      re-seed both completed; {@code false} if any
- *                      step threw — caller must close() and observe()
+ *                      step threw — caller must close() and desk()
  *                      again to recover
  * @param reason        a short description of the failure, or
  *                      {@code null} on success

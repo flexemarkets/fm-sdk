@@ -24,9 +24,9 @@ import org.junit.jupiter.api.Test;
  * {@link Reading#recentTrades} returned an empty list always, in all three
  * SDKs, for their whole life.
  *
- * <p>Not cosmetic: {@link MarketView} seeds its books from {@code activeOrders},
+ * <p>Not cosmetic: {@link Desk} seeds its books from {@code activeOrders},
  * so the seed was always empty and the books filled from live deltas
- * afterwards — which looks plausible until you open a view on a marketplace
+ * afterwards — which looks plausible until you open a desk on a marketplace
  * that already has resting orders and see nothing.
  *
  * <p>Nothing caught it because nothing tested it. The only mention of

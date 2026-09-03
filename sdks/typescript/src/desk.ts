@@ -1,5 +1,5 @@
 /**
- * MarketView — always-current view of a single marketplace, hiding
+ * Desk — always-current state for a single marketplace, hiding
  * transport details (WebSocket subscribe, snapshot+delta
  * reconciliation, sequence-gap recovery, reconnect) behind a small
  * read-side surface. Mirrors the Java + Python SDKs; same staged
@@ -17,15 +17,15 @@ import { NO_SEQ, type EventListener, type FmEvent, type OrdersUpdate, type Frame
 import type { Holding, Market, Order, Session } from "./types.js";
 
 /**
- * Handle returned by `MarketView.on*` listener registrations. Call
+ * Handle returned by `Desk.on*` listener registrations. Call
  * to unregister. Idempotent — multiple calls are no-ops.
  */
 export type Subscription = () => void;
 
 /**
- * Fires when MarketView detects a sequence-gap in the ORDERS-UPDATE
+ * Fires when Desk detects a sequence-gap in the ORDERS-UPDATE
  * WS stream — one or more frames were dropped between client and
- * fm-server. After a gap, MarketView re-runs the REST snapshot
+ * fm-server. After a gap, Desk re-runs the REST snapshot
  * recovery flow before applying further deltas; the gap event is the
  * signal callers can wire into their own observability stack instead
  * of relying on the SDK's default console.warn.
@@ -37,9 +37,9 @@ export interface GapEvent {
 }
 
 /**
- * Fires when MarketView reacts to a StreamDropped — either after
+ * Fires when Desk reacts to a StreamDropped — either after
  * the reconnect + resnapshot completes successfully, or after the
- * attempt has failed and the view is left stale.
+ * attempt has failed and the desk is left stale.
  */
 export interface ReconnectEvent {
   readonly marketplaceId: number;
@@ -47,11 +47,11 @@ export interface ReconnectEvent {
   readonly reason: string | null;
 }
 
-export interface MarketView {
-  /** The marketplace this view tracks. */
+export interface Desk {
+  /** The marketplace this desk tracks. */
   readonly marketplaceId: number;
 
-  /** Markets in this marketplace, captured at observe-time. */
+  /** Markets in this marketplace, captured when the desk was opened. */
   readonly markets: Market[];
 
   /**
@@ -66,7 +66,7 @@ export interface MarketView {
    * if `marketId` isn't in this marketplace.
    *
    * Maintained alongside {@link book}: seeded from the server's recent
-   * trades when the view opens, then kept current from the same delta stream.
+   * trades when the desk opens, then kept current from the same delta stream.
    * Each `Trade` on it carries both sides of its match — the resting
    * order that was taken and the aggressor that took it.
    */
@@ -117,7 +117,7 @@ export interface MarketView {
   onHoldingChange(handler: (h: Holding) => void): Subscription;
 
   /**
-   * Register a handler that fires when MarketView detects a gap in
+   * Register a handler that fires when Desk detects a gap in
    * the ORDERS-UPDATE seq stream. Use this to wire your own
    * telemetry — by default the SDK logs to console.warn but
    * otherwise hides the recovery flow.
@@ -127,7 +127,7 @@ export interface MarketView {
   /**
    * Register a handler that fires after the SDK reacts to a
    * transport error — either when reconnect + resnapshot have
-   * completed, or when the attempt has failed and the view is left
+   * completed, or when the attempt has failed and the desk is left
    * stale.
    */
   onReconnect(handler: (event: ReconnectEvent) => void): Subscription;
@@ -146,7 +146,7 @@ export interface MarketView {
   close(): void;
 }
 
-export class DefaultMarketView implements MarketView {
+export class DefaultDesk implements Desk {
   readonly marketplaceId: number;
   readonly markets: Market[];
 
@@ -167,7 +167,7 @@ export class DefaultMarketView implements MarketView {
   private _closed = false;
 
   /**
-   * Highest ORDERS-UPDATE seq this view has applied so far. Deltas
+   * Highest ORDERS-UPDATE seq this desk has applied so far. Deltas
    * with `seq <= _lastAppliedSeq` are skipped — they've already been
    * folded into the local state via the initial REST snapshot or a
    * previously-applied delta. Initial value comes from the snapshot's
@@ -175,9 +175,9 @@ export class DefaultMarketView implements MarketView {
    */
   private _lastAppliedSeq: number = NO_SEQ;
 
-  static async open(flexemarkets: Flexemarkets, marketplaceId: number): Promise<DefaultMarketView> {
+  static async open(flexemarkets: Flexemarkets, marketplaceId: number): Promise<DefaultDesk> {
     const markets = await flexemarkets.markets(marketplaceId);
-    const view = new DefaultMarketView(flexemarkets, marketplaceId, markets);
+    const desk = new DefaultDesk(flexemarkets, marketplaceId, markets);
     // Subscribe WS first (so deltas start buffering on the callback
     // path), then fetch + apply the snapshot, only THEN allow live
     // dispatch. _seedFromSnapshot flips _seedComplete=true atomically
@@ -185,18 +185,18 @@ export class DefaultMarketView implements MarketView {
     //
     // Phase 2d: own the EventListener directly rather than calling
     // flexemarkets.listen() — that would clobber the singleton
-    // _eventListener and prevent multiple shared views from
+    // _eventListener and prevent multiple shared desks from
     // coexisting in one Flexemarkets.
-    view._events = await flexemarkets._connectEvents(marketplaceId, (event) => view._dispatch(event));
-    await view._seedFromSnapshot();
-    return view;
+    desk._events = await flexemarkets._connectEvents(marketplaceId, (event) => desk._dispatch(event));
+    await desk._seedFromSnapshot();
+    return desk;
   }
 
   private _seedComplete = false;
   private _seedBuffer: OrdersUpdate[] = [];
 
   // 100 matches the default per-market Tape capacity. Plumb through to
-  // observe() later if a caller needs deeper trade scrollback.
+  // desk() later if a caller needs deeper trade scrollback.
   private constructor(flexemarkets: Flexemarkets, marketplaceId: number, markets: Market[]) {
     this._flexemarkets = flexemarkets;
     this.marketplaceId = marketplaceId;
@@ -338,7 +338,7 @@ export class DefaultMarketView implements MarketView {
       this._events = null;
     }
     // Flexemarkets is owned by the caller; we don't close it. If
-    // observe() was the only consumer, the caller can close
+    // desk() was the only consumer, the caller can close
     // Flexemarkets themselves.
   }
 
@@ -364,7 +364,7 @@ export class DefaultMarketView implements MarketView {
       ) {
         const expectedSeq = this._lastAppliedSeq + 1;
         console.warn(
-          `[MarketView] ORDERS-UPDATE seq gap on marketplace ${this.marketplaceId} ` +
+          `[Desk] ORDERS-UPDATE seq gap on marketplace ${this.marketplaceId} ` +
             `— expected ${expectedSeq}, got ${event.seq}; resyncing from snapshot`,
         );
         const gap: GapEvent = {
@@ -399,7 +399,7 @@ export class DefaultMarketView implements MarketView {
     if (_isStreamDropped(event)) {
       // The subscription restores itself; nothing to do but say so.
       console.warn(
-        `[MarketView] WS transport error on marketplace ${this.marketplaceId}: ${event.exception.message}`,
+        `[Desk] WS transport error on marketplace ${this.marketplaceId}: ${event.exception.message}`,
       );
       return;
     }
@@ -410,9 +410,9 @@ export class DefaultMarketView implements MarketView {
     if (_isFrameUnreadable(event)) {
       // STOMP ERROR / parse failure. Logged for visibility;
       // reconnecting won't help with a malformed frame, so we leave
-      // the view as-is.
+      // the desk as-is.
       console.warn(
-        `[MarketView] WS error on marketplace ${this.marketplaceId}: ${event.command} ${event.body}`,
+        `[Desk] WS error on marketplace ${this.marketplaceId}: ${event.command} ${event.body}`,
       );
       return;
     }
@@ -426,8 +426,8 @@ export class DefaultMarketView implements MarketView {
    * because the listener already restored the subscription. Reseeding is: a
    * reconnect is the largest possible sequence gap, so _seedFromSnapshot()
    * (clear + REST snapshot + reapply + seq watermark) is what converges the
-   * state, exactly as it does for a small one. If it fails the view is left
-   * stale until the caller close()s and observe()s again.
+   * state, exactly as it does for a small one. If it fails the desk is left
+   * stale until the caller close()s and desk()s again.
    */
   private _reseedAfterReconnect(): void {
     if (this._resyncInFlight) return; // already handling
@@ -441,12 +441,12 @@ export class DefaultMarketView implements MarketView {
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err);
         console.error(
-          `[MarketView] Reconnect failed on marketplace ${this.marketplaceId}; view is stale: ${reason}`,
+          `[Desk] Reconnect failed on marketplace ${this.marketplaceId}; desk is stale: ${reason}`,
         );
         outcome = { marketplaceId: this.marketplaceId, success: false, reason };
         // Leave _resyncInFlight=true so subsequent dispatches keep
         // buffering rather than corrupting state; caller can close()
-        // and observe() to recover.
+        // and desk() to recover.
       }
       for (const h of this._reconnectHandlers) {
         try { h(outcome); } catch { /* don't let one bad handler stop dispatch */ }
@@ -492,7 +492,7 @@ export class DefaultMarketView implements MarketView {
 
   private _ensureOpen(): void {
     if (this._closed) {
-      throw new Error(`MarketView for marketplace ${this.marketplaceId} is closed`);
+      throw new Error(`Desk for marketplace ${this.marketplaceId} is closed`);
     }
   }
 }
@@ -528,9 +528,9 @@ function _isFrameUnreadable(event: FmEvent): event is FrameUnreadable {
 }
 
 /**
- * Reader-side handle on a refcounted DefaultMarketView. Returned by
- * Flexemarkets.observe(); multiple handles for the same marketplaceId
- * share one underlying view + WS subscription + materialized state.
+ * Reader-side handle on a refcounted DefaultDesk. Returned by
+ * Flexemarkets.desk(); multiple handles for the same marketplaceId
+ * share one underlying desk + WS subscription + materialized state.
  * Each handle's close() decrements the shared refcount and tears down
  * the shared resources on the last close.
  *
@@ -538,13 +538,13 @@ function _isFrameUnreadable(event: FmEvent): event is FrameUnreadable {
  * locally and closed when the handle closes — so a handler doesn't
  * keep firing into stale state after the handle is gone.
  */
-export class MarketViewHandle implements MarketView {
-  private readonly _shared: DefaultMarketView;
+export class DeskHandle implements Desk {
+  private readonly _shared: DefaultDesk;
   private readonly _onClose: () => void;
   private readonly _mySubscriptions: Subscription[] = [];
   private _closed = false;
 
-  constructor(shared: DefaultMarketView, onClose: () => void) {
+  constructor(shared: DefaultDesk, onClose: () => void) {
     this._shared = shared;
     this._onClose = onClose;
   }
@@ -645,7 +645,7 @@ export class MarketViewHandle implements MarketView {
 
   private _check(): void {
     if (this._closed) {
-      throw new Error(`MarketView handle for marketplace ${this._shared.marketplaceId} is closed`);
+      throw new Error(`Desk handle for marketplace ${this._shared.marketplaceId} is closed`);
     }
   }
 }

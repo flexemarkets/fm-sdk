@@ -1,7 +1,7 @@
 /**
  * REST snapshot response bundle: parsed body + the `x-fm-as-of-seq`
  * header value the snapshot was read at. Returned by `Flexemarkets`
- * V1 snapshot methods so `MarketView` (and any other caller that
+ * V1 snapshot methods so `Desk` (and any other caller that
  * mixes REST snapshots with WS deltas) can reconcile the two
  * streams: apply deltas whose `seq` is greater than `asOfSeq` and
  * skip those whose seq is less than or equal.

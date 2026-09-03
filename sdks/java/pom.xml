@@ -51,7 +51,7 @@
             as the code actually needs.
 
             21 is what the code needs. Thread.startVirtualThread (Events,
-            DefaultMarketView) and HttpClient.close (HttpFlexemarkets) are
+            DefaultDesk) and HttpClient.close (HttpFlexemarkets) are
             Java 21 APIs, and Jackson 3 requires 17, so 17 was never reachable
             and 11 less so. Raising this floor should be a decision, not a
             side effect of a newer JDK being installed.

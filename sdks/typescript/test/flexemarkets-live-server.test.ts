@@ -11,7 +11,7 @@
  * Without those the suite self-skips so CI doesn't false-fail on a
  * missing server.
  *
- * Read-only: picks the endpoint's marketplace, opens a MarketView,
+ * Read-only: picks the endpoint's marketplace, opens a Desk,
  * verifies the accessors don't throw, closes. No orders submitted; no
  * marketplaces created. Idempotent.
  */
@@ -42,16 +42,16 @@ live("connects to local server and lists marketplaces", async () => {
   }
 });
 
-live("observes endpoint marketplace without throwing", async () => {
-  const fm = await Flexemarkets.connect(null, null, "fm-sdk-live-test/observe");
+live("opens a desk on the endpoint marketplace without throwing", async () => {
+  const fm = await Flexemarkets.connect(null, null, "fm-sdk-live-test/desk");
   try {
     const marketplaceId = fm.endpointMarketplaceId;
-    const view = await fm.observe(marketplaceId);
+    const desk = await fm.desk(marketplaceId);
     try {
-      assert.equal(view.marketplaceId, marketplaceId);
-      assert.ok(view.markets.length > 0, "marketplace should have at least one market");
-      for (const m of view.markets) {
-        const book = view.book(m.id);
+      assert.equal(desk.marketplaceId, marketplaceId);
+      assert.ok(desk.markets.length > 0, "marketplace should have at least one market");
+      for (const m of desk.markets) {
+        const book = desk.book(m.id);
         assert.ok(book !== null, `order book for market ${m.id} should be non-null`);
         // bestBuyPrice / bestSellPrice return -1 when empty; either
         // way they shouldn't throw, which is the real smoke-test
@@ -60,23 +60,23 @@ live("observes endpoint marketplace without throwing", async () => {
         assert.doesNotThrow(() => book!.bestSellPrice());
       }
     } finally {
-      view.close();
+      desk.close();
     }
   } finally {
     fm.close();
   }
 });
 
-live("shares view across multiple observe calls for same marketplace", async () => {
-  const fm = await Flexemarkets.connect(null, null, "fm-sdk-live-test/sharedObserve");
+live("shares one desk across repeat calls for same marketplace", async () => {
+  const fm = await Flexemarkets.connect(null, null, "fm-sdk-live-test/sharedDesk");
   try {
     const marketplaceId = fm.endpointMarketplaceId;
-    const a = await fm.observe(marketplaceId);
-    const b = await fm.observe(marketplaceId);
+    const a = await fm.desk(marketplaceId);
+    const b = await fm.desk(marketplaceId);
     try {
       assert.equal(a.marketplaceId, b.marketplaceId);
       assert.deepEqual(a.markets, b.markets);
-      // Closing one handle must NOT close the shared view — `b` should
+      // Closing one handle must NOT close the shared desk — `b` should
       // still be usable.
       a.close();
       assert.doesNotThrow(() => b.markets);
@@ -88,11 +88,11 @@ live("shares view across multiple observe calls for same marketplace", async () 
   }
 });
 
-live("closing Flexemarkets force-closes any remaining shared views", async () => {
+live("closing Flexemarkets force-closes any remaining shared desks", async () => {
   const fm = await Flexemarkets.connect(null, null, "fm-sdk-live-test/forceClose");
   const marketplaceId = fm.endpointMarketplaceId;
   // Intentionally don't close the handle — fm.close() must sweep it
   // up so the WS subscription is released.
-  await fm.observe(marketplaceId);
+  await fm.desk(marketplaceId);
   assert.doesNotThrow(() => fm.close());
 });

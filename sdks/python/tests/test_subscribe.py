@@ -2,10 +2,10 @@
 
 ``listen`` is one per connection: a second call replaces the first. The
 mechanism for more than one stream was already here -- ``_connect_events``,
-private, added so two ``observe()`` calls would not trample each other -- but a
+private, added so two ``desk()`` calls would not trample each other -- but a
 caller who wanted a second stream of their own had no way to ask.
 
-Java has exposed it as ``subscribe`` since MarketView sharing landed.
+Java has exposed it as ``subscribe`` since Desk sharing landed.
 """
 
 from __future__ import annotations

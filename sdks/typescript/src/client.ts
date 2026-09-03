@@ -29,11 +29,11 @@ import type {
 import { EventListener, NO_SEQ, type EventCallback } from "./stomp.js";
 import type { ApiRoot } from "./hal.js";
 import {
-  DefaultMarketView,
-  MarketViewHandle,
-  type MarketView,
+  DefaultDesk,
+  DeskHandle,
+  type Desk,
   type Subscription,
-} from "./market-view.js";
+} from "./desk.js";
 import type { Snapshot } from "./snapshot.js";
 
 function readVersion(): string {
@@ -347,7 +347,7 @@ export function parseConnection(data: JsonObject): ClientConnection {
  * The server embeds them under `orders`. It was `orderDtoes` — Spring HATEOAS
  * pluralising `OrderDto` — and every SDK still read that name long after the
  * server stopped sending it, so `activeOrders` and `recentTrades` returned an
- * empty array always. `MarketView` seeds from `activeOrders`, so its books were
+ * empty array always. `Desk` seeds from `activeOrders`, so its books were
  * never seeded; they filled from live deltas and looked plausible.
  *
  * Then the envelope itself went: fm-server now sends a bare array. Accepting
@@ -777,7 +777,7 @@ export class Flexemarkets {
 
   /**
    * GET helper that returns the parsed body bundled with the
-   * `x-fm-as-of-seq` response header so callers (notably MarketView)
+   * `x-fm-as-of-seq` response header so callers (notably Desk)
    * can correlate the snapshot with the WS delta stream. Returns
    * `Snapshot.NO_SEQ` when the header is absent.
    */
@@ -1231,7 +1231,7 @@ export class Flexemarkets {
   /**
    * The active-orders snapshot: every resting limit order on the
    * marketplace's current session, plus the `x-fm-as-of-seq` sequence
-   * the snapshot was read at. Used by `MarketView` seeding
+   * the snapshot was read at. Used by `Desk` seeding
    * — clients apply WS deltas whose seq is greater than the returned
    * value and skip those whose seq is less than or equal.
    */
@@ -1252,7 +1252,7 @@ export class Flexemarkets {
    * 4.3.1 this answered newest first, later versions answer oldest first.
    * Either way it is the newest `size` trades that come back — only their
    * order differs. `Tape` sorts what it is given, so a caller seeding a tape
-   * through `MarketView` is unaffected; a caller reading this list directly
+   * through `Desk` is unaffected; a caller reading this list directly
    * should not assume one.
    */
   async recentTrades(marketplaceId: number, size = 1000): Promise<Snapshot<Order[]>> {
@@ -1502,54 +1502,54 @@ export class Flexemarkets {
 
   // -- events / WebSocket ----------------------------------------------------
 
-  private readonly _sharedViews = new Map<number, { view: DefaultMarketView; refCount: number }>();
-  private readonly _sharedViewPromises = new Map<number, Promise<DefaultMarketView>>();
+  private readonly _sharedViews = new Map<number, { desk: DefaultDesk; refCount: number }>();
+  private readonly _sharedViewPromises = new Map<number, Promise<DefaultDesk>>();
 
   /**
-   * Open a stateful MarketView on this marketplace. Multiple calls
-   * for the same marketplaceId share a single underlying view + WS
+   * Open a stateful Desk on this marketplace. Multiple calls
+   * for the same marketplaceId share a single underlying desk + WS
    * subscription + materialized state within this Flexemarkets
    * instance — each call returns a fresh handle, the handles
    * refcount, and the shared resources tear down on the last close.
    *
    * Sharing is intentionally per-Flexemarkets (i.e. per-bearer). Two
-   * callers with different identities each get their own view —
+   * callers with different identities each get their own desk —
    * multi-tenant WS multiplexing is a server-side concern, not a
    * client-side one.
    */
-  async observe(marketplaceId: number): Promise<MarketView> {
+  async desk(marketplaceId: number): Promise<Desk> {
     const existing = this._sharedViews.get(marketplaceId);
     if (existing !== undefined) {
       existing.refCount++;
-      return new MarketViewHandle(existing.view, () => this._releaseSharedView(marketplaceId));
+      return new DeskHandle(existing.desk, () => this._releaseSharedView(marketplaceId));
     }
-    // Two concurrent observe() calls for the same marketplaceId need
+    // Two concurrent desk() calls for the same marketplaceId need
     // to dedupe — JS is single-threaded but awaits introduce
     // interleaving. Cache the in-flight Promise so the second caller
     // awaits the first's construction instead of racing a duplicate
     // WS subscription into existence.
     let p = this._sharedViewPromises.get(marketplaceId);
     if (p === undefined) {
-      p = DefaultMarketView.open(this, marketplaceId);
+      p = DefaultDesk.open(this, marketplaceId);
       this._sharedViewPromises.set(marketplaceId, p);
     }
-    let shared: DefaultMarketView;
+    let shared: DefaultDesk;
     try {
       shared = await p;
     } finally {
       this._sharedViewPromises.delete(marketplaceId);
     }
-    // Another observer may have arrived during the await and registered
-    // first. Re-check; if so, throw away our just-built view and use
+    // Another caller may have arrived during the await and registered
+    // first. Re-check; if so, throw away our just-built desk and use
     // theirs.
     const registered = this._sharedViews.get(marketplaceId);
     if (registered !== undefined) {
-      if (registered.view !== shared) shared.close();
+      if (registered.desk !== shared) shared.close();
       registered.refCount++;
-      return new MarketViewHandle(registered.view, () => this._releaseSharedView(marketplaceId));
+      return new DeskHandle(registered.desk, () => this._releaseSharedView(marketplaceId));
     }
-    this._sharedViews.set(marketplaceId, { view: shared, refCount: 1 });
-    return new MarketViewHandle(shared, () => this._releaseSharedView(marketplaceId));
+    this._sharedViews.set(marketplaceId, { desk: shared, refCount: 1 });
+    return new DeskHandle(shared, () => this._releaseSharedView(marketplaceId));
   }
 
   _releaseSharedView(marketplaceId: number): void {
@@ -1557,7 +1557,7 @@ export class Flexemarkets {
     if (entry === undefined) return;
     if (--entry.refCount <= 0) {
       this._sharedViews.delete(marketplaceId);
-      entry.view.close();
+      entry.desk.close();
     }
   }
 
@@ -1572,13 +1572,13 @@ export class Flexemarkets {
    *
    * Unlike {@link listen}, which is one per connection and replaces itself,
    * several of these coexist: each has its own stream and its own lifetime.
-   * That is what lets more than one MarketView live in one connection without
+   * That is what lets more than one Desk live in one connection without
    * trampling each other — the mechanism was already here for exactly that, as
    * the package-private `_connectEvents`, but a caller who wanted a second
    * stream of their own had no way to ask for one.
    *
    * Returns an unsubscribe function rather than an object with `close()`,
-   * matching what MarketView's `on*` handlers already return here. Java
+   * matching what Desk's `on*` handlers already return here. Java
    * returns a `Subscription`; both names describe the same lifetime.
    */
   async subscribe(marketplaceId: number, callback: EventCallback): Promise<Subscription> {
@@ -1589,10 +1589,10 @@ export class Flexemarkets {
   }
 
   /**
-   * Package-private helper used by {@link DefaultMarketView} (Phase 2d)
+   * Package-private helper used by {@link DefaultDesk} (Phase 2d)
    * to own its own EventListener subscription rather than clobbering
    * the singleton {@link #_eventListener}. Lets multiple
-   * observe(marketplaceId) calls coexist within one Flexemarkets.
+   * desk(marketplaceId) calls coexist within one Flexemarkets.
    */
   async _connectEvents(marketplaceId: number, callback: EventCallback): Promise<EventListener> {
     const wsUrl =
@@ -1626,10 +1626,10 @@ export class Flexemarkets {
       this._eventListener.close();
       this._eventListener = null;
     }
-    // Force-close any remaining shared MarketViews — safety net for
+    // Force-close any remaining shared Desks — safety net for
     // callers who didn't close their handles first.
     for (const entry of this._sharedViews.values()) {
-      try { entry.view.close(); } catch { /* best-effort */ }
+      try { entry.desk.close(); } catch { /* best-effort */ }
     }
     this._sharedViews.clear();
   }

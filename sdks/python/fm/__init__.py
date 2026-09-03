@@ -17,7 +17,7 @@ from .exceptions import (
     InvalidArgumentError,
     PersonHasMarketplaceDataError,
 )
-from .market_view import GapEvent, MarketView, ReconnectEvent, Subscription
+from .desk import GapEvent, Desk, ReconnectEvent, Subscription
 from .orderbook import Book, Books
 from .trades import Tapes, Trade, Tape
 from .types import (
@@ -63,8 +63,8 @@ __all__ = [
     "Tapes",
     "Trade",
     "Version",
-    # market view
-    "MarketView",
+    # market desk
+    "Desk",
     "Subscription",
     "GapEvent",
     "ReconnectEvent",

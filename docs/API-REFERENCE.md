@@ -277,7 +277,7 @@ and `supplier`:
 **Prices are integer cents.** `950` is $9.50. Prices must land on the market's
 tick and inside its bounds, or the submit fails with `ORDER_INVALID`.
 `clientDescription` is free text that surfaces in manager exports and the
-connections view — set it to something you can grep for.
+connections desk — set it to something you can grep for.
 
 Reads default to the **current** run. `/api/marketplaces/{id}/orders`,
 `…/holdings` and `…/holdings/downloads` take a `sessions` parameter to widen
@@ -394,7 +394,7 @@ The same bearer token authenticates the connection, by either route:
 
 Two further `CONNECT` headers are conventional and worth sending: an
 `agent-description` identifying your client, and `marketplace-id`. Both surface
-in the manager's connections view.
+in the manager's connections desk.
 
 Origins are allow-listed server-side, so browser clients must be served from a
 registered origin; non-browser clients are unaffected.

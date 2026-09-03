@@ -1,4 +1,4 @@
-"""MarketView — always-current view of a single marketplace.
+"""Desk — always-current state for a single marketplace.
 
 Hides transport details (WebSocket subscribe, snapshot+delta
 reconciliation, sequence-gap recovery, reconnect) behind a small
@@ -29,16 +29,16 @@ if TYPE_CHECKING:
     from .client import Flexemarkets
 
 
-# Handle returned by MarketView.on_* listener registrations. Call to
+# Handle returned by Desk.on_* listener registrations. Call to
 # unregister. Idempotent — multiple calls are no-ops.
 Subscription = Callable[[], None]
 
 
 @dataclass(frozen=True)
 class GapEvent:
-    """Fires when :class:`MarketView` detects a sequence-gap in the
+    """Fires when :class:`Desk` detects a sequence-gap in the
     ORDERS-UPDATE WS stream — one or more frames were dropped between
-    client and fm-server. After a gap, MarketView re-runs the REST
+    client and fm-server. After a gap, Desk re-runs the REST
     snapshot recovery flow before applying further deltas; the gap
     event is the signal callers can wire into their own observability
     stack instead of relying on the SDK's default ``log.warning``.
@@ -51,10 +51,10 @@ class GapEvent:
 
 @dataclass(frozen=True)
 class ReconnectEvent:
-    """Fires when :class:`MarketView` reacts to a
+    """Fires when :class:`Desk` reacts to a
     :class:`~fm.events.StreamDropped` — either after the reconnect
     + resnapshot completes successfully, or after the attempt has
-    failed and the view is left stale.
+    failed and the desk is left stale.
     """
 
     marketplace_id: int
@@ -62,10 +62,10 @@ class ReconnectEvent:
     reason: Optional[str]
 
 
-class MarketView:
-    """Always-current view of a single marketplace.
+class Desk:
+    """Always-current state for a single marketplace.
 
-    Obtained via ``Flexemarkets.observe(marketplace_id)``. The returned
+    Obtained via ``Flexemarkets.desk(marketplace_id)``. The returned
     instance owns a WebSocket subscription that stays live until
     :meth:`close`.
 
@@ -88,7 +88,7 @@ class MarketView:
         self.markets = list(markets)
         self._books = Books(self.markets)
         # 100 matches the default per-market Tape capacity. Plumb
-        # through to observe() later if a caller needs deeper trade
+        # through to desk() later if a caller needs deeper trade
         # scrollback.
         self._trades = Tapes(self.markets, 100)
 
@@ -120,12 +120,12 @@ class MarketView:
         #
         # Phase 2d: own the EventListener directly rather than calling
         # flexemarkets.listen() — that would clobber the singleton
-        # _event_listener and prevent multiple shared views from
+        # _event_listener and prevent multiple shared desks from
         # coexisting in one Flexemarkets.
         self._events = flexemarkets._connect_events(marketplace_id, self._queue)
         self._seed_from_snapshot()
         self._dispatcher = threading.Thread(
-            target=self._drain, name=f"fm-market-view-{marketplace_id}", daemon=True
+            target=self._drain, name=f"fm-desk-{marketplace_id}", daemon=True
         )
         self._dispatcher.start()
 
@@ -168,7 +168,7 @@ class MarketView:
         ``None`` if the market isn't in this marketplace.
 
         Maintained alongside :meth:`book`: seeded from the server's
-        recent trades when the view opens, then kept current from the same
+        recent trades when the desk opens, then kept current from the same
         delta stream. Each :class:`~fm.trades.Trade` on it carries both sides
         of its match -- the resting order that was taken and the aggressor
         that took it.
@@ -263,7 +263,7 @@ class MarketView:
         return cancel
 
     def on_gap(self, handler: Callable[[GapEvent], None]) -> Subscription:
-        """Register a handler that fires when MarketView detects a gap
+        """Register a handler that fires when Desk detects a gap
         in the ORDERS-UPDATE seq stream. Use this to wire your own
         telemetry — by default the SDK calls ``log.warning`` but
         otherwise hides the recovery flow.
@@ -282,7 +282,7 @@ class MarketView:
     def on_reconnect(self, handler: Callable[[ReconnectEvent], None]) -> Subscription:
         """Register a handler that fires after the SDK reacts to a
         transport error — either when reconnect + resnapshot have
-        completed, or when the attempt has failed and the view is
+        completed, or when the attempt has failed and the desk is
         left stale.
         """
         self._ensure_open()
@@ -327,7 +327,7 @@ class MarketView:
         # and the next queue.get() with timeout will see _closed and
         # bail.
 
-    def __enter__(self) -> "MarketView":
+    def __enter__(self) -> "Desk":
         return self
 
     def __exit__(self, *_args: object) -> None:
@@ -374,7 +374,7 @@ class MarketView:
             if isinstance(event, FrameUnreadable):
                 # STOMP ERROR / parse failure. Logged for visibility;
                 # reconnecting won't help with a malformed frame, so
-                # we leave the view as-is.
+                # we leave the desk as-is.
                 log.warning(
                     "WS error on marketplace %d: %s %s",
                     self.marketplace_id,
@@ -462,7 +462,7 @@ class MarketView:
         watermark) is what converges the state, exactly as it does for a small
         one.
 
-        If the reseed fails the view is left stale and the dispatcher
+        If the reseed fails the desk is left stale and the dispatcher
         continues; the caller's next access sees the last-applied state, and
         the ReconnectEvent says so.
         """
@@ -473,7 +473,7 @@ class MarketView:
             )
         except Exception as e:
             log.error(
-                "Reconnect failed on marketplace %d; view is stale: %s",
+                "Reconnect failed on marketplace %d; desk is stale: %s",
                 self.marketplace_id,
                 e,
             )
@@ -489,7 +489,7 @@ class MarketView:
     def _ensure_open(self) -> None:
         if self._closed:
             raise RuntimeError(
-                f"MarketView for marketplace {self.marketplace_id} is closed"
+                f"Desk for marketplace {self.marketplace_id} is closed"
             )
 
 
@@ -500,11 +500,11 @@ def _market_ids_touched(orders: list[Order]) -> list[int]:
     return list(seen)
 
 
-class MarketViewHandle:
-    """Reader-side handle on a refcounted :class:`MarketView`.
+class DeskHandle:
+    """Reader-side handle on a refcounted :class:`Desk`.
 
-    Returned by :meth:`Flexemarkets.observe`; multiple handles for the
-    same ``marketplace_id`` share one underlying view + WS
+    Returned by :meth:`Flexemarkets.desk`; multiple handles for the
+    same ``marketplace_id`` share one underlying desk + WS
     subscription + materialized state. Each handle's :meth:`close`
     decrements the shared refcount and tears down the shared
     resources on the last close.
@@ -514,7 +514,7 @@ class MarketViewHandle:
     doesn't keep firing into stale state after the handle is gone.
     """
 
-    def __init__(self, shared: MarketView, on_close: Callable[[], None]):
+    def __init__(self, shared: Desk, on_close: Callable[[], None]):
         self._shared = shared
         self._on_close = on_close
         self._my_subscriptions: list[Subscription] = []
@@ -603,7 +603,7 @@ class MarketViewHandle:
         self._my_subscriptions.clear()
         self._on_close()
 
-    def __enter__(self) -> "MarketViewHandle":
+    def __enter__(self) -> "DeskHandle":
         return self
 
     def __exit__(self, *_args: object) -> None:
@@ -612,5 +612,5 @@ class MarketViewHandle:
     def _check(self) -> None:
         if self._closed:
             raise RuntimeError(
-                f"MarketView handle for marketplace {self._shared.marketplace_id} is closed"
+                f"Desk handle for marketplace {self._shared.marketplace_id} is closed"
             )

@@ -172,7 +172,7 @@ class BehaviourFixturesTest {
 
             Trade[] added = tape.update(_orders(step));
 
-            // What update() reports it added is what MarketView dispatches
+            // What update() reports it added is what Desk dispatches
             // onTrade from. A step that declares `adds` pins it -- including
             // the zero, which is the update a handler must stay silent through.
             if (step.has("adds")) {

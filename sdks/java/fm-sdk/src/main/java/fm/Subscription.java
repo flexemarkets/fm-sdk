@@ -5,7 +5,7 @@ package fm;
  *
  * <p>Independent by construction: several may coexist on one connection, each
  * with its own stream and lifetime, which is what lets more than one
- * {@link MarketView} live in a single {@link Flexemarkets} without trampling
+ * {@link Desk} live in a single {@link Flexemarkets} without trampling
  * the others.
  *
  * <p>Reconnection is not here. A stream that drops is the transport's problem
