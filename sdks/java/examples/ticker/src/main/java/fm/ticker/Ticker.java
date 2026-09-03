@@ -1,15 +1,10 @@
 package fm.ticker;
 
-import fm.event.OrdersUpdate;
-import fm.event.StreamDropped;
-import fm.model.Holding;
 import fm.model.Market;
 import fm.model.Session;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.concurrent.ArrayBlockingQueue;
 
 import com.googlecode.lanterna.TerminalPosition;
 import com.googlecode.lanterna.graphics.TextGraphics;
@@ -20,8 +15,7 @@ import com.googlecode.lanterna.terminal.Terminal;
 
 import fm.Flexemarkets;
 import fm.Book;
-import fm.Tapes;
-import fm.Books;
+import fm.Desk;
 
 public class Ticker {
     private static final int TRADE_DISPLAY_COUNT = 5;
@@ -29,8 +23,7 @@ public class Ticker {
     private final String _credential;
     private final String _endpoint;
 
-    private Books _orderBooks;
-    private Tapes _trades;
+    private Desk _desk;
     private List<Market> _markets;
 
     private Session _session;
@@ -57,8 +50,6 @@ public class Ticker {
     }
 
     void run() throws Exception {
-        var queue = new ArrayBlockingQueue<>(1000);
-        var events = new ArrayList<>();
 
         Terminal terminal = new DefaultTerminalFactory().createTerminal();
         _screen = new TerminalScreen(terminal);
@@ -74,10 +65,11 @@ public class Ticker {
 
             _session = fm.session(marketplaceId);
 
-            _orderBooks = new Books(_markets);
-            _trades = new Tapes(_markets, 10);
-
-            fm.listen(marketplaceId, queue);
+            // A desk keeps the books and the tape for us: seeded from the
+            // REST snapshot, kept current from the same delta stream, and
+            // reseeded on a sequence gap. That is the whole reason this
+            // example no longer holds aggregators of its own.
+            _desk = fm.desk(marketplaceId);
 
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 fm.close();
@@ -86,33 +78,19 @@ public class Ticker {
 
             _display();
 
+            // The desk dispatches on its own thread, so these only flag that
+            // something moved; the screen is drawn from the main loop below.
+            // Lanterna is not thread-safe, and a redraw from the stream thread
+            // would race the one down here.
+            var dirty = new java.util.concurrent.atomic.AtomicBoolean(true);
+            _desk.onSessionChange(s -> { _session = s; dirty.set(true); });
+            for (var market : _markets) {
+                _desk.onBookChange(market.id(), b -> dirty.set(true));
+            }
+
             while (!Session.STATE_CLOSED.equals(_session != null ? _session.state() : null)) {
-                if (0 < queue.drainTo(events)) {
-                    boolean redraw = false;
-                    for (var event : events) {
-                        switch (event) {
-                            case Session s -> {
-                                _session = s;
-                                redraw = true;
-                            }
-                            case Session[] list -> {
-                                for (var s : list) _session = s;
-                                redraw = true;
-                            }
-                            case OrdersUpdate update -> {
-                                _orderBooks.update(update.orders());
-                                _trades.update(update.orders());
-                                redraw = true;
-                            }
-                            case Holding ignored -> { }
-                            case StreamDropped ignored -> {
-                                fm.reconnect();
-                            }
-                            default -> { }
-                        }
-                    }
-                    events.clear();
-                    if (redraw) _display();
+                if (dirty.compareAndSet(true, false)) {
+                    _display();
 
                     if (Session.STATE_CLOSED.equals(_session != null ? _session.state() : null)) {
                         _display();
@@ -164,14 +142,14 @@ public class Ticker {
 
         // Market rows
         row++;
-        var sorted = _orderBooks.collection().stream()
+        var sorted = _desk.books().stream()
                 .sorted(Comparator.comparingLong(Book::marketId)).toList();
         for (var book : sorted) {
             var bid = book.bestBuyPrice();
             var ask = book.bestSellPrice();
             var symbol = book.symbol();
 
-            var marketTrades = _trades.collection().stream()
+            var marketTrades = _desk.tapes().stream()
                     .filter(t -> t.marketId() == book.marketId())
                     .findFirst().orElse(null);
             var recentPrices = marketTrades != null ? marketTrades.mostRecentPrices() : new long[0];
