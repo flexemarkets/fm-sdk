@@ -295,6 +295,29 @@ class MarketBookTest {
         assertThat(books.bestPrice(99L, OrderSide.BUY)).isEqualTo(-1);
     }
 
+    /**
+     * Two markets do not share a book.
+     *
+     * <p>Carried over from fm-robots' BooksTest when fm.robot.Books was
+     * deleted for these methods. Every other case there is covered above; this
+     * one was not, and it is the case a keying mistake shows up in -- one
+     * market's bid answering for another reads as a plausible price rather
+     * than as a failure.
+     */
+    @Test
+    void booksAreKeptApartByMarket() {
+        Market alpha = _market(1L, "ALPHA");
+        Market beta  = _market(2L, "BETA");
+        MarketplaceBooks books = new MarketplaceBooks(java.util.List.of(alpha, beta));
+
+        books.update(_toArray(
+            _limitOf(alpha, 1L, OrderSide.BUY, 10, 100),
+            _limitOf(beta,  2L, OrderSide.BUY, 10, 500)));
+
+        assertThat(books.bestPrice(alpha.id(), OrderSide.BUY)).isEqualTo(100L);
+        assertThat(books.bestPrice(beta.id(),  OrderSide.BUY)).isEqualTo(500L);
+    }
+
     // ---- a side-less order is refused, not guessed at ----------------------
     //
     // _priceLevels was `BUY == side ? _buys : _sells` -- the complement of buy
