@@ -153,7 +153,7 @@ public class Ticker {
         _putRight(g, 16, row, "Bid");
         _putRight(g, 24, row, "Ask");
         _putRight(g, 32, row, "Spread");
-        g.putString(36, row, "Last _trades");
+        g.putString(36, row, "Last trades");
 
         row++;
         _putRight(g, 8,  row, "------");
