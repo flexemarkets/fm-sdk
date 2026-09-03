@@ -5,6 +5,7 @@ import fm.model.Order;
 import fm.model.OrderSide;
 import fm.model.OrderType;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 
 import org.junit.jupiter.api.Test;
 
@@ -293,4 +294,44 @@ class MarketBookTest {
         assertThat(books.hasValue(99L, OrderSide.BUY)).isFalse();
         assertThat(books.bestPrice(99L, OrderSide.BUY)).isEqualTo(-1);
     }
+
+    // ---- a side-less order is refused, not guessed at ----------------------
+    //
+    // _priceLevels was `BUY == side ? _buys : _sells` -- the complement of buy
+    // rather than a test for sell -- so an order that named no side was filed
+    // as an offer. A null side is a real value: fm-server builds a cancel from
+    // type/original/marketplaceId/marketId and nothing else, so a cancel that
+    // arrives without the limit it consumed reached that branch and took units
+    // off a side the order was never on. _cancelSet fabricates the side onto
+    // the cancel row, which is why the pair below is worth having: it is the
+    // row as the server actually sends it.
+
+    /** A cancel as fm-server builds one: no side, and no units or price either. */
+    private static Order _sidelessCancel(Market market, long cancelledId) {
+        return new Order(null, null, cancelledId + 1, cancelledId, cancelledId, null,
+                         OrderType.CANCEL, null, 0L, 0L, null, null,
+                         market.marketplaceId(), 0L, market.symbol(), market.id(), null, null);
+    }
+
+    @Test
+    void aSidelessCancelIsRefusedRatherThanTakenOffTheOfferSide() {
+        var market = _market(1L, "STK");
+        var book = new MarketBook(market);
+
+        book.update(_toArray(_limitOf(market, 1L, OrderSide.BUY, 5L, 100L)));
+
+        assertThatExceptionOfType(IllegalArgumentException.class).isThrownBy(
+            () -> book.update(_toArray(_sidelessCancel(market, 1L)))
+        );
+    }
+
+    @Test
+    void readingABookWithoutNamingASideIsRefused() {
+        var book = new MarketBook(_market(1L, "STK"));
+
+        assertThatExceptionOfType(IllegalArgumentException.class).isThrownBy(() -> book.hasValue(null));
+        assertThatExceptionOfType(IllegalArgumentException.class).isThrownBy(() -> book.bestPrice(null));
+        assertThatExceptionOfType(IllegalArgumentException.class).isThrownBy(() -> book.bestUnits(null));
+    }
+
 }

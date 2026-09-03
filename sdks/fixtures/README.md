@@ -137,6 +137,7 @@ What is in there now, and what each would let through if it went missing:
 | `orderbook-cancel` | a cancel removing twice — it found this one, live in all three SDKs |
 | `orderbook-split` | a partial fill counted twice, taking the level negative |
 | `orderbook-gap-reseed` | `clear()` leaving the book initialised, so the first delta after a gap underflows |
+| `orderbook-sideless-refused` | a cancel arriving without the limit it consumed — it names no side, and all three SDKs put it on the offer book |
 
 Both fixture families ban a shortcut worth naming: an instant is compared as
 `{"epochMilli": N}`, never as a string, for the reason the wire section gives.

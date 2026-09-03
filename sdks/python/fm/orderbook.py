@@ -9,7 +9,7 @@ import threading
 from collections import defaultdict
 
 from .order_utils import (find_order, is_available, is_cancel, is_resting,
-                          is_split, is_symbol, is_buy)
+                          is_split, is_symbol, is_buy, is_sell)
 from .types import Market, Order
 
 
@@ -110,7 +110,21 @@ class MarketBook:
             levels[price] = updated
 
     def _price_levels(self, side: str) -> dict[int, int]:
-        return self._buys if is_buy(side) else self._sells
+        """The book a side belongs to, refusing anything that does not name one.
+
+        This used to be ``self._buys if is_buy(side) else self._sells``, which
+        is the complement of buy rather than a test for sell, so a ``None``
+        side fell to the offer book. A ``None`` side is a real value on the
+        wire -- a cancel carries none -- so that guess was reachable, and a
+        book kept on a guess is wrong silently: units come off a side the
+        order was never on.
+        """
+        if is_buy(side):
+            return self._buys
+        if is_sell(side):
+            return self._sells
+        raise ValueError(
+            f"An order must name its side to be placed on a book; got: {side!r}")
 
     # -- query -------------------------------------------------------------
 

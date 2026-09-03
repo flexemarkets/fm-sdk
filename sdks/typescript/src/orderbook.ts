@@ -5,7 +5,7 @@
  */
 
 import {
-  findOrder, isAvailable, isBuy, isCancel, isResting, isSplit, isSymbol,
+  findOrder, isAvailable, isBuy, isSell, isCancel, isResting, isSplit, isSymbol,
 } from "./order-utils.js";
 import type { Market, Order } from "./types.js";
 
@@ -107,8 +107,19 @@ export class MarketBook {
     }
   }
 
+  /**
+   * The book a side belongs to, refusing anything that does not name one.
+   *
+   * This used to be `isBuy(side) ? this._buys : this._sells`, which is the
+   * complement of buy rather than a test for sell, so a null side fell to the
+   * offer book. A null side is a real value on the wire -- a cancel carries
+   * none -- so that guess was reachable, and a book kept on a guess is wrong
+   * silently: units come off a side the order was never on.
+   */
   private _priceLevels(side: string): Map<number, number> {
-    return isBuy(side) ? this._buys : this._sells;
+    if (isBuy(side)) return this._buys;
+    if (isSell(side)) return this._sells;
+    throw new Error(`An order must name its side to be placed on a book; got: ${side}`);
   }
 
   // -- query -----------------------------------------------------------------

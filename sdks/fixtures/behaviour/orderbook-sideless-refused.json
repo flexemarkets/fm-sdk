@@ -1,0 +1,82 @@
+{
+  "type": "MarketBook",
+  "why": "An order that names no side was filed as an offer. _priceLevels was `BUY == side ? buys : sells` in all three SDKs -- the complement of buy rather than a test for sell -- so a null side fell through to the sell book. A null side is not hypothetical: fm-server builds a cancel from type/original/marketplaceId/marketId and nothing else (OrderHandler.clearStandingOrders), so it carries no side. It also carries no consumer, which makes isAvailable true, so such a row reached _add and put a phantom offer on the book -- on a side the cancelled order may never have been on. The SDK cannot know the side, so it must say so rather than pick one.",
+  "source": {
+    "constructed": "fm-server broadcasts a cancel beside the limit it consumed, so the lone row is not something a capture of a healthy stream produces -- it is what arrives when the pair is split across two frames."
+  },
+  "market": {
+    "id": 7,
+    "symbol": "A"
+  },
+  "deliveredIds": [
+    101,
+    102,
+    103
+  ],
+  "steps": [
+    {
+      "note": "a bid at 1000 and an offer at 1100, so both sides hold value",
+      "orders": [
+        {
+          "id": 101,
+          "original": 101,
+          "supplier": 101,
+          "consumer": null,
+          "type": "LIMIT",
+          "side": "BUY",
+          "symbol": "A",
+          "units": 5,
+          "price": 1000,
+          "ownerId": 900,
+          "marketplaceId": 1,
+          "marketId": 7,
+          "sessionId": 1
+        },
+        {
+          "id": 102,
+          "original": 102,
+          "supplier": 102,
+          "consumer": null,
+          "type": "LIMIT",
+          "side": "SELL",
+          "symbol": "A",
+          "units": 5,
+          "price": 1100,
+          "ownerId": 901,
+          "marketplaceId": 1,
+          "marketId": 7,
+          "sessionId": 1
+        }
+      ]
+    },
+    {
+      "note": "the cancel for the bid, arriving alone and carrying units and price but no side, as order-cancel.json has it",
+      "refused": "must name its side",
+      "orders": [
+        {
+          "id": 103,
+          "original": 101,
+          "supplier": 101,
+          "consumer": null,
+          "type": "CANCEL",
+          "side": null,
+          "symbol": "A",
+          "units": 5,
+          "price": 1000,
+          "ownerId": 900,
+          "marketplaceId": 1,
+          "marketId": 7,
+          "sessionId": 1
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "bestBuyPrice": 1000,
+    "bestBuyUnits": 5,
+    "bestSellPrice": 1100,
+    "bestSellUnits": 5,
+    "buyLevels": [[1000, 5]],
+    "sellLevels": [[1100, 5]]
+  }
+}

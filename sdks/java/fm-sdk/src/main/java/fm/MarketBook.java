@@ -171,35 +171,37 @@ public class MarketBook {
      * runtime -- which is most of them, since a side arrives on an order --
      * had to branch on it by hand to reach a book that could already answer.
      *
-     * @param side the side to test; anything other than {@link OrderSide#BUY} reads
-     *             as the sell side, matching {@code is_buy} in the other SDKs
+     * @param side the side to test
      * @return true if that side has any resting units
+     * @throws IllegalArgumentException if the side is null
      */
     public synchronized boolean hasValue(OrderSide side) {
-        return !(OrderSide.BUY == side ? _buys : _sells).isEmpty();
+        return !_priceLevels(side).isEmpty();
     }
 
     /**
      * The best price on the given side.
      *
-     * @param side the side to read; anything other than {@link OrderSide#BUY} reads
-     *             as the sell side
+     * @param side the side to read
      * @return the best resting price on that side, or -1 if it is empty
+     * @throws IllegalArgumentException if the side is null
      */
     public synchronized long bestPrice(OrderSide side) {
-        return OrderSide.BUY == side ? bestBuyPrice() : bestSellPrice();
+        var levels = _priceLevels(side);
+        return levels.isEmpty() ? -1 : levels.firstKey();
     }
 
     /**
      * The size available at the best price on the given side.
      *
-     * @param side the side to read; anything other than {@link OrderSide#BUY} reads
-     *             as the sell side
+     * @param side the side to read
      * @return units resting at the best price on that side, or -1 if it is
      *         empty
+     * @throws IllegalArgumentException if the side is null
      */
     public synchronized long bestUnits(OrderSide side) {
-        return OrderSide.BUY == side ? bestBuyUnits() : bestSellUnits();
+        var levels = _priceLevels(side);
+        return levels.isEmpty() ? -1 : levels.firstEntry().getValue();
     }
 
     /**
@@ -251,7 +253,25 @@ public class MarketBook {
         }
     }
 
+    /**
+     * The book a side belongs to, refusing anything that does not name one.
+     *
+     * <p>This used to be {@code BUY == side ? _buys : _sells}, which is the
+     * complement of buy rather than a test for sell, so a null side fell to
+     * the offer book. A null side is a real value on the wire -- a cancel
+     * carries none -- so that guess was reachable, and a book kept on a guess
+     * is wrong silently: units come off a side the order was never on.
+     *
+     * @param side the side to read
+     * @return that side's price levels
+     * @throws IllegalArgumentException if the side is null
+     */
     private TreeMap<Long, Long> _priceLevels(OrderSide side) {
-        return OrderSide.BUY == side ? _buys : _sells;
+        return switch (side) {
+            case BUY  -> _buys;
+            case SELL -> _sells;
+            case null -> throw new IllegalArgumentException(
+                "An order must name its side to be placed on a book; got: null");
+        };
     }
 }
