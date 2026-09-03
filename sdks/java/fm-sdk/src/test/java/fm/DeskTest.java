@@ -189,4 +189,56 @@ class DeskTest {
             assertThat(fake.activeReads()).as("no reseed").isEqualTo(1);
         }
     }
+
+    /**
+     * "Reads are atomic; a caller never sees a half-applied delta" is what
+     * {@link Desk#book} promises, and nothing checked it. One update carrying
+     * many orders must land all-or-nothing: a reader on another thread sees
+     * the level empty or sees it whole, never partway through.
+     *
+     * <p>This matters more than it looks. Book.update is synchronized over the
+     * whole array, so the promise holds today by construction -- but the
+     * obvious "optimisation" of locking per order would keep every other test
+     * in this file green while breaking exactly this.
+     *
+     * <p>Honest about its limits: a race that is not hit is not proven absent,
+     * so this can only fail when it actually observes tearing. Five hundred
+     * orders in one frame is what widens the window enough to make that
+     * likely. Verified by removing synchronized from Book.update, which fails
+     * it.
+     */
+    @Test
+    @Timeout(30)
+    void oneUpdateLandsAllOrNothing() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha), new Snapshot<>(List.of(), 4L), new Snapshot<>(List.of(), 4L));
+
+        final int orders = 500;
+        Order[] batch = new Order[orders];
+        for (int i = 0; i < orders; i++) {
+            batch[i] = _limit(alpha, 200L + i, OrderSide.BUY, 1, 1000);
+        }
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            var seen = java.util.Collections.synchronizedSet(new java.util.HashSet<Long>());
+            var stop = new java.util.concurrent.atomic.AtomicBoolean();
+
+            Thread reader = Thread.startVirtualThread(() -> {
+                while (!stop.get()) {
+                    seen.add(desk.book(alpha.id()).bestBuyUnits());
+                }
+            });
+
+            fake.post(new OrdersUpdate(batch, 5L));
+            _await("the batch to land", () -> desk.book(alpha.id()).bestBuyUnits() == orders);
+            stop.set(true);
+            reader.join();
+
+            assertThat(seen)
+                .as("a reader saw the level part-built, so the update was not atomic")
+                .isSubsetOf(-1L, (long) orders);
+        }
+    }
+
 }
