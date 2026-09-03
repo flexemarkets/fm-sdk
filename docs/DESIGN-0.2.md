@@ -13,9 +13,16 @@ changes what a consumer can compile against — including adding a method to a
 published interface, which breaks implementors even though it does not break
 callers.
 
-**What is already on Central.** 0.1.0. Everything committed after the `v0.1.0`
+**What is already on Central.** 0.1.4. Everything committed after the `v0.1.4`
 tag is unreleased, so the items marked *landed* below are in `main` and not in
 anyone's build.
+
+**0.2.0 is open, not cut.** `VERSION` reads `0.2.0-dev0` — a prerelease in all
+three ecosystems, so no consumer resolves to it by accident. The number moved
+because the packaging change below landed and it breaks compilation; the
+release is deliberately held while the surface is still being tried out. Items
+marked *landed* are therefore settled in `main` but not yet promised to
+anyone, and are still cheap to revisit.
 
 ---
 
@@ -60,6 +67,73 @@ been right about that one.
 `MarketTrades` itself stays public: `MarketView.trades` returns it.
 
 ---
+
+### 3. A `fm.model` package — *landed*, and it went further than this sketch
+
+`fm` was flat: **52 public types in one package** — 23 records, 11 exceptions,
+10 interfaces, and 8 classes and enums. Nothing groups them, so the types you
+*receive* sit beside the types you *call* and the ones you *catch*, and an IDE
+completion on `fm.` is a wall.
+
+The split as proposed, which is broadly what landed — the differences are
+tabulated further down:
+
+| package | what | roughly |
+|---|---|---|
+| `fm.model` | the wire records — `Account`, `Allotment`, `Assets`, `ClientConnection`, `Holding`, `ManagerOtpBundle`, `Market`, `Marketplace`, `Order`, `Person`, `Security`, `Session`, `Token` | 13 |
+| `fm.event` | what arrives on a queue — `StreamDropped`, `FrameUnreadable`, `Reconnected`, `ReconnectEvent`, `GapEvent`, `OrdersUpdate`, `Version` | 7 |
+| `fm` | what you call and catch — the six roles, `Flexemarkets`, `MarketView`, `Subscription`, the eleven exceptions, `Endpoints`, the aggregators, `OrderUtils`, `OrderSide`, `OrderType`, `TickGrid`, `Snapshot` | the rest |
+
+Not obvious, and the cost is specific rather than general.
+
+**The cost is a second mass re-import inside one release cycle.** 0.1.0's
+headline change was that the seventeen records left the `Types` holder class
+and became top-level in `fm`; fm-robots rewrote 478 import lines to follow, in
+August 2026. Moving them again — even into a package, which is the idiomatic
+answer where a holder class was not — asks every consumer to rewrite the same
+imports a second time, months apart, for a benefit they did not ask for.
+
+**So the sequencing matters more than the decision.** If this happens it should
+land in the *same* release as any other change that rewrites imports, so a
+consumer re-imports once. Doing it alone, in a release whose other contents are
+a trade-tape accessor and an internal move, spends the whole cost on
+tidiness.
+
+Two smaller questions inside it, if it is taken: whether `Snapshot` and
+`TickGrid` are model at all — one is a wrapper, the other a parameter type —
+and whether the exceptions want `fm.exception` or are fine where they are,
+given `catch` sites read better unqualified. *Both were answered when this
+landed: `TickGrid` moved and `Snapshot` did not, and the exceptions went to
+`fm.error`. See the table below.*
+
+**The condition below was met, which is why it landed.** This asked to be
+sequenced with any other change that rewrites imports, so a consumer
+re-imports once. It shipped together with the `fm.error`, `fm.event` and
+`fm.role` moves, the `Side` → `OrderSide` rename and the narrowing of
+`fm.internal` — one migration, not five.
+
+**Four choices this sketch left open, now made.** Recorded so they stop being
+re-proposed:
+
+| the sketch | what landed | why |
+|---|---|---|
+| exceptions stay in `fm`; `fm.exception` floated | `fm.error` | shorter at the `catch` site than `fm.exception`, and the eleven of them were a third of the flat package |
+| `OrderSide`, `TickGrid` stay in `fm` | `fm.model` | both are things you are handed or hand back, which is what `fm.model` means here; `Snapshot` stayed out, being a wrapper |
+| the six role interfaces stay in `fm` | `fm.role` | grouping them makes "no uptake" visible rather than hiding six unused names among fifty-two |
+| `Endpoints`, `OrderUtils` stay in `fm` | `fm.internal`, **unexported** | see below — this one is not a move |
+
+**`Endpoints` leaving the exported surface is a withdrawal, not a rename**, and
+it is the only part of this with no mechanical migration. fm-robots imports it
+today; after this it cannot, at any import path. That deserves its own decision
+before 0.2.0 is cut: either it is re-exported from `fm`, or a supported
+replacement exists, or fm-robots stops needing it. The other 47 moved types are
+a scripted import rewrite.
+
+**Measured cost to the one real consumer.** fm-robots: 625 imports across 369
+files, plus 322 call sites naming `Side` — `Side.BUY` 141, `Side.SELL` 90,
+`Side.BOTH` 29 — which is a rename rather than a move and cannot be done by
+path substitution alone. fm-robots-server imports no moved type and is
+unaffected.
 
 ## Considered and rejected
 
@@ -136,40 +210,9 @@ abstract" expressible. Recorded because the benefit they were added for is not
 yet being realised by anyone, and that is worth knowing before more is built on
 the assumption that it is.
 
-### A `fm.model` package (and perhaps `fm.event`)
-
-`fm` is flat: **52 public types in one package** — 23 records, 11 exceptions,
-10 interfaces, and 8 classes and enums. Nothing groups them, so the types you
-*receive* sit beside the types you *call* and the ones you *catch*, and an IDE
-completion on `fm.` is a wall.
-
-A plausible split:
-
-| package | what | roughly |
-|---|---|---|
-| `fm.model` | the wire records — `Account`, `Allotment`, `Assets`, `ClientConnection`, `Holding`, `ManagerOtpBundle`, `Market`, `Marketplace`, `Order`, `Person`, `Security`, `Session`, `Token` | 13 |
-| `fm.event` | what arrives on a queue — `StreamDropped`, `FrameUnreadable`, `Reconnected`, `ReconnectEvent`, `GapEvent`, `OrdersUpdate`, `Version` | 7 |
-| `fm` | what you call and catch — the six roles, `Flexemarkets`, `MarketView`, `Subscription`, the eleven exceptions, `Endpoints`, the aggregators, `OrderUtils`, `OrderSide`, `OrderType`, `TickGrid`, `Snapshot` | the rest |
-
-Not obvious, and the cost is specific rather than general.
-
-**The cost is a second mass re-import inside one release cycle.** 0.1.0's
-headline change was that the seventeen records left the `Types` holder class
-and became top-level in `fm`; fm-robots rewrote 478 import lines to follow, in
-August 2026. Moving them again — even into a package, which is the idiomatic
-answer where a holder class was not — asks every consumer to rewrite the same
-imports a second time, months apart, for a benefit they did not ask for.
-
-**So the sequencing matters more than the decision.** If this happens it should
-land in the *same* release as any other change that rewrites imports, so a
-consumer re-imports once. Doing it alone, in a release whose other contents are
-a trade-tape accessor and an internal move, spends the whole cost on
-tidiness.
-
-Two smaller questions inside it, if it is taken: whether `Snapshot` and
-`TickGrid` are model at all — one is a wrapper, the other a parameter type —
-and whether the exceptions want `fm.exception` or are fine where they are,
-given `catch` sites read better unqualified.
+They now live in `fm.role` (see item 3), which changes nothing about the uptake
+— it only stops six unused names sitting among fifty-two, and makes the absence
+of callers easier to see rather than easier to miss.
 
 ### HAL-less and V1-only
 
