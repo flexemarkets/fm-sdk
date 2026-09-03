@@ -18,8 +18,8 @@ from .exceptions import (
     PersonHasMarketplaceDataError,
 )
 from .desk import GapEvent, Desk, ReconnectEvent, Subscription
-from .orderbook import Book, Books
-from .trades import Tapes, Trade, Tape
+from .orderbook import Book
+from .trades import Trade, Tape
 from .types import (
     Account,
     Allotment,
@@ -58,9 +58,7 @@ __all__ = [
     "Token",
     # orderbook & trades
     "Book",
-    "Books",
     "Tape",
-    "Tapes",
     "Trade",
     "Version",
     # market desk

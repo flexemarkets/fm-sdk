@@ -1,5 +1,6 @@
 package fm;
 
+import fm.internal.Books;
 import fm.model.Market;
 import fm.model.Order;
 import fm.model.OrderSide;

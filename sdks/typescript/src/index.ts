@@ -72,10 +72,10 @@ export {
 } from "./order-utils.js";
 
 // Order book
-export { Book, Books } from "./orderbook.js";
+export { Book } from "./orderbook.js";
 
 // Tape
-export { Tape, Tapes, tradeOf } from "./trades.js";
+export { Tape, tradeOf } from "./trades.js";
 export type { Trade } from "./trades.js";
 
 // Events

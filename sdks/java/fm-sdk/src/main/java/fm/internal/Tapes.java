@@ -1,5 +1,6 @@
-package fm;
+package fm.internal;
 
+import fm.Tape;
 import fm.model.Market;
 import fm.model.Order;
 import fm.model.Trade;
