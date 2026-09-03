@@ -59,18 +59,18 @@ export interface MarketView {
    * caller never sees a half-applied delta. Returns null if
    * `marketId` isn't in this marketplace.
    */
-  orderBook(marketId: number): Book | null;
+  book(marketId: number): Book | null;
 
   /**
    * Always-current trade tape for `marketId`, most recent last. Returns null
    * if `marketId` isn't in this marketplace.
    *
-   * Maintained alongside {@link orderBook}: seeded from the server's recent
+   * Maintained alongside {@link book}: seeded from the server's recent
    * trades when the view opens, then kept current from the same delta stream.
    * Each `Trade` on it carries both sides of its match — the resting
    * order that was taken and the aggressor that took it.
    */
-  trades(marketId: number): Tape | null;
+  tape(marketId: number): Tape | null;
 
   /**
    * Most-recent session update observed. Null until the first
@@ -91,19 +91,19 @@ export interface MarketView {
    * Register a handler that fires when the order book for
    * `marketId` changes. The handler receives the post-update book.
    */
-  onOrderBookChange(marketId: number, handler: (b: Book) => void): Subscription;
+  onBookChange(marketId: number, handler: (b: Book) => void): Subscription;
 
   /**
    * Register a handler that fires for each trade on `marketId`.
    *
-   * The missing member of the family {@link onOrderBookChange} and
+   * The missing member of the family {@link onBookChange} and
    * {@link onSessionChange} belong to. Without it, "tell me when a trade
    * happens" is asked as "tell me when the book changed, then let me look" —
    * which answers a different question, since a book changes on every resting
    * order and most changes are not trades.
    *
    * Fires **once per trade**, oldest first, rather than coalescing a batch the
-   * way {@link onOrderBookChange} does. A trade is a discrete event with its own
+   * way {@link onBookChange} does. A trade is a discrete event with its own
    * price and counterparties; collapsing two into one callback would lose one.
    *
    * Live deltas only. A gap or a reconnect re-seeds the tape from the server's
@@ -151,7 +151,7 @@ export class DefaultMarketView implements MarketView {
   readonly markets: Market[];
 
   private readonly _flexemarkets: Flexemarkets;
-  private readonly _orderBooks: Books;
+  private readonly _books: Books;
   private readonly _trades: Tapes;
   private _events: EventListener | null = null;
   private _session: Session | null = null;
@@ -201,7 +201,7 @@ export class DefaultMarketView implements MarketView {
     this._flexemarkets = flexemarkets;
     this.marketplaceId = marketplaceId;
     this.markets = markets;
-    this._orderBooks = new Books(markets);
+    this._books = new Books(markets);
     this._trades = new Tapes(markets, 100);
   }
 
@@ -225,10 +225,10 @@ export class DefaultMarketView implements MarketView {
     // Clear before reseeding so a resync (Phase 2b) doesn't double-add
     // against existing price levels. Initial seed hits empty books so
     // clear() is a no-op there.
-    this._orderBooks.clear();
+    this._books.clear();
     this._trades.clear();
 
-    if (orders.body.length > 0) this._orderBooks.update(orders.body);
+    if (orders.body.length > 0) this._books.update(orders.body);
     if (trades.body.length > 0) this._trades.update(trades.body);
 
     this._lastAppliedSeq = orders.asOfSeq;
@@ -244,12 +244,12 @@ export class DefaultMarketView implements MarketView {
     for (const update of buffered) this._applyOrdersUpdate(update);
   }
 
-  orderBook(marketId: number): Book | null {
+  book(marketId: number): Book | null {
     this._ensureOpen();
-    return this._orderBooks.get(marketId) ?? null;
+    return this._books.get(marketId) ?? null;
   }
 
-  trades(marketId: number): Tape | null {
+  tape(marketId: number): Tape | null {
     this._ensureOpen();
     return this._trades.get(marketId);
   }
@@ -283,7 +283,7 @@ export class DefaultMarketView implements MarketView {
     };
   }
 
-  onOrderBookChange(marketId: number, handler: (b: Book) => void): Subscription {
+  onBookChange(marketId: number, handler: (b: Book) => void): Subscription {
     this._ensureOpen();
     const entry = { marketId, handler };
     this._bookHandlers.push(entry);
@@ -467,7 +467,7 @@ export class DefaultMarketView implements MarketView {
     }
     const orders = update.orders;
     const touched = _marketIdsTouched(orders);
-    this._orderBooks.update(orders);
+    this._books.update(orders);
     const traded = this._trades.update(orders);
 
     // Tape first: the more specific event, and a book handler that then reads
@@ -481,7 +481,7 @@ export class DefaultMarketView implements MarketView {
     }
 
     for (const marketId of touched) {
-      const book = this._orderBooks.get(marketId);
+      const book = this._books.get(marketId);
       if (!book) continue;
       for (const h of this._bookHandlers) {
         if (h.marketId === marketId) h.handler(book);
@@ -558,14 +558,14 @@ export class MarketViewHandle implements MarketView {
     return this._shared.markets;
   }
 
-  orderBook(marketId: number): Book | null {
+  book(marketId: number): Book | null {
     this._check();
-    return this._shared.orderBook(marketId);
+    return this._shared.book(marketId);
   }
 
-  trades(marketId: number): Tape | null {
+  tape(marketId: number): Tape | null {
     this._check();
-    return this._shared.trades(marketId);
+    return this._shared.tape(marketId);
   }
 
   session(): Session | null {
@@ -585,9 +585,9 @@ export class MarketViewHandle implements MarketView {
     return sub;
   }
 
-  onOrderBookChange(marketId: number, handler: (b: Book) => void): Subscription {
+  onBookChange(marketId: number, handler: (b: Book) => void): Subscription {
     this._check();
-    const sub = this._shared.onOrderBookChange(marketId, handler);
+    const sub = this._shared.onBookChange(marketId, handler);
     this._mySubscriptions.push(sub);
     return sub;
   }

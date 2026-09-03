@@ -51,7 +51,7 @@ live("observes endpoint marketplace without throwing", async () => {
       assert.equal(view.marketplaceId, marketplaceId);
       assert.ok(view.markets.length > 0, "marketplace should have at least one market");
       for (const m of view.markets) {
-        const book = view.orderBook(m.id);
+        const book = view.book(m.id);
         assert.ok(book !== null, `order book for market ${m.id} should be non-null`);
         // bestBuyPrice / bestSellPrice return -1 when empty; either
         // way they shouldn't throw, which is the real smoke-test

@@ -86,7 +86,7 @@ class MarketView:
         self._flexemarkets = flexemarkets
         self.marketplace_id = marketplace_id
         self.markets = list(markets)
-        self._order_books = Books(self.markets)
+        self._books = Books(self.markets)
         # 100 matches the default per-market Tape capacity. Plumb
         # through to observe() later if a caller needs deeper trade
         # scrollback.
@@ -141,11 +141,11 @@ class MarketView:
 
         # Clear before reseeding so a resync doesn't double-add
         # against existing price levels.
-        self._order_books.clear()
+        self._books.clear()
         self._trades.clear()
 
         if orders.body:
-            self._order_books.update(orders.body)
+            self._books.update(orders.body)
         if trades.body:
             self._trades.update(trades.body)
 
@@ -156,18 +156,18 @@ class MarketView:
 
     # -- read-side accessors ----------------------------------------------
 
-    def order_book(self, market_id: int) -> Optional[Book]:
+    def book(self, market_id: int) -> Optional[Book]:
         """Always-current order book for *market_id*; ``None`` if the
         market isn't in this marketplace.
         """
         self._ensure_open()
-        return self._order_books.get(market_id)
+        return self._books.get(market_id)
 
-    def trades(self, market_id: int) -> Optional[Tape]:
+    def tape(self, market_id: int) -> Optional[Tape]:
         """Always-current trade tape for *market_id*, most recent last;
         ``None`` if the market isn't in this marketplace.
 
-        Maintained alongside :meth:`order_book`: seeded from the server's
+        Maintained alongside :meth:`book`: seeded from the server's
         recent trades when the view opens, then kept current from the same
         delta stream. Each :class:`~fm.trades.Trade` on it carries both sides
         of its match -- the resting order that was taken and the aggressor
@@ -204,7 +204,7 @@ class MarketView:
 
         return cancel
 
-    def on_order_book_change(
+    def on_book_change(
         self, market_id: int, handler: Callable[[Book], None]
     ) -> Subscription:
         self._ensure_open()
@@ -222,14 +222,14 @@ class MarketView:
     def on_trade(self, market_id: int, handler: Callable[[Trade], None]) -> Subscription:
         """Register a handler that fires for each trade on *market_id*.
 
-        The missing member of the family :meth:`on_order_book_change` and
+        The missing member of the family :meth:`on_book_change` and
         :meth:`on_session_change` belong to. Without it, "tell me when a trade
         happens" is asked as "tell me when the book changed, then let me look"
         -- which answers a different question, since a book changes on every
         resting order and most changes are not trades.
 
         Fires **once per trade**, oldest first, rather than coalescing a batch
-        the way :meth:`on_order_book_change` does. A trade is a discrete event
+        the way :meth:`on_book_change` does. A trade is a discrete event
         with its own price and counterparties; collapsing two into one callback
         would lose one of them.
 
@@ -429,7 +429,7 @@ class MarketView:
 
         orders = event.orders
         touched = _market_ids_touched(orders)
-        self._order_books.update(orders)
+        self._books.update(orders)
         traded = self._trades.update(orders)
 
         # Tape first: the more specific event, and a book handler that then
@@ -443,7 +443,7 @@ class MarketView:
                         handler(trade)
 
         for market_id in touched:
-            book = self._order_books.get(market_id)
+            book = self._books.get(market_id)
             if book is None:
                 continue
             for entry_id, handler in self._book_handlers:
@@ -529,13 +529,13 @@ class MarketViewHandle:
         self._check()
         return self._shared.markets
 
-    def order_book(self, market_id: int) -> Optional[Book]:
+    def book(self, market_id: int) -> Optional[Book]:
         self._check()
-        return self._shared.order_book(market_id)
+        return self._shared.book(market_id)
 
-    def trades(self, market_id: int) -> Optional[Tape]:
+    def tape(self, market_id: int) -> Optional[Tape]:
         self._check()
-        return self._shared.trades(market_id)
+        return self._shared.tape(market_id)
 
     def session(self) -> Optional[Session]:
         self._check()
@@ -551,11 +551,11 @@ class MarketViewHandle:
         self._my_subscriptions.append(sub)
         return sub
 
-    def on_order_book_change(
+    def on_book_change(
         self, market_id: int, handler: Callable[[Book], None]
     ) -> Subscription:
         self._check()
-        sub = self._shared.on_order_book_change(market_id, handler)
+        sub = self._shared.on_book_change(market_id, handler)
         self._my_subscriptions.append(sub)
         return sub
 

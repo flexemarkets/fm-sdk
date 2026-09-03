@@ -59,7 +59,7 @@ def test_observes_endpoint_marketplace_without_throwing():
             assert view.marketplace_id == marketplace_id
             assert len(view.markets) > 0, "marketplace should have at least one market"
             for m in view.markets:
-                book = view.order_book(m.id)
+                book = view.book(m.id)
                 assert book is not None, f"order book for market {m.id} should be non-null"
                 # best_buy_price / best_sell_price return -1 when empty;
                 # either way they shouldn't throw, which is the real

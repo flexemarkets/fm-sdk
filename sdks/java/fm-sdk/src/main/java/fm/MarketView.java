@@ -81,12 +81,12 @@ public interface MarketView extends AutoCloseable {
      * @return that market's book, current as of this call, or null when
      *         {@code marketId} is not in this marketplace
      */
-    Book orderBook(long marketId);
+    Book book(long marketId);
 
     /**
      * Always-current trade tape for {@code marketId}, most recent last.
      *
-     * <p>Maintained alongside {@link #orderBook}: seeded from the server's
+     * <p>Maintained alongside {@link #book}: seeded from the server's
      * recent trades when the view opens, then kept current from the same delta
      * stream. Reads are atomic, on the same terms as the book.
      *
@@ -99,7 +99,7 @@ public interface MarketView extends AutoCloseable {
      * @return that market's tape, current as of this call, or null when
      *         {@code marketId} is not in this marketplace
      */
-    Tape trades(long marketId);
+    Tape tape(long marketId);
 
     /**
      * Most-recent session update observed. Null until the first
@@ -135,19 +135,19 @@ public interface MarketView extends AutoCloseable {
      * @param handler  called with that market's book after each change
      * @return a handle that unsubscribes the handler
      */
-    Subscription onOrderBookChange(long marketId, Consumer<Book> handler);
+    Subscription onBookChange(long marketId, Consumer<Book> handler);
 
     /**
      * Register a handler that fires for each trade on {@code marketId}.
      *
-     * <p>The missing member of the family {@link #onOrderBookChange} and
+     * <p>The missing member of the family {@link #onBookChange} and
      * {@link #onSessionChange} belong to. Without it, "tell me when a trade
      * happens" is asked as "tell me when the book changed, then let me look" --
      * which answers a different question, since a book changes on every resting
      * order and most changes are not trades.
      *
      * <p>Fires <b>once per trade</b>, oldest first, rather than coalescing a
-     * batch the way {@link #onOrderBookChange} does. A trade is a discrete
+     * batch the way {@link #onBookChange} does. A trade is a discrete
      * event with its own price and counterparties; collapsing two into one
      * callback would lose one of them.
      *

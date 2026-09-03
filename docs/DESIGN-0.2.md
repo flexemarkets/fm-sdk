@@ -37,8 +37,8 @@ cleared and updated, and never read. Every observer paid a network round trip
 and per-update work for something unreachable through the supported entry
 point.
 
-`MarketView.trades(long marketId)` now answers it, mirroring
-`orderBook(long marketId)` — same shape, same null-for-unknown-market rule,
+`MarketView.tape(long marketId)` now answers it, mirroring
+`book(long marketId)` — same shape, same null-for-unknown-market rule,
 same atomicity. `Tapes` gained the `get(long)` lookup that
 `Books` already had, so either aggregator reaches one market's view the
 same way.

@@ -52,14 +52,14 @@ class MarketViewHandle implements MarketView {
         return _shared.markets();
     }
 
-    @Override public Book orderBook(long marketId) {
+    @Override public Book book(long marketId) {
         _check();
-        return _shared.orderBook(marketId);
+        return _shared.book(marketId);
     }
 
-    @Override public Tape trades(long marketId) {
+    @Override public Tape tape(long marketId) {
         _check();
-        return _shared.trades(marketId);
+        return _shared.tape(marketId);
     }
 
     @Override public Session session() {
@@ -79,9 +79,9 @@ class MarketViewHandle implements MarketView {
         return sub;
     }
 
-    @Override public Subscription onOrderBookChange(long marketId, Consumer<Book> handler) {
+    @Override public Subscription onBookChange(long marketId, Consumer<Book> handler) {
         _check();
-        Subscription sub = _shared.onOrderBookChange(marketId, handler);
+        Subscription sub = _shared.onBookChange(marketId, handler);
         _mySubscriptions.add(sub);
         return sub;
     }

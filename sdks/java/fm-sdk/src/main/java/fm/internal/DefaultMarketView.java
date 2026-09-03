@@ -189,13 +189,13 @@ public class DefaultMarketView implements MarketView {
     }
 
     @Override
-    public Book orderBook(long marketId) {
+    public Book book(long marketId) {
         _ensureOpen();
         return _books.get(marketId);
     }
 
     @Override
-    public Tape trades(long marketId) {
+    public Tape tape(long marketId) {
         _ensureOpen();
         return _trades.get(marketId);
     }
@@ -220,7 +220,7 @@ public class DefaultMarketView implements MarketView {
     }
 
     @Override
-    public Subscription onOrderBookChange(long marketId, Consumer<Book> handler) {
+    public Subscription onBookChange(long marketId, Consumer<Book> handler) {
         _ensureOpen();
         BookHandler entry = new BookHandler(marketId, handler);
         _bookHandlers.add(entry);

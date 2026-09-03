@@ -458,7 +458,7 @@ def typescript_failures(path: Path) -> set[str]:
 # check_methods compares Flexemarkets and its roles: what a caller can ask the
 # server to do. It stops there. MarketView, Book and Tape -- what a
 # caller does with the data that comes back -- were never compared, and that is
-# where the three drifted furthest. MarketView.trades(marketId) existed in Java
+# where the three drifted furthest. MarketView.tape(marketId) existed in Java
 # and in neither of the others, so "what was the last trade, and who took it"
 # had no answer at all in Python or TypeScript, for the whole life of the type,
 # while this script reported three SDKs in agreement.
@@ -918,7 +918,7 @@ def main() -> int:
         print(
             "\nMarketView, Book and Tape are what a caller does with the data "
             "the client returns. A member on one and not the others is work its callers "
-            "have to do by hand -- which is how MarketView.trades sat in Java alone. "
+            "have to do by hand -- which is how MarketView.tape sat in Java alone. "
             "If a difference is intended, record it in SURFACE_EXEMPTIONS with the "
             "reason.",
             file=sys.stderr,

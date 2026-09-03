@@ -83,7 +83,7 @@ public class FlexemarketsLiveServerTest {
                 assertThat(view.marketplaceId()).isEqualTo(marketplaceId);
                 assertThat(view.markets()).isNotEmpty();
                 for (Market m : view.markets()) {
-                    Book book = view.orderBook(m.id());
+                    Book book = view.book(m.id());
                     assertThat(book).isNotNull();
                     // bestBuyPrice / bestSellPrice return -1 when empty;
                     // either way they shouldn't throw, which is the real

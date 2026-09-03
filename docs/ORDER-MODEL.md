@@ -91,9 +91,9 @@ wrongly here.
 
 | you want | use |
 |---|---|
-| the last trade, and who took it | `MarketView.trades(marketId)` → `Tape.last()` → `Trade.aggressor` |
+| the last trade, and who took it | `MarketView.tape(marketId)` → `Tape.last()` → `Trade.aggressor` |
 | both sides of every recent trade | `Tape.mostRecentTrades()` → `Trade.resting` / `Trade.aggressor` |
-| the aggregated book | `MarketView.orderBook(marketId)` |
+| the aggregated book | `MarketView.book(marketId)` |
 | which side of a pair was resting | `OrderUtils.isResting(orders, order)` |
 | the three `consumer` states | `isAvailable` / `isSplit` / `isConsumed` |
 | an order by id within a batch | `OrderUtils.findOrder(orders, id)` |
