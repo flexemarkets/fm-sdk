@@ -1,5 +1,7 @@
 package fm;
 
+import fm.role.Reading;
+import fm.internal.Timestamps;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;

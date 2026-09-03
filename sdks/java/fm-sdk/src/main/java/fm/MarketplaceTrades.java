@@ -1,5 +1,8 @@
 package fm;
 
+import fm.model.Market;
+import fm.model.Order;
+import fm.model.Trade;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
@@ -12,11 +15,11 @@ import java.util.stream.Stream;
 /**
  * Every market's trade tape in one marketplace, keyed by market id.
  *
- * <p>The trade-side counterpart to {@link OrderBooks}, and fed the same way:
+ * <p>The trade-side counterpart to {@link MarketplaceBooks}, and fed the same way:
  * one update, fanned at every tape, each keeping what belongs to it.
  */
 public class MarketplaceTrades {
-    private final Map<Long, Trades> collection = new ConcurrentHashMap<>();
+    private final Map<Long, MarketTrades> _trades = new ConcurrentHashMap<>();
 
     /**
      * An empty tape per market.
@@ -26,7 +29,7 @@ public class MarketplaceTrades {
      */
     public MarketplaceTrades(List<Market> markets, int capacity) {
         for (var market : markets) {
-            collection.put(market.id(), new Trades(market, capacity));
+            _trades.put(market.id(), new MarketTrades(market, capacity));
         }
     }
 
@@ -43,7 +46,7 @@ public class MarketplaceTrades {
     public Map<Long, List<Trade>> update(Order[] orders) {
         Map<Long, List<Trade>> added = new LinkedHashMap<>();
 
-        collection.forEach((marketId, tape) -> {
+        _trades.forEach((marketId, tape) -> {
             Trade[] fresh = tape.update(orders);
             if (fresh.length > 0) {
                 added.put(marketId, List.of(fresh));
@@ -56,23 +59,14 @@ public class MarketplaceTrades {
     /**
      * One market's tape.
      *
-     * <p>The counterpart to {@link OrderBooks#get}, so a caller holding either
+     * <p>The counterpart to {@link MarketplaceBooks#get}, so a caller holding either
      * aggregator reaches one market's view the same way.
      *
      * @param marketId the market to look up
      * @return its tape, or null if no tape is kept for that market
      */
-    public Trades get(long marketId) {
-        return collection.get(marketId);
-    }
-
-    /**
-     * Every tape being kept.
-     *
-     * @return the tapes, in no particular order
-     */
-    public Collection<Trades> collection() {
-        return collection.values();
+    public MarketTrades get(long marketId) {
+        return _trades.get(marketId);
     }
 
     /**
@@ -85,15 +79,24 @@ public class MarketplaceTrades {
      * @return one row of prices per market, ordered by market id
      */
     public long[][] mostRecentPrices() {
-        return collection.values().stream()
-            .sorted(Comparator.comparingLong(Trades::marketId))
-            .map(Trades::mostRecentTrades)
+        return _trades.values().stream()
+            .sorted(Comparator.comparingLong(MarketTrades::marketId))
+            .map(MarketTrades::mostRecentTrades)
             .map(trades -> Stream.of(trades).mapToLong(Trade::price).toArray())
             .toArray(long[][]::new);
     }
 
-    /** Empty every per-market trade tape — see {@link Trades#clear()}. */
+    /**
+     * Every tape being kept.
+     *
+     * @return the tapes, in no particular order
+     */
+    public Collection<MarketTrades> collection() {
+        return _trades.values();
+    }
+
+    /** Empty every per-market trade tape — see {@link MarketTrades#clear()}. */
     public void clear() {
-        collection.values().forEach(Trades::clear);
+        _trades.values().forEach(MarketTrades::clear);
     }
 }

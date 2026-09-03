@@ -41,45 +41,45 @@ class RedirectFollowingTest {
     private static final String TOKEN =
             "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl";
 
-    private HttpServer origin;
-    private HttpServer edge;
+    private HttpServer _origin;
+    private HttpServer _edge;
 
-    private final List<String> originRequests = new ArrayList<>();
-    private final List<String> edgeRequests = new ArrayList<>();
+    private final List<String> _originRequests = new ArrayList<>();
+    private final List<String> _edgeRequests = new ArrayList<>();
 
     @BeforeEach
     void startServers() throws IOException {
-        origin = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        _origin = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 
-        origin.createContext("/api/tokens", exchange -> {
-            originRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
-            respond(exchange, 200, """
+        _origin.createContext("/api/tokens", exchange -> {
+            _originRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
+            _respond(exchange, 200, """
                 {"token":"%s",
                  "person":{"id":7,"accountId":1,"email":"dev@dev","firstName":"Dev","lastName":"User"},
                  "account":{"id":1,"name":"dev"}}
                 """.formatted(TOKEN));
         });
 
-        origin.createContext("/api/marketplaces/1", exchange -> {
-            originRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
-            respond(exchange, 200, "{\"id\":1,\"name\":\"Test\",\"markets\":[]}");
+        _origin.createContext("/api/marketplaces/1", exchange -> {
+            _originRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
+            _respond(exchange, 200, "{\"id\":1,\"name\":\"Test\",\"markets\":[]}");
         });
 
-        origin.createContext("/api", exchange -> {
-            originRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
-            respond(exchange, 200, "{\"_links\":{}}");
+        _origin.createContext("/api", exchange -> {
+            _originRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
+            _respond(exchange, 200, "{\"_links\":{}}");
         });
 
-        origin.start();
+        _origin.start();
 
         // The edge: every request is answered with a permanent redirect to the
         // origin, carrying the same path. This is the http -> https upgrade in
         // front of production, with the scheme change removed because a test
         // cannot serve TLS -- the redirect is the part that matters.
-        edge = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        edge.createContext("/", exchange -> {
-            edgeRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
-            String target = "http://127.0.0.1:" + origin.getAddress().getPort()
+        _edge = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        _edge.createContext("/", exchange -> {
+            _edgeRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
+            String target = "http://127.0.0.1:" + _origin.getAddress().getPort()
                             + exchange.getRequestURI().getPath();
             exchange.getResponseHeaders().add("Location", target);
             // The edge answers with its own HTML, not JSON -- which is what the
@@ -91,20 +91,20 @@ class RedirectFollowingTest {
                 out.write(body);
             }
         });
-        edge.start();
+        _edge.start();
     }
 
     @AfterEach
     void stopServers() {
-        if (edge != null) {
-            edge.stop(0);
+        if (_edge != null) {
+            _edge.stop(0);
         }
-        if (origin != null) {
-            origin.stop(0);
+        if (_origin != null) {
+            _origin.stop(0);
         }
     }
 
-    private static void respond(HttpExchange exchange, int status, String body) throws IOException {
+    private static void _respond(HttpExchange exchange, int status, String body) throws IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
         exchange.sendResponseHeaders(status, bytes.length);
@@ -113,19 +113,19 @@ class RedirectFollowingTest {
         }
     }
 
-    private String edgeEndpoint() {
-        return "http://127.0.0.1:" + edge.getAddress().getPort() + "/api/marketplaces/1";
+    private String _edgeEndpoint() {
+        return "http://127.0.0.1:" + _edge.getAddress().getPort() + "/api/marketplaces/1";
     }
 
     /** The defect: a redirected endpoint must still connect. */
     @Test
     void anEndpointThatRedirectsIsFollowed() throws Exception {
-        try (Flexemarkets fm = Flexemarkets.connect(TOKEN, edgeEndpoint(), "redirect-test")) {
+        try (Flexemarkets fm = Flexemarkets.connect(TOKEN, _edgeEndpoint(), "redirect-test")) {
             assertThat(fm.userId()).isEqualTo(7L);
         }
 
-        assertThat(edgeRequests).as("the edge was asked").isNotEmpty();
-        assertThat(originRequests)
+        assertThat(_edgeRequests).as("the edge was asked").isNotEmpty();
+        assertThat(_originRequests)
                 .as("the redirect was followed through to the origin")
                 .isNotEmpty();
     }

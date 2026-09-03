@@ -1,7 +1,7 @@
 """Flexemarkets Python SDK."""
 
 from .client import Flexemarkets
-from .enums import OrderType, Side
+from .enums import OrderType, OrderSide
 from .events import NO_SEQ, OrdersUpdate, FrameUnreadable, Reconnected, StreamDropped
 from .snapshot import Snapshot
 from .exceptions import (
@@ -18,8 +18,8 @@ from .exceptions import (
     PersonHasMarketplaceDataError,
 )
 from .market_view import GapEvent, MarketView, ReconnectEvent, Subscription
-from .orderbook import OrderBook, OrderBooks
-from .trades import MarketplaceTrades, Trade, Trades
+from .orderbook import MarketBook, MarketplaceBooks
+from .trades import MarketplaceTrades, Trade, MarketTrades
 from .types import (
     Account,
     Allotment,
@@ -33,14 +33,14 @@ from .types import (
     Security,
     Session,
     TickGrid,
-    Token,
     Version,
+    Token,
 )
 
 __all__ = [
     "Flexemarkets",
     # side and order type
-    "Side",
+    "OrderSide",
     "OrderType",
     # types
     "Account",
@@ -56,13 +56,13 @@ __all__ = [
     "Session",
     "TickGrid",
     "Token",
-    "Version",
     # orderbook & trades
-    "OrderBook",
-    "OrderBooks",
-    "Trades",
+    "MarketBook",
+    "MarketplaceBooks",
+    "MarketTrades",
     "MarketplaceTrades",
     "Trade",
+    "Version",
     # market view
     "MarketView",
     "Subscription",

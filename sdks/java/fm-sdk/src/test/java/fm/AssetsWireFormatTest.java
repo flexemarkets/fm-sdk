@@ -1,5 +1,9 @@
 package fm;
 
+import fm.model.Allotment;
+import fm.model.Assets;
+import fm.model.Holding;
+import fm.model.Security;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
@@ -30,18 +34,18 @@ import tools.jackson.databind.json.JsonMapper;
  */
 class AssetsWireFormatTest {
 
-    private final JsonMapper mapper = JsonMapper.builder()
+    private final JsonMapper _mapper = JsonMapper.builder()
             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
             .build();
 
-    private static Assets assets() {
+    private static Assets _assets() {
         return new Assets(null, "alice", 10_000,
                 List.of(new Security(10L, 50L, 50L, 0L, true, true)));
     }
 
     @Test
     void positionsAreWrittenAsGrants() {
-        var json = mapper.writeValueAsString(assets());
+        var json = _mapper.writeValueAsString(_assets());
 
         assertThat(json)
                 .as("the server reads opening positions from 'grants'")
@@ -51,7 +55,7 @@ class AssetsWireFormatTest {
 
     @Test
     void positionsAreReadFromGrants() {
-        var parsed = mapper.readValue(
+        var parsed = _mapper.readValue(
                 "{\"cash\":10000,\"grants\":[{\"marketId\":10,\"units\":50}]}", Assets.class);
 
         assertThat(parsed.cash()).isEqualTo(10_000L);
@@ -66,7 +70,7 @@ class AssetsWireFormatTest {
      */
     @Test
     void positionsSpelledSecuritiesStillParse() {
-        var parsed = mapper.readValue(
+        var parsed = _mapper.readValue(
                 "{\"cash\":10000,\"securities\":[{\"marketId\":10,\"units\":50}]}", Assets.class);
 
         assertThat(parsed.securities()).singleElement()
@@ -84,9 +88,9 @@ class AssetsWireFormatTest {
      */
     @Test
     void aShortAllowanceIsReadUnderEitherName() {
-        var viaShortUnits = mapper.readValue(
+        var viaShortUnits = _mapper.readValue(
                 "{\"marketId\":10,\"units\":5,\"shortUnits\":50}", Security.class);
-        var viaInitial = mapper.readValue(
+        var viaInitial = _mapper.readValue(
                 "{\"marketId\":10,\"units\":5,\"initialShortUnits\":50}", Security.class);
 
         assertThat(viaShortUnits.shortUnits()).isEqualTo(50L);
@@ -96,7 +100,7 @@ class AssetsWireFormatTest {
     /** Absent means none, not null -- callers do arithmetic on this. */
     @Test
     void anAbsentShortAllowanceIsZero() {
-        var parsed = mapper.readValue("{\"marketId\":10,\"units\":5}", Security.class);
+        var parsed = _mapper.readValue("{\"marketId\":10,\"units\":5}", Security.class);
 
         assertThat(parsed.shortUnits()).isZero();
     }
@@ -104,7 +108,7 @@ class AssetsWireFormatTest {
     /** Requests carry "shortUnits", which is the name /allocations reads. */
     @Test
     void aShortAllowanceIsWrittenAsShortUnits() {
-        var json = mapper.writeValueAsString(new Security(10L, 5L, 55L, 50L, true, true));
+        var json = _mapper.writeValueAsString(new Security(10L, 5L, 55L, 50L, true, true));
 
         assertThat(json).contains("\"shortUnits\":50");
     }
@@ -112,9 +116,9 @@ class AssetsWireFormatTest {
     /** Same shape one level up: responses spell the nested capital either way. */
     @Test
     void allotmentAcceptsCapitalOrAssets() {
-        var viaCapital = mapper.readValue(
+        var viaCapital = _mapper.readValue(
                 "{\"ownerId\":8,\"capital\":{\"cash\":10000}}", Allotment.class);
-        var viaAssets = mapper.readValue(
+        var viaAssets = _mapper.readValue(
                 "{\"ownerId\":8,\"assets\":{\"cash\":10000}}", Allotment.class);
 
         assertThat(viaCapital.assets().cash()).isEqualTo(10_000L);

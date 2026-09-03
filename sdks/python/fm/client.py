@@ -44,7 +44,7 @@ from .exceptions import (
     InvalidArgumentError,
     PersonHasMarketplaceDataError,
 )
-from .enums import OrderType, Side
+from .enums import OrderType, OrderSide
 from ._hal import ApiRoot
 from .types import (
     Account,
@@ -192,7 +192,7 @@ def _parse_order(data: dict[str, Any]) -> Order:
         supplier=data.get("supplier", 0),
         consumer=data.get("consumer"),
         type=OrderType.of(data.get("type")),
-        side=Side.of(data.get("side")),
+        side=OrderSide.of(data.get("side")),
         units=data.get("units", 0),
         price=data.get("price", 0),
         owner_id=data.get("ownerId"),
@@ -319,7 +319,7 @@ def _marketable_limit(market: Market, side: str) -> int:
     the last tick at or below ``price_maximum``. A tick of zero marks a fixed
     dimension, where the two bounds are equal and there is one legal price.
     """
-    if Side.of(side) is not Side.BUY or market.price_tick <= 0:
+    if OrderSide.of(side) is not OrderSide.BUY or market.price_tick <= 0:
         return market.price_minimum
 
     span = market.price_maximum - market.price_minimum
@@ -1167,7 +1167,7 @@ class Flexemarkets:
         Ordering is the server's and has changed: up to and including
         fm-server 4.3.1 this answered newest first, later versions answer
         oldest first. Either way it is the newest ``size`` trades that come
-        back -- only their order differs. :class:`~fm.trades.Trades` sorts
+        back -- only their order differs. :class:`~fm.trades.MarketTrades` sorts
         what it is given, so a caller seeding a tape through
         :class:`~fm.market_view.MarketView` is unaffected; a caller reading
         this list directly should not assume one.
@@ -1225,7 +1225,7 @@ class Flexemarkets:
         return [_parse_order(o) for o in data]
 
     def trades(self, marketplace_id: int, symbol: str) -> list[Order]:
-        """Trades in one market, in ascending order id.
+        """MarketTrades in one market, in ascending order id.
 
         Answered by a symbol-keyed route, so the orders come back without the
         symbol on them and with the trade id in ``original``; both are filled

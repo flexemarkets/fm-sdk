@@ -1,5 +1,6 @@
 package fm;
 
+import fm.role.Reading;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
@@ -43,26 +44,26 @@ class SnapshotEnvelopeTest {
            "type":"LIMIT","side":"BUY","symbol":"STK","units":5,"price":125,"marketId":6560}]}}
         """;
 
-    private HttpServer server;
+    private HttpServer _server;
 
     @BeforeEach
     void startServer() throws IOException {
-        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        server.createContext("/api/tokens/refresh", exchange -> respond(exchange, """
+        _server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        _server.createContext("/api/tokens/refresh", exchange -> _respond(exchange, """
             {"token":"%s","person":{"id":7,"accountId":1,"email":"dev@dev"},
              "account":{"id":1,"name":"dev"}}
             """.formatted(TOKEN)));
-        server.createContext("/api/v1", exchange -> respond(exchange, ENVELOPE));
-        server.createContext("/api", exchange -> respond(exchange, "{\"_links\":{}}"));
-        server.start();
+        _server.createContext("/api/v1", exchange -> _respond(exchange, ENVELOPE));
+        _server.createContext("/api", exchange -> _respond(exchange, "{\"_links\":{}}"));
+        _server.start();
     }
 
     @AfterEach
     void stopServer() {
-        if (server != null) server.stop(0);
+        if (_server != null) _server.stop(0);
     }
 
-    private static void respond(HttpExchange exchange, String json) throws IOException {
+    private static void _respond(HttpExchange exchange, String json) throws IOException {
         byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
         exchange.getResponseHeaders().add("x-fm-as-of-seq", "7");
@@ -72,15 +73,15 @@ class SnapshotEnvelopeTest {
         }
     }
 
-    private Flexemarkets connect() throws IOException {
+    private Flexemarkets _connect() throws IOException {
         return Flexemarkets.connect(TOKEN,
-                "http://127.0.0.1:" + server.getAddress().getPort() + "/api/marketplaces/1",
+                "http://127.0.0.1:" + _server.getAddress().getPort() + "/api/marketplaces/1",
                 "envelope-test");
     }
 
     @Test
     void activeOrdersReadsTheEnvelope() throws Exception {
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             var snapshot = fm.activeOrders(1);
 
             assertThat(snapshot.body())
@@ -93,7 +94,7 @@ class SnapshotEnvelopeTest {
 
     @Test
     void recentTradesReadsTheEnvelope() throws Exception {
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             assertThat(fm.recentTrades(1).body()).hasSize(1);
             assertThat(fm.recentTrades(1, 10).body()).hasSize(1);
         }

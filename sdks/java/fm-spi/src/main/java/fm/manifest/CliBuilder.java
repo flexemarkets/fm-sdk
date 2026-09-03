@@ -55,9 +55,9 @@ public final class CliBuilder {
 
         Map<String, String> merged = new LinkedHashMap<>(manifest.defaults());
 
-        accept(manifest, merged, manager, Ownership.MANAGER);
-        accept(manifest, merged, user, Ownership.USER);
-        accept(manifest, merged, platform, Ownership.PLATFORM);
+        _accept(manifest, merged, manager, Ownership.MANAGER);
+        _accept(manifest, merged, user, Ownership.USER);
+        _accept(manifest, merged, platform, Ownership.PLATFORM);
 
         for (ParameterSpec spec : manifest.all()) {
             if (spec.required() && !merged.containsKey(spec.name())) {
@@ -109,7 +109,7 @@ public final class CliBuilder {
         return Ownership.MANAGER == by || owner == by;
     }
 
-    private static void accept(
+    private static void _accept(
             Manifest manifest,
             Map<String, String> merged,
             Map<String, String> supplied,

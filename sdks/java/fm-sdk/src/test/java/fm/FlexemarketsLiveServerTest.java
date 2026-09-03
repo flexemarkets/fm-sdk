@@ -1,5 +1,7 @@
 package fm;
 
+import fm.model.Market;
+import fm.model.Marketplace;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -37,14 +39,14 @@ import static org.assertj.core.api.Assertions.assertThatNoException;
  */
 public class FlexemarketsLiveServerTest {
 
-    private static Path credentialPath;
-    private static Path endpointPath;
+    private static Path _credentialPath;
+    private static Path _endpointPath;
 
     @BeforeAll
     static void resolveConfig() {
         var home = System.getProperty("user.home");
-        credentialPath = Paths.get(home, ".fm", "credential");
-        endpointPath = Paths.get(home, ".fm", "endpoint");
+        _credentialPath = Paths.get(home, ".fm", "credential");
+        _endpointPath = Paths.get(home, ".fm", "endpoint");
     }
 
     /** Precondition gate for every test in this class. Returns true only
@@ -81,7 +83,7 @@ public class FlexemarketsLiveServerTest {
                 assertThat(view.marketplaceId()).isEqualTo(marketplaceId);
                 assertThat(view.markets()).isNotEmpty();
                 for (Market m : view.markets()) {
-                    OrderBook book = view.orderBook(m.id());
+                    MarketBook book = view.orderBook(m.id());
                     assertThat(book).isNotNull();
                     // bestBuyPrice / bestSellPrice return -1 when empty;
                     // either way they shouldn't throw, which is the real
@@ -131,8 +133,8 @@ public class FlexemarketsLiveServerTest {
         // Flexemarkets.connect expects file paths (or a token / URL),
         // not the file contents. Same convention the ticker example uses.
         return Flexemarkets.connect(
-                credentialPath.toString(),
-                endpointPath.toString(),
+                _credentialPath.toString(),
+                _endpointPath.toString(),
                 clientDescription);
     }
 }

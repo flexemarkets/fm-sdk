@@ -1,5 +1,5 @@
 {
-  "type": "Trades",
+  "type": "MarketTrades",
   "why": "/v1/orders/recent-trades answered newest-first up to fm-server 4.3.1 and the tape appended in array order, so every seed -- on open, on a sequence gap, after every reconnect -- built it backwards and last() was the oldest trade retained. Delivered newest-first here on purpose; deliveredIds is what stops someone quietly sorting the input and leaving a test that proves nothing. Also covers drain(), which hands the tape over and leaves it empty -- distinct from clear(), which throws it away.",
   "market": {
     "id": 7,

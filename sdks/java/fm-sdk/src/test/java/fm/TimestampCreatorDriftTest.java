@@ -1,5 +1,7 @@
 package fm;
 
+import fm.model.Order;
+import fm.model.Trade;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.lang.reflect.Executable;
@@ -47,10 +49,10 @@ class TimestampCreatorDriftTest {
      */
     private static final Map<String, String> NOT_FROM_THE_WIRE = Map.of(
             "Trade",
-            "assembled client-side by Trades from two Orders that were "
+            "assembled client-side by MarketTrades from two Orders that were "
                 + "themselves parsed; the exchange sends no such object.");
 
-    private static List<Class<?>> records() throws Exception {
+    private static List<Class<?>> _records() throws Exception {
         Path classes = Path.of("target", "classes", "fm");
         assertThat(classes).as("compiled package to scan").exists();
 
@@ -71,7 +73,7 @@ class TimestampCreatorDriftTest {
         return found;
     }
 
-    private static Executable creator(Class<?> type) {
+    private static Executable _creator(Class<?> type) {
         return Stream.<Executable>concat(
                     Arrays.stream(type.getDeclaredMethods()),
                     Arrays.stream(type.getDeclaredConstructors()))
@@ -84,13 +86,13 @@ class TimestampCreatorDriftTest {
     void everyRecordHoldingAnInstantHasACreatorToBuildItFromTheWire() throws Exception {
         var missing = new ArrayList<String>();
 
-        for (Class<?> type : records()) {
+        for (Class<?> type : _records()) {
             if (NOT_FROM_THE_WIRE.containsKey(type.getSimpleName())) {
                 continue;
             }
             boolean holdsInstant = Arrays.stream(type.getRecordComponents())
                     .anyMatch(c -> c.getType() == Instant.class);
-            if (holdsInstant && creator(type) == null) {
+            if (holdsInstant && _creator(type) == null) {
                 missing.add(type.getSimpleName());
             }
         }
@@ -105,8 +107,8 @@ class TimestampCreatorDriftTest {
     void everyCreatorTakesExactlyTheComponentsInOrder() throws Exception {
         var drifted = new ArrayList<String>();
 
-        for (Class<?> type : records()) {
-            Executable creator = creator(type);
+        for (Class<?> type : _records()) {
+            Executable creator = _creator(type);
             if (creator == null) {
                 continue;
             }
@@ -135,7 +137,7 @@ class TimestampCreatorDriftTest {
     void nothingExemptedIsAWireType() throws Exception {
         var wrongly = new ArrayList<String>();
 
-        for (Class<?> type : records()) {
+        for (Class<?> type : _records()) {
             if (NOT_FROM_THE_WIRE.containsKey(type.getSimpleName())
                     && type.isAnnotationPresent(JsonIgnoreProperties.class)) {
                 wrongly.add(type.getSimpleName());

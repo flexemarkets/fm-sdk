@@ -232,8 +232,8 @@ def camel(name: str) -> str:
 # about the SDKs rather than the other way round.
 JAVA_SURFACE = [
     "Flexemarkets.java",
-    "Identity.java", "Reading.java", "Writing.java",
-    "Management.java", "Administration.java", "Streaming.java",
+    "role/Identity.java", "role/Reading.java", "role/Writing.java",
+    "role/Management.java", "role/Administration.java", "role/Streaming.java",
 ]
 
 # Differences that are intended. Each needs a reason, so that adding one is a
@@ -456,7 +456,7 @@ def typescript_failures(path: Path) -> set[str]:
 # --- read-side surface ------------------------------------------------------
 #
 # check_methods compares Flexemarkets and its roles: what a caller can ask the
-# server to do. It stops there. MarketView, OrderBook and Trades -- what a
+# server to do. It stops there. MarketView, MarketBook and MarketTrades -- what a
 # caller does with the data that comes back -- were never compared, and that is
 # where the three drifted furthest. MarketView.trades(marketId) existed in Java
 # and in neither of the others, so "what was the last trade, and who took it"
@@ -476,12 +476,12 @@ def typescript_failures(path: Path) -> set[str]:
 READ_SURFACE = {
     "MarketView": ("MarketView.java", ("market_view.py", "MarketView"),
                    ("market-view.ts", "MarketView", "interface")),
-    "OrderBook": ("OrderBook.java", ("orderbook.py", "OrderBook"),
-                  ("orderbook.ts", "OrderBook", "class")),
-    "OrderBooks": ("OrderBooks.java", ("orderbook.py", "OrderBooks"),
-                   ("orderbook.ts", "OrderBooks", "class")),
-    "Trades": ("Trades.java", ("trades.py", "Trades"),
-               ("trades.ts", "Trades", "class")),
+    "MarketBook": ("MarketBook.java", ("orderbook.py", "MarketBook"),
+                  ("orderbook.ts", "MarketBook", "class")),
+    "MarketplaceBooks": ("MarketplaceBooks.java", ("orderbook.py", "MarketplaceBooks"),
+                   ("orderbook.ts", "MarketplaceBooks", "class")),
+    "MarketTrades": ("MarketTrades.java", ("trades.py", "MarketTrades"),
+               ("trades.ts", "MarketTrades", "class")),
     "MarketplaceTrades": ("MarketplaceTrades.java", ("trades.py", "MarketplaceTrades"),
                           ("trades.ts", "MarketplaceTrades", "class")),
 }
@@ -916,7 +916,7 @@ def main() -> int:
         for problem in surface_problems:
             print(f"  - {problem}", file=sys.stderr)
         print(
-            "\nMarketView, OrderBook and Trades are what a caller does with the data "
+            "\nMarketView, MarketBook and MarketTrades are what a caller does with the data "
             "the client returns. A member on one and not the others is work its callers "
             "have to do by hand -- which is how MarketView.trades sat in Java alone. "
             "If a difference is intended, record it in SURFACE_EXEMPTIONS with the "

@@ -7,7 +7,7 @@ import sys
 
 from fm import (
     Flexemarkets,
-    OrderBooks,
+    MarketplaceBooks,
     MarketplaceTrades,
     OrdersUpdate,
     Session,
@@ -35,7 +35,7 @@ def _trade_prices(prices: list[int], count: int) -> str:
     return "  ".join(f"${p / 100:.2f}" for p in reversed(recent))
 
 
-def display(books: OrderBooks, trades: MarketplaceTrades, session: Session | None, endpoint_url: str = "") -> None:
+def display(books: MarketplaceBooks, trades: MarketplaceTrades, session: Session | None, endpoint_url: str = "") -> None:
     state = session.state if session else "---"
 
     lines: list[str] = []
@@ -77,7 +77,7 @@ def main() -> None:
         markets = fm.markets(marketplace_id)
         markets.sort(key=lambda m: m.id)
 
-        books = OrderBooks(markets)
+        books = MarketplaceBooks(markets)
         market_trades = MarketplaceTrades(markets)
 
         q: queue.Queue[object] = queue.Queue(maxsize=1000)

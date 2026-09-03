@@ -1,5 +1,15 @@
 package fm.internal;
 
+import fm.model.Account;
+import fm.model.ClientConnection;
+import fm.model.Holding;
+import fm.model.Market;
+import fm.model.Marketplace;
+import fm.model.Order;
+import fm.model.Person;
+import fm.model.Security;
+import fm.model.Session;
+import fm.model.Token;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
@@ -47,23 +57,23 @@ class WireFixturesTest {
 
     /** Wire type name -> the record the SDK deserializes it into. */
     private static final Map<String, Class<?>> TYPES = Map.of(
-            "Order", fm.Order.class,
-            "Session", fm.Session.class,
-            "Holding", fm.Holding.class,
-            "Account", fm.Account.class,
-            "Person", fm.Person.class,
-            "Market", fm.Market.class,
-            "Marketplace", fm.Marketplace.class,
-            "ClientConnection", fm.ClientConnection.class,
-            "Security", fm.Security.class,
-            "Token", fm.Token.class);
+            "Order", fm.model.Order.class,
+            "Session", fm.model.Session.class,
+            "Holding", fm.model.Holding.class,
+            "Account", fm.model.Account.class,
+            "Person", fm.model.Person.class,
+            "Market", fm.model.Market.class,
+            "Marketplace", fm.model.Marketplace.class,
+            "ClientConnection", fm.model.ClientConnection.class,
+            "Security", fm.model.Security.class,
+            "Token", fm.model.Token.class);
 
     /**
      * The snapshot envelope is not a record the mapper binds -- it is a shape
      * the SDK has to recognise, which is exactly why it has broken twice. The
      * fixtures for it run through the real unwrap.
      */
-    record OrdersSnapshot(java.util.List<fm.Order> orders) { }
+    record OrdersSnapshot(java.util.List<fm.model.Order> orders) { }
 
     /** Types the fixture run handles by a route other than {@link #TYPES}. */
     private static final java.util.Set<String> HANDLED_WITHOUT_A_TYPE =
@@ -104,12 +114,12 @@ class WireFixturesTest {
         assertNotNull(parsed, fixture.name() + ": deserialized to null");
 
         fixture.expect().propertyStream().forEach(entry ->
-                check(read(parsed, entry.getKey()), entry.getValue(),
+                _check(_read(parsed, entry.getKey()), entry.getValue(),
                       fixture.name() + "." + entry.getKey()));
     }
 
     /** The value of one record component, by its wire name. */
-    private static Object read(Object parsed, String name) {
+    private static Object _read(Object parsed, String name) {
         Method accessor;
         try {
             accessor = parsed.getClass().getMethod(name);
@@ -123,7 +133,7 @@ class WireFixturesTest {
         }
     }
 
-    private static void check(Object actual, JsonNode expected, String where) {
+    private static void _check(Object actual, JsonNode expected, String where) {
         if (expected.isObject() && expected.has("epochMilli") && expected.size() == 1) {
             assertNotNull(actual, where + ": expected an instant, got null");
             var instant = assertInstanceOf(Instant.class, actual,
@@ -148,10 +158,10 @@ class WireFixturesTest {
                 if (want.isObject()) {
                     int index = i;
                     want.propertyStream().forEach(e ->
-                            check(read(list.get(index), e.getKey()), e.getValue(),
+                            _check(_read(list.get(index), e.getKey()), e.getValue(),
                                   where + "[" + index + "]." + e.getKey()));
                 } else {
-                    check(list.get(i), want, where + "[" + i + "]");
+                    _check(list.get(i), want, where + "[" + i + "]");
                 }
             }
             return;
@@ -159,7 +169,7 @@ class WireFixturesTest {
 
         if (expected.isObject()) {
             expected.propertyStream().forEach(e ->
-                    check(read(actual, e.getKey()), e.getValue(), where + "." + e.getKey()));
+                    _check(_read(actual, e.getKey()), e.getValue(), where + "." + e.getKey()));
             return;
         }
 

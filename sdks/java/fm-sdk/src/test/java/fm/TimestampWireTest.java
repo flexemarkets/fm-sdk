@@ -1,5 +1,9 @@
 package fm;
 
+import fm.model.ManagerOtpBundle;
+import fm.model.Person;
+import fm.model.Session;
+import fm.internal.Timestamps;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;

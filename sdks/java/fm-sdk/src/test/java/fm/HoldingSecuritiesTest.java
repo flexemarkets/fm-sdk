@@ -1,5 +1,7 @@
 package fm;
 
+import fm.model.Holding;
+import fm.model.Security;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
@@ -18,17 +20,17 @@ import org.junit.jupiter.api.Test;
  */
 class HoldingSecuritiesTest {
 
-    private static Security security(long marketId, long units) {
+    private static Security _security(long marketId, long units) {
         return new Security(marketId, units, units, 0L, true, true);
     }
 
-    private static Holding holding(List<Security> securities) {
+    private static Holding _holding(List<Security> securities) {
         return new Holding(1L, 300L, 42L, 8L, "alice", 10_000L, 10_000L, securities);
     }
 
     @Test
     void positionsComeBackInMarketOrderWhateverOrderTheyArrivedIn() {
-        var out = holding(List.of(security(30, 3), security(10, 1), security(20, 2)));
+        var out = _holding(List.of(_security(30, 3), _security(10, 1), _security(20, 2)));
 
         assertThat(out.securities()).extracting(Security::marketId)
                 .containsExactly(10L, 20L, 30L);
@@ -37,7 +39,7 @@ class HoldingSecuritiesTest {
     /** The old accessor returned the wire's null straight through. */
     @Test
     void aHoldingWithNoPositionsReadsAsEmptyRatherThanNull() {
-        assertThat(holding(null).securities()).isEmpty();
+        assertThat(_holding(null).securities()).isEmpty();
     }
 
     /**
@@ -47,8 +49,8 @@ class HoldingSecuritiesTest {
      */
     @Test
     void twoHoldingsOfTheSamePositionsAreEqual() {
-        assertThat(holding(List.of(security(10, 1), security(20, 2))))
-                .isEqualTo(holding(List.of(security(20, 2), security(10, 1))));
+        assertThat(_holding(List.of(_security(10, 1), _security(20, 2))))
+                .isEqualTo(_holding(List.of(_security(20, 2), _security(10, 1))));
     }
 
     /**
@@ -58,9 +60,9 @@ class HoldingSecuritiesTest {
      */
     @Test
     void askingForAPositionTheHolderDoesNotHaveIsEmptyNotAnError() {
-        var out = holding(List.of(security(10, 1)));
+        var out = _holding(List.of(_security(10, 1)));
 
-        assertThat(out.security(10)).contains(security(10, 1));
+        assertThat(out.security(10)).contains(_security(10, 1));
         assertThat(out.security(99)).isEmpty();
     }
 }

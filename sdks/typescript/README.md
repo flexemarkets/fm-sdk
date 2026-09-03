@@ -47,7 +47,7 @@ endpoint=https://api.flexemarkets.com/api/marketplaces/123
 ## SDK usage
 
 ```typescript
-import { Flexemarkets, OrderBooks, MarketplaceTrades } from "@flexemarkets/fm-sdk";
+import { Flexemarkets, MarketplaceBooks, MarketplaceTrades } from "@flexemarkets/fm-sdk";
 import type { FmEvent } from "@flexemarkets/fm-sdk";
 
 // connect(null, null, ...) falls back to ~/.fm/credential and ~/.fm/endpoint
@@ -64,7 +64,7 @@ const order = await fm.submitLimit(marketplaceId, markets[0].id, "BUY", 1, 950);
 await fm.submitCancel(marketplaceId, markets[0].id, order.id);
 
 // WebSocket events
-const books = new OrderBooks(markets);
+const books = new MarketplaceBooks(markets);
 const trades = new MarketplaceTrades(markets);
 
 await fm.listen(marketplaceId, (event: FmEvent) => {

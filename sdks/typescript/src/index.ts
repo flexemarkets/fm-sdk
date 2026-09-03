@@ -18,7 +18,7 @@ export type {
 } from "./types.js";
 
 export {
-  Side,
+  OrderSide,
   OrderType,
   toSide,
   toOrderType,
@@ -68,15 +68,14 @@ export {
   isSplit,
   isSymbol,
   isSubmit,
-  isResting,
   findOrder,
 } from "./order-utils.js";
 
 // Order book
-export { OrderBook, OrderBooks } from "./orderbook.js";
+export { MarketBook, MarketplaceBooks } from "./orderbook.js";
 
-// Trades
-export { Trades, MarketplaceTrades, tradeOf } from "./trades.js";
+// MarketTrades
+export { MarketTrades, MarketplaceTrades, tradeOf } from "./trades.js";
 export type { Trade } from "./trades.js";
 
 // Events

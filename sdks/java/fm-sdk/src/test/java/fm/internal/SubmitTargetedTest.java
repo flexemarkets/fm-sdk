@@ -1,7 +1,7 @@
 package fm.internal;
 
 import fm.Flexemarkets;
-import fm.Side;
+import fm.model.OrderSide;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -99,7 +99,7 @@ class SubmitTargetedTest {
     @Test
     void aTargetedOrderCarriesItsOwnerTargetId() throws Exception {
         try (Flexemarkets fm = connect()) {
-            fm.submitLimit(1L, 11L, Side.BUY, 1L, 850L, 106771L);
+            fm.submitLimit(1L, 11L, OrderSide.BUY, 1L, 850L, 106771L);
         }
 
         assertThat(submitted.get(0))
@@ -117,7 +117,7 @@ class SubmitTargetedTest {
     @Test
     void anUntargetedOrderOmitsTheKeyRatherThanNullingIt() throws Exception {
         try (Flexemarkets fm = connect()) {
-            fm.submitLimit(1L, 11L, Side.SELL, 1L, 900L, null);
+            fm.submitLimit(1L, 11L, OrderSide.SELL, 1L, 900L, null);
         }
 
         assertThat(submitted.get(0)).doesNotContain("ownerTargetId");
@@ -127,8 +127,8 @@ class SubmitTargetedTest {
     @Test
     void theUntargetedOverloadSendsTheSameBody() throws Exception {
         try (Flexemarkets fm = connect()) {
-            fm.submitLimit(1L, 11L, Side.BUY, 2L, 700L);
-            fm.submitLimit(1L, 11L, Side.BUY, 2L, 700L, null);
+            fm.submitLimit(1L, 11L, OrderSide.BUY, 2L, 700L);
+            fm.submitLimit(1L, 11L, OrderSide.BUY, 2L, 700L, null);
         }
 
         assertThat(submitted.get(0)).isEqualTo(submitted.get(1));

@@ -1,7 +1,7 @@
 package fm.internal;
 
-import fm.Account;
 
+import fm.model.Account;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 /**

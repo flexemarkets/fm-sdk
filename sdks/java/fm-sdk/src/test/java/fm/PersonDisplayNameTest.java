@@ -1,5 +1,6 @@
 package fm;
 
+import fm.model.Person;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
@@ -17,11 +18,11 @@ import org.junit.jupiter.params.provider.CsvSource;
  * <p>The same cases run in the Python and TypeScript suites. They are written
  * out rather than shared as a fixture because this is a pure function over one
  * record, not a sequence of updates over an aggregator — the behaviour fixtures
- * drive {@code OrderBook} and {@code Trades} and have nowhere to put it.
+ * drive {@code MarketBook} and {@code MarketTrades} and have nowhere to put it.
  */
 class PersonDisplayNameTest {
 
-    private static Person person(String firstName, String lastName, String email) {
+    private static Person _person(String firstName, String lastName, String email) {
         return new Person(null, null, 1L, 1L, firstName, lastName, email, null, null);
     }
 
@@ -38,14 +39,14 @@ class PersonDisplayNameTest {
         "null,       null,           '   ',               null",
     })
     void displayName(String first, String last, String email, String expected) {
-        assertThat(person(first, last, email).displayName()).isEqualTo(expected);
+        assertThat(_person(first, last, email).displayName()).isEqualTo(expected);
     }
 
     @Test
     void aNameWinsOverTheEmail() {
         // Not "Name <email>". That is a presentation choice, and a caller who
         // wants it composes one — baking it in would make the common case wrong.
-        String label = person("Ada", "Lovelace", "ada@example.com").displayName();
+        String label = _person("Ada", "Lovelace", "ada@example.com").displayName();
 
         assertThat(label).isEqualTo("Ada Lovelace").doesNotContain("ada@example.com");
     }

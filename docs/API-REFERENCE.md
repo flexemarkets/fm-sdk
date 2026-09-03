@@ -372,7 +372,7 @@ leaves the newest trade at the end.
 
 It answered newest-first up to and including fm-server 4.3.1, which made every
 client that appended it build its tape backwards — including all three SDKs,
-whose "most recent trade" was then the oldest one they had retained. `Trades`
+whose "most recent trade" was then the oldest one they had retained. `MarketTrades`
 sorts each batch by time regardless of what the server sends, so the tape is
 right against a server on either side of that change.
 

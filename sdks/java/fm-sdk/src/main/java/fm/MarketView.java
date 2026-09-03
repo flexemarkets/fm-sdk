@@ -1,5 +1,13 @@
 package fm;
 
+import fm.event.GapEvent;
+import fm.event.ReconnectEvent;
+import fm.model.Holding;
+import fm.model.Market;
+import fm.model.Order;
+import fm.model.OrderSide;
+import fm.model.Session;
+import fm.model.Trade;
 import fm.internal.DefaultMarketView;
 
 import java.util.List;
@@ -73,7 +81,7 @@ public interface MarketView extends AutoCloseable {
      * @return that market's book, current as of this call, or null when
      *         {@code marketId} is not in this marketplace
      */
-    OrderBook orderBook(long marketId);
+    MarketBook orderBook(long marketId);
 
     /**
      * Always-current trade tape for {@code marketId}, most recent last.
@@ -91,7 +99,7 @@ public interface MarketView extends AutoCloseable {
      * @return that market's tape, current as of this call, or null when
      *         {@code marketId} is not in this marketplace
      */
-    Trades trades(long marketId);
+    MarketTrades trades(long marketId);
 
     /**
      * Most-recent session update observed. Null until the first
@@ -127,7 +135,7 @@ public interface MarketView extends AutoCloseable {
      * @param handler  called with that market's book after each change
      * @return a handle that unsubscribes the handler
      */
-    Subscription onOrderBookChange(long marketId, Consumer<OrderBook> handler);
+    Subscription onOrderBookChange(long marketId, Consumer<MarketBook> handler);
 
     /**
      * Register a handler that fires for each trade on {@code marketId}.
@@ -193,7 +201,7 @@ public interface MarketView extends AutoCloseable {
      * @param price    the limit, which must sit on the market's price grid
      * @return the order as accepted, with its server-assigned id
      */
-    Order submitLimit(long marketId, Side side, long units, long price);
+    Order submitLimit(long marketId, OrderSide side, long units, long price);
 
     /**
      * Cancel a previously-submitted order.

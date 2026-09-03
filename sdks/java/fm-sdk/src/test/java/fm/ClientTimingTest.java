@@ -39,50 +39,50 @@ class ClientTimingTest {
     private static final Pattern RTT = Pattern.compile("rtt=(\\d+)");
     private static final Pattern NET = Pattern.compile("net=(\\d+)");
 
-    private HttpServer server;
+    private HttpServer _server;
 
     /** Every Client-Timing seen, in order; null for a request that carried none. */
-    private final List<String> timings = new ArrayList<>();
+    private final List<String> _timings = new ArrayList<>();
 
     /** What the server claims its own handling cost, or null to send nothing. */
-    private volatile String serverTiming = "st=1000000";
+    private volatile String _serverTiming = "st=1000000";
 
     @BeforeEach
     void startServer() throws IOException {
-        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        _server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 
-        server.createContext("/api/marketplaces", exchange -> {
-            record(exchange);
-            respond(exchange, 200, "{\"id\":1,\"name\":\"course\",\"markets\":[]}");
+        _server.createContext("/api/marketplaces", exchange -> {
+            _record(exchange);
+            _respond(exchange, 200, "{\"id\":1,\"name\":\"course\",\"markets\":[]}");
         });
 
-        server.createContext("/api", exchange -> {
-            record(exchange);
-            respond(exchange, 200, """
+        _server.createContext("/api", exchange -> {
+            _record(exchange);
+            _respond(exchange, 200, """
                 {"_links":{"marketplaces":{"href":"%1$s/marketplaces"},
                            "accounts":{"href":"%1$s/accounts"},
                            "users":{"href":"%1$s/users"}}}
-                """.formatted(api()));
+                """.formatted(_api()));
         });
 
-        server.start();
+        _server.start();
     }
 
     @AfterEach
     void stopServer() {
-        if (server != null) server.stop(0);
+        if (_server != null) _server.stop(0);
     }
 
-    private void record(HttpExchange exchange) {
-        timings.add(exchange.getRequestHeaders().getFirst("Client-Timing"));
+    private void _record(HttpExchange exchange) {
+        _timings.add(exchange.getRequestHeaders().getFirst("Client-Timing"));
     }
 
-    private void respond(HttpExchange exchange, int status, String body) throws IOException {
+    private void _respond(HttpExchange exchange, int status, String body) throws IOException {
         var bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
 
-        if (serverTiming != null) {
-            exchange.getResponseHeaders().add("Server-Timing", serverTiming);
+        if (_serverTiming != null) {
+            exchange.getResponseHeaders().add("Server-Timing", _serverTiming);
         }
 
         exchange.sendResponseHeaders(status, bytes.length);
@@ -91,18 +91,18 @@ class ClientTimingTest {
         }
     }
 
-    private String api() {
-        return "http://127.0.0.1:" + server.getAddress().getPort() + "/api";
+    private String _api() {
+        return "http://127.0.0.1:" + _server.getAddress().getPort() + "/api";
     }
 
-    private static long field(String header, Pattern pattern) {
+    private static long _field(String header, Pattern pattern) {
         var matcher = pattern.matcher(header);
         return matcher.find() ? Long.parseLong(matcher.group(1)) : -1;
     }
 
     /** Every Client-Timing that was actually sent, in order. */
-    private List<String> reported() {
-        return timings.stream().filter(t -> t != null).toList();
+    private List<String> _reported() {
+        return _timings.stream().filter(t -> t != null).toList();
     }
 
     // ---------------------------------------------------------------------
@@ -113,24 +113,24 @@ class ClientTimingTest {
      */
     @Test
     void theFirstRequestCarriesNoTiming() throws Exception {
-        try (var fm = Flexemarkets.connect(TOKEN, api() + "/marketplaces/1", "test")) {
+        try (var fm = Flexemarkets.connect(TOKEN, _api() + "/marketplaces/1", "test")) {
             fm.marketplace(1);
         }
 
-        assertThat(timings).isNotEmpty();
-        assertThat(timings.get(0)).as("the first request has nothing to say yet").isNull();
+        assertThat(_timings).isNotEmpty();
+        assertThat(_timings.get(0)).as("the first request has nothing to say yet").isNull();
     }
 
     @Test
     void aLaterRequestReportsWhatAnEarlierOneCost() throws Exception {
-        try (var fm = Flexemarkets.connect(TOKEN, api() + "/marketplaces/1", "test")) {
+        try (var fm = Flexemarkets.connect(TOKEN, _api() + "/marketplaces/1", "test")) {
             fm.marketplace(1);
             fm.marketplace(1);
             fm.marketplace(1);
         }
 
-        assertThat(reported()).as("later calls report the earlier ones").isNotEmpty();
-        assertThat(reported()).allMatch(t -> field(t, RTT) > 0);
+        assertThat(_reported()).as("later calls report the earlier ones").isNotEmpty();
+        assertThat(_reported()).allMatch(t -> _field(t, RTT) > 0);
     }
 
     /**
@@ -140,19 +140,19 @@ class ClientTimingTest {
      */
     @Test
     void theServersShareIsTakenOutOfTheWire() throws Exception {
-        serverTiming = "st=1000000";                       // 1ms of server time
+        _serverTiming = "st=1000000";                       // 1ms of server time
 
-        try (var fm = Flexemarkets.connect(TOKEN, api() + "/marketplaces/1", "test")) {
+        try (var fm = Flexemarkets.connect(TOKEN, _api() + "/marketplaces/1", "test")) {
             fm.marketplace(1);
             fm.marketplace(1);
         }
 
-        var header = reported().get(0);
+        var header = _reported().get(0);
 
-        assertThat(field(header, NET)).as("net= is present once the server has said").isNotNegative();
-        assertThat(field(header, NET))
+        assertThat(_field(header, NET)).as("net= is present once the server has said").isNotNegative();
+        assertThat(_field(header, NET))
                 .as("the wire is what is left after the server's share")
-                .isEqualTo(field(header, RTT) - 1_000_000);
+                .isEqualTo(_field(header, RTT) - 1_000_000);
     }
 
     /**
@@ -162,30 +162,30 @@ class ClientTimingTest {
      */
     @Test
     void anUnreportedServerShareLeavesTheWireUnstated() throws Exception {
-        serverTiming = null;                               // no Server-Timing at all
+        _serverTiming = null;                               // no Server-Timing at all
 
-        try (var fm = Flexemarkets.connect(TOKEN, api() + "/marketplaces/1", "test")) {
+        try (var fm = Flexemarkets.connect(TOKEN, _api() + "/marketplaces/1", "test")) {
             fm.marketplace(1);
             fm.marketplace(1);
         }
 
-        var header = reported().get(0);
+        var header = _reported().get(0);
 
-        assertThat(field(header, RTT)).as("the round trip is still known").isPositive();
+        assertThat(_field(header, RTT)).as("the round trip is still known").isPositive();
         assertThat(header).as("but the wire is not claimed").doesNotContain("net=");
     }
 
     /** A garbled Server-Timing is treated as none rather than as a number. */
     @Test
     void anUnparseableServerShareIsIgnored() throws Exception {
-        serverTiming = "st=banana";
+        _serverTiming = "st=banana";
 
-        try (var fm = Flexemarkets.connect(TOKEN, api() + "/marketplaces/1", "test")) {
+        try (var fm = Flexemarkets.connect(TOKEN, _api() + "/marketplaces/1", "test")) {
             fm.marketplace(1);
             fm.marketplace(1);
         }
 
-        assertThat(reported().get(0)).doesNotContain("net=");
+        assertThat(_reported().get(0)).doesNotContain("net=");
     }
 
     /**
@@ -197,13 +197,13 @@ class ClientTimingTest {
      */
     @Test
     void oneMeasurementIsReportedOnlyOnce() throws Exception {
-        try (var fm = Flexemarkets.connect(TOKEN, api() + "/marketplaces/1", "test")) {
+        try (var fm = Flexemarkets.connect(TOKEN, _api() + "/marketplaces/1", "test")) {
             fm.marketplace(1);
             fm.marketplace(1);
             fm.marketplace(1);
         }
 
-        var sent = reported();
+        var sent = _reported();
 
         assertThat(sent).as("more than one measurement to compare").hasSizeGreaterThan(1);
         assertThat(sent).as("each request carries its own predecessor's cost")
@@ -216,13 +216,13 @@ class ClientTimingTest {
      */
     @Test
     void aServerShareLargerThanTheTripCannotGoNegative() throws Exception {
-        serverTiming = "st=" + Long.MAX_VALUE;
+        _serverTiming = "st=" + Long.MAX_VALUE;
 
-        try (var fm = Flexemarkets.connect(TOKEN, api() + "/marketplaces/1", "test")) {
+        try (var fm = Flexemarkets.connect(TOKEN, _api() + "/marketplaces/1", "test")) {
             fm.marketplace(1);
             fm.marketplace(1);
         }
 
-        assertThat(field(reported().get(0), NET)).isZero();
+        assertThat(_field(_reported().get(0), NET)).isZero();
     }
 }

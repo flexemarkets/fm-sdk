@@ -40,50 +40,50 @@ class TokenAuthenticationTest {
     private static final String TOKEN =
             "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl";
 
-    private HttpServer server;
-    private final List<String> requests = new ArrayList<>();
+    private HttpServer _server;
+    private final List<String> _requests = new ArrayList<>();
 
     @BeforeEach
     void startServer() throws IOException {
-        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        _server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 
-        server.createContext("/api/tokens", exchange -> {
-            requests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath()
+        _server.createContext("/api/tokens", exchange -> {
+            _requests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath()
                          + " auth=" + exchange.getRequestHeaders().getFirst("Authorization"));
             // A sign-in attempt with no credentials is refused, exactly as the
             // real server refuses it. Only the refresh path should succeed.
             if (!exchange.getRequestURI().getPath().endsWith("/refresh")) {
-                respond(exchange, 401, "{\"message\":\"unauthorized\"}");
+                _respond(exchange, 401, "{\"message\":\"unauthorized\"}");
                 return;
             }
-            respond(exchange, 200, """
+            _respond(exchange, 200, """
                 {"token":"%s",
                  "person":{"id":7,"accountId":1,"email":"dev@dev","firstName":"Dev","lastName":"User"},
                  "account":{"id":1,"name":"dev"}}
                 """.formatted(TOKEN));
         });
 
-        server.createContext("/api/marketplaces/1", exchange -> {
-            requests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
-            respond(exchange, 200, "{\"id\":1,\"name\":\"Test\",\"markets\":[]}");
+        _server.createContext("/api/marketplaces/1", exchange -> {
+            _requests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
+            _respond(exchange, 200, "{\"id\":1,\"name\":\"Test\",\"markets\":[]}");
         });
 
-        server.createContext("/api", exchange -> {
-            requests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
-            respond(exchange, 200, "{\"_links\":{}}");
+        _server.createContext("/api", exchange -> {
+            _requests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
+            _respond(exchange, 200, "{\"_links\":{}}");
         });
 
-        server.start();
+        _server.start();
     }
 
     @AfterEach
     void stopServer() {
-        if (server != null) {
-            server.stop(0);
+        if (_server != null) {
+            _server.stop(0);
         }
     }
 
-    private static void respond(HttpExchange exchange, int status, String body) throws IOException {
+    private static void _respond(HttpExchange exchange, int status, String body) throws IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
         exchange.sendResponseHeaders(status, bytes.length);
@@ -92,18 +92,18 @@ class TokenAuthenticationTest {
         }
     }
 
-    private String endpoint() {
-        return "http://127.0.0.1:" + server.getAddress().getPort() + "/api/marketplaces/1";
+    private String _endpoint() {
+        return "http://127.0.0.1:" + _server.getAddress().getPort() + "/api/marketplaces/1";
     }
 
     @Test
     void connectingWithATokenRefreshesItRatherThanSigningIn() throws Exception {
-        try (Flexemarkets fm = Flexemarkets.connect(TOKEN, endpoint(), "token-test")) {
+        try (Flexemarkets fm = Flexemarkets.connect(TOKEN, _endpoint(), "token-test")) {
             assertThat(fm.userId()).isEqualTo(7L);
             assertThat(fm.accountName()).isEqualTo("dev");
         }
 
-        assertThat(requests)
+        assertThat(_requests)
                 .as("a held token is refreshed, never exchanged for another")
                 .anySatisfy(r -> assertThat(r).contains("GET /api/tokens/refresh"))
                 .noneSatisfy(r -> assertThat(r).isEqualTo("POST /api/tokens auth=null"));
@@ -111,11 +111,11 @@ class TokenAuthenticationTest {
 
     @Test
     void theTokenIsPresentedAsABearer() throws Exception {
-        try (Flexemarkets fm = Flexemarkets.connect(TOKEN, endpoint(), "token-test")) {
+        try (Flexemarkets fm = Flexemarkets.connect(TOKEN, _endpoint(), "token-test")) {
             assertThat(fm.userId()).isEqualTo(7L);
         }
 
-        assertThat(requests).anySatisfy(r -> {
+        assertThat(_requests).anySatisfy(r -> {
             assertThat(r).contains("/api/tokens/refresh");
             assertThat(r).contains("auth=Bearer " + TOKEN);
         });
@@ -128,11 +128,11 @@ class TokenAuthenticationTest {
      */
     @Test
     void theSignInEndpointIsNotPostedToAtAll() throws Exception {
-        try (Flexemarkets fm = Flexemarkets.connect(TOKEN, endpoint(), "token-test")) {
+        try (Flexemarkets fm = Flexemarkets.connect(TOKEN, _endpoint(), "token-test")) {
             assertThat(fm.userId()).isEqualTo(7L);
         }
 
-        assertThat(requests)
+        assertThat(_requests)
                 .noneSatisfy(r -> assertThat(r).startsWith("POST /api/tokens auth"));
     }
 }

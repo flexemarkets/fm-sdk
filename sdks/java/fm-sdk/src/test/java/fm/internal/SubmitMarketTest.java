@@ -1,9 +1,9 @@
 package fm.internal;
 
-import fm.ApiException;
+import fm.model.Market;
+import fm.model.OrderSide;
 import fm.Flexemarkets;
-import fm.Market;
-import fm.Side;
+import fm.error.ApiException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -42,11 +42,11 @@ class SubmitMarketTest {
     private static final String TOKEN =
             "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl";
 
-    private HttpServer server;
-    private final List<String> submitted = new ArrayList<>();
+    private HttpServer _server;
+    private final List<String> _submitted = new ArrayList<>();
 
     /** priceMinimum 110, tick 25 — so the legal prices are 110, 135, 160, 185. */
-    private String marketsJson = """
+    private String _marketsJson = """
         [{"id":11,"marketplaceId":1,"symbol":"STK","name":"Stock",
           "priceMinimum":110,"priceMaximum":199,"priceTick":25,
           "unitMinimum":1,"unitMaximum":100,"unitTick":1}]
@@ -54,44 +54,44 @@ class SubmitMarketTest {
 
     @BeforeEach
     void startServer() throws IOException {
-        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        _server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 
-        server.createContext("/api/tokens", exchange -> respond(exchange, """
+        _server.createContext("/api/tokens", exchange -> _respond(exchange, """
             {"token":"%s",
              "person":{"id":7,"accountId":1,"email":"dev@dev"},
              "account":{"id":1,"name":"dev"}}
             """.formatted(TOKEN)));
 
-        server.createContext("/api/marketplaces/1/markets", exchange -> respond(exchange, marketsJson));
+        _server.createContext("/api/marketplaces/1/markets", exchange -> _respond(exchange, _marketsJson));
 
-        server.createContext("/api/orders", exchange -> {
-            submitted.add(body(exchange));
-            respond(exchange, "{\"id\":42,\"marketplaceId\":1,\"marketId\":11}");
+        _server.createContext("/api/orders", exchange -> {
+            _submitted.add(_body(exchange));
+            _respond(exchange, "{\"id\":42,\"marketplaceId\":1,\"marketId\":11}");
         });
 
-        server.createContext("/api", exchange -> {
-            String base = "http://127.0.0.1:" + server.getAddress().getPort() + "/api";
-            respond(exchange, """
+        _server.createContext("/api", exchange -> {
+            String base = "http://127.0.0.1:" + _server.getAddress().getPort() + "/api";
+            _respond(exchange, """
                 {"_links":{"marketplaces":{"href":"%s/marketplaces"},
                            "orders":{"href":"%s/orders"}}}
                 """.formatted(base, base));
         });
 
-        server.start();
+        _server.start();
     }
 
     @AfterEach
     void stopServer() {
-        if (server != null) {
-            server.stop(0);
+        if (_server != null) {
+            _server.stop(0);
         }
     }
 
-    private static String body(HttpExchange exchange) throws IOException {
+    private static String _body(HttpExchange exchange) throws IOException {
         return new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
     }
 
-    private static void respond(HttpExchange exchange, String json) throws IOException {
+    private static void _respond(HttpExchange exchange, String json) throws IOException {
         byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
         exchange.sendResponseHeaders(200, bytes.length);
@@ -100,9 +100,9 @@ class SubmitMarketTest {
         }
     }
 
-    private Flexemarkets connect() throws IOException {
+    private Flexemarkets _connect() throws IOException {
         return Flexemarkets.connect(TOKEN,
-                "http://127.0.0.1:" + server.getAddress().getPort() + "/api/marketplaces/1",
+                "http://127.0.0.1:" + _server.getAddress().getPort() + "/api/marketplaces/1",
                 "submit-market-test");
     }
 
@@ -112,11 +112,11 @@ class SubmitMarketTest {
      */
     @Test
     void aBuyBidsTheHighestLegalPrice() throws Exception {
-        try (Flexemarkets fm = connect()) {
-            fm.submitMarket(1L, 11L, Side.BUY, 5L);
+        try (Flexemarkets fm = _connect()) {
+            fm.submitMarket(1L, 11L, OrderSide.BUY, 5L);
         }
 
-        assertThat(submitted.get(0))
+        assertThat(_submitted.get(0))
                 .contains("\"price\":185")
                 .doesNotContain(String.valueOf(Long.MAX_VALUE));
     }
@@ -124,21 +124,21 @@ class SubmitMarketTest {
     /** A sell offers the floor, which is always on a tick. */
     @Test
     void aSellOffersTheLowestLegalPrice() throws Exception {
-        try (Flexemarkets fm = connect()) {
-            fm.submitMarket(1L, 11L, Side.SELL, 5L);
+        try (Flexemarkets fm = _connect()) {
+            fm.submitMarket(1L, 11L, OrderSide.SELL, 5L);
         }
 
-        assertThat(submitted.get(0)).contains("\"price\":110");
+        assertThat(_submitted.get(0)).contains("\"price\":110");
     }
 
     /** It is a LIMIT on the wire, because that is the only type the server has. */
     @Test
     void itIsSubmittedAsALimit() throws Exception {
-        try (Flexemarkets fm = connect()) {
-            fm.submitMarket(1L, 11L, Side.BUY, 5L);
+        try (Flexemarkets fm = _connect()) {
+            fm.submitMarket(1L, 11L, OrderSide.BUY, 5L);
         }
 
-        assertThat(submitted.get(0)).contains("\"type\":\"LIMIT\"");
+        assertThat(_submitted.get(0)).contains("\"type\":\"LIMIT\"");
     }
 
     /**
@@ -150,12 +150,12 @@ class SubmitMarketTest {
      */
     @Test
     void whateverDoesNotFillIsCancelled() throws Exception {
-        try (Flexemarkets fm = connect()) {
-            fm.submitMarket(1L, 11L, Side.BUY, 5L);
+        try (Flexemarkets fm = _connect()) {
+            fm.submitMarket(1L, 11L, OrderSide.BUY, 5L);
         }
 
-        assertThat(submitted).hasSize(2);
-        assertThat(submitted.get(1))
+        assertThat(_submitted).hasSize(2);
+        assertThat(_submitted.get(1))
                 .contains("\"type\":\"CANCEL\"")
                 .contains("\"original\":42");
     }
@@ -169,34 +169,34 @@ class SubmitMarketTest {
      */
     @Test
     void theCancelIsUnconditional() throws Exception {
-        try (Flexemarkets fm = connect()) {
-            fm.submitMarket(1L, 11L, Side.SELL, 5L);
+        try (Flexemarkets fm = _connect()) {
+            fm.submitMarket(1L, 11L, OrderSide.SELL, 5L);
         }
 
-        assertThat(submitted).as("submit then cancel, always").hasSize(2);
+        assertThat(_submitted).as("submit then cancel, always").hasSize(2);
     }
 
     @Test
     void anUnknownMarketSaysSoRatherThanGuessingAPrice() throws Exception {
-        try (Flexemarkets fm = connect()) {
+        try (Flexemarkets fm = _connect()) {
             org.assertj.core.api.Assertions
-                    .assertThatThrownBy(() -> fm.submitMarket(1L, 99L, Side.BUY, 5L))
+                    .assertThatThrownBy(() -> fm.submitMarket(1L, 99L, OrderSide.BUY, 5L))
                     .isInstanceOf(ApiException.class)
                     .hasMessageContaining("99");
         }
 
-        assertThat(submitted).as("nothing was sent").isEmpty();
+        assertThat(_submitted).as("nothing was sent").isEmpty();
     }
 
     // --- the price rule itself, without a server ----------------------------
 
-    private static Market market(long min, long max, long tick) {
+    private static Market _market(long min, long max, long tick) {
         return new Market(11L, 1L, "Stock", null, "STK", false, min, max, tick, 1L, 100L, 1L);
     }
 
     @Test
     void theTopOfTheRangeIsUsedWhenItIsOnATick() {
-        assertThat(HttpFlexemarkets.marketableLimit(market(100, 200, 25), Side.BUY))
+        assertThat(HttpFlexemarkets.marketableLimit(_market(100, 200, 25), OrderSide.BUY))
                 .isEqualTo(200L);
     }
 
@@ -208,16 +208,16 @@ class SubmitMarketTest {
      */
     @Test
     void aRangeThatIsNotAWholeNumberOfTicksRoundsDownToOne() {
-        assertThat(HttpFlexemarkets.marketableLimit(market(110, 199, 25), Side.BUY))
+        assertThat(HttpFlexemarkets.marketableLimit(_market(110, 199, 25), OrderSide.BUY))
                 .isEqualTo(185L);
     }
 
     /** A tick of zero marks a fixed dimension: one legal price, both bounds equal. */
     @Test
     void aFixedPriceMarketHasOnlyItsFloor() {
-        assertThat(HttpFlexemarkets.marketableLimit(market(150, 150, 0), Side.BUY))
+        assertThat(HttpFlexemarkets.marketableLimit(_market(150, 150, 0), OrderSide.BUY))
                 .isEqualTo(150L);
-        assertThat(HttpFlexemarkets.marketableLimit(market(150, 150, 0), Side.SELL))
+        assertThat(HttpFlexemarkets.marketableLimit(_market(150, 150, 0), OrderSide.SELL))
                 .isEqualTo(150L);
     }
 }

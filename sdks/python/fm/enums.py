@@ -1,4 +1,4 @@
-"""Side and order type, as enums rather than Strings with constants beside them.
+"""OrderSide and order type, as enums rather than Strings with constants beside them.
 
 Both were plain strings with ``Order.SIDE_BUY`` and ``Order.TYPE_LIMIT`` next to
 them, which is a convention rather than a rule: nothing stopped a caller writing
@@ -16,18 +16,18 @@ from __future__ import annotations
 from enum import StrEnum
 
 
-class Side(StrEnum):
+class OrderSide(StrEnum):
     """Which way an order goes."""
 
     BUY = "BUY"
     SELL = "SELL"
 
-    def contra(self) -> "Side":
+    def contra(self) -> "OrderSide":
         """The other side: what a maker quotes against, and what a taker lifts."""
-        return Side.SELL if self is Side.BUY else Side.BUY
+        return OrderSide.SELL if self is OrderSide.BUY else OrderSide.BUY
 
     @classmethod
-    def of(cls, value: str | None) -> "Side | None":
+    def of(cls, value: str | None) -> "OrderSide | None":
         """The side a response names, or ``None`` if it names none or one this
         version does not know.
 
@@ -58,7 +58,7 @@ class OrderType(StrEnum):
 
     @classmethod
     def of(cls, value: str | None) -> "OrderType | None":
-        """Lenient for the reason :meth:`Side.of` gives -- and it matters more
+        """Lenient for the reason :meth:`OrderSide.of` gives -- and it matters more
         here, because the server has emitted ``"MARKET"`` on at least one path.
         """
         if value is None:
