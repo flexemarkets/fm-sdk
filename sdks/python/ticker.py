@@ -2,17 +2,13 @@
 """fm-ticker — live order book and trade history display."""
 
 import argparse
-import queue
 import sys
+import threading
 
 from fm import (
     Flexemarkets,
-    Books,
-    Tapes,
-    OrdersUpdate,
+    Desk,
     Session,
-    Holding,
-    StreamDropped,
 )
 
 TRADE_DISPLAY_COUNT = 5
@@ -35,7 +31,7 @@ def _trade_prices(prices: list[int], count: int) -> str:
     return "  ".join(f"${p / 100:.2f}" for p in reversed(recent))
 
 
-def display(books: Books, trades: Tapes, session: Session | None, endpoint_url: str = "") -> None:
+def display(desk: Desk, session: Session | None, endpoint_url: str = "") -> None:
     state = session.state if session else "---"
 
     lines: list[str] = []
@@ -46,11 +42,11 @@ def display(books: Books, trades: Tapes, session: Session | None, endpoint_url: 
     lines.append(f"  {'Symbol':>6}  {'Bid':>6}  {'Ask':>6}  {'Spread':>6}   Last trades")
     lines.append(f"  {'------':>6}  {'------':>6}  {'------':>6}  {'------':>6}   -----------")
 
-    for book in sorted(books.collection(), key=lambda b: b.market_id):
+    for book in sorted(desk.books(), key=lambda b: b.market_id):
         bid = book.best_buy_price()
         ask = book.best_sell_price()
         symbol = book.symbol or "?"
-        recent = trades[book.market_id].most_recent_prices()
+        recent = desk.tape(book.market_id).most_recent_prices()
         lines.append(
             f"  {symbol:>6}  {_price(bid)}  {_price(ask)}  {_spread(bid, ask)}"
             f"   {_trade_prices(recent, TRADE_DISPLAY_COUNT)}"
@@ -77,46 +73,41 @@ def main() -> None:
         markets = fm.markets(marketplace_id)
         markets.sort(key=lambda m: m.id)
 
-        books = Books(markets)
-        market_trades = Tapes(markets)
-
-        q: queue.Queue[object] = queue.Queue(maxsize=1000)
-        fm.listen(marketplace_id, q)
+        # A desk keeps the books and the tape for us: seeded from the REST
+        # snapshot, kept current from the same delta stream, and reseeded on a
+        # sequence gap. That is the whole reason this example no longer holds
+        # aggregators of its own.
+        desk = fm.desk(marketplace_id)
 
         endpoint_url = fm.endpoint_url
-        session: Session | None = None
-        display(books, market_trades, session, endpoint_url)
+        state: dict[str, Session | None] = {"session": None}
+        closed = threading.Event()
+        dirty = threading.Event()
+        dirty.set()
+
+        def _session_changed(s: Session) -> None:
+            state["session"] = s
+            dirty.set()
+            if s.state == Session.STATE_CLOSED:
+                closed.set()
+
+        # The desk dispatches on its own thread; these only flag that something
+        # moved, so the screen is written from the main thread below.
+        desk.on_session_change(_session_changed)
+        for market in markets:
+            desk.on_book_change(market.id, lambda _b: dirty.set())
 
         try:
-            while True:
-                event = q.get()
-                redraw = False
-
-                match event:
-                    case OrdersUpdate() as update:
-                        books.update(update.orders)
-                        market_trades.update(update.orders)
-                        redraw = True
-                    case Session() as s:
-                        session = s
-                        redraw = True
-                        if s.state == Session.STATE_CLOSED:
-                            display(books, market_trades, session, endpoint_url)
-                            print("Session closed.")
-                            break
-                    case Holding():
-                        pass
-                    case StreamDropped() as err:
-                        print(f"\nConnection lost: {err.exception}", file=sys.stderr)
-                        fm.reconnect()
-                    case _:
-                        pass
-
-                if redraw:
-                    display(books, market_trades, session, endpoint_url)
-
+            while not closed.is_set():
+                if dirty.wait(timeout=0.1):
+                    dirty.clear()
+                    display(desk, state["session"], endpoint_url)
+            display(desk, state["session"], endpoint_url)
+            print("Session closed.")
         except KeyboardInterrupt:
             print("\nStopped.")
+        finally:
+            desk.close()
 
 
 if __name__ == "__main__":

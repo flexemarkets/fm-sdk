@@ -6,11 +6,8 @@
  */
 
 import { Flexemarkets } from "./client.js";
-import { Books } from "./orderbook.js";
-import { Tapes } from "./trades.js";
-import type { FmEvent, StreamDropped } from "./stomp.js";
+import type { Desk } from "./desk.js";
 import type { Session } from "./types.js";
-import type { OrdersUpdate } from "./stomp.js";
 import { SESSION_STATE_CLOSED } from "./types.js";
 
 const TRADE_DISPLAY_COUNT = 5;
@@ -34,8 +31,7 @@ function tradePrices(prices: number[], count: number): string {
 }
 
 function display(
-  books: Books,
-  trades: Tapes,
+  desk: Desk,
   session: Session | null,
   endpointUrl: string = "",
 ): void {
@@ -53,12 +49,12 @@ function display(
     `  ${"------".padStart(6)}  ${"------".padStart(6)}  ${"------".padStart(6)}  ${"------".padStart(6)}   -----------`,
   );
 
-  const sorted = [...books.collection()].sort((a, b) => a.marketId - b.marketId);
+  const sorted = [...desk.books()].sort((a, b) => a.marketId - b.marketId);
   for (const book of sorted) {
     const bid = book.bestBuyPrice();
     const ask = book.bestSellPrice();
     const symbol = book.symbol ?? "?";
-    const recent = trades.get(book.marketId)?.mostRecentPrices() ?? [];
+    const recent = desk.tape(book.marketId)?.mostRecentPrices() ?? [];
     lines.push(
       `  ${symbol.padStart(6)}  ${price(bid)}  ${price(ask)}  ${spread(bid, ask)}   ${tradePrices(recent, TRADE_DISPLAY_COUNT)}`,
     );
@@ -66,24 +62,6 @@ function display(
 
   lines.push("");
   process.stdout.write(lines.join("\n"));
-}
-
-function isOrdersUpdate(event: FmEvent): event is OrdersUpdate {
-  return typeof event === "object" && event !== null && (event as OrdersUpdate).kind === "orders-update";
-}
-
-function isSession(event: FmEvent): event is Session {
-  return (
-    typeof event === "object" &&
-    !Array.isArray(event) &&
-    "state" in event &&
-    "marketplaceId" in event &&
-    "allocationId" in event
-  );
-}
-
-function isStreamDropped(event: FmEvent): event is StreamDropped {
-  return typeof event === "object" && "kind" in event && event.kind === "stream-dropped";
 }
 
 async function main(): Promise<void> {
@@ -106,38 +84,30 @@ async function main(): Promise<void> {
     const markets = await fm.markets(marketplaceId);
     markets.sort((a, b) => a.id - b.id);
 
-    const books = new Books(markets);
-    const marketTrades = new Tapes(markets);
+    // A desk keeps the books and the tape for us: seeded from the REST
+    // snapshot, kept current from the same delta stream, and reseeded on a
+    // sequence gap. That is the whole reason this example no longer holds
+    // aggregators of its own.
+    const desk = await fm.desk(marketplaceId);
     const endpointUrl = fm.endpointUrl;
 
     let session: Session | null = null;
-    display(books, marketTrades, session, endpointUrl);
+    display(desk, session, endpointUrl);
 
-    await fm.listen(marketplaceId, (event: FmEvent) => {
-      let redraw = false;
-
-      if (isOrdersUpdate(event)) {
-        books.update(event.orders);
-        marketTrades.update(event.orders);
-        redraw = true;
-      } else if (isSession(event)) {
-        session = event;
-        redraw = true;
-        if (event.state === SESSION_STATE_CLOSED) {
-          display(books, marketTrades, session, endpointUrl);
-          console.log("Session closed.");
-          fm.close();
-          process.exit(0);
-        }
-      } else if (isStreamDropped(event)) {
-        process.stderr.write(`\nConnection lost: ${event.exception.message}\n`);
-        fm.reconnect();
-      }
-
-      if (redraw) {
-        display(books, marketTrades, session, endpointUrl);
+    desk.onSessionChange((s: Session) => {
+      session = s;
+      display(desk, session, endpointUrl);
+      if (s.state === SESSION_STATE_CLOSED) {
+        console.log("Session closed.");
+        desk.close();
+        fm.close();
+        process.exit(0);
       }
     });
+
+    for (const market of markets) {
+      desk.onBookChange(market.id, () => display(desk, session, endpointUrl));
+    }
 
     // Keep alive — listen for Ctrl+C
     process.on("SIGINT", () => {
