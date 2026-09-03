@@ -6,7 +6,6 @@ import fm.role.Management;
 import fm.role.Reading;
 import fm.role.Streaming;
 import fm.role.Writing;
-import fm.internal.Endpoints;
 import fm.internal.HttpFlexemarkets;
 
 import java.io.IOException;

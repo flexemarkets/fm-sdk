@@ -120,14 +120,36 @@ re-proposed:
 | exceptions stay in `fm`; `fm.exception` floated | `fm.error` | shorter at the `catch` site than `fm.exception`, and the eleven of them were a third of the flat package |
 | `OrderSide`, `TickGrid` stay in `fm` | `fm.model` | both are things you are handed or hand back, which is what `fm.model` means here; `Snapshot` stayed out, being a wrapper |
 | the six role interfaces stay in `fm` | `fm.role` | grouping them makes "no uptake" visible rather than hiding six unused names among fifty-two |
-| `Endpoints`, `OrderUtils` stay in `fm` | `fm.internal`, **unexported** | see below — this one is not a move |
+| `Endpoints`, `OrderUtils` stay in `fm` | `OrderUtils` to `fm.internal`; **`Endpoints` stays exported in `fm`** | see below — withdrawing `Endpoints` was a mistake, corrected before release |
 
-**`Endpoints` leaving the exported surface is a withdrawal, not a rename**, and
-it is the only part of this with no mechanical migration. fm-robots imports it
-today; after this it cannot, at any import path. That deserves its own decision
-before 0.2.0 is cut: either it is re-exported from `fm`, or a supported
-replacement exists, or fm-robots stops needing it. The other 47 moved types are
-a scripted import rewrite.
+**`Endpoints` was swept into `fm.internal` and has been put back.** It went
+there with the genuinely internal machinery, and that was wrong: it is the
+shared vocabulary for a public CLI flag, and withdrawing it is not a rename but
+a capability removed, with no mechanical migration for anyone relying on it.
+
+Two repos do. fm-robots calls `Endpoints.resolve` once, in `fm-tokens redeem`
+— which runs *before* a credential exists, so it cannot go through
+`Flexemarkets.connect` and needs the bare resolved URL to POST an OTP to. It
+must also read `-E/--endpoint` exactly as the SDK does, or `-E 1234` would mean
+one thing to that subcommand and another to its siblings; that divergence is
+the failure this class was centralised to prevent. fm-server calls
+`Endpoints.marketplaceId` from `LoopbackProvider`, on the SPI side.
+
+So the exported surface those two need is two static methods, which is already
+all `Endpoints` has in public besides `DEFAULT_HOST`. It stays in `fm`.
+`OrderUtils` and `Timestamps` did move, and nothing outside imports either.
+
+**Not on `Flexemarkets`, and it is worth saying why**, because it is the
+obvious-looking home. That interface documents itself as *a composition, not a
+list* — everything it can do belongs to one of the six roles and every one of
+those methods is abstract — and it is something you hold and close. Endpoint
+resolution is a pure string function you call before you have one. Statics on
+an interface are also not inherited, and five types implement `Flexemarkets`,
+so `Flexemarkets.resolve` would compile while `FakeFlexemarkets.resolve` would
+not. And `marketplaceId`'s caller is a provider, which is the other side of the
+boundary from the client interface.
+
+The other 47 moved types are a scripted import rewrite.
 
 **Measured cost to the one real consumer.** fm-robots: 625 imports across 369
 files, plus 322 call sites naming `Side` — `Side.BUY` 141, `Side.SELL` 90,
@@ -213,6 +235,32 @@ the assumption that it is.
 They now live in `fm.role` (see item 3), which changes nothing about the uptake
 — it only stops six unused names sitting among fifty-two, and makes the absence
 of callers easier to see rather than easier to miss.
+
+### An `Endpoint` value type instead of the `Endpoints` statics
+
+`Endpoints` is a holder of statics over `String`, and the thing it is guarding
+is a distinction the type system does not carry: its own doc says provider
+selection *"has to happen against the resolved endpoint, not the argument as
+typed"*. Nothing stops a caller passing the raw argument where the resolved one
+is meant. That is a convention held by review.
+
+A value type would hold it instead:
+
+```java
+Endpoint.of("1234").url()              // https://api.flexemarkets.com/api/marketplaces/1234
+Endpoint.of("~/.fm/endpoint").url()    // whatever the file holds
+Endpoint.of(raw).marketplaceId()
+```
+
+Resolved-ness becomes a type rather than a discipline, and the two call sites
+outside this repo — fm-robots' `fm-tokens redeem` and fm-server's
+`LoopbackProvider` — read as what they are.
+
+Not proposed, for now. It is new API rather than a move, both consumers change
+again, and the statics work. Recorded because 0.2.0 is the release that can
+afford it: it is already rewriting every import, so a consumer that has to
+touch these two call sites anyway pays almost nothing extra. If it is not taken
+now, the next chance is 0.3.
 
 ### HAL-less and V1-only
 

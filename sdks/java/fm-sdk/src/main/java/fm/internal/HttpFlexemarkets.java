@@ -22,6 +22,7 @@ import fm.MarketView;
 import fm.Snapshot;
 import fm.Subscription;
 import fm.error.AccountNameConflictException;
+import fm.Endpoints;
 import fm.error.ApiException;
 import fm.error.AuthenticationException;
 import fm.error.AuthorizationException;
