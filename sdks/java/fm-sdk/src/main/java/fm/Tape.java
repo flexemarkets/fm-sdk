@@ -44,10 +44,10 @@ import java.util.stream.Stream;
  * makes the tape's own contract independent of which one answered, the way
  * reading the snapshot's <em>shape</em> rather than assuming it is.
  *
- * <p>Synchronized for the same reason {@link MarketBook} is: the stream writes
+ * <p>Synchronized for the same reason {@link Book} is: the stream writes
  * on its thread while the caller reads on theirs.
  */
-public class MarketTrades {
+public class Tape {
     private final Market _market;
     private final int _capacity;
     private final ArrayDeque<Trade> _container;
@@ -62,7 +62,7 @@ public class MarketTrades {
      * @throws NullPointerException     if {@code market} is null
      * @throws IllegalArgumentException if {@code capacity} is less than one
      */
-    public MarketTrades(Market market, int capacity) {
+    public Tape(Market market, int capacity) {
         if (market == null) throw new NullPointerException("Market is required.");
         if (capacity < 1) throw new IllegalArgumentException("Capacity must be greater than zero.");
         this._market = market;
@@ -75,7 +75,7 @@ public class MarketTrades {
      *
      * @param market the market whose trades to keep
      */
-    public MarketTrades(Market market) {
+    public Tape(Market market) {
         this(market, 100);
     }
 

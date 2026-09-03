@@ -1,7 +1,7 @@
 /**
  * Trade history maintained from WebSocket order events.
  *
- * Port of fm.trades (Python) / fm.Trade and fm.MarketTrades (Java).
+ * Port of fm.trades (Python) / fm.Trade and fm.Tape (Java).
  */
 
 import { findOrder, isConsumed, isLimit, isResting, isSymbol } from "./order-utils.js";
@@ -65,7 +65,7 @@ export function tradeOf(resting: Order, aggressor: Order): Trade {
  * it oldest-first; sorting here is what makes the tape's own contract
  * independent of which one answered.
  */
-export class MarketTrades {
+export class Tape {
   readonly market: Market;
   readonly capacity: number;
   private readonly _container: Trade[] = [];
@@ -151,14 +151,14 @@ export class MarketTrades {
 }
 
 /**
- * Container of MarketTrades instances, one per market.
+ * Container of Tape instances, one per market.
  */
-export class MarketplaceTrades {
-  private readonly _trades = new Map<number, MarketTrades>();
+export class Tapes {
+  private readonly _trades = new Map<number, Tape>();
 
   constructor(markets: Market[], capacity: number = 100) {
     for (const m of markets) {
-      this._trades.set(m.id, new MarketTrades(m, capacity));
+      this._trades.set(m.id, new Tape(m, capacity));
     }
   }
 
@@ -188,18 +188,18 @@ export class MarketplaceTrades {
       .map((t) => t.mostRecentPrices());
   }
 
-  collection(): MarketTrades[] {
+  collection(): Tape[] {
     return [...this._trades.values()];
   }
 
   /** That market's tape, or null when the market is not in this marketplace —
    *  the lookup MarketView needs, where an unknown id is an answer rather than
    *  a crash on the next property read. */
-  get(marketId: number): MarketTrades | null {
+  get(marketId: number): Tape | null {
     return this._trades.get(marketId) ?? null;
   }
 
-  /** Empty every per-market trade tape — see {@link MarketTrades.clear}. */
+  /** Empty every per-market trade tape — see {@link Tape.clear}. */
   clear(): void {
     for (const t of this._trades.values()) t.clear();
   }

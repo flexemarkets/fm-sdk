@@ -22,7 +22,7 @@ import org.junit.jupiter.api.Test;
  * the API, which is why they were worth carrying rather than rewriting: what
  * makes a book wrong is a missed frame, not a missed method.
  */
-class MarketBookTest {
+class BookTest {
 
     private static Market _market(long id, String symbol) {
         return new Market(id, 0L, symbol, symbol, symbol, false, 0, 10_000, 1, 1, 100, 1);
@@ -98,7 +98,7 @@ class MarketBookTest {
     @Test
     void restingCrossingAndCancellingMoveTheTopOfBook() {
         var market = _market(1, "N5");
-        var book = new MarketBook(market);
+        var book = new Book(market);
 
         assertThat(book.bestBuyPrice()).isEqualTo(-1L);
         assertThat(book.bestSellPrice()).isEqualTo(-1L);
@@ -143,7 +143,7 @@ class MarketBookTest {
     @Test
     void aPartialFillChainThenCancelDrainsTheBook() {
         var market = _market(1, "N10");
-        var book = new MarketBook(market);
+        var book = new Book(market);
 
         long price = 708;
         long nextId = 100;
@@ -199,7 +199,7 @@ class MarketBookTest {
     @Test
     void aDroppedSplitMarkerLeavesGhostUnitsThatSurviveTheCancel() {
         var market = _market(1, "N10");
-        var book = new MarketBook(market);
+        var book = new Book(market);
 
         long price = 708;
         long nextId = 100;
@@ -255,7 +255,7 @@ class MarketBookTest {
     @Test
     void sideGenericAccessorsAgreeWithTheFixedOnes() {
         Market market = _market(1L, "A");
-        MarketBook book = new MarketBook(market);
+        Book book = new Book(market);
         book.update(_toArray(
             _limitOf(market, 1L, OrderSide.BUY, 10, 100),
             _limitOf(market, 2L, OrderSide.BUY, 5, 90),
@@ -272,7 +272,7 @@ class MarketBookTest {
     @Test
     void sideGenericAccessorsReportAnEmptySide() {
         Market market = _market(1L, "A");
-        MarketBook book = new MarketBook(market);
+        Book book = new Book(market);
         book.update(_toArray(_limitOf(market, 1L, OrderSide.BUY, 10, 100)));
 
         assertThat(book.hasValue(OrderSide.SELL)).isFalse();
@@ -283,7 +283,7 @@ class MarketBookTest {
     @Test
     void marketplaceBooksAnswerForAnUnknownMarketRatherThanFailing() {
         Market market = _market(1L, "A");
-        MarketplaceBooks books = new MarketplaceBooks(java.util.List.of(market));
+        Books books = new Books(java.util.List.of(market));
         books.update(_toArray(_limitOf(market, 1L, OrderSide.BUY, 10, 100)));
 
         assertThat(books.bestPrice(1L, OrderSide.BUY)).isEqualTo(100);
@@ -308,7 +308,7 @@ class MarketBookTest {
     void booksAreKeptApartByMarket() {
         Market alpha = _market(1L, "ALPHA");
         Market beta  = _market(2L, "BETA");
-        MarketplaceBooks books = new MarketplaceBooks(java.util.List.of(alpha, beta));
+        Books books = new Books(java.util.List.of(alpha, beta));
 
         books.update(_toArray(
             _limitOf(alpha, 1L, OrderSide.BUY, 10, 100),
@@ -339,7 +339,7 @@ class MarketBookTest {
     @Test
     void aSidelessCancelIsRefusedRatherThanTakenOffTheOfferSide() {
         var market = _market(1L, "STK");
-        var book = new MarketBook(market);
+        var book = new Book(market);
 
         book.update(_toArray(_limitOf(market, 1L, OrderSide.BUY, 5L, 100L)));
 
@@ -350,7 +350,7 @@ class MarketBookTest {
 
     @Test
     void readingABookWithoutNamingASideIsRefused() {
-        var book = new MarketBook(_market(1L, "STK"));
+        var book = new Book(_market(1L, "STK"));
 
         assertThatExceptionOfType(IllegalArgumentException.class).isThrownBy(() -> book.hasValue(null));
         assertThatExceptionOfType(IllegalArgumentException.class).isThrownBy(() -> book.bestPrice(null));

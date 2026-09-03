@@ -49,7 +49,7 @@ class TimestampCreatorDriftTest {
      */
     private static final Map<String, String> NOT_FROM_THE_WIRE = Map.of(
             "Trade",
-            "assembled client-side by MarketTrades from two Orders that were "
+            "assembled client-side by Tape from two Orders that were "
                 + "themselves parsed; the exchange sends no such object.");
 
     private static List<Class<?>> _records() throws Exception {

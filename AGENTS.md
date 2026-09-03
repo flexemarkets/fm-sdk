@@ -35,7 +35,7 @@ dirty build and `mvn -q` both report a false zero.
 |---|---|
 | wire types | the same fields, with the same names, in all three |
 | client surface | the same methods on `Flexemarkets` and its roles, with the same required arguments |
-| read-side surface | the same members on `MarketView`, `MarketBook`, `MarketTrades` and their containers |
+| read-side surface | the same members on `MarketView`, `Book`, `Tape` and their containers |
 | documentation | a ratchet: a method documented in one SDK and not the others |
 | failure types | the same exceptions catchable in each |
 
@@ -48,7 +48,7 @@ cross-SDK comparison can see it. That is what the fixtures are for.
 - `sdks/fixtures/*.json` — **wire** fixtures. A payload the server sends and the
   values every SDK must read out of it.
 - `sdks/fixtures/behaviour/*.json` — **behaviour** fixtures. A sequence of
-  updates and what `MarketBook` or `MarketTrades` must hold afterwards.
+  updates and what `Book` or `Tape` must hold afterwards.
 
 Adding a fixture requires no code change in any SDK. Prefer one over three
 hand-written tests: a fixture cannot be right in one language and wrong in

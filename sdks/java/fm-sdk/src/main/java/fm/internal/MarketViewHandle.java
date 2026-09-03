@@ -10,8 +10,8 @@ import fm.model.Session;
 import fm.model.Trade;
 import fm.Flexemarkets;
 import fm.MarketView;
-import fm.MarketBook;
-import fm.MarketTrades;
+import fm.Book;
+import fm.Tape;
 import fm.Subscription;
 
 import java.util.List;
@@ -52,12 +52,12 @@ class MarketViewHandle implements MarketView {
         return _shared.markets();
     }
 
-    @Override public MarketBook orderBook(long marketId) {
+    @Override public Book orderBook(long marketId) {
         _check();
         return _shared.orderBook(marketId);
     }
 
-    @Override public MarketTrades trades(long marketId) {
+    @Override public Tape trades(long marketId) {
         _check();
         return _shared.trades(marketId);
     }
@@ -79,7 +79,7 @@ class MarketViewHandle implements MarketView {
         return sub;
     }
 
-    @Override public Subscription onOrderBookChange(long marketId, Consumer<MarketBook> handler) {
+    @Override public Subscription onOrderBookChange(long marketId, Consumer<Book> handler) {
         _check();
         Subscription sub = _shared.onOrderBookChange(marketId, handler);
         _mySubscriptions.add(sub);

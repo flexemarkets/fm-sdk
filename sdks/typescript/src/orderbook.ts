@@ -1,7 +1,7 @@
 /**
  * Order book maintained from WebSocket order events.
  *
- * Port of fm.orderbook (Python) / fm.MarketBook (Java).
+ * Port of fm.orderbook (Python) / fm.Book (Java).
  */
 
 import {
@@ -15,7 +15,7 @@ import type { Market, Order } from "./types.js";
  * Updated incrementally from WebSocket ORDERS-UPDATE events.
  * Buys are sorted highest-first (best bid), sells lowest-first (best ask).
  */
-export class MarketBook {
+export class Book {
   readonly market: Market;
   private readonly _buys = new Map<number, number>(); // price → units
   private readonly _sells = new Map<number, number>(); // price → units
@@ -183,14 +183,14 @@ export class MarketBook {
 }
 
 /**
- * Container of MarketBook instances, one per market.
+ * Container of Book instances, one per market.
  */
-export class MarketplaceBooks {
-  private readonly _books = new Map<number, MarketBook>();
+export class Books {
+  private readonly _books = new Map<number, Book>();
 
   constructor(markets: Market[]) {
     for (const m of markets) {
-      this._books.set(m.id, new MarketBook(m));
+      this._books.set(m.id, new Book(m));
     }
   }
 
@@ -208,15 +208,15 @@ export class MarketplaceBooks {
     return this._books.get(marketId)!.bestPrice(side);
   }
 
-  collection(): MarketBook[] {
+  collection(): Book[] {
     return [...this._books.values()];
   }
 
-  get(marketId: number): MarketBook {
+  get(marketId: number): Book {
     return this._books.get(marketId)!;
   }
 
-  /** Clear every contained book — see {@link MarketBook.clear}. */
+  /** Clear every contained book — see {@link Book.clear}. */
   clear(): void {
     for (const book of this._books.values()) book.clear();
   }

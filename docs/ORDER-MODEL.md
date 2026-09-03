@@ -91,8 +91,8 @@ wrongly here.
 
 | you want | use |
 |---|---|
-| the last trade, and who took it | `MarketView.trades(marketId)` → `MarketTrades.last()` → `Trade.aggressor` |
-| both sides of every recent trade | `MarketTrades.mostRecentTrades()` → `Trade.resting` / `Trade.aggressor` |
+| the last trade, and who took it | `MarketView.trades(marketId)` → `Tape.last()` → `Trade.aggressor` |
+| both sides of every recent trade | `Tape.mostRecentTrades()` → `Trade.resting` / `Trade.aggressor` |
 | the aggregated book | `MarketView.orderBook(marketId)` |
 | which side of a pair was resting | `OrderUtils.isResting(orders, order)` |
 | the three `consumer` states | `isAvailable` / `isSplit` / `isConsumed` |
@@ -117,7 +117,7 @@ model invites, and the tape used to make it.
   machine.
 - **The trade snapshot's order is not fixed.** `/v1/orders/recent-trades`
   answered newest-first up to and including fm-server 4.3.1 and oldest-first
-  after it. `MarketTrades` sorts by time either way; if you read the snapshot list
+  after it. `Tape` sorts by time either way; if you read the snapshot list
   directly, sort it yourself.
 - **`trades(marketplaceId, symbol)` is the FM-3 route** and returns rows in
   ascending order id — neither chronological nor most-recent-first.
@@ -128,7 +128,7 @@ model invites, and the tape used to make it.
 |---|---|
 | the data model, in full, with a worked example | [fm-ui's Order Data Format](https://github.com/adhocmarkets/fm-ui/blob/main/src/assets/docs/ORDERS-CSV.md) |
 | the three `consumer` states, `isResting`, `findOrder` | `OrderUtils` (Java), `order_utils` (Python), `order-utils` (TypeScript) |
-| the pairing rule, in prose and in code | `Trade` / `MarketTrades` in each SDK |
+| the pairing rule, in prose and in code | `Trade` / `Tape` in each SDK |
 | the reference implementation it was read from | `TradesSummary` in fm-robots' fm-manager |
 | worked examples as executable fixtures | `sdks/fixtures/behaviour/` |
 

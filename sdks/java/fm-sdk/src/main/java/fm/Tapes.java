@@ -15,11 +15,11 @@ import java.util.stream.Stream;
 /**
  * Every market's trade tape in one marketplace, keyed by market id.
  *
- * <p>The trade-side counterpart to {@link MarketplaceBooks}, and fed the same way:
+ * <p>The trade-side counterpart to {@link Books}, and fed the same way:
  * one update, fanned at every tape, each keeping what belongs to it.
  */
-public class MarketplaceTrades {
-    private final Map<Long, MarketTrades> _trades = new ConcurrentHashMap<>();
+public class Tapes {
+    private final Map<Long, Tape> _trades = new ConcurrentHashMap<>();
 
     /**
      * An empty tape per market.
@@ -27,9 +27,9 @@ public class MarketplaceTrades {
      * @param markets  the markets to keep trades for
      * @param capacity how many trades each tape retains
      */
-    public MarketplaceTrades(List<Market> markets, int capacity) {
+    public Tapes(List<Market> markets, int capacity) {
         for (var market : markets) {
-            _trades.put(market.id(), new MarketTrades(market, capacity));
+            _trades.put(market.id(), new Tape(market, capacity));
         }
     }
 
@@ -59,13 +59,13 @@ public class MarketplaceTrades {
     /**
      * One market's tape.
      *
-     * <p>The counterpart to {@link MarketplaceBooks#get}, so a caller holding either
+     * <p>The counterpart to {@link Books#get}, so a caller holding either
      * aggregator reaches one market's view the same way.
      *
      * @param marketId the market to look up
      * @return its tape, or null if no tape is kept for that market
      */
-    public MarketTrades get(long marketId) {
+    public Tape get(long marketId) {
         return _trades.get(marketId);
     }
 
@@ -80,8 +80,8 @@ public class MarketplaceTrades {
      */
     public long[][] mostRecentPrices() {
         return _trades.values().stream()
-            .sorted(Comparator.comparingLong(MarketTrades::marketId))
-            .map(MarketTrades::mostRecentTrades)
+            .sorted(Comparator.comparingLong(Tape::marketId))
+            .map(Tape::mostRecentTrades)
             .map(trades -> Stream.of(trades).mapToLong(Trade::price).toArray())
             .toArray(long[][]::new);
     }
@@ -91,12 +91,12 @@ public class MarketplaceTrades {
      *
      * @return the tapes, in no particular order
      */
-    public Collection<MarketTrades> collection() {
+    public Collection<Tape> collection() {
         return _trades.values();
     }
 
-    /** Empty every per-market trade tape — see {@link MarketTrades#clear()}. */
+    /** Empty every per-market trade tape — see {@link Tape#clear()}. */
     public void clear() {
-        _trades.values().forEach(MarketTrades::clear);
+        _trades.values().forEach(Tape::clear);
     }
 }

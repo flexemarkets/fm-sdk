@@ -7,7 +7,7 @@ robot in fm-robot-llm-eval, and anything else that has to put a name next to an
 The same cases run in the Java and TypeScript suites. They are written out
 rather than shared as a fixture because this is a pure function over one record,
 not a sequence of updates over an aggregator -- the behaviour fixtures drive
-``MarketBook`` and ``MarketTrades`` and have nowhere to put it.
+``Book`` and ``Tape`` and have nowhere to put it.
 """
 
 from __future__ import annotations

@@ -15,12 +15,12 @@ import fm.model.Session;
 import fm.model.Trade;
 import fm.Flexemarkets;
 import fm.MarketView;
-import fm.MarketplaceTrades;
-import fm.MarketBook;
-import fm.MarketplaceBooks;
+import fm.Tapes;
+import fm.Book;
+import fm.Books;
 import fm.Snapshot;
 import fm.Subscription;
-import fm.MarketTrades;
+import fm.Tape;
 
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -42,8 +42,8 @@ import java.util.function.Consumer;
  *   <li>Calls {@code flexemarkets.listen(marketplaceId, queue)} to
  *       drive a WS subscription, draining the queue in a background
  *       thread.</li>
- *   <li>Dispatches WS events into the existing {@link MarketplaceBooks}
- *       and {@link MarketplaceTrades} aggregators, plus
+ *   <li>Dispatches WS events into the existing {@link Books}
+ *       and {@link Tapes} aggregators, plus
  *       {@link #session} / {@link #holding} fields.</li>
  *   <li>Fires registered handlers when state changes.</li>
  * </ul>
@@ -73,8 +73,8 @@ public class DefaultMarketView implements MarketView {
     private final long _marketplaceId;
     private final List<Market> _markets;
 
-    private final MarketplaceBooks _books;
-    private final MarketplaceTrades _trades;
+    private final Books _books;
+    private final Tapes _trades;
     private final AtomicReference<Session> _session = new AtomicReference<>();
     private final AtomicReference<Holding> _holding = new AtomicReference<>();
 
@@ -83,7 +83,7 @@ public class DefaultMarketView implements MarketView {
     // happens on robot startup / shutdown).
     private final List<Consumer<Session>>                  _sessionHandlers   = new CopyOnWriteArrayList<>();
     private final List<Consumer<Holding>>                  _holdingHandlers   = new CopyOnWriteArrayList<>();
-    private final List<MarketBookHandler>                  _bookHandlers      = new CopyOnWriteArrayList<>();
+    private final List<BookHandler>                  _bookHandlers      = new CopyOnWriteArrayList<>();
     private final List<TradeHandler>                       _tradeHandlers     = new CopyOnWriteArrayList<>();
     private final List<Consumer<GapEvent>>                 _gapHandlers       = new CopyOnWriteArrayList<>();
     private final List<Consumer<ReconnectEvent>>           _reconnectHandlers = new CopyOnWriteArrayList<>();
@@ -114,11 +114,11 @@ public class DefaultMarketView implements MarketView {
         this._flexemarkets = flexemarkets;
         this._marketplaceId = marketplaceId;
         this._markets = List.copyOf(markets);
-        this._books = new MarketplaceBooks(this._markets);
-        // 100 matches the default per-market MarketTrades capacity — see
-        // MarketTrades(Market) ctor. Plumb through to observe() later if a
+        this._books = new Books(this._markets);
+        // 100 matches the default per-market Tape capacity — see
+        // Tape(Market) ctor. Plumb through to observe() later if a
         // caller needs deeper trade scrollback.
-        this._trades = new MarketplaceTrades(this._markets, 100);
+        this._trades = new Tapes(this._markets, 100);
 
         // Subscribe WS first so deltas start landing in the queue,
         // then fetch the REST snapshot, apply it, and only THEN start
@@ -161,8 +161,8 @@ public class DefaultMarketView implements MarketView {
         this._trades.clear();
 
         // Snapshot orders are all available (consumer == null), so
-        // MarketBook.update treats them as adds — same code path WS
-        // deltas use. MarketTrades snapshot feeds the tape via the same
+        // Book.update treats them as adds — same code path WS
+        // deltas use. Tape snapshot feeds the tape via the same
         // update() entrypoint.
         if (!orders.body().isEmpty()) {
             this._books.update(orders.body().toArray(new Order[0]));
@@ -189,13 +189,13 @@ public class DefaultMarketView implements MarketView {
     }
 
     @Override
-    public MarketBook orderBook(long marketId) {
+    public Book orderBook(long marketId) {
         _ensureOpen();
         return _books.get(marketId);
     }
 
     @Override
-    public MarketTrades trades(long marketId) {
+    public Tape trades(long marketId) {
         _ensureOpen();
         return _trades.get(marketId);
     }
@@ -220,9 +220,9 @@ public class DefaultMarketView implements MarketView {
     }
 
     @Override
-    public Subscription onOrderBookChange(long marketId, Consumer<MarketBook> handler) {
+    public Subscription onOrderBookChange(long marketId, Consumer<Book> handler) {
         _ensureOpen();
-        MarketBookHandler entry = new MarketBookHandler(marketId, handler);
+        BookHandler entry = new BookHandler(marketId, handler);
         _bookHandlers.add(entry);
         return () -> _bookHandlers.remove(entry);
     }
@@ -375,7 +375,7 @@ public class DefaultMarketView implements MarketView {
         _books.update(orders);
         var traded = _trades.update(orders);
 
-        // MarketTrades first: the more specific event, and a book handler that then
+        // Tape first: the more specific event, and a book handler that then
         // reads the tape sees the same trade the trade handler was just given.
         // Both aggregators are already current either way -- what is ordered
         // here is only which handler hears about it first.
@@ -426,7 +426,7 @@ public class DefaultMarketView implements MarketView {
         }
     }
 
-    private record MarketBookHandler(long marketId, Consumer<MarketBook> handler) {}
+    private record BookHandler(long marketId, Consumer<Book> handler) {}
 
     private record TradeHandler(long marketId, Consumer<fm.model.Trade> handler) {}
 }

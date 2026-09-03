@@ -1,5 +1,5 @@
 {
-  "type": "MarketBook",
+  "type": "Book",
   "why": "Cancelling one of two orders resting at the same price emptied the level. fm-server broadcasts a cancel as two rows -- the CANCEL, and the LIMIT it consumed -- and update() removed for both: once in the CANCEL branch, once because a cancelled limit reads as resting. Invisible for as long as it was because the only cancel test used a single one-unit order, where removing twice and removing once both leave the level empty. Two owners, five units each, is what tells them apart.",
   "market": {
     "id": 7,

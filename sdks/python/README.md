@@ -47,7 +47,7 @@ endpoint=https://api.flexemarkets.com/api/marketplaces/123
 ## SDK usage
 
 ```python
-from fm import Flexemarkets, MarketplaceBooks, MarketplaceTrades
+from fm import Flexemarkets, Books, Tapes
 
 # Connect
 fm = Flexemarkets.connect(
@@ -72,8 +72,8 @@ import queue
 q = queue.Queue(maxsize=1000)
 fm.listen(marketplace_id, q)
 
-books = MarketplaceBooks(markets)
-trades = MarketplaceTrades(markets)
+books = Books(markets)
+trades = Tapes(markets)
 
 while True:
     event = q.get()

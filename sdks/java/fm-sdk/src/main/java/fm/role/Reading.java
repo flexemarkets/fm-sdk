@@ -1,7 +1,7 @@
 package fm.role;
 
 import fm.Flexemarkets;
-import fm.MarketTrades;
+import fm.Tape;
 import fm.MarketView;
 import fm.Snapshot;
 import fm.model.Allotment;
@@ -125,7 +125,7 @@ public interface Reading {
     List<Order> orders(long marketplaceId, String symbol);
 
     /**
-     * MarketTrades in one market, in ascending order id.
+     * Tape in one market, in ascending order id.
      *
      * <p>Answered by a symbol-keyed route, so the orders come back without the
      * symbol on them and with the trade id in {@code original}; both are filled
@@ -240,7 +240,7 @@ public interface Reading {
      * <p>Ordering is the server's and has changed: up to and including
      * fm-server 4.3.1 this answered newest first, later versions answer oldest
      * first. Either way it is the newest {@code size} trades that come back —
-     * only their order differs. {@link MarketTrades} sorts what it is given, so a
+     * only their order differs. {@link Tape} sorts what it is given, so a
      * caller seeding a tape through {@link MarketView} is unaffected; a caller
      * reading this list directly should not assume one.
      *
@@ -256,7 +256,7 @@ public interface Reading {
      * <p>Ordering is the server's and has changed: up to and including
      * fm-server 4.3.1 this answered newest first, later versions answer oldest
      * first. Either way it is the newest {@code size} trades that come back —
-     * only their order differs. {@link MarketTrades} sorts what it is given, so a
+     * only their order differs. {@link Tape} sorts what it is given, so a
      * caller seeding a tape through {@link MarketView} is unaffected; a caller
      * reading this list directly should not assume one.
      *

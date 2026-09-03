@@ -17,8 +17,8 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import tools.jackson.databind.JsonNode;
 
-import fm.MarketBook;
-import fm.MarketTrades;
+import fm.Book;
+import fm.Tape;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -32,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.fail;
  *
  * <p>{@link WireFixturesTest} next door compares <em>parsed field values</em>:
  * one payload in, one set of fields out. It says nothing about what
- * {@link MarketBook} and {@link MarketTrades} do with a sequence of them, which is
+ * {@link Book} and {@link Tape} do with a sequence of them, which is
  * where the three SDKs have actually been wrong together — a book that
  * double-counts a cancel and a tape that holds its trades backwards both parse
  * every field correctly.
@@ -49,7 +49,7 @@ class BehaviourFixturesTest {
     private static final Path FIXTURES =
             Path.of("..", "..", "fixtures", "behaviour").toAbsolutePath().normalize();
 
-    private static final List<String> AGGREGATORS = List.of("MarketBook", "MarketTrades");
+    private static final List<String> AGGREGATORS = List.of("Book", "Tape");
 
     private record Fixture(String name, JsonNode document) {
         @Override
@@ -114,14 +114,14 @@ class BehaviourFixturesTest {
                 + "because its input arrives newest first.");
 
         switch (doc.get("type").asString()) {
-            case "MarketBook" -> _checkOrderBook(doc);
-            case "MarketTrades" -> _checkTrades(doc);
+            case "Book" -> _checkOrderBook(doc);
+            case "Tape" -> _checkTrades(doc);
             default -> fail("no aggregator for type " + doc.get("type").asString());
         }
     }
 
     private void _checkOrderBook(JsonNode doc) {
-        MarketBook book = new MarketBook(_market(doc));
+        Book book = new Book(_market(doc));
         int index = 0;
         for (JsonNode step : doc.get("steps")) {
             if (step.path("clear").asBoolean(false)) {
@@ -163,7 +163,7 @@ class BehaviourFixturesTest {
     }
 
     private void _checkTrades(JsonNode doc) {
-        MarketTrades tape = new MarketTrades(_market(doc));
+        Tape tape = new Tape(_market(doc));
         int index = 0;
         for (JsonNode step : doc.get("steps")) {
             if (step.path("clear").asBoolean(false)) {

@@ -19,9 +19,9 @@ import com.googlecode.lanterna.terminal.DefaultTerminalFactory;
 import com.googlecode.lanterna.terminal.Terminal;
 
 import fm.Flexemarkets;
-import fm.MarketBook;
-import fm.MarketplaceTrades;
-import fm.MarketplaceBooks;
+import fm.Book;
+import fm.Tapes;
+import fm.Books;
 
 public class Ticker {
     private static final int TRADE_DISPLAY_COUNT = 5;
@@ -29,8 +29,8 @@ public class Ticker {
     private final String _credential;
     private final String _endpoint;
 
-    private MarketplaceBooks _orderBooks;
-    private MarketplaceTrades _trades;
+    private Books _orderBooks;
+    private Tapes _trades;
     private List<Market> _markets;
 
     private Session _session;
@@ -74,8 +74,8 @@ public class Ticker {
 
             _session = fm.session(marketplaceId);
 
-            _orderBooks = new MarketplaceBooks(_markets);
-            _trades = new MarketplaceTrades(_markets, 10);
+            _orderBooks = new Books(_markets);
+            _trades = new Tapes(_markets, 10);
 
             fm.listen(marketplaceId, queue);
 
@@ -165,7 +165,7 @@ public class Ticker {
         // Market rows
         row++;
         var sorted = _orderBooks.collection().stream()
-                .sorted(Comparator.comparingLong(MarketBook::marketId)).toList();
+                .sorted(Comparator.comparingLong(Book::marketId)).toList();
         for (var book : sorted) {
             var bid = book.bestBuyPrice();
             var ask = book.bestSellPrice();

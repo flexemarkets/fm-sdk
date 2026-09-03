@@ -6,8 +6,8 @@
  */
 
 import { Flexemarkets } from "./client.js";
-import { MarketplaceBooks } from "./orderbook.js";
-import { MarketplaceTrades } from "./trades.js";
+import { Books } from "./orderbook.js";
+import { Tapes } from "./trades.js";
 import type { FmEvent, StreamDropped } from "./stomp.js";
 import type { Session } from "./types.js";
 import type { OrdersUpdate } from "./stomp.js";
@@ -34,8 +34,8 @@ function tradePrices(prices: number[], count: number): string {
 }
 
 function display(
-  books: MarketplaceBooks,
-  trades: MarketplaceTrades,
+  books: Books,
+  trades: Tapes,
   session: Session | null,
   endpointUrl: string = "",
 ): void {
@@ -106,8 +106,8 @@ async function main(): Promise<void> {
     const markets = await fm.markets(marketplaceId);
     markets.sort((a, b) => a.id - b.id);
 
-    const books = new MarketplaceBooks(markets);
-    const marketTrades = new MarketplaceTrades(markets);
+    const books = new Books(markets);
+    const marketTrades = new Tapes(markets);
     const endpointUrl = fm.endpointUrl;
 
     let session: Session | null = null;

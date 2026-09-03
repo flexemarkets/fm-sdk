@@ -30,7 +30,7 @@ anyone, and are still cheap to revisit.
 
 ### 1. `MarketView` exposes the trade tape — *landed*
 
-`DefaultMarketView` built a `MarketplaceTrades`, seeded it with a REST call to
+`DefaultMarketView` built a `Tapes`, seeded it with a REST call to
 `recentTrades` on every `observe()`, and fed it on every delta. The
 `MarketView` interface had no accessor for it: the tape was constructed,
 cleared and updated, and never read. Every observer paid a network round trip
@@ -39,32 +39,32 @@ point.
 
 `MarketView.trades(long marketId)` now answers it, mirroring
 `orderBook(long marketId)` — same shape, same null-for-unknown-market rule,
-same atomicity. `MarketplaceTrades` gained the `get(long)` lookup that
-`MarketplaceBooks` already had, so either aggregator reaches one market's view the
+same atomicity. `Tapes` gained the `get(long)` lookup that
+`Books` already had, so either aggregator reaches one market's view the
 same way.
 
 Forces 0.2 because it adds a method to a published interface.
 
-### 2. `MarketplaceTrades` moves to `fm.internal`
+### 2. `Tapes` moves to `fm.internal`
 
 Zero references in fm-robots and fm-server. Inside the SDK its only use is
 `DefaultMarketView`'s private field, and with item 1 landed a caller reaches a
 tape through `MarketView.trades` without ever naming the aggregate.
 
-`MarketplaceBooks` is not in the same position and stays public: `Taker`, `TakerMvo`
+`Books` is not in the same position and stays public: `Taker`, `TakerMvo`
 and `Venture` each construct one directly, and `fm.robot.Books` takes one as a
 parameter. Building the aggregators yourself is a real path — for books.
 Nobody has ever done it for trades.
 
 Worth knowing: `UPGRADING-0.1.md` records that a draft proposed moving
-`MarketplaceBooks`, `MarketplaceTrades` and `Version` to `fm.internal` and that the
-revert was right. It then justifies two of the three — `new MarketplaceBooks(markets)`
+`Books`, `Tapes` and `Version` to `fm.internal` and that the
+revert was right. It then justifies two of the three — `new Books(markets)`
 is supported and fm-robots does it four times, `Version` arrives on your event
 queue so you must be able to name it — and says nothing about
-`MarketplaceTrades`. It was swept along with its neighbours. The draft may have
+`Tapes`. It was swept along with its neighbours. The draft may have
 been right about that one.
 
-`MarketTrades` itself stays public: `MarketView.trades` returns it.
+`Tape` itself stays public: `MarketView.trades` returns it.
 
 ---
 

@@ -1,6 +1,6 @@
 """Order book maintained from WebSocket order events.
 
-Port of fm.orderbook.MarketBook and fm.orderbook.MarketplaceOrderBooks.
+Port of fm.orderbook.Book and fm.orderbook.MarketplaceOrderBooks.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from .order_utils import (find_order, is_available, is_cancel, is_resting,
 from .types import Market, Order
 
 
-class MarketBook:
+class Book:
     """Aggregated price-level order book for a single market.
 
     Updated incrementally from WebSocket ``ORDERS-UPDATE`` events.
@@ -207,15 +207,15 @@ class MarketBook:
         return "\n".join(lines)
 
 
-class MarketplaceBooks:
-    """Container of :class:`MarketBook` instances, one per market.
+class Books:
+    """Container of :class:`Book` instances, one per market.
 
     Port of ``MarketplaceOrderBooks``.
     """
 
     def __init__(self, markets: list[Market], depth: int = 0):
-        self._books: dict[int, MarketBook] = {
-            m.id: MarketBook(m, depth) for m in markets
+        self._books: dict[int, Book] = {
+            m.id: Book(m, depth) for m in markets
         }
 
     def update(self, orders: list[Order]) -> None:
@@ -228,21 +228,21 @@ class MarketplaceBooks:
     def best_price(self, market_id: int, side: str) -> int:
         return self._books[market_id].best_price(side)
 
-    def collection(self) -> list[MarketBook]:
+    def collection(self) -> list[Book]:
         return list(self._books.values())
 
-    def get(self, market_id: int) -> MarketBook | None:
+    def get(self, market_id: int) -> Book | None:
         """Return the order book for *market_id*, or ``None`` if the
         market isn't part of this marketplace. Mirrors the Java + TS
-        ``MarketplaceBooks.get(marketId)`` signature so MarketView can do a
+        ``Books.get(marketId)`` signature so MarketView can do a
         null-tolerant lookup.
         """
         return self._books.get(market_id)
 
     def clear(self) -> None:
-        """Clear every contained book — see :meth:`MarketBook.clear`."""
+        """Clear every contained book — see :meth:`Book.clear`."""
         for book in self._books.values():
             book.clear()
 
-    def __getitem__(self, market_id: int) -> MarketBook:
+    def __getitem__(self, market_id: int) -> Book:
         return self._books[market_id]

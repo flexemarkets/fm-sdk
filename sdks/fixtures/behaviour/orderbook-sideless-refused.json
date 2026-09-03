@@ -1,5 +1,5 @@
 {
-  "type": "MarketBook",
+  "type": "Book",
   "why": "An order that names no side was filed as an offer. _priceLevels was `BUY == side ? buys : sells` in all three SDKs -- the complement of buy rather than a test for sell -- so a null side fell through to the sell book. A null side is not hypothetical: fm-server builds a cancel from type/original/marketplaceId/marketId and nothing else (OrderHandler.clearStandingOrders), so it carries no side. It also carries no consumer, which makes isAvailable true, so such a row reached _add and put a phantom offer on the book -- on a side the cancelled order may never have been on. The SDK cannot know the side, so it must say so rather than pick one.",
   "source": {
     "constructed": "fm-server broadcasts a cancel beside the limit it consumed, so the lone row is not something a capture of a healthy stream produces -- it is what arrives when the pair is split across two frames."

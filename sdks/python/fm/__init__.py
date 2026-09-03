@@ -18,8 +18,8 @@ from .exceptions import (
     PersonHasMarketplaceDataError,
 )
 from .market_view import GapEvent, MarketView, ReconnectEvent, Subscription
-from .orderbook import MarketBook, MarketplaceBooks
-from .trades import MarketplaceTrades, Trade, MarketTrades
+from .orderbook import Book, Books
+from .trades import Tapes, Trade, Tape
 from .types import (
     Account,
     Allotment,
@@ -57,10 +57,10 @@ __all__ = [
     "TickGrid",
     "Token",
     # orderbook & trades
-    "MarketBook",
-    "MarketplaceBooks",
-    "MarketTrades",
-    "MarketplaceTrades",
+    "Book",
+    "Books",
+    "Tape",
+    "Tapes",
     "Trade",
     "Version",
     # market view

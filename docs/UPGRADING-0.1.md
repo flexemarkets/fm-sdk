@@ -97,11 +97,11 @@ or `MarketView` returns or accepts either:
 
 If you import one, you were reaching past the contract.
 
-**`MarketplaceBooks`, `MarketplaceTrades` and `Version` are unchanged.** A draft of
+**`Books`, `Tapes` and `Version` are unchanged.** A draft of
 this guide listed them here; that was wrong and it never shipped that way.
-`new MarketplaceBooks(markets)` is a supported thing to write — `fm-robots` does it
+`new Books(markets)` is a supported thing to write — `fm-robots` does it
 in four places — and `Version` arrives on your event queue, so you need to be
-able to name it. They are still `fm.MarketplaceBooks`, `fm.MarketplaceTrades` and
+able to name it. They are still `fm.Books`, `fm.Tapes` and
 `fm.Version`. No import changes.
 
 `MarketView` remains the easier way to a maintained order book: it keeps the
@@ -250,7 +250,7 @@ fm.create_market(5, "STK", "Stock", TickGrid(0, 10_000, 1), TickGrid(10, 500, 10
 These matched Java, where the same three are unreachable. Nothing in a public
 signature mentions them.
 
-`Version`, `MarketplaceBooks` and `MarketplaceTrades` are still exported.
+`Version`, `Books` and `Tapes` are still exported.
 
 ---
 
@@ -278,7 +278,7 @@ signature mentions them.
 | `EventListener` | `listen()` returns a function that stops it |
 | `DefaultMarketView`, `MarketViewHandle` | `fm.observe(marketplaceId)` returns one |
 
-`Version`, `MarketplaceBooks` and `MarketplaceTrades` are still exported.
+`Version`, `Books` and `Tapes` are still exported.
 
 `createMarket` takes the unit grid it used to hardcode; omit it for the old
 default:

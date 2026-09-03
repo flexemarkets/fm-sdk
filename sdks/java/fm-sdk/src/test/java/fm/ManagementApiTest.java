@@ -421,7 +421,7 @@ class ManagementApiTest {
     }
 
     /**
-     * MarketTrades come back with the trade id in {@code original} and no symbol,
+     * Tape come back with the trade id in {@code original} and no symbol,
      * because the query already fixed it. Both are filled in, so the result is
      * a trade list rather than half-populated orders.
      */

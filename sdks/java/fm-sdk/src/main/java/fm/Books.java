@@ -20,17 +20,17 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>Building these by hand is supported -- {@link MarketView} does it for a
  * caller who does not want to drive the event queue themselves.
  */
-public class MarketplaceBooks {
-    private final Map<Long, MarketBook> _books = new ConcurrentHashMap<>();
+public class Books {
+    private final Map<Long, Book> _books = new ConcurrentHashMap<>();
 
     /**
      * An empty book per market.
      *
      * @param markets the markets to keep books for
      */
-    public MarketplaceBooks(List<Market> markets) {
+    public Books(List<Market> markets) {
         for (var market : markets) {
-            _books.put(market.id(), new MarketBook(market));
+            _books.put(market.id(), new Book(market));
         }
     }
 
@@ -50,7 +50,7 @@ public class MarketplaceBooks {
      * @param marketId the market to look up
      * @return its book, or null if no book is kept for that market
      */
-    public MarketBook get(long marketId) {
+    public Book get(long marketId) {
         return _books.get(marketId);
     }
 
@@ -65,7 +65,7 @@ public class MarketplaceBooks {
      *         nothing resting either way
      */
     public boolean hasValue(long marketId, OrderSide side) {
-        MarketBook book = get(marketId);
+        Book book = get(marketId);
         return book != null && book.hasValue(side);
     }
 
@@ -78,7 +78,7 @@ public class MarketplaceBooks {
      *         market is not in this marketplace
      */
     public long bestPrice(long marketId, OrderSide side) {
-        MarketBook book = get(marketId);
+        Book book = get(marketId);
         return book == null ? -1 : book.bestPrice(side);
     }
 
@@ -87,12 +87,12 @@ public class MarketplaceBooks {
      *
      * @return the books, in no particular order
      */
-    public Collection<MarketBook> collection() {
+    public Collection<Book> collection() {
         return _books.values();
     }
 
-    /** Clear every contained book — see {@link MarketBook#clear()}. */
+    /** Clear every contained book — see {@link Book#clear()}. */
     public void clear() {
-        _books.values().forEach(MarketBook::clear);
+        _books.values().forEach(Book::clear);
     }
 }

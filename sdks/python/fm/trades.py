@@ -1,6 +1,6 @@
 """Trade history maintained from WebSocket order events.
 
-Port of fm.Trade, fm.MarketTrades and fm.MarketplaceTrades.
+Port of fm.Trade, fm.Tape and fm.Tapes.
 """
 
 from __future__ import annotations
@@ -58,7 +58,7 @@ class Trade:
         )
 
 
-class MarketTrades:
+class Tape:
     """Bounded FIFO queue of executed trades for a single market, newest last.
 
     Updated incrementally from WebSocket ``ORDERS-UPDATE`` events, and seeded
@@ -168,15 +168,15 @@ class MarketTrades:
             self._container.clear()
 
 
-class MarketplaceTrades:
-    """Container of :class:`MarketTrades` instances, one per market.
+class Tapes:
+    """Container of :class:`Tape` instances, one per market.
 
-    Port of ``MarketplaceTrades``.
+    Port of ``Tapes``.
     """
 
     def __init__(self, markets: list[Market], capacity: int = 100):
-        self._trades: dict[int, MarketTrades] = {
-            m.id: MarketTrades(m, capacity) for m in markets
+        self._trades: dict[int, Tape] = {
+            m.id: Tape(m, capacity) for m in markets
         }
 
     def update(self, orders: list[Order]) -> dict[int, list[Trade]]:
@@ -201,13 +201,13 @@ class MarketplaceTrades:
             for t in sorted(self._trades.values(), key=lambda t: t.market_id)
         ]
 
-    def collection(self) -> list[MarketTrades]:
+    def collection(self) -> list[Tape]:
         return list(self._trades.values())
 
-    def __getitem__(self, market_id: int) -> MarketTrades:
+    def __getitem__(self, market_id: int) -> Tape:
         return self._trades[market_id]
 
-    def get(self, market_id: int) -> "MarketTrades | None":
+    def get(self, market_id: int) -> "Tape | None":
         """That market's tape, or ``None`` when the market is not in this
         marketplace -- the lookup :class:`~fm.market_view.MarketView` needs,
         where an unknown id is an answer rather than a ``KeyError``.
@@ -216,7 +216,7 @@ class MarketplaceTrades:
 
     def clear(self) -> None:
         """Empty every per-market trade tape — see
-        :meth:`MarketTrades.clear`.
+        :meth:`Tape.clear`.
         """
         for t in self._trades.values():
             t.clear()

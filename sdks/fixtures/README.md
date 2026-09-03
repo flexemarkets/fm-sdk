@@ -84,7 +84,7 @@ longer sends, or one whose type changed, is the failure.
 
 The documents above are one payload each, run through every parser that claims
 to produce their type. They compare *parsed field values*, and say nothing about
-what `MarketBook` and `MarketTrades` do with a sequence of them — which is where the
+what `Book` and `Tape` do with a sequence of them — which is where the
 three SDKs have actually been wrong *together*. A book that double-counts a
 cancel and a tape that holds its trades backwards both parse every field
 correctly.
@@ -93,7 +93,7 @@ So `behaviour/` holds inputs and answers rather than payloads and fields:
 
 ```json
 {
-  "type": "MarketBook",
+  "type": "Book",
   "why": "why this case exists — what breaks without it",
   "market": { "id": 7, "symbol": "A" },
   "deliveredIds": [101, 102],
@@ -104,7 +104,7 @@ So `behaviour/` holds inputs and answers rather than payloads and fields:
 }
 ```
 
-- `type` names the aggregator to drive: `MarketBook` or `MarketTrades`.
+- `type` names the aggregator to drive: `Book` or `Tape`.
 - `steps` are applied in order, each an `update()`. `"clear": true` calls
   `clear()` first, which is how `MarketView` recovers from a sequence gap.
 - `"refused": "<text>"` on a step means that `update()` must raise rather than
@@ -119,11 +119,11 @@ So `behaviour/` holds inputs and answers rather than payloads and fields:
   `trades-ordering` fixture is only a test at all because its orders arrive
   newest-first, and sorting them would leave it green and meaningless.
 
-`MarketBook` reads `bestBuyPrice`, `bestBuyUnits`, `bestSellPrice`,
+`Book` reads `bestBuyPrice`, `bestBuyUnits`, `bestSellPrice`,
 `bestSellUnits`, `hasValueBuy`, `hasValueSell`, `buyLevels` and `sellLevels`;
 levels are `[price, units]` pairs in the order the SDK returns them, so the
 three are held to one sequence despite Java returning a `Map` and the other two
-a list. `MarketTrades` reads `size`, `trades`, `last` and `drain`; a trade compares
+a list. `Tape` reads `size`, `trades`, `last` and `drain`; a trade compares
 `price`, `units`, `restingId`, `aggressorId`, `restingOwnerId`,
 `aggressorOwnerId` and `at`.
 

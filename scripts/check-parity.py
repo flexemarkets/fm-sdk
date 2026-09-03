@@ -456,7 +456,7 @@ def typescript_failures(path: Path) -> set[str]:
 # --- read-side surface ------------------------------------------------------
 #
 # check_methods compares Flexemarkets and its roles: what a caller can ask the
-# server to do. It stops there. MarketView, MarketBook and MarketTrades -- what a
+# server to do. It stops there. MarketView, Book and Tape -- what a
 # caller does with the data that comes back -- were never compared, and that is
 # where the three drifted furthest. MarketView.trades(marketId) existed in Java
 # and in neither of the others, so "what was the last trade, and who took it"
@@ -476,14 +476,14 @@ def typescript_failures(path: Path) -> set[str]:
 READ_SURFACE = {
     "MarketView": ("MarketView.java", ("market_view.py", "MarketView"),
                    ("market-view.ts", "MarketView", "interface")),
-    "MarketBook": ("MarketBook.java", ("orderbook.py", "MarketBook"),
-                  ("orderbook.ts", "MarketBook", "class")),
-    "MarketplaceBooks": ("MarketplaceBooks.java", ("orderbook.py", "MarketplaceBooks"),
-                   ("orderbook.ts", "MarketplaceBooks", "class")),
-    "MarketTrades": ("MarketTrades.java", ("trades.py", "MarketTrades"),
-               ("trades.ts", "MarketTrades", "class")),
-    "MarketplaceTrades": ("MarketplaceTrades.java", ("trades.py", "MarketplaceTrades"),
-                          ("trades.ts", "MarketplaceTrades", "class")),
+    "Book": ("Book.java", ("orderbook.py", "Book"),
+                  ("orderbook.ts", "Book", "class")),
+    "Books": ("Books.java", ("orderbook.py", "Books"),
+                   ("orderbook.ts", "Books", "class")),
+    "Tape": ("Tape.java", ("trades.py", "Tape"),
+               ("trades.ts", "Tape", "class")),
+    "Tapes": ("Tapes.java", ("trades.py", "Tapes"),
+                          ("trades.ts", "Tapes", "class")),
 }
 
 # Members that exist in some SDKs and not others on purpose. Same rule as the
@@ -916,7 +916,7 @@ def main() -> int:
         for problem in surface_problems:
             print(f"  - {problem}", file=sys.stderr)
         print(
-            "\nMarketView, MarketBook and MarketTrades are what a caller does with the data "
+            "\nMarketView, Book and Tape are what a caller does with the data "
             "the client returns. A member on one and not the others is work its callers "
             "have to do by hand -- which is how MarketView.trades sat in Java alone. "
             "If a difference is intended, record it in SURFACE_EXEMPTIONS with the "

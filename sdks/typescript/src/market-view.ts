@@ -11,8 +11,8 @@
  */
 
 import type { Flexemarkets } from "./client.js";
-import { MarketBook, MarketplaceBooks } from "./orderbook.js";
-import { MarketplaceTrades, type Trade, type MarketTrades } from "./trades.js";
+import { Book, Books } from "./orderbook.js";
+import { Tapes, type Trade, type Tape } from "./trades.js";
 import { NO_SEQ, type EventListener, type FmEvent, type OrdersUpdate, type FrameUnreadable, type Reconnected, type StreamDropped } from "./stomp.js";
 import type { Holding, Market, Order, Session } from "./types.js";
 
@@ -59,7 +59,7 @@ export interface MarketView {
    * caller never sees a half-applied delta. Returns null if
    * `marketId` isn't in this marketplace.
    */
-  orderBook(marketId: number): MarketBook | null;
+  orderBook(marketId: number): Book | null;
 
   /**
    * Always-current trade tape for `marketId`, most recent last. Returns null
@@ -70,7 +70,7 @@ export interface MarketView {
    * Each `Trade` on it carries both sides of its match — the resting
    * order that was taken and the aggressor that took it.
    */
-  trades(marketId: number): MarketTrades | null;
+  trades(marketId: number): Tape | null;
 
   /**
    * Most-recent session update observed. Null until the first
@@ -91,7 +91,7 @@ export interface MarketView {
    * Register a handler that fires when the order book for
    * `marketId` changes. The handler receives the post-update book.
    */
-  onOrderBookChange(marketId: number, handler: (b: MarketBook) => void): Subscription;
+  onOrderBookChange(marketId: number, handler: (b: Book) => void): Subscription;
 
   /**
    * Register a handler that fires for each trade on `marketId`.
@@ -151,15 +151,15 @@ export class DefaultMarketView implements MarketView {
   readonly markets: Market[];
 
   private readonly _flexemarkets: Flexemarkets;
-  private readonly _orderBooks: MarketplaceBooks;
-  private readonly _trades: MarketplaceTrades;
+  private readonly _orderBooks: Books;
+  private readonly _trades: Tapes;
   private _events: EventListener | null = null;
   private _session: Session | null = null;
   private _holding: Holding | null = null;
 
   private readonly _sessionHandlers: Array<(s: Session) => void> = [];
   private readonly _holdingHandlers: Array<(h: Holding) => void> = [];
-  private readonly _bookHandlers: Array<{ marketId: number; handler: (b: MarketBook) => void }> = [];
+  private readonly _bookHandlers: Array<{ marketId: number; handler: (b: Book) => void }> = [];
   private readonly _tradeHandlers: Array<{ marketId: number; handler: (t: Trade) => void }> = [];
   private readonly _gapHandlers: Array<(e: GapEvent) => void> = [];
   private readonly _reconnectHandlers: Array<(e: ReconnectEvent) => void> = [];
@@ -195,14 +195,14 @@ export class DefaultMarketView implements MarketView {
   private _seedComplete = false;
   private _seedBuffer: OrdersUpdate[] = [];
 
-  // 100 matches the default per-market MarketTrades capacity. Plumb through to
+  // 100 matches the default per-market Tape capacity. Plumb through to
   // observe() later if a caller needs deeper trade scrollback.
   private constructor(flexemarkets: Flexemarkets, marketplaceId: number, markets: Market[]) {
     this._flexemarkets = flexemarkets;
     this.marketplaceId = marketplaceId;
     this.markets = markets;
-    this._orderBooks = new MarketplaceBooks(markets);
-    this._trades = new MarketplaceTrades(markets, 100);
+    this._orderBooks = new Books(markets);
+    this._trades = new Tapes(markets, 100);
   }
 
   /**
@@ -244,12 +244,12 @@ export class DefaultMarketView implements MarketView {
     for (const update of buffered) this._applyOrdersUpdate(update);
   }
 
-  orderBook(marketId: number): MarketBook | null {
+  orderBook(marketId: number): Book | null {
     this._ensureOpen();
     return this._orderBooks.get(marketId) ?? null;
   }
 
-  trades(marketId: number): MarketTrades | null {
+  trades(marketId: number): Tape | null {
     this._ensureOpen();
     return this._trades.get(marketId);
   }
@@ -283,7 +283,7 @@ export class DefaultMarketView implements MarketView {
     };
   }
 
-  onOrderBookChange(marketId: number, handler: (b: MarketBook) => void): Subscription {
+  onOrderBookChange(marketId: number, handler: (b: Book) => void): Subscription {
     this._ensureOpen();
     const entry = { marketId, handler };
     this._bookHandlers.push(entry);
@@ -470,7 +470,7 @@ export class DefaultMarketView implements MarketView {
     this._orderBooks.update(orders);
     const traded = this._trades.update(orders);
 
-    // MarketTrades first: the more specific event, and a book handler that then reads
+    // Tape first: the more specific event, and a book handler that then reads
     // the tape sees the same trade the trade handler was just given. Both
     // aggregators are already current either way — what is ordered here is only
     // which handler hears about it first.
@@ -558,12 +558,12 @@ export class MarketViewHandle implements MarketView {
     return this._shared.markets;
   }
 
-  orderBook(marketId: number): MarketBook | null {
+  orderBook(marketId: number): Book | null {
     this._check();
     return this._shared.orderBook(marketId);
   }
 
-  trades(marketId: number): MarketTrades | null {
+  trades(marketId: number): Tape | null {
     this._check();
     return this._shared.trades(marketId);
   }
@@ -585,7 +585,7 @@ export class MarketViewHandle implements MarketView {
     return sub;
   }
 
-  onOrderBookChange(marketId: number, handler: (b: MarketBook) => void): Subscription {
+  onOrderBookChange(marketId: number, handler: (b: Book) => void): Subscription {
     this._check();
     const sub = this._shared.onOrderBookChange(marketId, handler);
     this._mySubscriptions.push(sub);
