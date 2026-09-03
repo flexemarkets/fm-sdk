@@ -125,7 +125,7 @@ public interface Reading {
     List<Order> orders(long marketplaceId, String symbol);
 
     /**
-     * Tape in one market, in ascending order id.
+     * Trades in one market, in ascending order id.
      *
      * <p>Answered by a symbol-keyed route, so the orders come back without the
      * symbol on them and with the trade id in {@code original}; both are filled
