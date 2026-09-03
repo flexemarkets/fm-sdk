@@ -24,6 +24,9 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -87,8 +90,44 @@ public class Events implements Subscription {
     private final ObjectMapper mapper;
     private final BlockingQueue<Object> queue;
 
+    /**
+     * How often a heartbeat goes out, under the 30s this client ADVERTISES in
+     * CONNECT so it is never late, and well under the 55 seconds after which
+     * Heroku's router closes an idle connection and records an H15.
+     */
+    static final long HEARTBEAT_INTERVAL_SECONDS = 25;
+
+    /** What this client advertises in CONNECT, and must therefore keep to. */
+    static final long ADVERTISED_HEARTBEAT_MS = 30_000;
+
+    /**
+     * After this much silence in either direction, Heroku's router closes the
+     * connection and records an H15 against the app. Here so the interval
+     * above can be tested against the thing it exists to stay under.
+     */
+    static final long HEROKU_IDLE_TIMEOUT_MS = 55_000;
+
     private volatile WebSocket webSocket;
     private volatile boolean closed;
+
+    /**
+     * Sends the heartbeats this client promises.
+     *
+     * <p>IT PROMISED THEM AND NEVER SENT ONE. The CONNECT frame has always
+     * carried `heart-beat:30000,30000` -- "I will send every 30s, send me one
+     * every 30s" -- and nothing in this class ever wrote to the socket again
+     * except SUBSCRIBE. The server's own heartbeats covered for it, so nothing
+     * broke; but a robot that idles is relying on the far end to keep its
+     * socket alive, and the advertisement was a claim this client could not
+     * back. A daemon thread, so it can never hold a JVM open.
+     */
+    private final ScheduledExecutorService heartbeats =
+            Executors.newSingleThreadScheduledExecutor(r -> {
+                var thread = new Thread(r, "fm-sdk-stomp-heartbeat");
+                thread.setDaemon(true);
+                return thread;
+            });
+    private volatile ScheduledFuture<?> heartbeat;
 
     /** One reconnect at a time: onClose and onError can both fire for one drop. */
     private final java.util.concurrent.atomic.AtomicBoolean reconnecting =
@@ -139,6 +178,8 @@ public class Events implements Subscription {
             subscribe("/user/queue/marketplaces/" + marketplaceId);
             subscribe("/topic/marketplaces/" + marketplaceId);
             subscribe("/app" + API_VERSION_PREFIX + "/marketplaces/" + marketplaceId);
+
+            startHeartbeats();
         } catch (FlexemarketsException e) {
             throw e;
         } catch (Exception e) {
@@ -200,13 +241,47 @@ public class Events implements Subscription {
         if (closed) return;
         closed = true;
         closeWebSocket();
+        heartbeats.shutdownNow();
     }
 
     private void closeWebSocket() {
+        stopHeartbeats();
         if (webSocket != null) {
             try {
                 webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "").join();
             } catch (Exception ignored) {}
+        }
+    }
+
+    /**
+     * Begin sending the STOMP heartbeat: a bare end-of-line, which is what the
+     * protocol defines a heartbeat to be.
+     *
+     * <p>Started only after CONNECTED. Before that there is no STOMP session
+     * to heartbeat on, and a stray newline into a socket mid-handshake is a
+     * frame the server has no reason to expect.
+     *
+     * <p>Failures are swallowed on purpose. A heartbeat that cannot be written
+     * means the socket is gone, and the listener's onClose/onError is what
+     * reconnects -- raising from a scheduled task would kill the schedule and
+     * report a fault the transport is already handling.
+     */
+    private void startHeartbeats() {
+        stopHeartbeats();
+        heartbeat = heartbeats.scheduleAtFixedRate(() -> {
+            var socket = webSocket;
+            if (closed || socket == null) return;
+            try {
+                socket.sendText("\n", true);
+            } catch (Exception ignored) {}
+        }, HEARTBEAT_INTERVAL_SECONDS, HEARTBEAT_INTERVAL_SECONDS, TimeUnit.SECONDS);
+    }
+
+    private void stopHeartbeats() {
+        var running = heartbeat;
+        if (running != null) {
+            running.cancel(false);
+            heartbeat = null;
         }
     }
 
@@ -216,7 +291,7 @@ public class Events implements Subscription {
         var frame = stompFrame("CONNECT",
             List.of(
                 "accept-version:1.2",
-                "heart-beat:30000,30000",
+                "heart-beat:" + ADVERTISED_HEARTBEAT_MS + "," + ADVERTISED_HEARTBEAT_MS,
                 "agent-description:" + clientDescription,
                 "marketplace-id:" + marketplaceId
             ),
