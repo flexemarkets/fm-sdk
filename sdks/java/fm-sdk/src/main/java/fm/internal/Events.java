@@ -10,6 +10,7 @@ import fm.Order;
 import fm.OrdersUpdate;
 import fm.Reconnected;
 import fm.Session;
+import fm.AuthenticationException;
 import fm.Snapshot;
 import fm.StreamDropped;
 import fm.Subscription;
@@ -18,6 +19,7 @@ import fm.Version;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
+import java.net.http.WebSocketHandshakeException;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -206,9 +208,48 @@ public class Events implements Subscription {
                 connect();
                 return;
             } catch (Exception e) {
+                // A REJECTED TOKEN IS NOT A BLIP, and retrying it is not
+                // patience -- it is a client hammering a server that has
+                // already given its final answer. Measured 2026-09-03: one NAT
+                // gateway produced 11,918 handshake 401s in two hours, ~100 a
+                // minute, against 360 successful connections from every other
+                // client combined. Nothing told the operator their token had
+                // expired; the loop simply ran.
+                //
+                // So an auth refusal ends the stream and says why, and every
+                // other failure keeps the existing retry: a server restart or
+                // a network drop IS a blip and recovering from it is the whole
+                // point of this loop.
+                if (isAuthRefusal(e)) {
+                    closed = true;
+                    queue.offer(new StreamDropped(new AuthenticationException(
+                        "WebSocket refused: the token was rejected. It has expired or was "
+                        + "signed for another server; reconnecting cannot fix it.", e)));
+                    return;
+                }
                 TimeUnit.SECONDS.sleep(2);
             }
         }
+    }
+
+    /**
+     * Whether the handshake was refused for who we are rather than for what
+     * the network did.
+     *
+     * <p>The status is read off the handshake response rather than a message,
+     * because the text is the JDK's and could change under us. 403 counts too:
+     * a token that is valid but not permitted here will not become permitted
+     * by being presented again.
+     */
+    private static boolean isAuthRefusal(Throwable failure) {
+        for (var cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof WebSocketHandshakeException handshake) {
+                var status = handshake.getResponse().statusCode();
+                return status == 401 || status == 403;
+            }
+            if (cause == cause.getCause()) break;
+        }
+        return false;
     }
 
     /**

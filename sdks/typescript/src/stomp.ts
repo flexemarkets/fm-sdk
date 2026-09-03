@@ -238,6 +238,22 @@ function parseOrders(
 // EventListener — manages WS + STOMP connection
 // ---------------------------------------------------------------------------
 
+/**
+ * Whether the handshake was refused for who we are rather than for what the
+ * network did.
+ *
+ * <p>`ws` reports a rejected upgrade as `Unexpected server response: 401`, so
+ * the status is read back out of that. 403 counts too: a token that is valid
+ * but not permitted here will not become permitted by being presented again.
+ */
+function isAuthRefusal(failure: unknown): boolean {
+  for (let cause: unknown = failure; cause instanceof Error; cause = cause.cause) {
+    const status = /Unexpected server response:\s*(\d{3})/.exec(cause.message)?.[1];
+    if (status === "401" || status === "403") return true;
+  }
+  return false;
+}
+
 export class EventListener {
   private readonly _wsUrl: string;
   private readonly _bearerToken: string;
@@ -335,7 +351,29 @@ export class EventListener {
         this._disconnect();
         await this.start();
         return;
-      } catch {
+      } catch (exception) {
+        // A REJECTED TOKEN IS NOT A BLIP, and retrying it is not patience --
+        // it is a client hammering a server that has already given its final
+        // answer. Measured 2026-09-03: one NAT gateway produced 11,918
+        // handshake 401s in two hours, about 100 a minute, against 360
+        // successful connections from every other client combined. Nothing
+        // told the operator their token had expired; the loop simply ran.
+        //
+        // So an auth refusal ends the stream and says why, and every other
+        // failure keeps the existing retry: a server restart or a network drop
+        // IS a blip, and recovering from it is what this loop is for.
+        if (isAuthRefusal(exception)) {
+          this._closed = true;
+          this._callback({
+            kind: "stream-dropped",
+            exception: new Error(
+              "WebSocket refused: the token was rejected. It has expired or was " +
+                "signed for another server; reconnecting cannot fix it.",
+              { cause: exception },
+            ),
+          });
+          return;
+        }
         await new Promise((r) => setTimeout(r, 2000));
       }
     }

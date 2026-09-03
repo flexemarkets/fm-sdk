@@ -99,6 +99,27 @@ def _decode_frame(raw: str) -> StompFrame:
 # Error / transport event types put onto the queue
 # ---------------------------------------------------------------------------
 
+def _is_auth_refusal(failure: BaseException) -> bool:
+    """Whether the handshake was refused for who we are, not for what the
+    network did.
+
+    ``websockets`` raises :class:`InvalidStatus` carrying the response, so the
+    status is read off that rather than out of a message the library owns. 403
+    counts too: a token that is valid but not permitted here will not become
+    permitted by being presented again.
+    """
+    cause: BaseException | None = failure
+    seen: set[int] = set()
+    while cause is not None and id(cause) not in seen:
+        seen.add(id(cause))
+        response = getattr(cause, "response", None)
+        status = getattr(response, "status_code", None)
+        if status in (401, 403):
+            return True
+        cause = cause.__cause__ or cause.__context__
+    return False
+
+
 @dataclass
 class StreamDropped:
     exception: BaseException
@@ -325,7 +346,26 @@ class EventListener:
                 )
                 self._thread.start()
                 return
-            except Exception:
+            except Exception as exc:
+                # A REJECTED TOKEN IS NOT A BLIP, and retrying it is not
+                # patience -- it is a client hammering a server that has
+                # already given its final answer. Measured 2026-09-03: one NAT
+                # gateway produced 11,918 handshake 401s in two hours, about
+                # 100 a minute, against 360 successful connections from every
+                # other client combined. Nothing told the operator their token
+                # had expired; the loop simply ran.
+                #
+                # So an auth refusal ends the stream and says why, and every
+                # other failure keeps the existing retry: a server restart or a
+                # network drop IS a blip, and recovering from it is what this
+                # loop is for.
+                if _is_auth_refusal(exc):
+                    self._closed = True
+                    self._queue.put(StreamDropped(exception=PermissionError(
+                        "WebSocket refused: the token was rejected. It has expired "
+                        "or was signed for another server; reconnecting cannot fix it."
+                    )))
+                    return
                 time.sleep(2)
 
     def close(self) -> None:
