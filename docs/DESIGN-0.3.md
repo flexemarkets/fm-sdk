@@ -67,29 +67,7 @@ Both are needed; the names do not say which is which. This was open for 0.2 and
 not taken. It gets cheaper to defer and never cheaper to do: every release that
 ships both names adds call sites.
 
-### 3. The role interfaces have no uptake
-
-`Reading`, `Writing`, `Identity`, `Management`, `Administration` and `Streaming`
-exist so a caller can narrow — `void report(Reading books)` says what the code
-can do to a live marketplace.
-
-**No consumer does it.** Measured at 0.2.0: fm-robots, fm-server and
-fm-robots-server import zero types from `fm.role`. Both migrations hit
-structural reasons not to narrow — a robot holds a `Supplier<Flexemarkets>`, and
-Java cannot spell an intersection of roles as a field type;
-`RecordingFlexemarkets` is a decorator whose contract is that everything passes
-through.
-
-Not a proposal to delete them: they make `Flexemarkets` a composition rather
-than a list, which is what made "every role method is abstract" expressible.
-
-The option worth weighing is narrower. A public interface may extend a
-non-exported one — the inherited methods stay callable through `Flexemarkets`,
-while `fm.role.Reading` stops being a name a consumer can write. That keeps the
-composition and withdraws six names nobody uses. **Since nobody imports them,
-the migration cost today is zero.** It only rises.
-
-### 4. HAL-less and V1-only
+### 3. HAL-less and V1-only
 
 Blocked on the server, not the SDK. The SDK reads `GET /api`, pulls hrefs out of
 `_links` and rebases them onto the configured endpoint; it should call only

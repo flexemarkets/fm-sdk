@@ -18,9 +18,16 @@
  *       {@link fm.error.FlexemarketsException}.
  *   <li>{@code fm.event} -- what arrives on the queue passed to
  *       {@code listen}.
- *   <li>{@code fm.role} -- the six interfaces {@link fm.Flexemarkets} composes,
- *       so a signature can say which of them it needs.
  * </ul>
+ *
+ * <p>{@code fm.role} is <em>not</em> exported. The six interfaces
+ * {@link fm.Flexemarkets} composes are still what shapes it -- every method it
+ * has belongs to one of them, which is what makes "every role method is
+ * abstract" a property rather than a habit -- but they are not names a caller
+ * writes. They were exported through 0.1.x so a signature could narrow to one,
+ * and nothing ever did: fm-robots, fm-server and fm-robots-server import zero
+ * of them. Withdrawing them while that is still true costs nobody a call site.
+ * Re-exporting later is additive if a caller ever wants to narrow.
  *
  * <p>Everything under {@code fm.internal} is implementation -- it was public
  * only because the classpath gave no way to say otherwise, and a caller could
@@ -41,7 +48,6 @@ module fm {
     exports fm.error;
     exports fm.event;
     exports fm.model;
-    exports fm.role;
 
     opens fm to tools.jackson.databind;
     opens fm.model to tools.jackson.databind;

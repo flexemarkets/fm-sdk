@@ -47,7 +47,7 @@ are.
 | `fm.model` | the wire records and the enums you hand back — `Account`, `Allotment`, `Assets`, `ClientConnection`, `ConflictFailure`, `Holding`, `ManagerOtpBundle`, `Market`, `Marketplace`, `Order`, `OrderSide`, `OrderType`, `Person`, `Security`, `Session`, `TickGrid`, `Token`, `Trade` | 18 |
 | `fm.error` | the eleven exceptions — `FlexemarketsException` and its subtypes | 11 |
 | `fm.event` | what arrives on a queue — `FrameUnreadable`, `GapEvent`, `OrdersUpdate`, `ReconnectEvent`, `Reconnected`, `StreamDropped`, `Version` | 7 |
-| `fm.role` | the six role interfaces — `Administration`, `Identity`, `Management`, `Reading`, `Streaming`, `Writing` | 6 |
+| `fm.role` | the six role interfaces — `Administration`, `Identity`, `Management`, `Reading`, `Streaming`, `Writing`. **Not exported** — see below | 6 |
 
 What stays in `fm`: `Flexemarkets`, `Desk`, `Subscription`, `Book`, `Tape`,
 `Orders`, `Endpoints`, `Snapshot`, `FlexemarketsProvider`, `Providers`.
@@ -126,6 +126,29 @@ a blanket rename does not know whose they are. fm-robots had its own
 `fm.robot.Books` alongside the SDK's, and a `\bOrderBooks\b` pass would have
 walked into it. Grep your own packages for `Book`, `Books`, `Tape`, `Tapes`,
 `Orders` and `Desk` before you run anything.
+
+### The role interfaces are no longer names you can write
+
+`Reading`, `Writing`, `Identity`, `Management`, `Administration` and `Streaming`
+were public in `fm` through 0.1.x. They are now in `fm.role`, which the module
+does not export.
+
+**Nothing you call changes.** `Flexemarkets` still extends all six, so every
+method they declare is still on the interface and still callable:
+
+```java
+List<Market> markets = flexemarkets.markets(marketplaceId);   // Reading, unchanged
+```
+
+What you can no longer do is name one — `void report(Reading books)` stops
+compiling on the module path. They were exported so a signature could narrow to
+one, and in two releases nothing ever did: fm-robots, fm-server and
+fm-robots-server import zero of them between them. Both migrations found
+structural reasons not to narrow, a robot holding a `Supplier<Flexemarkets>`
+being the clearest — Java cannot spell an intersection of roles as a field type.
+
+If you were narrowing, declare `Flexemarkets` instead. Re-exporting is additive,
+so say so if you have a use for it.
 
 ### `OrderBooks` and `MarketplaceTrades` are no longer yours to construct
 
