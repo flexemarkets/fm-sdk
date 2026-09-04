@@ -21,6 +21,8 @@ from .desk import GapEvent, Desk, ReconnectEvent, Subscription
 from .orderbook import Book
 from .trades import Trade, Tape
 from .types import (
+    ConflictFailure,
+    ManagerOtpBundle,
     Account,
     Allotment,
     Assets,
@@ -55,6 +57,8 @@ __all__ = [
     "Security",
     "Session",
     "TickGrid",
+    "ConflictFailure",
+    "ManagerOtpBundle",
     "Token",
     # orderbook & trades
     "Book",

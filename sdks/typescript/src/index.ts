@@ -4,6 +4,9 @@
 export type {
   Person,
   Account,
+  Allotment,
+  Assets,
+  ManagerOtpBundle,
   Token,
   Security,
   Holding,
