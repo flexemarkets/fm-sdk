@@ -22,6 +22,14 @@ from .types import Holding, Order, Session, Version
 log = logging.getLogger(__name__)
 
 _HEARTBEAT_MS = 30_000
+
+# How often this client actually sends one. Under the 30s it advertises, so a
+# late timer still lands inside the window it promised, and well under the 55s
+# at which Heroku's router closes an idle connection and records an H15
+# against the app. Named so the interval can be tested against the thing it
+# exists to stay under.
+_HEARTBEAT_INTERVAL_SECONDS = 25.0
+_HEROKU_IDLE_TIMEOUT_MS = 55_000
 _INBOUND_MESSAGE_SIZE = 128 * 1024 * 1024  # 128 MB
 _NULL = "\x00"
 
@@ -286,6 +294,21 @@ class EventListener:
         self._subscription_counter = 0
         self._reconnecting = threading.Lock()
 
+        # Sends the heartbeats this client promises.
+        #
+        # IT PROMISED THEM AND NEVER SENT ONE. The CONNECT frame has always
+        # carried heart-beat:30000,30000 -- "I will send every 30s, send me
+        # one every 30s" -- and nothing here wrote to the socket again except
+        # SUBSCRIBE. The websockets library's own 20s ping kept the connection
+        # off Heroku's idle timer, so nothing broke visibly; but the
+        # advertisement was still a claim this client could not back, and a
+        # ping is not a STOMP heartbeat. Java fixed this first; Python and
+        # TypeScript advertised the same thing and were left behind.
+        #
+        # A daemon thread, so it can never hold the interpreter open.
+        self._heartbeat_stop = threading.Event()
+        self._heartbeat_thread: threading.Thread | None = None
+
     # -- public API --------------------------------------------------------
 
     def start(self) -> None:
@@ -293,6 +316,7 @@ class EventListener:
         self._ws = self._connect()
         self._stomp_connect()
         self._subscribe()
+        self._start_heartbeats()
 
         self._thread = threading.Thread(
             target=self._receive_loop,
@@ -338,6 +362,7 @@ class EventListener:
                 self._ws = self._connect()
                 self._stomp_connect()
                 self._subscribe()
+                self._start_heartbeats()
 
                 self._thread = threading.Thread(
                     target=self._receive_loop,
@@ -373,7 +398,36 @@ class EventListener:
         if self._closed:
             return
         self._closed = True
+        self._stop_heartbeats()
         self._disconnect()
+
+    def _start_heartbeats(self) -> None:
+        """Send a bare EOL every :data:`_HEARTBEAT_INTERVAL_SECONDS`.
+
+        A newline on its own is what STOMP 1.2 defines a heartbeat to be, so
+        the server reads it as one and nothing else parses it as a frame.
+        """
+        self._stop_heartbeats()
+        self._heartbeat_stop = threading.Event()
+
+        def _beat() -> None:
+            while not self._heartbeat_stop.wait(_HEARTBEAT_INTERVAL_SECONDS):
+                ws = self._ws
+                if self._closed or ws is None:
+                    return
+                try:
+                    ws.send("\n")
+                except Exception:  # a dead socket is the receive loop's problem
+                    return
+
+        self._heartbeat_thread = threading.Thread(
+            target=_beat, name="fm-sdk-stomp-heartbeat", daemon=True
+        )
+        self._heartbeat_thread.start()
+
+    def _stop_heartbeats(self) -> None:
+        self._heartbeat_stop.set()
+        self._heartbeat_thread = None
 
     # -- WebSocket connection ----------------------------------------------
 

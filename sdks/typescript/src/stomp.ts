@@ -10,6 +10,19 @@ import { toInstant } from "./timestamps.js";
 import type { Holding, Order, Session, Version } from "./types.js";
 
 const HEARTBEAT_MS = 30_000;
+
+/** What this client advertises in CONNECT, and must therefore keep to. */
+export const ADVERTISED_HEARTBEAT_MS = HEARTBEAT_MS;
+
+/**
+ * How often this client actually sends one. Under the 30s it advertises, so a
+ * late timer still lands inside the window it promised, and well under the 55s
+ * at which Heroku's router closes an idle connection and records an H15
+ * against the app. Named so the interval can be tested against the thing it
+ * exists to stay under.
+ */
+export const HEARTBEAT_INTERVAL_MS = 25_000;
+export const HEROKU_IDLE_TIMEOUT_MS = 55_000;
 const NULL = "\x00";
 
 /**
@@ -265,6 +278,20 @@ export class EventListener {
 
   private _ws: WebSocket | null = null;
   private _closed = false;
+
+  /**
+   * Sends the heartbeats this client promises.
+   *
+   * IT PROMISED THEM AND NEVER SENT ONE. The CONNECT frame has always carried
+   * `heart-beat:30000,30000` -- "I will send every 30s, send me one every 30s"
+   * -- and nothing here wrote to the socket again except SUBSCRIBE. Worse than
+   * the other two SDKs: `ws` sends no WebSocket ping of its own unless asked,
+   * so this client had no keepalive at any layer. Java fixed this first;
+   * TypeScript and Python advertised the same thing and were left behind.
+   *
+   * unref()'d, so it can never hold the process open.
+   */
+  private _heartbeat: NodeJS.Timeout | null = null;
   private _subscriptionCounter = 0;
   private _reconnecting = false;
 
@@ -305,6 +332,7 @@ export class EventListener {
             // unexpected but continue
           }
           this._subscribe();
+          this._startHeartbeats();
           this._receiveLoop();
           resolve();
         });
@@ -382,7 +410,35 @@ export class EventListener {
   close(): void {
     if (this._closed) return;
     this._closed = true;
+    this._stopHeartbeats();
     this._disconnect();
+  }
+
+  /**
+   * Send a bare EOL every {@link HEARTBEAT_INTERVAL_MS}.
+   *
+   * A newline on its own is what STOMP 1.2 defines a heartbeat to be, so the
+   * server reads it as one and nothing else parses it as a frame.
+   */
+  private _startHeartbeats(): void {
+    this._stopHeartbeats();
+    this._heartbeat = setInterval(() => {
+      const ws = this._ws;
+      if (this._closed || ws === null || ws.readyState !== WebSocket.OPEN) return;
+      try {
+        ws.send("\n");
+      } catch {
+        // a dead socket is the receive loop's problem, not this timer's
+      }
+    }, HEARTBEAT_INTERVAL_MS);
+    this._heartbeat.unref?.();
+  }
+
+  private _stopHeartbeats(): void {
+    if (this._heartbeat !== null) {
+      clearInterval(this._heartbeat);
+      this._heartbeat = null;
+    }
   }
 
   // -- WebSocket connection --------------------------------------------------
