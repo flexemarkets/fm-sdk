@@ -16,10 +16,10 @@ import java.util.stream.Stream;
 /**
  * Every market's trade tape in one marketplace, keyed by market id.
  *
- * <p>The trade-side counterpart to {@link Books}, and fed the same way:
+ * <p>The trade-side counterpart to {@link BookIndex}, and fed the same way:
  * one update, fanned at every tape, each keeping what belongs to it.
  */
-public class Tapes {
+public class TapeIndex {
     private final Map<Long, Tape> _trades = new ConcurrentHashMap<>();
 
     /**
@@ -28,7 +28,7 @@ public class Tapes {
      * @param markets  the markets to keep trades for
      * @param capacity how many trades each tape retains
      */
-    public Tapes(List<Market> markets, int capacity) {
+    public TapeIndex(List<Market> markets, int capacity) {
         for (var market : markets) {
             _trades.put(market.id(), new Tape(market, capacity));
         }
@@ -60,7 +60,7 @@ public class Tapes {
     /**
      * One market's tape.
      *
-     * <p>The counterpart to {@link Books#get}, so a caller holding either
+     * <p>The counterpart to {@link BookIndex#get}, so a caller holding either
      * aggregator reaches one market's desk the same way.
      *
      * @param marketId the market to look up

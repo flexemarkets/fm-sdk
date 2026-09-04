@@ -207,7 +207,7 @@ class Book:
         return "\n".join(lines)
 
 
-class Books:
+class BookIndex:
     """Container of :class:`Book` instances, one per market.
 
     Port of ``MarketplaceOrderBooks``.
@@ -234,7 +234,7 @@ class Books:
     def get(self, market_id: int) -> Book | None:
         """Return the order book for *market_id*, or ``None`` if the
         market isn't part of this marketplace. Mirrors the Java + TS
-        ``Books.get(marketId)`` signature so Desk can do a
+        ``BookIndex.get(marketId)`` signature so Desk can do a
         null-tolerant lookup.
         """
         return self._books.get(market_id)

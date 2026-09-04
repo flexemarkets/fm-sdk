@@ -19,10 +19,11 @@ import java.util.concurrent.ConcurrentHashMap;
  * carrying a symbol no book recognises is silently dropped, which is worth
  * knowing when a book comes back unexpectedly empty.
  *
- * <p>Building these by hand is supported -- {@link Desk} does it for a
- * caller who does not want to drive the event queue themselves.
+ * <p>Implementation of {@link Desk}, which is how a caller reaches these: the
+ * desk owns one and answers {@code book(marketId)} and {@code books()} off it.
+ * Nothing outside the SDK constructs one.
  */
-public class Books {
+public class BookIndex {
     private final Map<Long, Book> _books = new ConcurrentHashMap<>();
 
     /**
@@ -30,7 +31,7 @@ public class Books {
      *
      * @param markets the markets to keep books for
      */
-    public Books(List<Market> markets) {
+    public BookIndex(List<Market> markets) {
         for (var market : markets) {
             _books.put(market.id(), new Book(market));
         }

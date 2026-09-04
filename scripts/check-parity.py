@@ -478,17 +478,17 @@ READ_SURFACE = {
                    ("desk.ts", "Desk", "interface")),
     "Book": ("Book.java", ("orderbook.py", "Book"),
                   ("orderbook.ts", "Book", "class")),
-    # Books and Tapes are no longer callable from outside -- fm.internal in
+    # BookIndex and TapeIndex are no longer callable from outside -- fm.internal in
     # Java, unexported in the other two. They stay compared anyway: they are
     # still three hand-written implementations of one behaviour, and drift
     # between them is the bug class this file exists for. A book that
     # double-counted a cancel was found exactly this way, in all three at once.
-    "Books": ("internal/Books.java", ("orderbook.py", "Books"),
-                   ("orderbook.ts", "Books", "class")),
+    "BookIndex": ("internal/BookIndex.java", ("orderbook.py", "BookIndex"),
+                   ("orderbook.ts", "BookIndex", "class")),
     "Tape": ("Tape.java", ("trades.py", "Tape"),
                ("trades.ts", "Tape", "class")),
-    "Tapes": ("internal/Tapes.java", ("trades.py", "Tapes"),
-                          ("trades.ts", "Tapes", "class")),
+    "TapeIndex": ("internal/TapeIndex.java", ("trades.py", "TapeIndex"),
+                          ("trades.ts", "TapeIndex", "class")),
 }
 
 # Members that exist in some SDKs and not others on purpose. Same rule as the

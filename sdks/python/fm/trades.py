@@ -1,6 +1,6 @@
 """Trade history maintained from WebSocket order events.
 
-Port of fm.Trade, fm.Tape and fm.Tapes.
+Port of fm.Trade, fm.Tape and fm.TapeIndex.
 """
 
 from __future__ import annotations
@@ -168,10 +168,10 @@ class Tape:
             self._container.clear()
 
 
-class Tapes:
+class TapeIndex:
     """Container of :class:`Tape` instances, one per market.
 
-    Port of ``Tapes``.
+    Port of ``TapeIndex``.
     """
 
     def __init__(self, markets: list[Market], capacity: int = 100):

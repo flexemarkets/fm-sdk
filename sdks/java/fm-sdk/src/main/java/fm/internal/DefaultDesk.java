@@ -41,8 +41,8 @@ import java.util.function.Consumer;
  *   <li>Calls {@code flexemarkets.listen(marketplaceId, queue)} to
  *       drive a WS subscription, draining the queue in a background
  *       thread.</li>
- *   <li>Dispatches WS events into the existing {@link Books}
- *       and {@link Tapes} aggregators, plus
+ *   <li>Dispatches WS events into the existing {@link BookIndex}
+ *       and {@link TapeIndex} aggregators, plus
  *       {@link #session} / {@link #holding} fields.</li>
  *   <li>Fires registered handlers when state changes.</li>
  * </ul>
@@ -72,8 +72,8 @@ public class DefaultDesk implements Desk {
     private final long _marketplaceId;
     private final List<Market> _markets;
 
-    private final Books _books;
-    private final Tapes _trades;
+    private final BookIndex _books;
+    private final TapeIndex _trades;
     private final AtomicReference<Session> _session = new AtomicReference<>();
     private final AtomicReference<Holding> _holding = new AtomicReference<>();
 
@@ -113,11 +113,11 @@ public class DefaultDesk implements Desk {
         this._flexemarkets = flexemarkets;
         this._marketplaceId = marketplaceId;
         this._markets = List.copyOf(markets);
-        this._books = new Books(this._markets);
+        this._books = new BookIndex(this._markets);
         // 100 matches the default per-market Tape capacity — see
         // Tape(Market) ctor. Plumb through to desk() later if a
         // caller needs deeper trade scrollback.
-        this._trades = new Tapes(this._markets, 100);
+        this._trades = new TapeIndex(this._markets, 100);
 
         // Subscribe WS first so deltas start landing in the queue,
         // then fetch the REST snapshot, apply it, and only THEN start

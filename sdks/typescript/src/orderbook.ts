@@ -185,7 +185,7 @@ export class Book {
 /**
  * Container of Book instances, one per market.
  */
-export class Books {
+export class BookIndex {
   private readonly _books = new Map<number, Book>();
 
   constructor(markets: Market[]) {

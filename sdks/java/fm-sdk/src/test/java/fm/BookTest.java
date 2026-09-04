@@ -1,6 +1,6 @@
 package fm;
 
-import fm.internal.Books;
+import fm.internal.BookIndex;
 import fm.model.Market;
 import fm.model.Order;
 import fm.model.OrderSide;
@@ -284,7 +284,7 @@ class BookTest {
     @Test
     void marketplaceBooksAnswerForAnUnknownMarketRatherThanFailing() {
         Market market = _market(1L, "A");
-        Books books = new Books(java.util.List.of(market));
+        BookIndex books = new BookIndex(java.util.List.of(market));
         books.update(_toArray(_limitOf(market, 1L, OrderSide.BUY, 10, 100)));
 
         assertThat(books.bestPrice(1L, OrderSide.BUY)).isEqualTo(100);
@@ -299,7 +299,7 @@ class BookTest {
     /**
      * Two markets do not share a book.
      *
-     * <p>Carried over from fm-robots' BooksTest when fm.robot.Books was
+     * <p>Carried over from fm-robots' BooksTest when fm.robot.BookIndex was
      * deleted for these methods. Every other case there is covered above; this
      * one was not, and it is the case a keying mistake shows up in -- one
      * market's bid answering for another reads as a plausible price rather
@@ -309,7 +309,7 @@ class BookTest {
     void booksAreKeptApartByMarket() {
         Market alpha = _market(1L, "ALPHA");
         Market beta  = _market(2L, "BETA");
-        Books books = new Books(java.util.List.of(alpha, beta));
+        BookIndex books = new BookIndex(java.util.List.of(alpha, beta));
 
         books.update(_toArray(
             _limitOf(alpha, 1L, OrderSide.BUY, 10, 100),

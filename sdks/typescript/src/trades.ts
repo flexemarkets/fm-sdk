@@ -153,7 +153,7 @@ export class Tape {
 /**
  * Container of Tape instances, one per market.
  */
-export class Tapes {
+export class TapeIndex {
   private readonly _trades = new Map<number, Tape>();
 
   constructor(markets: Market[], capacity: number = 100) {

@@ -11,8 +11,8 @@
  */
 
 import type { Flexemarkets } from "./client.js";
-import { Book, Books } from "./orderbook.js";
-import { Tapes, type Trade, type Tape } from "./trades.js";
+import { Book, BookIndex } from "./orderbook.js";
+import { TapeIndex, type Trade, type Tape } from "./trades.js";
 import { NO_SEQ, type EventListener, type FmEvent, type OrdersUpdate, type FrameUnreadable, type Reconnected, type StreamDropped } from "./stomp.js";
 import type { Holding, Market, Order, Session } from "./types.js";
 
@@ -163,8 +163,8 @@ export class DefaultDesk implements Desk {
   readonly markets: Market[];
 
   private readonly _flexemarkets: Flexemarkets;
-  private readonly _books: Books;
-  private readonly _trades: Tapes;
+  private readonly _books: BookIndex;
+  private readonly _trades: TapeIndex;
   private _events: EventListener | null = null;
   private _session: Session | null = null;
   private _holding: Holding | null = null;
@@ -213,8 +213,8 @@ export class DefaultDesk implements Desk {
     this._flexemarkets = flexemarkets;
     this.marketplaceId = marketplaceId;
     this.markets = markets;
-    this._books = new Books(markets);
-    this._trades = new Tapes(markets, 100);
+    this._books = new BookIndex(markets);
+    this._trades = new TapeIndex(markets, 100);
   }
 
   /**

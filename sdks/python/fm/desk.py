@@ -21,8 +21,8 @@ from typing import TYPE_CHECKING, Callable, Optional
 log = logging.getLogger(__name__)
 
 from .events import NO_SEQ, OrdersUpdate, FrameUnreadable, Reconnected, StreamDropped
-from .orderbook import Book, Books
-from .trades import Tapes, Trade, Tape
+from .orderbook import Book, BookIndex
+from .trades import TapeIndex, Trade, Tape
 from .types import Holding, Market, Order, Session
 
 if TYPE_CHECKING:
@@ -71,7 +71,7 @@ class Desk:
 
     Phase 1 scope: This is a skeleton that wraps the existing
     ``Flexemarkets.listen()`` queue and dispatches events into the
-    existing :class:`Books`/:class:`Tapes`
+    existing :class:`BookIndex`/:class:`TapeIndex`
     aggregators. *No reconciliation is wired yet* — REST-seed,
     sequence-gap recovery, per-identity sharing, and automatic
     reconnect land in Phase 2.
@@ -86,11 +86,11 @@ class Desk:
         self._flexemarkets = flexemarkets
         self.marketplace_id = marketplace_id
         self.markets = list(markets)
-        self._books = Books(self.markets)
+        self._books = BookIndex(self.markets)
         # 100 matches the default per-market Tape capacity. Plumb
         # through to desk() later if a caller needs deeper trade
         # scrollback.
-        self._trades = Tapes(self.markets, 100)
+        self._trades = TapeIndex(self.markets, 100)
 
         self._session: Optional[Session] = None
         self._holding: Optional[Holding] = None
