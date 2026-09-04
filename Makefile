@@ -34,7 +34,7 @@ check: check-sdks check-mcp
 # that is a local tool, in no publish target, and a missing venv for it must
 # not stand between a fix and a registry.
 check-sdks: check-parity check-fixtures check-python check-typescript check-java \
-       test-python test-typescript test-java
+       test-python test-typescript test-java check-quickstarts
 
 # The three SDKs are hand-written and every type is declared three times, so
 # nothing but this holds them to the same wire format. Runs first because it
@@ -42,6 +42,14 @@ check-sdks: check-parity check-fixtures check-python check-typescript check-java
 # installing three of them.
 check-parity:
 	$(PYTHON) scripts/check-parity.py
+
+# The README quickstart is the first code anyone reads, and nothing was holding
+# it to the API: all three imported Books and Tapes after they were withdrawn,
+# and Java's still named the pre-0.2 packages, so it did not compile. This
+# compiles each one against its own SDK. It runs last because the Java check
+# needs fm-sdk/target/classes, which build-java produces.
+check-quickstarts:
+	$(PYTHON) scripts/check-quickstarts.py
 
 # Every fixture says where its payload came from: a route it was captured from,
 # or why no live server produces it. Needs no server -- the half that does is
