@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
@@ -40,6 +41,11 @@ class StreamReconnectTest {
         int connects;
         int failConnects;
 
+        /** While held, connect() parks here, holding a reconnect open. */
+        volatile CountDownLatch gate;
+        /** Counts down once a reconnect has reached the gate and is parked. */
+        final CountDownLatch reachedGate = new CountDownLatch(1);
+
         _Listener(BlockingQueue<Object> queue) {
             super("ws://127.0.0.1:0/events", "t", MP, "fm-sdk-test",
                   HttpFlexemarkets.MAPPER, queue);
@@ -48,6 +54,20 @@ class StreamReconnectTest {
         @Override
         void connect() {
             connects++;
+
+            CountDownLatch held = gate;
+
+            if (held != null) {
+                reachedGate.countDown();
+                try {
+                    if (!held.await(5, TimeUnit.SECONDS)) {
+                        throw new AssertionError("gate never opened");
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new AssertionError(e);
+                }
+            }
             if (connects <= failConnects) {
                 throw new ApiException("refused");
             }
@@ -100,23 +120,45 @@ class StreamReconnectTest {
         assertThat(listener.connects).isZero();
     }
 
+    /**
+     * Same shape as Python's {@code test_one_drop_starts_one_reconnect} and
+     * TypeScript's "one drop starts one reconnect": hold the reconnect open,
+     * deliver the burst, prove the window really was open, then let it finish
+     * and count.
+     *
+     * <p>It used to hold the window by failing two connects, so the retry
+     * sleep was still running when the later drops arrived. That works, but it
+     * is timing, and the Python copy of the same idea drifted into a spelling
+     * that held nothing at all and passed anyway about four runs in five. A
+     * gate cannot drift that way: if the window is not open, the premise
+     * assertion below fails on every run rather than occasionally.
+     */
     @Test
     @Timeout(20)
     void oneDropStartsOneReconnect() throws Exception {
         BlockingQueue<Object> queue = new ArrayBlockingQueue<>(16);
         var listener = new _Listener(queue);
-        // Two attempts fail, so the retry loop is still running when the
-        // second and third drops arrive -- which is what a dying socket
-        // actually does: onClose and onError both fire for one outage.
-        listener.failConnects = 2;
+        listener.gate = new CountDownLatch(1);
 
-        listener.reconnectInBackground();
-        listener.reconnectInBackground();
-        listener.reconnectInBackground();
+        // What a dying socket actually does: onClose and onError both fire for
+        // one outage, several times over.
+        for (int i = 0; i < 5; i++) {
+            listener.reconnectInBackground();
+        }
+
+        assertThat(listener.reachedGate.await(2, TimeUnit.SECONDS))
+            .as("no reconnect reached the gate: the burst was delivered after the "
+              + "reconnect had already finished, so nothing here tests the guard")
+            .isTrue();
+        assertThat(queue.peek())
+            .as("a reconnect finished before the burst was delivered")
+            .isNull();
+
+        listener.gate.countDown();
 
         assertThat(_poll(queue)).isInstanceOf(Reconnected.class);
         assertThat(queue.poll(250, TimeUnit.MILLISECONDS))
-            .as("a burst of errors from one dying socket is one outage, not three")
+            .as("a burst of errors from one dying socket is one outage, not five")
             .isNull();
     }
 }
