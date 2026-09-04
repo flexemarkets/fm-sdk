@@ -90,6 +90,8 @@ were named after the container rather than the thing.
 | `fm.OrderBooks` | `fm.internal.BookIndex` | withdrawn |
 | `fm.MarketplaceTrades` | `fm.internal.TapeIndex` | withdrawn |
 | `fm.DefaultMarketView` | `fm.internal.DefaultDesk` | was already implementation |
+| `fm.Reconnected` | `fm.event.StreamReconnected` | move *and* rename |
+| `fm.ReconnectEvent` | `fm.event.DeskRecovery` | move *and* rename |
 | `fm.MarketViewHandle` | `fm.internal.DeskHandle` | was already implementation |
 
 `Side` is the expensive one: it is a rename rather than a path move, so
@@ -126,6 +128,26 @@ a blanket rename does not know whose they are. fm-robots had its own
 `fm.robot.Books` alongside the SDK's, and a `\bOrderBooks\b` pass would have
 walked into it. Grep your own packages for `Book`, `Books`, `Tape`, `Tapes`,
 `Orders` and `Desk` before you run anything.
+
+### The two reconnect types say which layer they are
+
+`Reconnected` and `ReconnectEvent` were one word apart and two layers apart,
+which is the worst distance for a pair of names: close enough to look
+interchangeable, far enough that using the wrong one is a category error.
+
+| 0.1.x | 0.2.0 | what it is |
+|---|---|---|
+| `Reconnected` | `StreamReconnected` | the transport is back. Arrives on the `listen()` queue. Cannot fail |
+| `ReconnectEvent` | `DeskRecovery` | the desk finished reconnecting **and** re-seeding over REST. Carries `success`, because either step can throw |
+| `Desk.onReconnect` | `Desk.onRecovery` | subscribes to the second |
+
+`StreamReconnected` now pairs with its sibling `StreamDropped`, which is what it
+should always have done. `DeskRecovery` drops the `Event` suffix: every type in
+`fm.event` is an event, so the suffix distinguished nothing while appearing to.
+
+If you implement `Desk` — a test double, say — rename the override. If you only
+call it, `onReconnect` becomes `onRecovery` and the payload type changes name;
+its fields are unchanged.
 
 ### The role interfaces are no longer names you can write
 

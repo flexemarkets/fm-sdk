@@ -13,7 +13,7 @@
 import type { Flexemarkets } from "./client.js";
 import { Book, BookIndex } from "./orderbook.js";
 import { TapeIndex, type Trade, type Tape } from "./trades.js";
-import { NO_SEQ, type EventListener, type FmEvent, type OrdersUpdate, type FrameUnreadable, type Reconnected, type StreamDropped } from "./stomp.js";
+import { NO_SEQ, type EventListener, type FmEvent, type OrdersUpdate, type FrameUnreadable, type StreamReconnected, type StreamDropped } from "./stomp.js";
 import type { Holding, Market, Order, Session } from "./types.js";
 
 /**
@@ -41,7 +41,7 @@ export interface GapEvent {
  * the reconnect + resnapshot completes successfully, or after the
  * attempt has failed and the desk is left stale.
  */
-export interface ReconnectEvent {
+export interface DeskRecovery {
   readonly marketplaceId: number;
   readonly success: boolean;
   readonly reason: string | null;
@@ -120,7 +120,7 @@ export interface Desk {
    *
    * Live deltas only. A gap or a reconnect re-seeds the tape from the server's
    * snapshot, and those trades do not fire here — they are not new, they are
-   * what was missed. {@link onGap} and {@link onReconnect} are how a caller
+   * what was missed. {@link onGap} and {@link onRecovery} are how a caller
    * learns that happened.
    */
   onTrade(marketId: number, handler: (t: Trade) => void): Subscription;
@@ -142,7 +142,7 @@ export interface Desk {
    * completed, or when the attempt has failed and the desk is left
    * stale.
    */
-  onReconnect(handler: (event: ReconnectEvent) => void): Subscription;
+  onRecovery(handler: (event: DeskRecovery) => void): Subscription;
 
   /** Submit a limit order on this marketplace. */
   submitLimit(marketId: number, side: string, units: number, price: number): Promise<Order>;
@@ -174,7 +174,7 @@ export class DefaultDesk implements Desk {
   private readonly _bookHandlers: Array<{ marketId: number; handler: (b: Book) => void }> = [];
   private readonly _tradeHandlers: Array<{ marketId: number; handler: (t: Trade) => void }> = [];
   private readonly _gapHandlers: Array<(e: GapEvent) => void> = [];
-  private readonly _reconnectHandlers: Array<(e: ReconnectEvent) => void> = [];
+  private readonly _reconnectHandlers: Array<(e: DeskRecovery) => void> = [];
 
   private _closed = false;
 
@@ -333,7 +333,7 @@ export class DefaultDesk implements Desk {
     };
   }
 
-  onReconnect(handler: (e: ReconnectEvent) => void): Subscription {
+  onRecovery(handler: (e: DeskRecovery) => void): Subscription {
     this._ensureOpen();
     this._reconnectHandlers.push(handler);
     return () => {
@@ -444,7 +444,7 @@ export class DefaultDesk implements Desk {
   /**
    * Re-seed once the transport is back.
    *
-   * Reconnecting is not this layer's job -- a `Reconnected` only arrives
+   * Reconnecting is not this layer's job -- a `StreamReconnected` only arrives
    * because the listener already restored the subscription. Reseeding is: a
    * reconnect is the largest possible sequence gap, so _seedFromSnapshot()
    * (clear + REST snapshot + reapply + seq watermark) is what converges the
@@ -456,7 +456,7 @@ export class DefaultDesk implements Desk {
     this._resyncInFlight = true;
     this._seedComplete = false;
     void (async () => {
-      let outcome: ReconnectEvent;
+      let outcome: DeskRecovery;
       try {
         await this._seedFromSnapshot();
         outcome = { marketplaceId: this.marketplaceId, success: true, reason: null };
@@ -541,8 +541,8 @@ function _isStreamDropped(event: FmEvent): event is StreamDropped {
   return typeof event === "object" && event !== null && (event as StreamDropped).kind === "stream-dropped";
 }
 
-function _isReconnected(event: FmEvent): event is Reconnected {
-  return typeof event === "object" && event !== null && (event as Reconnected).kind === "reconnected";
+function _isReconnected(event: FmEvent): event is StreamReconnected {
+  return typeof event === "object" && event !== null && (event as StreamReconnected).kind === "reconnected";
 }
 
 function _isFrameUnreadable(event: FmEvent): event is FrameUnreadable {
@@ -645,9 +645,9 @@ export class DeskHandle implements Desk {
     return sub;
   }
 
-  onReconnect(handler: (e: ReconnectEvent) => void): Subscription {
+  onRecovery(handler: (e: DeskRecovery) => void): Subscription {
     this._check();
-    const sub = this._shared.onReconnect(handler);
+    const sub = this._shared.onRecovery(handler);
     this._mySubscriptions.push(sub);
     return sub;
   }

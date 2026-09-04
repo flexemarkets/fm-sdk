@@ -2,7 +2,7 @@
 
 from .client import Flexemarkets
 from .enums import OrderType, OrderSide
-from .events import NO_SEQ, OrdersUpdate, FrameUnreadable, Reconnected, StreamDropped
+from .events import NO_SEQ, OrdersUpdate, FrameUnreadable, StreamReconnected, StreamDropped
 from .snapshot import Snapshot
 from .exceptions import (
     AccountNameConflictError,
@@ -17,7 +17,7 @@ from .exceptions import (
     InvalidArgumentError,
     PersonHasMarketplaceDataError,
 )
-from .desk import GapEvent, Desk, ReconnectEvent, Subscription
+from .desk import GapEvent, Desk, DeskRecovery, Subscription
 from .orderbook import Book
 from .trades import Trade, Tape
 from .types import (
@@ -69,11 +69,11 @@ __all__ = [
     "Desk",
     "Subscription",
     "GapEvent",
-    "ReconnectEvent",
+    "DeskRecovery",
     # events
     "StreamDropped",
     "FrameUnreadable",
-    "Reconnected",
+    "StreamReconnected",
     "OrdersUpdate",
     # snapshot
     "Snapshot",

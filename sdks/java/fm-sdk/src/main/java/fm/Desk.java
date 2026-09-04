@@ -1,7 +1,7 @@
 package fm;
 
 import fm.event.GapEvent;
-import fm.event.ReconnectEvent;
+import fm.event.DeskRecovery;
 import fm.model.Holding;
 import fm.model.Market;
 import fm.model.Order;
@@ -36,7 +36,7 @@ import java.util.function.Consumer;
  * a book that has a hole in it, and a dropped transport is
  * reconnected and re-seeded. Both are observable —
  * {@link #onGap(java.util.function.Consumer)} and
- * {@link #onReconnect(java.util.function.Consumer)} — so a caller who
+ * {@link #onRecovery(java.util.function.Consumer)} — so a caller who
  * wants to know that its desk went stale can be told rather than
  * having to infer it.
  */
@@ -174,7 +174,7 @@ public interface Desk extends AutoCloseable {
      *
      * <p>Live deltas only. A gap or a reconnect re-seeds the tape from the
      * server's snapshot, and those trades do not fire here -- they are not new,
-     * they are what was missed. {@link #onGap} and {@link #onReconnect} are how
+     * they are what was missed. {@link #onGap} and {@link #onRecovery} are how
      * a caller learns that happened.
      *
      * @param marketId the market to watch
@@ -211,7 +211,7 @@ public interface Desk extends AutoCloseable {
      * @param handler called after the stream is restored and the desk reseeded
      * @return a handle that unsubscribes the handler
      */
-    Subscription onReconnect(Consumer<ReconnectEvent> handler);
+    Subscription onRecovery(Consumer<DeskRecovery> handler);
 
     /**
      * Submit a limit order on this marketplace.

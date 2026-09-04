@@ -24,8 +24,8 @@ import org.junit.jupiter.api.Test;
 /**
  * What module-info promises, held to.
  *
- * <p>Written after fm.role.Streaming was found importing fm.internal.Reconnected.
- * Streaming is exported and Reconnected was not, so a caller on the module path
+ * <p>Written after fm.role.Streaming was found importing fm.internal.StreamReconnected.
+ * Streaming is exported and StreamReconnected was not, so a caller on the module path
  * was handed objects on their own queue whose type they could not name. Nothing
  * caught it: it compiles, and every existing test passed.
  *
@@ -74,7 +74,7 @@ class ExportedApiTest {
      * listen() and subscribe() hand the caller a queue and put objects on it.
      * Those objects are the contract, whatever the queue's element type says,
      * so every one of them has to be nameable. This is the check that would
-     * have caught Reconnected.
+     * have caught StreamReconnected.
      */
     @Test
     void everyEventPutOnTheCallerQueueIsExported() throws IOException {

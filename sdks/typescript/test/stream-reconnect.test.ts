@@ -2,7 +2,7 @@
  * What a caller draining `listen()` learns when the stream drops.
  *
  * Java's `Events` restores the subscription itself and then delivers a
- * `Reconnected`, so a consumer knows its state is stale and reseeds.
+ * `StreamReconnected`, so a consumer knows its state is stale and reseeds.
  * TypeScript delivered `StreamDropped` and stopped: the stream stayed dead
  * until someone noticed and called `fm.reconnect()`, and nothing was ever
  * delivered to say it had come back.
@@ -21,7 +21,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { EventListener } from "../src/stomp.ts";
-import type { FmEvent, Reconnected, StreamDropped } from "../src/stomp.ts";
+import type { FmEvent, StreamReconnected, StreamDropped } from "../src/stomp.ts";
 
 /** An EventListener with the socket stubbed out. */
 class StubListener extends EventListener {
@@ -98,8 +98,8 @@ test("a dropped stream restores itself and says so", async () => {
 
   assert.equal((events[0] as StreamDropped).kind, "stream-dropped");
   assert.ok(events[1], "the caller is never told the stream came back");
-  assert.equal((events[1] as Reconnected).kind, "reconnected");
-  assert.equal((events[1] as Reconnected).marketplaceId, 7);
+  assert.equal((events[1] as StreamReconnected).kind, "reconnected");
+  assert.equal((events[1] as StreamReconnected).marketplaceId, 7);
   assert.ok(listener.connects > before, "nothing reconnected");
   listener.close();
 });
@@ -146,13 +146,13 @@ test("one drop starts one reconnect", async () => {
     "no reconnect reached the gate: the burst was delivered after the reconnect " +
       "had already finished, so nothing here tests the guard",
   );
-  const isReconnected = (e: FmEvent) => (e as Reconnected).kind === "reconnected";
+  const isReconnected = (e: FmEvent) => (e as StreamReconnected).kind === "reconnected";
   assert.equal(events.filter(isReconnected).length, 0, "a reconnect finished before the burst was delivered");
 
   listener.release();
   await settle();
 
   const reconnected = events.filter(isReconnected);
-  assert.equal(reconnected.length, 1, `expected one Reconnected, got ${reconnected.length}`);
+  assert.equal(reconnected.length, 1, `expected one StreamReconnected, got ${reconnected.length}`);
   listener.close();
 });

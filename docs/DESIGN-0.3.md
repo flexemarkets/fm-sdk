@@ -56,18 +56,7 @@ where this item is heading. It should be decided with the rest of this, not
 before — and the export check cannot see it, since no SDK exports it at top
 level.
 
-### 2. `Reconnected` and `ReconnectEvent`
-
-Two types whose names are one concept apart and whose meanings are two layers
-apart. `Reconnected` is a queue event on the raw stream — the transport is back.
-`ReconnectEvent` is the payload of `Desk.onReconnect`, carrying `success` and
-`reason`, because the desk also re-seeds over REST and that can fail.
-
-Both are needed; the names do not say which is which. This was open for 0.2 and
-not taken. It gets cheaper to defer and never cheaper to do: every release that
-ships both names adds call sites.
-
-### 3. HAL-less and V1-only
+### 2. HAL-less and V1-only
 
 Blocked on the server, not the SDK. The SDK reads `GET /api`, pulls hrefs out of
 `_links` and rebases them onto the configured endpoint; it should call only

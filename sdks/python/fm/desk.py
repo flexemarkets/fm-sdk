@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Callable, Optional
 
 log = logging.getLogger(__name__)
 
-from .events import NO_SEQ, OrdersUpdate, FrameUnreadable, Reconnected, StreamDropped
+from .events import NO_SEQ, OrdersUpdate, FrameUnreadable, StreamReconnected, StreamDropped
 from .orderbook import Book, BookIndex
 from .trades import TapeIndex, Trade, Tape
 from .types import Holding, Market, Order, Session
@@ -50,7 +50,7 @@ class GapEvent:
 
 
 @dataclass(frozen=True)
-class ReconnectEvent:
+class DeskRecovery:
     """Fires when :class:`Desk` reacts to a
     :class:`~fm.events.StreamDropped` — either after the reconnect
     + resnapshot completes successfully, or after the attempt has
@@ -100,7 +100,7 @@ class Desk:
         self._book_handlers: list[tuple[int, Callable[[Book], None]]] = []
         self._trade_handlers: list[tuple[int, Callable[[Trade], None]]] = []
         self._gap_handlers: list[Callable[[GapEvent], None]] = []
-        self._reconnect_handlers: list[Callable[[ReconnectEvent], None]] = []
+        self._reconnect_handlers: list[Callable[[DeskRecovery], None]] = []
 
         self._queue: queue.Queue[object] = queue.Queue(maxsize=10_000)
         self._closed = False
@@ -249,7 +249,7 @@ class Desk:
 
         Live deltas only. A gap or a reconnect re-seeds the tape from the
         server's snapshot, and those trades do not fire here -- they are not
-        new, they are what was missed. :meth:`on_gap` and :meth:`on_reconnect`
+        new, they are what was missed. :meth:`on_gap` and :meth:`on_recovery`
         are how a caller learns that happened.
         """
         self._ensure_open()
@@ -293,7 +293,7 @@ class Desk:
 
         return cancel
 
-    def on_reconnect(self, handler: Callable[[ReconnectEvent], None]) -> Subscription:
+    def on_recovery(self, handler: Callable[[DeskRecovery], None]) -> Subscription:
         """Register a handler that fires after the SDK reacts to a
         transport error — either when reconnect + resnapshot have
         completed, or when the attempt has failed and the desk is
@@ -381,7 +381,7 @@ class Desk:
                 )
                 continue
 
-            if isinstance(event, Reconnected):
+            if isinstance(event, StreamReconnected):
                 self._reseed_after_reconnect()
                 continue
 
@@ -469,7 +469,7 @@ class Desk:
     def _reseed_after_reconnect(self) -> None:
         """Re-seed once the transport is back.
 
-        Reconnecting is not this layer's job -- :class:`~fm.events.Reconnected`
+        Reconnecting is not this layer's job -- :class:`~fm.events.StreamReconnected`
         only arrives because the listener already restored the subscription.
         Reseeding is: a reconnect is the largest possible sequence gap, so
         :meth:`_seed_from_snapshot` (clear + REST snapshot + reapply + seq
@@ -478,11 +478,11 @@ class Desk:
 
         If the reseed fails the desk is left stale and the dispatcher
         continues; the caller's next access sees the last-applied state, and
-        the ReconnectEvent says so.
+        the DeskRecovery says so.
         """
         try:
             self._seed_from_snapshot()
-            outcome = ReconnectEvent(
+            outcome = DeskRecovery(
                 marketplace_id=self.marketplace_id, success=True, reason=None
             )
         except Exception as e:
@@ -491,7 +491,7 @@ class Desk:
                 self.marketplace_id,
                 e,
             )
-            outcome = ReconnectEvent(
+            outcome = DeskRecovery(
                 marketplace_id=self.marketplace_id, success=False, reason=str(e)
             )
         for h in self._reconnect_handlers:
@@ -599,9 +599,9 @@ class DeskHandle:
         self._my_subscriptions.append(sub)
         return sub
 
-    def on_reconnect(self, handler: Callable[[ReconnectEvent], None]) -> Subscription:
+    def on_recovery(self, handler: Callable[[DeskRecovery], None]) -> Subscription:
         self._check()
-        sub = self._shared.on_reconnect(handler)
+        sub = self._shared.on_recovery(handler)
         self._my_subscriptions.append(sub)
         return sub
 

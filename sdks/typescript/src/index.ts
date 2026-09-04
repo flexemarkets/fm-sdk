@@ -85,14 +85,14 @@ export type { Trade } from "./trades.js";
 export type {
   StompFrame,
   StreamDropped,
-  Reconnected,
+  StreamReconnected,
   FrameUnreadable,
   FmEvent,
   EventCallback,
 } from "./stomp.js";
 
 // Desk
-export type { Desk, Subscription, GapEvent, ReconnectEvent } from "./desk.js";
+export type { Desk, Subscription, GapEvent, DeskRecovery } from "./desk.js";
 export type { Snapshot } from "./snapshot.js";
 export { NO_SEQ } from "./stomp.js";
 export type { OrdersUpdate } from "./stomp.js";

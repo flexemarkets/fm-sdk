@@ -1,6 +1,6 @@
 package fm.role;
 
-import fm.event.Reconnected;
+import fm.event.StreamReconnected;
 import fm.event.StreamDropped;
 import fm.Desk;
 import fm.Subscription;
@@ -60,7 +60,7 @@ public interface Streaming {
      * Re-establish the subscription by hand.
      *
      * <p>Rarely needed: the client reconnects in the background after a
-     * {@link StreamDropped} and puts a {@link Reconnected} on the queue when it
+     * {@link StreamDropped} and puts a {@link StreamReconnected} on the queue when it
      * has. Calling this as well reconnects twice.
      *
      * @throws InterruptedException if the wait for the new subscription is

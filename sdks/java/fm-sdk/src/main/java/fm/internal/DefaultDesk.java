@@ -3,8 +3,8 @@ package fm.internal;
 import fm.event.FrameUnreadable;
 import fm.event.GapEvent;
 import fm.event.OrdersUpdate;
-import fm.event.ReconnectEvent;
-import fm.event.Reconnected;
+import fm.event.DeskRecovery;
+import fm.event.StreamReconnected;
 import fm.event.StreamDropped;
 import fm.model.Holding;
 import fm.model.Market;
@@ -85,7 +85,7 @@ public class DefaultDesk implements Desk {
     private final List<BookHandler>                  _bookHandlers      = new CopyOnWriteArrayList<>();
     private final List<TradeHandler>                       _tradeHandlers     = new CopyOnWriteArrayList<>();
     private final List<Consumer<GapEvent>>                 _gapHandlers       = new CopyOnWriteArrayList<>();
-    private final List<Consumer<ReconnectEvent>>           _reconnectHandlers = new CopyOnWriteArrayList<>();
+    private final List<Consumer<DeskRecovery>>           _reconnectHandlers = new CopyOnWriteArrayList<>();
 
     private final BlockingQueue<Object> _queue = new ArrayBlockingQueue<>(10_000);
     private final Subscription _events;
@@ -261,7 +261,7 @@ public class DefaultDesk implements Desk {
     }
 
     @Override
-    public Subscription onReconnect(Consumer<ReconnectEvent> handler) {
+    public Subscription onRecovery(Consumer<DeskRecovery> handler) {
         _ensureOpen();
         _reconnectHandlers.add(handler);
         return () -> _reconnectHandlers.remove(handler);
@@ -308,7 +308,7 @@ public class DefaultDesk implements Desk {
                     // The subscription restores itself; nothing to do but say so.
                     System.err.println("[Desk] WS transport error on marketplace "
                             + _marketplaceId + ": " + error.failure().getMessage());
-                } else if (event instanceof Reconnected) {
+                } else if (event instanceof StreamReconnected) {
                     _reseedAfterReconnect();
                 } else if (event instanceof FrameUnreadable ex) {
                     // STOMP ERROR / parse failure. Logged for
@@ -339,14 +339,14 @@ public class DefaultDesk implements Desk {
      * apart from a dead connection.
      */
     private void _reseedAfterReconnect() {
-        ReconnectEvent event;
+        DeskRecovery event;
         try {
             _seedFromSnapshot();
-            event = new ReconnectEvent(_marketplaceId, true, null);
+            event = new DeskRecovery(_marketplaceId, true, null);
         } catch (Throwable t) {
             System.err.println("[Desk] Reseed failed on marketplace "
                     + _marketplaceId + "; desk is stale: " + t.getMessage());
-            event = new ReconnectEvent(_marketplaceId, false, t.getMessage());
+            event = new DeskRecovery(_marketplaceId, false, t.getMessage());
         }
         for (var h : _reconnectHandlers) {
             try { h.accept(event); } catch (Throwable ignored) { /* don't let one bad handler stop dispatch */ }

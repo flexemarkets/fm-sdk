@@ -1,7 +1,7 @@
 """What a caller draining ``listen()`` learns when the stream drops.
 
 Java's ``Events`` restores the subscription itself and then puts a
-``Reconnected`` on the queue, so a consumer knows its state is stale and
+``StreamReconnected`` on the queue, so a consumer knows its state is stale and
 reseeds. Python emitted ``StreamDropped`` and stopped: the stream stayed dead
 until someone noticed and called ``fm.reconnect()``, and nothing was ever put
 on the queue to say it had come back.
@@ -10,7 +10,7 @@ on the queue to say it had come back.
 so the gap only showed for callers using the raw queue -- which is the whole
 point of ``listen()`` being public.
 
-These fail before the auto-reconnect lands: no ``Reconnected`` type exists to
+These fail before the auto-reconnect lands: no ``StreamReconnected`` type exists to
 import, and nothing reconnects.
 """
 
@@ -21,7 +21,7 @@ import threading
 
 import pytest
 
-from fm.events import EventListener, Reconnected, StreamDropped
+from fm.events import EventListener, StreamReconnected, StreamDropped
 
 
 class _Listener(EventListener):
@@ -89,14 +89,14 @@ def test_a_dropped_stream_restores_itself_and_says_so() -> None:
 
     events = _drain(q)
     assert isinstance(events[0], StreamDropped)
-    assert isinstance(events[1], Reconnected), "the caller is never told the stream came back"
+    assert isinstance(events[1], StreamReconnected), "the caller is never told the stream came back"
     assert events[1].marketplace_id == 7
     assert listener.connects > before, "nothing reconnected"
     listener.close()
 
 
 def test_reconnected_carries_the_marketplace_it_belongs_to() -> None:
-    """Matching Java's ``Reconnected(long marketplaceId)``.
+    """Matching Java's ``StreamReconnected(long marketplaceId)``.
 
     One Flexemarkets can hold several subscriptions, so a bare "we are back"
     does not tell a consumer which desk to reseed.
@@ -108,7 +108,7 @@ def test_reconnected_carries_the_marketplace_it_belongs_to() -> None:
     listener._on_stream_dropped(OSError("connection reset"))
 
     events = _drain(q)
-    assert Reconnected(marketplace_id=7) in events
+    assert StreamReconnected(marketplace_id=7) in events
     listener.close()
 
 
@@ -132,7 +132,7 @@ def test_one_drop_starts_one_reconnect() -> None:
 
     Java guards with compareAndSet on a `reconnecting` flag; without it a
     handful of failing reads each start their own reconnect thread and the
-    caller gets a queue full of Reconnected for a single event.
+    caller gets a queue full of StreamReconnected for a single event.
 
     Same shape as Java's oneDropStartsOneReconnect and TypeScript's "one drop
     starts one reconnect": hold the reconnect open, deliver the burst, prove
@@ -180,14 +180,14 @@ def test_one_drop_starts_one_reconnect() -> None:
             event = q.get(timeout=3.0)
         except queue.Empty:
             break
-        if isinstance(event, Reconnected):
+        if isinstance(event, StreamReconnected):
             reconnected.append(event)
-    assert len(reconnected) == 1, f"expected one Reconnected, got {len(reconnected)}"
+    assert len(reconnected) == 1, f"expected one StreamReconnected, got {len(reconnected)}"
     listener.close()
 
 
 def _reconnected_so_far(q: "queue.Queue[object]") -> int:
-    """Reconnected events already on the queue, without blocking or losing any."""
+    """StreamReconnected events already on the queue, without blocking or losing any."""
     drained, count = [], 0
     while True:
         try:
@@ -195,7 +195,7 @@ def _reconnected_so_far(q: "queue.Queue[object]") -> int:
         except queue.Empty:
             break
     for event in drained:
-        if isinstance(event, Reconnected):
+        if isinstance(event, StreamReconnected):
             count += 1
         q.put(event)
     return count

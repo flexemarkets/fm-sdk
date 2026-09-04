@@ -1,7 +1,7 @@
 package fm.internal;
 
 import fm.event.GapEvent;
-import fm.event.ReconnectEvent;
+import fm.event.DeskRecovery;
 import fm.model.Holding;
 import fm.model.Market;
 import fm.model.Order;
@@ -118,9 +118,9 @@ class DeskHandle implements Desk {
         return sub;
     }
 
-    @Override public Subscription onReconnect(Consumer<ReconnectEvent> handler) {
+    @Override public Subscription onRecovery(Consumer<DeskRecovery> handler) {
         _check();
-        Subscription sub = _shared.onReconnect(handler);
+        Subscription sub = _shared.onRecovery(handler);
         _mySubscriptions.add(sub);
         return sub;
     }

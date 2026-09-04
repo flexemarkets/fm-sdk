@@ -543,7 +543,14 @@ def _python_surface(path: Path, name: str) -> set[str]:
     which is idiom being called divergence.
     """
     source = path.read_text()
-    body = source[source.index(f"class {name}"):]
+    # \b, not a plain index: "class Desk" is a prefix of "class DeskRecovery",
+    # and reading the wrong class is a comparison that proves nothing. Caught
+    # only because the wrong class had no public members and the reader-found-
+    # nothing guard fired; a near-miss with members would have passed.
+    start = re.search(rf"^class {name}\b", source, re.M)
+    if not start:
+        return set()
+    body = source[start.start():]
     following = re.search(r"\nclass ", body)
     if following:
         body = body[: following.start()]
@@ -557,7 +564,12 @@ def _typescript_surface(path: Path, name: str, kind: str) -> set[str]:
     """Public members of a TypeScript class or interface: methods, getters and
     readonly fields."""
     source = path.read_text()
-    body = source[source.index(f"{kind} {name}"):]
+    # Same prefix trap as the Python reader: "interface Desk" matches
+    # "interface DeskRecovery".
+    start = re.search(rf"{kind} {name}\b", source)
+    if not start:
+        return set()
+    body = source[start.start():]
     following = re.search(r"\n(?:export )?(?:class|interface|function|const) ", body[1:])
     if following:
         body = body[: following.start() + 1]

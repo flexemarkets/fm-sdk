@@ -113,7 +113,7 @@ export interface StreamDropped {
  * Carries the marketplace because one client can hold several subscriptions,
  * and "we are back" does not say which desk to reseed.
  */
-export interface Reconnected {
+export interface StreamReconnected {
   kind: "reconnected";
   marketplaceId: number;
 }
@@ -153,7 +153,7 @@ export type FmEvent =
   | Holding
   | OrdersUpdate
   | StreamDropped
-  | Reconnected
+  | StreamReconnected
   | FrameUnreadable;
 
 export type EventCallback = (event: FmEvent) => void;
@@ -348,7 +348,7 @@ export class EventListener {
   /**
    * React to a dropped stream by restoring it.
    *
-   * On success a `Reconnected` is delivered so consumers know their state
+   * On success a `StreamReconnected` is delivered so consumers know their state
    * needs reseeding -- matching Java, where the subscription has always
    * restored itself rather than leaving the caller to notice.
    *

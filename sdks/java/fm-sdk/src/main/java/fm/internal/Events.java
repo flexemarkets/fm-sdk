@@ -2,7 +2,7 @@ package fm.internal;
 
 import fm.event.FrameUnreadable;
 import fm.event.OrdersUpdate;
-import fm.event.Reconnected;
+import fm.event.StreamReconnected;
 import fm.event.StreamDropped;
 import fm.event.Version;
 import fm.role.Streaming;
@@ -257,7 +257,7 @@ public class Events implements Subscription {
      * React to a dropped stream by restoring it, off the callback thread.
      *
      * <p>The WebSocket listener must not block, and reconnect() sleeps between
-     * attempts. On success a {@link Reconnected} goes onto the queue so
+     * attempts. On success a {@link StreamReconnected} goes onto the queue so
      * consumers know their state needs reseeding.
      *
      * <p>Package-private for the same reason {@link #reconnect()} is: the
@@ -274,7 +274,7 @@ public class Events implements Subscription {
             try {
                 reconnect();
                 if (!_closed) {
-                    _queue.offer(new Reconnected(_marketplaceId));
+                    _queue.offer(new StreamReconnected(_marketplaceId));
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();

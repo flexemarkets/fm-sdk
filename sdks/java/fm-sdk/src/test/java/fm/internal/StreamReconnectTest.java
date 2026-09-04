@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import fm.error.ApiException;
-import fm.event.Reconnected;
+import fm.event.StreamReconnected;
 
 /**
  * What a caller draining {@code listen()} learns when the stream drops.
@@ -19,11 +19,11 @@ import fm.event.Reconnected;
  * <p>Python and TypeScript have covered this all along and Java did not, which
  * is backwards: Java is where the auto-reconnect was written first, and the
  * other two were brought up to it. The behaviour is that {@link Events}
- * restores the subscription itself and then puts a {@link Reconnected} on the
+ * restores the subscription itself and then puts a {@link StreamReconnected} on the
  * queue, so a consumer knows its state is stale and reseeds.
  *
  * <p>It matters beyond the raw queue. {@code DefaultDesk} reseeds its books
- * from that Reconnected -- a reconnect is the largest possible sequence gap --
+ * from that StreamReconnected -- a reconnect is the largest possible sequence gap --
  * so a drop that never announced itself would leave a desk serving a stale
  * book with nothing to say so.
  *
@@ -88,7 +88,7 @@ class StreamReconnectTest {
 
         assertThat(_poll(queue))
             .as("a consumer is told the stream came back, so it can reseed")
-            .isInstanceOf(Reconnected.class);
+            .isInstanceOf(StreamReconnected.class);
         assertThat(listener.connects).isEqualTo(1);
     }
 
@@ -101,8 +101,8 @@ class StreamReconnectTest {
         listener.reconnectInBackground();
 
         // One Flexemarkets can hold desks on several marketplaces, so a
-        // Reconnected that did not name one would tell every desk to reseed.
-        assertThat(_poll(queue)).isEqualTo(new Reconnected(MP));
+        // StreamReconnected that did not name one would tell every desk to reseed.
+        assertThat(_poll(queue)).isEqualTo(new StreamReconnected(MP));
     }
 
     @Test
@@ -156,7 +156,7 @@ class StreamReconnectTest {
 
         listener.gate.countDown();
 
-        assertThat(_poll(queue)).isInstanceOf(Reconnected.class);
+        assertThat(_poll(queue)).isInstanceOf(StreamReconnected.class);
         assertThat(queue.poll(250, TimeUnit.MILLISECONDS))
             .as("a burst of errors from one dying socket is one outage, not five")
             .isNull();

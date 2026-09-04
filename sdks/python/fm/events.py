@@ -142,7 +142,7 @@ class FrameUnreadable:
 
 
 @dataclass
-class Reconnected:
+class StreamReconnected:
     """The stream is back.
 
     Put on the queue once the transport has re-established itself after a
@@ -330,7 +330,7 @@ class EventListener:
 
         The receive loop is dead by the time this runs and reconnect() sleeps
         between attempts, so the work goes to its own thread. On success a
-        :class:`Reconnected` goes onto the queue so consumers know their state
+        :class:`StreamReconnected` goes onto the queue so consumers know their state
         needs reseeding -- matching Java, where the subscription has always
         restored itself rather than leaving the caller to notice.
 
@@ -348,7 +348,7 @@ class EventListener:
             try:
                 self.reconnect()
                 if not self._closed:
-                    self._queue.put(Reconnected(marketplace_id=self._marketplace_id))
+                    self._queue.put(StreamReconnected(marketplace_id=self._marketplace_id))
             finally:
                 self._reconnecting.release()
 
