@@ -5,7 +5,7 @@ package fm.event;
  * The event stream dropped.
  *
  * <p>Delivered onto a listener's queue when the transport fails. What follows
- * depends on who is reading: {@link Desk} reconnects and reseeds by
+ * depends on who is reading: {@link fm.Desk} reconnects and reseeds by
  * itself and reports the outcome as a {@link ReconnectEvent}, while a caller
  * reading a raw queue sees this and decides.
  *

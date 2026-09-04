@@ -36,7 +36,7 @@ public interface Administration {
      * Register a new account and its owner, returning the owner's token.
      *
      * <p>Account names are unique. A clash raises {@link
-     * fm.ConflictException}, whose {@code failure().suggestedName()}
+     * fm.error.ConflictException}, whose {@code failure().suggestedName()}
      * carries the server's proposed alternative -- worth surfacing rather than
      * retrying blindly, since the suggestion is what the user will be known as.
      *

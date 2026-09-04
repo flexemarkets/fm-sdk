@@ -8,7 +8,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
  * @param person     the person it signs in as
  * @param account    the account they belong to
  * @param token      the bearer token itself, which
- *                   {@link Flexemarkets#connect} accepts as a credential
+ *                   {@link fm.Flexemarkets#connect} accepts as a credential
  */
 
 @JsonIgnoreProperties(ignoreUnknown = true)

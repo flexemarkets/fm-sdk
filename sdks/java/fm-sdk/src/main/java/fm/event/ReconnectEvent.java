@@ -1,11 +1,11 @@
 package fm.event;
 
 /**
- * Fires when {@link Desk} reacts to a {@code StreamDropped} —
+ * Fires when {@link fm.Desk} reacts to a {@code StreamDropped} —
  * either after the reconnect + resnapshot completes successfully, or
  * after the reconnect attempt has failed and the desk is left stale.
  *
- * <p>Subscribe via {@link Desk#onReconnect(java.util.function.Consumer)}.
+ * <p>Subscribe via {@link fm.Desk#onReconnect(java.util.function.Consumer)}.
  *
  * @param marketplaceId the marketplace the reconnect ran for
  * @param success       {@code true} if the reconnect + REST snapshot
