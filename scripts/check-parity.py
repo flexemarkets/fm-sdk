@@ -893,27 +893,33 @@ EXPORT_EXEMPTIONS: dict[str, str] = {
     "FmEvent":       "the TypeScript union of stream events; Java uses a queue of Object",
     "EventCallback": "TypeScript callback type; Java and Python pass a queue",
 
-    # Tracked in DESIGN-0.3 item 4 rather than exempted away: these are the
-    # four predicates Java deleted as redundant with the enums, plus contra.
-    # They are still exported by TypeScript and still defined by Python.
-    # Withdrawing them breaks callers, so it waits for 0.3.
-    "isBuy":    "DESIGN-0.3 item 4: deleted in Java, still exported by TypeScript",
-    "isSell":   "DESIGN-0.3 item 4: deleted in Java, still exported by TypeScript",
-    "isCancel": "DESIGN-0.3 item 4: deleted in Java, still exported by TypeScript",
-    "isLimit":  "DESIGN-0.3 item 4: deleted in Java, still exported by TypeScript",
-    "contra":   "DESIGN-0.3 item 4: OrderSide.contra() in Java, still a free function elsewhere",
+    # contra: OrderSide is a StrEnum in Python and an enum in Java, both of
+    # which carry contra() as a method. TypeScript's OrderSide is a string
+    # union and cannot, so the free function is the only spelling available
+    # there. Idiom, not drift -- and the one member of this group that is.
+    "contra": "OrderSide.contra() in Java and Python; TypeScript's union type cannot carry a method",
 
-    # The relational predicates. Java groups them as statics on fm.Orders, so
-    # they are members rather than exported names; Python has them in
-    # order_utils and leaves that module out of __all__. Recorded rather than
-    # hidden: a Python caller cannot reach find_order from fm at all, which is
-    # the asymmetry DESIGN-0.3 item 4 is about.
-    "findOrder":   "Orders.findOrder in Java; Python's order_utils is not in __all__",
-    "isAvailable": "Orders.isAvailable in Java; same for Python",
-    "isConsumed":  "Orders.isConsumed in Java; same for Python",
-    "isSplit":     "Orders.isSplit in Java; same for Python",
-    "isSubmit":    "Orders.isSubmit in Java; same for Python",
-    "isSymbol":    "Orders.isSymbol in Java; same for Python",
+    # The relational predicates -- what can only be worked out from a set of
+    # orders together. Public in all three, spelled per idiom: statics on
+    # fm.Orders in Java, the fm.order_utils module in Python, named exports in
+    # TypeScript. Java's are members rather than top-level names and Python's
+    # module is not re-exported through __all__, so neither shows up in an
+    # export list and all of them look TypeScript-only from here.
+    "findOrder":         "Orders.findOrder in Java; fm.order_utils in Python",
+    "isAvailable":       "Orders.isAvailable in Java; same for Python",
+    "isConsumed":        "Orders.isConsumed in Java; same for Python",
+    "isConsumedOrSplit": "Orders.isConsumedOrSplit in Java; same for Python",
+    "isResting":         "Orders.isResting in Java; same for Python",
+    "isSplit":           "Orders.isSplit in Java; same for Python",
+    "isSubmit":          "Orders.isSubmit in Java; same for Python",
+    "isSupplier":        "Orders.isSupplier in Java; same for Python",
+    "isSymbol":          "Orders.isSymbol in Java; same for Python",
+    "limit":             "Orders.limit in Java; same for Python",
+
+    # isBuy, isSell, isCancel and isLimit are no longer exempted: they are out
+    # of TypeScript's entry point, so no SDK offers them as public API. They
+    # survive as internal helpers in Python and TypeScript, where this SDK's
+    # own code uses them and Java's did not.
 }
 
 

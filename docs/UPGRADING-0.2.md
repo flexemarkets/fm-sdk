@@ -129,6 +129,39 @@ a blanket rename does not know whose they are. fm-robots had its own
 walked into it. Grep your own packages for `Book`, `Books`, `Tape`, `Tapes`,
 `Orders` and `Desk` before you run anything.
 
+### The order helpers agree across the three SDKs
+
+`fm.Orders` (Java), `fm.order_utils` (Python) and `order-utils` (TypeScript) had
+drifted apart in both directions.
+
+**Withdrawn from TypeScript's entry point:** `isBuy`, `isSell`, `isCancel`,
+`isLimit`. They became one-line comparisons the moment side and type became
+enums, and Java deleted them in 0.1.0:
+
+```ts
+// before
+if (isBuy(order)) …
+// after
+if (OrderSide.BUY === order.side) …
+```
+
+They still exist inside the TypeScript and Python SDKs, which use them
+internally where Java's did not — but no SDK offers them as public API now.
+`contra` stays exported in TypeScript alone: `OrderSide` is a string union
+there, so unlike Java's and Python's enums it cannot carry the method that
+replaced it.
+
+**Added to Python and TypeScript**, having existed in Java only:
+
+| | answers |
+|---|---|
+| `isConsumedOrSplit(order)` | has this order been traded against at all — the positive complement of `isAvailable` |
+| `isSupplier(lhs, rhs)` | are these the two sides of one trade |
+| `limit(market, side, units, price)` | a limit order ready to submit, without an object literal of mostly nulls |
+
+**Newly reachable in TypeScript:** `isResting` was defined and never exported,
+so TypeScript callers could not reach it while Java and Python could.
+
 ### The two reconnect types say which layer they are
 
 `Reconnected` and `ReconnectEvent` were one word apart and two layers apart,

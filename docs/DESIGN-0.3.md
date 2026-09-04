@@ -12,51 +12,7 @@ revisited.
 
 ## Open
 
-### 1. The three SDKs do not export the same surface
-
-The largest item here, and the only one with work already done against it.
-
-0.2.0's simplifications landed in **Java alone**:
-
-- Java deleted `isBuy`, `isSell`, `isCancel` and `isLimit` as redundant with the
-  enums — "two ways to ask one question is one too many". TypeScript still
-  exports all four; Python still defines them in `order_utils`.
-- Java moved `contra` onto `OrderSide`. TypeScript and Python still export a
-  free function.
-- Java withdrew `OrderUtils` and `Timestamps` to `fm.internal`. TypeScript
-  exports `toInstant` and eleven order utilities from its entry point. Python
-  leaves both out of `__all__` but keeps `order_utils.py` and `timestamps.py`
-  importable — it already has the underscore convention for private modules,
-  in `_hal.py`, and applies it to neither.
-
-Some divergence is idiom and should stay: TypeScript's wire types are structural
-`interface`s and cannot carry methods, so behaviour Java hangs off a record has
-to be a free function there.
-
-**What has been done.** `check-parity.py` now compares the export lists — Java's
-exported packages, Python's `__all__`, TypeScript's `index.ts` — with the
-idiomatic differences recorded in `EXPORT_EXEMPTIONS` rather than ignored. It
-found four names declared in all three SDKs but exported by only some
-(`Allotment`, `Assets`, `ConflictFailure`, `ManagerOtpBundle`); those were
-additive and are fixed. This drifted invisibly because a name exported by one
-SDK and not another is not a wire field, a client method, a read-side member or
-a failure, so it fell through all four existing checks while every one passed.
-
-**What remains is the breaking half**, which is why it is here: withdrawing the
-four redundant predicates and `contra` from TypeScript, and making Python's
-`order_utils` and `timestamps` modules private. Both change what a consumer can
-import.
-
-**One case is a genuine either/or rather than an oversight.** `isResting` is
-defined in TypeScript's `order-utils.ts` and not re-exported from `index.ts`, so
-TypeScript callers cannot reach it at all, while Java (`Orders.isResting`) and
-Python (`order_utils.is_resting`) can. Exporting it makes TypeScript consistent
-with its own other eleven utilities; leaving it makes TypeScript consistent with
-where this item is heading. It should be decided with the rest of this, not
-before — and the export check cannot see it, since no SDK exports it at top
-level.
-
-### 2. HAL-less and V1-only
+### 1. HAL-less and V1-only
 
 Blocked on the server, not the SDK. The SDK reads `GET /api`, pulls hrefs out of
 `_links` and rebases them onto the configured endpoint; it should call only

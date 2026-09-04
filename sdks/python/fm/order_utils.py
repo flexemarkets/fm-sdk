@@ -6,7 +6,7 @@ Port of fm.net.TypesUtilities order-related helpers.
 from __future__ import annotations
 
 from .enums import OrderType, OrderSide
-from .types import Order
+from .types import Market, Order
 
 
 def is_cancel(order: Order) -> bool:
@@ -158,3 +158,46 @@ def is_resting(orders: list[Order], order: Order) -> bool:
 
     # split order with child younger than its consumer is resting
     return _is_supplier_older(orders, _first_child(orders, order))
+
+
+def is_consumed_or_split(order: Order | None) -> bool:
+    """
+    True once an order has a consumer: traded against, whole or in part.
+
+    The positive complement of :func:`is_available`, named for what a position
+    keeps rather than for the mechanism. A split leaves a remainder order
+    behind, so from the position's point of view the original is finished
+    either way -- which is why this is one predicate rather than
+    ``is_consumed(o) or is_split(o)`` spelled out at every call site.
+    """
+    return order is not None and order.consumer is not None
+
+
+def is_supplier(lhs: Order | None, rhs: Order | None) -> bool:
+    """
+    True if ``rhs`` was supplied by ``lhs`` -- the two sides of one trade.
+
+    The kind of question this module exists for: it cannot be answered by
+    either order alone, only by the reference between them.
+    """
+    return lhs is not None and rhs is not None and lhs.id == rhs.supplier
+
+
+def limit(market: Market, side: OrderSide, units: int, price: int) -> Order:
+    """
+    A limit order ready to submit.
+
+    :class:`~fm.types.Order` has seventeen fields because it is what the server
+    returns; a caller building one to send sets four and leaves the rest to the
+    exchange. Naming those at the call site beats a constructor of mostly
+    defaults.
+    """
+    return Order(
+        type=OrderType.LIMIT,
+        side=side,
+        units=units,
+        price=price,
+        marketplace_id=market.marketplace_id,
+        symbol=market.symbol,
+        market_id=market.id,
+    )

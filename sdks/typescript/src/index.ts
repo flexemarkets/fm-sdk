@@ -59,19 +59,28 @@ export {
 
 export { toInstant } from "./timestamps.js";
 
-// Order utils
+// Order utils -- what can only be worked out from a set of orders together.
+//
+// isBuy, isSell, isCancel and isLimit are deliberately not here. They became
+// one-line comparisons the moment side and type became enums: OrderSide.BUY ===
+// order.side says the same thing as isBuy(order), reads the same way, and is
+// one fewer name to know. Java deleted them outright; they survive here only
+// because this SDK's own code uses them, where Java's did not.
+//
+// contra stays: OrderSide is a string union in TypeScript, so unlike Java and
+// Python it cannot carry the method that replaced this.
 export {
-  isCancel,
-  isLimit,
-  isBuy,
-  isSell,
   contra,
+  findOrder,
   isAvailable,
   isConsumed,
+  isConsumedOrSplit,
+  isResting,
   isSplit,
-  isSymbol,
   isSubmit,
-  findOrder,
+  isSupplier,
+  isSymbol,
+  limit,
 } from "./order-utils.js";
 
 // Order book

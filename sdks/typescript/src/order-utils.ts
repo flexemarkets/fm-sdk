@@ -4,7 +4,7 @@
  * Port of fm.order_utils (Python) / fm.OrderUtils (Java).
  */
 
-import { Order, toOrderType, toSide, type OrderSide } from "./types.js";
+import { Order, OrderType, toOrderType, toSide, type Market, type OrderSide } from "./types.js";
 
 export function isCancel(order: Order): boolean {
   return toOrderType(order.type) === "CANCEL";
@@ -146,4 +146,61 @@ export function isResting(orders: Order[], order: Order): boolean {
 
   // split order with child younger than its consumer is resting
   return isSupplierOlder(orders, firstChild(orders, order));
+}
+
+/**
+ * True once an order has a consumer: traded against, whole or in part.
+ *
+ * The positive complement of {@link isAvailable}, named for what a position
+ * keeps rather than for the mechanism. A split leaves a remainder order behind,
+ * so from the position's point of view the original is finished either way --
+ * which is why this is one predicate rather than `isConsumed(o) || isSplit(o)`
+ * spelled out at every call site.
+ */
+export function isConsumedOrSplit(order: Order | null): boolean {
+  return order != null && order.consumer != null;
+}
+
+/**
+ * True if `rhs` was supplied by `lhs` -- the two sides of one trade.
+ *
+ * The kind of question this module exists for: it cannot be answered by either
+ * order alone, only by the reference between them.
+ */
+export function isSupplier(lhs: Order | null, rhs: Order | null): boolean {
+  return lhs != null && rhs != null && lhs.id === rhs.supplier;
+}
+
+/**
+ * A limit order ready to submit.
+ *
+ * {@link Order} has seventeen fields because it is what the server returns; a
+ * caller building one to send sets four and leaves the rest to the exchange.
+ * Naming those at the call site beats an object literal of mostly nulls.
+ */
+export function limit(
+  market: Market,
+  side: OrderSide,
+  units: number,
+  price: number,
+): Order {
+  return {
+    id: 0,
+    original: 0,
+    supplier: 0,
+    consumer: null,
+    type: OrderType.LIMIT,
+    side,
+    units,
+    price,
+    ownerId: null,
+    marketplaceId: market.marketplaceId,
+    sessionId: 0,
+    symbol: market.symbol,
+    marketId: market.id,
+    ownerTarget: null,
+    clientDescription: null,
+    createdDate: null,
+    lastModifiedDate: null,
+  };
 }
