@@ -13,6 +13,8 @@ import java.lang.reflect.WildcardType;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Deque;
+import java.util.ArrayDeque;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -45,7 +47,15 @@ class ExportedApiTest {
         assertThat(exported).isNotEmpty();
 
         List<String> leaks = new ArrayList<>();
-        for (Class<?> type : _publicTypesInExportedPackages(exported)) {
+        for (Class<?> exportedType : _publicTypesInExportedPackages(exported)) {
+          // The type itself, plus any supertype module-info keeps in. A method
+          // declared on a non-exported supertype is still callable through the
+          // exported subtype, so its signature is still part of the surface --
+          // and it is in no other type's getDeclaredMethods(), so scanning
+          // exported types alone cannot see it. fm.role went this way: six
+          // interfaces Flexemarkets extends left the scan the day they stopped
+          // being exported, silently, with every test still passing.
+          for (Class<?> type : _withHiddenSupertypes(exportedType, exported)) {
             for (Method m : type.getDeclaredMethods()) {
                 if (!Modifier.isPublic(m.getModifiers())) continue;
                 _check(type, "method " + m.getName(), exported, leaks,
@@ -64,6 +74,7 @@ class ExportedApiTest {
                 if (!Modifier.isPublic(f.getModifiers())) continue;
                 _check(type, "field " + f.getName(), exported, leaks, _flatten(f.getGenericType()));
             }
+          }
         }
         assertThat(leaks)
             .as("an exported type may not name one module-info keeps in")
@@ -129,6 +140,37 @@ class ExportedApiTest {
         List<String> found = new ArrayList<>();
         while (m.find()) found.add(m.group(1));
         return Set.copyOf(found);
+    }
+
+    /**
+     * {@code type}, plus every supertype of it that module-info does not
+     * export.
+     *
+     * <p>An exported supertype needs no visit: it is in the scan already, on
+     * its own account. A non-exported one is visited here or nowhere, and its
+     * methods are reachable through this subtype regardless.
+     */
+    private static List<Class<?>> _withHiddenSupertypes(Class<?> type, Set<String> exported) {
+        List<Class<?>> found = new ArrayList<>();
+        Set<Class<?>> seen = new LinkedHashSet<>();
+        Deque<Class<?>> pending = new ArrayDeque<>();
+
+        found.add(type);
+        pending.add(type);
+        while (!pending.isEmpty()) {
+            Class<?> current = pending.poll();
+            List<Class<?>> parents = new ArrayList<>(List.of(current.getInterfaces()));
+            if (null != current.getSuperclass()) parents.add(current.getSuperclass());
+            for (Class<?> parent : parents) {
+                if (!seen.add(parent)) continue;
+                // java.* and anything exported is either not ours or already scanned.
+                String pkg = null == parent.getPackage() ? "" : parent.getPackage().getName();
+                if (pkg.startsWith("java.") || exported.contains(pkg)) continue;
+                found.add(parent);
+                pending.add(parent);
+            }
+        }
+        return found;
     }
 
     private static List<Class<?>> _publicTypesInExportedPackages(Set<String> exported) throws Exception {
