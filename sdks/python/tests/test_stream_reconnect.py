@@ -17,6 +17,7 @@ import, and nothing reconnects.
 from __future__ import annotations
 
 import queue
+import threading
 
 import pytest
 
@@ -40,9 +41,19 @@ class _Listener(EventListener):
         )
         self.connects = 0
         self.fail_connects = 0
+        #: When set, _connect blocks on it. Lets a test hold a reconnect open
+        #: for as long as it needs, rather than relying on the retry sleep.
+        self.gate: threading.Event | None = None
+        #: Fires when a reconnect has reached the gate and is parked there.
+        #: Lets a test wait for the window to be open instead of assuming it.
+        self.reached_gate = threading.Event()
 
     def _connect(self):  # type: ignore[override]
         self.connects += 1
+        if self.gate is not None:
+            self.reached_gate.set()
+            if not self.gate.wait(timeout=5.0):
+                raise AssertionError("gate never opened")
         if self.connects <= self.fail_connects:
             raise OSError("refused")
         return object()
@@ -122,14 +133,46 @@ def test_one_drop_starts_one_reconnect() -> None:
     Java guards with compareAndSet on a `reconnecting` flag; without it a
     handful of failing reads each start their own reconnect thread and the
     caller gets a queue full of Reconnected for a single event.
+
+    Same shape as Java's oneDropStartsOneReconnect and TypeScript's "one drop
+    starts one reconnect": hold the reconnect open, deliver the burst, prove
+    the window really was open, then let it finish and count.
     """
     q: queue.Queue[object] = queue.Queue()
     listener = _Listener(q)
     listener.start()
-    listener.fail_connects = 1  # hold the first attempt open for a retry
+
+    # Hold the reconnect open, rather than hoping it is slow.
+    #
+    # This used to say `fail_connects = 1`, meaning "fail the first attempt so
+    # the retry sleep holds the lock while the other four drops arrive". It
+    # never did that: start() has already spent connect #1, so the attempt
+    # inside reconnect() is #2, `2 <= 1` is false, and it succeeds at once.
+    # With no failure there is no sleep, the lock is held for microseconds, and
+    # whether drops 2-5 are rejected came down to whether a thread outran a
+    # five-iteration loop. It lost about one run in five.
+    listener.gate = threading.Event()
 
     for _ in range(5):
         listener._on_stream_dropped(OSError("connection reset"))
+
+    # The premise, asserted rather than assumed.
+    #
+    # A reconnect must be parked in the gate right now. If it is not, the
+    # window was never open and the guard was never exercised -- the test would
+    # pass for the wrong reason, which is what the old spelling did until it
+    # happened not to. Waiting on reached_gate makes that a deterministic
+    # failure rather than a flake: remove the gate and this never fires.
+    assert listener.reached_gate.wait(2.0), (
+        "no reconnect reached the gate: the burst was delivered after the "
+        "reconnect had already finished, so nothing here tests the guard"
+    )
+    assert _reconnected_so_far(q) == 0, (
+        "the reconnect finished before the burst was delivered: this test is "
+        "not exercising the single-reconnect guard"
+    )
+
+    listener.gate.set()
 
     reconnected = []
     while True:
@@ -141,3 +184,18 @@ def test_one_drop_starts_one_reconnect() -> None:
             reconnected.append(event)
     assert len(reconnected) == 1, f"expected one Reconnected, got {len(reconnected)}"
     listener.close()
+
+
+def _reconnected_so_far(q: "queue.Queue[object]") -> int:
+    """Reconnected events already on the queue, without blocking or losing any."""
+    drained, count = [], 0
+    while True:
+        try:
+            drained.append(q.get_nowait())
+        except queue.Empty:
+            break
+    for event in drained:
+        if isinstance(event, Reconnected):
+            count += 1
+        q.put(event)
+    return count
