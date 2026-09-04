@@ -120,6 +120,19 @@ public class HttpFlexemarkets implements Flexemarkets {
     // lookalike passes while the real one is misconfigured.
     static final ObjectMapper MAPPER = JsonMapper.builder()
         .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+        // The server sends an explicit null for a primitive it has no value
+        // for -- Market.marketplaceId, Session.allocationId, Order.sessionClosed
+        // -- and the SDK reads those as the type's default, which is what the
+        // wire has always meant.
+        //
+        // Stated rather than inherited, because the default moved underneath
+        // us: Jackson 3.1.5 rejects a null primitive and 3.2.1 coerces it, so
+        // the SDK parsed the same payload differently depending on which patch
+        // release a consumer happened to resolve. It was pinned to 3.2.1 here
+        // while fm-server inherits 3.1.5 from spring-boot-starter-parent, and
+        // the difference stayed invisible only because fm-robots' shaded jars
+        // were putting 3.2.1 on fm-server's classpath anyway.
+        .disable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES)
         .build();
 
     private static final TypeReference<Token>               TOKEN_TYPE        = new TypeReference<>() {};

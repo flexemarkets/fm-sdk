@@ -1,14 +1,14 @@
-package fm;
+package fm.internal;
 
 import fm.model.ManagerOtpBundle;
 import fm.model.Person;
 import fm.model.Session;
-import fm.internal.Timestamps;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
 
-import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.ObjectMapper;
+
 
 import org.junit.jupiter.api.Test;
 
@@ -23,7 +23,14 @@ import org.junit.jupiter.api.Test;
  */
 class TimestampWireTest {
 
-    private static final JsonMapper MAPPER = JsonMapper.builder().build();
+    // The SDK's own mapper, not a lookalike. This test used to build a bare
+    // JsonMapper, and a bare one rejects the null primitives the server sends
+    // (Session.allocationId), so it failed the moment HttpFlexemarkets started
+    // saying what it wanted instead of inheriting a Jackson default. The class
+    // it is testing is reached the same way WireFixturesTest reaches it: read
+    // the wire with the mapper the SDK actually uses, or the test can pass
+    // while the real one is misconfigured.
+    private static final ObjectMapper MAPPER = HttpFlexemarkets.MAPPER;
 
     /** Bare, three fractional digits, as api.flexemarkets.com sends it. */
     @Test

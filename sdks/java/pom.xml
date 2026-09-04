@@ -60,7 +60,9 @@
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <jackson.version>3.2.1</jackson.version>
+        <!-- Spring Boot 4.1.1's managed Jackson 3, which is what fm-server
+             actually resolves. See the jackson-bom import below. -->
+        <jackson.version>3.1.5</jackson.version>
         <lanterna.version>3.1.3</lanterna.version>
         <!-- Don't publish by default: the parent POM and the ticker example
              stay off Central. Publishable library modules (fm-sdk, fm-spi)
@@ -79,6 +81,19 @@
                 Jackson 3. The BOM governs every Jackson artifact, matching how
                 fm-server and fm-robots manage it, so an SDK consumer sharing a
                 classpath with either does not end up straddling two majors.
+
+                The version is Spring Boot's, not ours to choose. fm-server
+                declares no Jackson at all and inherits 3.1.5 from
+                spring-boot-starter-parent, so asking for anything else here
+                means the SDK is built and tested against a Jackson its largest
+                consumer will never run. That is not hypothetical: this said
+                3.2.1, and fm-server got 3.2.1 anyway: not from here, but
+                because fm-robots' robot jars shaded the SDK and its Jackson in,
+                and those classes won on fm-server's classpath. fm-server was
+                compiling against 3.1.5 and executing against 3.2.1. Removing
+                that shading is what surfaced it.
+
+                So when Boot's managed version moves, this moves with it.
 
                 jackson-datatype-jsr310 is gone on purpose: Jackson 3 folded
                 java.time support into databind, so registering JavaTimeModule
