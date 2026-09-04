@@ -478,11 +478,15 @@ READ_SURFACE = {
                    ("desk.ts", "Desk", "interface")),
     "Book": ("Book.java", ("orderbook.py", "Book"),
                   ("orderbook.ts", "Book", "class")),
-    # BookIndex and TapeIndex are no longer callable from outside -- fm.internal in
-    # Java, unexported in the other two. They stay compared anyway: they are
+    # BookIndex and TapeIndex are no longer callable from outside -- fm.internal
+    # in Java, unexported in the other two. They stay compared anyway: they are
     # still three hand-written implementations of one behaviour, and drift
     # between them is the bug class this file exists for. A book that
     # double-counted a cancel was found exactly this way, in all three at once.
+    #
+    # They were Books and Tapes until the aggregates were renamed to stop them
+    # colliding with Desk.books() and Desk.tapes(), which are public and return
+    # Collection<Book> and Collection<Tape>.
     "BookIndex": ("internal/BookIndex.java", ("orderbook.py", "BookIndex"),
                    ("orderbook.ts", "BookIndex", "class")),
     "Tape": ("Tape.java", ("trades.py", "Tape"),
@@ -818,6 +822,152 @@ def check_methods(verbose: bool) -> list[str]:
     return problems
 
 
+# ---------------------------------------------------------------- exports ---
+#
+# What each SDK actually hands a consumer: Java's exported packages, Python's
+# __all__, TypeScript's index.ts. Everything above this compares things that
+# exist; this compares whether a caller can reach them.
+#
+# It exists because 0.2.0's simplifications landed in Java alone and nothing
+# noticed. Java deleted isBuy/isSell/isCancel/isLimit as redundant with the
+# enums and moved contra onto OrderSide; TypeScript still exports all five.
+# Every other check in this file passed throughout, because a name that is
+# exported by one SDK and not another is not a wire field, a client method, a
+# read-side member or a failure -- it falls through all four.
+
+# Java spells an exception what the other two spell an error.
+def _export_concept(name: str) -> str:
+    return name[:-len("Exception")] + "Error" if name.endswith("Exception") else name
+
+
+# Names one SDK exports and the others do not, on purpose. Same rule as every
+# other exemption map here: each needs a reason, so adding one is a decision
+# somebody wrote down rather than a way to make the check quiet.
+EXPORT_EXEMPTIONS: dict[str, str] = {
+    # Java-only by language, not by choice.
+    "FlexemarketsProvider": "the SPI; Java service loading has no counterpart in the other two",
+    "Providers":            "SPI lookup, same reason",
+    "Endpoints":            "endpoint resolution for the -E flag; Python keeps it private in _hal, TypeScript has no CLI",
+    "Orders":               "a holder class for statics; Python and TypeScript use plain functions in a module",
+    "Administration":       "role interface; narrowing a client to a subset has no idiom in Python or TypeScript",
+    "Identity":             "role interface, same reason",
+    "Management":           "role interface, same reason",
+    "Reading":              "role interface, same reason",
+    "Streaming":            "role interface, same reason",
+    "Writing":              "role interface, same reason",
+
+    # Members in Java, top-level names in the other two.
+    "NO_SEQ":               "Snapshot.NO_SEQ in Java, a module constant in Python and TypeScript",
+    "SESSION_STATE_INIT":   "Session.State enum in Java, string constants in TypeScript",
+    "SESSION_STATE_OPEN":   "same",
+    "SESSION_STATE_PAUSED": "same",
+    "SESSION_STATE_CLOSED": "same",
+
+    # TypeScript's wire types are structural interfaces and cannot carry
+    # methods, so behaviour Java hangs off a record has to be a free function.
+    # These are the ones that answer a question about a single value.
+    "displayName":       "Person.displayName() in Java, a free function in TypeScript",
+    "getSecurity":       "Holding.security() in Java",
+    "isApproved":        "Account.isApproved() in Java",
+    "orderedSecurities": "Holding.orderedSecurities() in Java",
+    "holdingUnits":      "Holding.units() in Java",
+    "priceRound":        "Market.priceRound() in Java",
+    "unitRound":         "Market.unitRound() in Java",
+    "unitGrid":          "Market.unitGrid() in Java",
+    "tickRound":         "TickGrid arithmetic, package-private in Java",
+    "gridRound":         "TickGrid arithmetic, package-private in Java",
+    "toSide":            "OrderSide.of() in Java",
+    "toOrderType":       "OrderType.of() in Java",
+    "tradeOf":           "Trade construction, a static in Java",
+    "toInstant":         "fm.internal.Timestamps in Java; TypeScript has no Instant type to hide it behind",
+
+    # TypeScript-only transport shapes. Java models the stream with typed
+    # events; TypeScript hands the frame over.
+    "StompFrame":    "TypeScript exposes the raw frame; Java and Python do not",
+    "FmEvent":       "the TypeScript union of stream events; Java uses a queue of Object",
+    "EventCallback": "TypeScript callback type; Java and Python pass a queue",
+
+    # Tracked in DESIGN-0.3 item 4 rather than exempted away: these are the
+    # four predicates Java deleted as redundant with the enums, plus contra.
+    # They are still exported by TypeScript and still defined by Python.
+    # Withdrawing them breaks callers, so it waits for 0.3.
+    "isBuy":    "DESIGN-0.3 item 4: deleted in Java, still exported by TypeScript",
+    "isSell":   "DESIGN-0.3 item 4: deleted in Java, still exported by TypeScript",
+    "isCancel": "DESIGN-0.3 item 4: deleted in Java, still exported by TypeScript",
+    "isLimit":  "DESIGN-0.3 item 4: deleted in Java, still exported by TypeScript",
+    "contra":   "DESIGN-0.3 item 4: OrderSide.contra() in Java, still a free function elsewhere",
+
+    # The relational predicates. Java groups them as statics on fm.Orders, so
+    # they are members rather than exported names; Python has them in
+    # order_utils and leaves that module out of __all__. Recorded rather than
+    # hidden: a Python caller cannot reach find_order from fm at all, which is
+    # the asymmetry DESIGN-0.3 item 4 is about.
+    "findOrder":   "Orders.findOrder in Java; Python's order_utils is not in __all__",
+    "isAvailable": "Orders.isAvailable in Java; same for Python",
+    "isConsumed":  "Orders.isConsumed in Java; same for Python",
+    "isSplit":     "Orders.isSplit in Java; same for Python",
+    "isSubmit":    "Orders.isSubmit in Java; same for Python",
+    "isSymbol":    "Orders.isSymbol in Java; same for Python",
+}
+
+
+def java_exports(directory: Path) -> set[str]:
+    """Public types in the packages module-info exports."""
+    module_info = directory.parent / "module-info.java"
+    packages = re.findall(r"exports\s+([\w.]+)\s*;", module_info.read_text())
+    names = set()
+    for package in packages:
+        package_dir = directory.parent / package.replace(".", "/")
+        for path in package_dir.glob("*.java"):
+            if re.search(r"^public\s+(final\s+|abstract\s+|sealed\s+)*"
+                         r"(class|interface|record|enum)\s", path.read_text(), re.M):
+                names.add(path.stem)
+    return names
+
+
+def python_exports(path: Path) -> set[str]:
+    body = re.search(r"__all__\s*=\s*\[(.*?)\]", path.read_text(), re.S)
+    if not body:
+        return set()
+    return {a or b for a, b in re.findall(r'"([^"]+)"|\'([^\']+)\'', body.group(1))}
+
+
+def typescript_exports(path: Path) -> set[str]:
+    names = set()
+    for block in re.findall(r"export\s+(?:type\s+)?\{([^}]*)\}", path.read_text()):
+        for name in block.split(","):
+            name = name.strip().split(" as ")[-1].strip()
+            if name:
+                names.add(name)
+    return names
+
+
+def check_exports(verbose: bool) -> list[str]:
+    java = {_export_concept(n) for n in java_exports(JAVA)}
+    python = {_export_concept(n) for n in python_exports(PYTHON_PKG / "__init__.py")}
+    typescript = {_export_concept(n) for n in typescript_exports(TYPESCRIPT_SRC / "index.ts")}
+
+    if not (java and python and typescript):
+        return ["export parity: a parser found nothing; it is broken, not the SDKs"]
+
+    languages = (("java", java), ("python", python), ("typescript", typescript))
+
+    problems = []
+    for name in sorted(java | python | typescript):
+        if name in EXPORT_EXEMPTIONS:
+            continue
+        missing = [lang for lang, names in languages if name not in names]
+        if missing:
+            present = [lang for lang, names in languages if name in names]
+            problems.append(
+                f"{name} is exported by {', '.join(present)} but not by {', '.join(missing)}")
+
+    if verbose:
+        print(f"  exported names: java {len(java)}, python {len(python)}, "
+              f"typescript {len(typescript)}; {len(EXPORT_EXEMPTIONS)} exempt")
+    return problems
+
+
 def main() -> int:
     verbose = "--verbose" in sys.argv
 
@@ -957,9 +1107,25 @@ def main() -> int:
         )
         return 1
 
+    export_problems = check_exports(verbose)
+    if export_problems:
+        print(f"\nparity: the SDKs disagree about {len(export_problems)} exported name(s):\n",
+              file=sys.stderr)
+        for problem in export_problems:
+            print(f"  - {problem}", file=sys.stderr)
+        print(
+            "\nA name exported by one SDK and not another is a capability one set of "
+            "callers has and another does not -- and it falls through every other check "
+            "here, because it is not a wire field, a client method, a read-side member or "
+            "a failure. If a difference is intended, record it in EXPORT_EXEMPTIONS with "
+            "the reason.",
+            file=sys.stderr,
+        )
+        return 1
+
     print(f"parity ok: {len(shared)} shared types agree on their wire fields, "
-          f"the client and read-side surfaces agree, and the same failures are "
-          f"catchable in each")
+          f"the client and read-side surfaces agree, the same failures are "
+          f"catchable in each, and the three export the same names")
     return 0
 
 
