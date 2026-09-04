@@ -14,21 +14,47 @@ revisited.
 
 ### 1. HAL-less and V1-only
 
-Blocked on the server, not the SDK. The SDK reads `GET /api`, pulls hrefs out of
-`_links` and rebases them onto the configured endpoint; it should call only
-versioned `/v1` routes and mention HAL nowhere.
+The SDK reads `GET /api`, pulls hrefs out of `_links` and rebases them onto the
+configured endpoint. It should call versioned `/v1` routes and mention HAL
+nowhere.
 
-SDK-side preparation is done — `ApiRoot` is private in all three languages, so
-the type can be deleted without a version bump. What remains is URL
-construction: roughly 45 `_uri*` sites in `sdks/python/fm/client.py`, 8 in
-`sdks/typescript/src/client.ts`, and the matching helpers in
-`HttpFlexemarkets.java`. Some `/v1/marketplaces` paths are already hardcoded, so
-it is a mix rather than a clean swap.
+**The dependency is narrower than the call-site count suggests.** All three SDKs
+resolve exactly five HAL link names — `accounts`, `marketplaces`, `orders`,
+`users`, `usersJson` — and derive every other path by appending segments. The 42
+`_uri*` sites in `sdks/python/fm/client.py` are 42 uses of those five. A `_v1()`
+helper already exists and is used at three call sites, so the shape of the
+answer is settled; what is left is how many links can point at it.
 
-**Do not start before the server side lands.** fm-server publishes about a dozen
-`/v1` routes against a largely unversioned surface — marketplaces, markets,
-sessions, holdings, allocations and roles are all still unversioned — so the
-full V1 set the SDK needs does not exist yet.
+**Three routes are missing, and they are the whole blocker:**
+
+| SDK needs | today | `/v1` | filed |
+|---|---|---|---|
+| the `accounts` link | `/api/accounts`, `AccountV0Controller` | absent. The only `/api/v1/accounts/*` routes are `OwnershipTransferV1Controller`'s transfer endpoints | [fm-server#964](https://github.com/adhocmarkets/fm-server/issues/964) |
+| the `usersJson` link | `/api/users-json`, `RootController` | absent. It exists because `/api/v1/users` is paginated and misses freshly-created users on accounts with many persons | [fm-server#965](https://github.com/adhocmarkets/fm-server/issues/965) |
+| `marketplaces/{id}/symbols` | `MarketplaceV0Controller` | absent from `MarketplaceV1Controller` | [fm-server#966](https://github.com/adhocmarkets/fm-server/issues/966) |
+
+Two of the three may close without a new route. #965 is arguably a pagination
+default rather than a missing endpoint, and #966 asks whether `symbols` is worth
+keeping at all now that v1's `markets` returns each market's symbol. Either
+resolution unblocks the SDK.
+
+**Everything else the SDK reaches is already versioned**, which an earlier draft
+of this note got wrong — it listed marketplaces, markets, sessions, holdings,
+allocations and roles as unversioned. `MarketplaceV1Controller` publishes
+`/{id}/markets`, `/{id}/markets/{marketId}`, `/{id}/holdings` with `me`,
+`uploads` and `downloads`, `/{id}/allocations`, `/{id}/allotments`, and
+`/{id}/sessions` with `open`, `pause`, `close` and `current`. `OrderV1Controller`
+covers `/active`, `/by-sessions`, `/market/{marketId}/standing` and
+`/recent-trades`; `TradeV1Controller` covers trades.
+
+**The two halves decouple.** Everything reachable through `marketplaces`,
+`orders` and `users` can move to `_v1()` now, without waiting on fm-server. That
+shrinks the HAL dependency from five links to three and is worth doing on its
+own: it is the bulk of the 42 sites, and it makes what remains a three-line
+change once the routes land.
+
+Once all five are gone, `ApiRoot` and `_process_template` go with them. `ApiRoot`
+is already private in all three languages, so deleting it needs no version bump.
 
 ---
 
