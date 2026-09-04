@@ -193,7 +193,7 @@ public class Events implements Subscription {
     /**
      * Re-establish the stream, retrying until it succeeds or this is closed.
      *
-     * <p>Driven from {@link #_reconnectInBackground()} rather than by a
+     * <p>Driven from {@link #reconnectInBackground()} rather than by a
      * consumer: whether the socket is up is this class's business, and a
      * consumer that had to run the retry loop would be doing the transport's
      * job on its own thread.
@@ -259,8 +259,14 @@ public class Events implements Subscription {
      * <p>The WebSocket listener must not block, and reconnect() sleeps between
      * attempts. On success a {@link Reconnected} goes onto the queue so
      * consumers know their state needs reseeding.
+     *
+     * <p>Package-private for the same reason {@link #reconnect()} is: the
+     * recovery path is otherwise reachable only through a live socket, since
+     * the listener that calls it is built inside {@link #connect()}. Driving
+     * it directly is what lets StreamReconnectTest cover the behaviour Python
+     * and TypeScript have covered all along.
      */
-    private void _reconnectInBackground() {
+    void reconnectInBackground() {
         if (_closed || !_reconnecting.compareAndSet(false, true)) {
             return;
         }
@@ -485,7 +491,7 @@ public class Events implements Subscription {
             if (!_closed) {
                 _queue.offer(new StreamDropped(
                     new Exception("WebSocket closed: %d %s".formatted(statusCode, reason))));
-                _reconnectInBackground();
+                reconnectInBackground();
             }
             return CompletableFuture.completedFuture(null);
         }
@@ -493,7 +499,7 @@ public class Events implements Subscription {
         @Override
         public void onError(WebSocket webSocket, Throwable error) {
             _queue.offer(new StreamDropped(error));
-            _reconnectInBackground();
+            reconnectInBackground();
         }
     }
 }
