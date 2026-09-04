@@ -47,8 +47,7 @@ endpoint=https://api.flexemarkets.com/api/marketplaces/123
 ## SDK usage
 
 ```typescript
-import { Flexemarkets, Books, Tapes } from "@flexemarkets/fm-sdk";
-import type { FmEvent } from "@flexemarkets/fm-sdk";
+import { Flexemarkets } from "@flexemarkets/fm-sdk";
 
 // connect(null, null, ...) falls back to ~/.fm/credential and ~/.fm/endpoint
 const fm = await Flexemarkets.connect(null, null, "my-bot");
@@ -63,23 +62,21 @@ const holding = await fm.holding(marketplaceId);
 const order = await fm.submitLimit(marketplaceId, markets[0].id, "BUY", 1, 950);
 await fm.submitCancel(marketplaceId, markets[0].id, order.id);
 
-// WebSocket events
-const books = new Books(markets);
-const trades = new Tapes(markets);
+// Live market data. A desk keeps the books and tapes for you: it seeds them
+// over REST, applies deltas, and re-seeds after a sequence gap.
+const desk = await fm.desk(marketplaceId);
+const marketId = markets[0].id;
 
-await fm.listen(marketplaceId, (event: FmEvent) => {
-  if ("kind" in event && event.kind === "orders-update") {
-    books.update(event.orders);
-    trades.update(event.orders);
-  } else if (!Array.isArray(event) && "state" in event) {
-    console.log(event.state); // Session
-  } else if ("cash" in event) {
-    console.log(event.cash); // Holding
-  }
-});
+desk.onBookChange(marketId, (book) => console.log(book.bestPrice("BUY")));
+desk.onSessionChange((s) => console.log(s.state));
+desk.onHoldingChange((h) => console.log(h.cash));
 
-// when done
-fm.close();
+const one = desk.book(marketId);          // one market
+for (const book of desk.books()) {        // every market in the marketplace
+  console.log(book.symbol, book.bestPrice("BUY"));
+}
+
+desk.close();
 ```
 
 ## Example: ticker

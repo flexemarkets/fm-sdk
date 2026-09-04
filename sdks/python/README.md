@@ -47,7 +47,7 @@ endpoint=https://api.flexemarkets.com/api/marketplaces/123
 ## SDK usage
 
 ```python
-from fm import Flexemarkets, Books, Tapes
+from fm import Flexemarkets
 
 # Connect
 fm = Flexemarkets.connect(
@@ -59,6 +59,7 @@ fm = Flexemarkets.connect(
 # REST API
 marketplace_id = fm.endpoint_marketplace_id
 markets = fm.markets(marketplace_id)
+market_id = markets[0].id
 session = fm.session(marketplace_id)
 holdings = fm.holdings(marketplace_id)
 
@@ -66,25 +67,16 @@ holdings = fm.holdings(marketplace_id)
 order = fm.submit_limit(marketplace_id, market_id, "BUY", units=1, price=950)
 fm.submit_cancel(marketplace_id, market_id, order.id)
 
-# WebSocket events
-import queue
+# Live market data: a desk keeps the books and tapes for you -- it seeds
+# them over REST, applies deltas, and re-seeds after a sequence gap.
+with fm.desk(marketplace_id) as desk:
+    desk.on_book_change(market_id, lambda book: print(book.best_price("BUY")))
+    desk.on_session_change(lambda session: print(session.state))
+    desk.on_holding_change(lambda holding: print(holding.cash))
 
-q = queue.Queue(maxsize=1000)
-fm.listen(marketplace_id, q)
-
-books = Books(markets)
-trades = Tapes(markets)
-
-while True:
-    event = q.get()
-    match event:
-        case list() as orders:
-            books.update(orders)
-            trades.update(orders)
-        case Session() as s:
-            print(s.state)
-        case Holding() as h:
-            print(h.cash)
+    one = desk.book(market_id)       # one market
+    for book in desk.books():        # every market in the marketplace
+        print(book.symbol, book.best_price("BUY"))
 
 fm.close()
 ```

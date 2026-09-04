@@ -60,17 +60,13 @@ endpoint=https://api.flexemarkets.com/api/marketplaces/123
 
 ```java
 import fm.Flexemarkets;
-import fm.Books;
-import fm.Tapes;
-import fm.Holding;
-import fm.Market;
-import fm.Order;
-import fm.Session;
-import fm.OrderSide;
+import fm.model.Holding;
+import fm.model.Market;
+import fm.model.Order;
+import fm.model.OrderSide;
+import fm.model.Session;
 
 import java.util.List;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
 
 // connect(null, null, ...) falls back to ~/.fm/credential and ~/.fm/endpoint
 try (var fm = Flexemarkets.connect(null, null, "my-bot")) {
@@ -85,20 +81,18 @@ try (var fm = Flexemarkets.connect(null, null, "my-bot")) {
     Order order = fm.submitLimit(marketplaceId, markets.get(0).id(), OrderSide.BUY, 1, 950);
     fm.submitCancel(marketplaceId, markets.get(0).id(), order.id());
 
-    // WebSocket events
-    BlockingQueue<Object> queue = new LinkedBlockingQueue<>(1000);
-    fm.listen(marketplaceId, queue);
+    // Live market data. A desk keeps the books and tapes for you: it seeds
+    // them over REST, applies deltas, and re-seeds after a sequence gap.
+    try (var desk = fm.desk(marketplaceId)) {
+        long marketId = markets.get(0).id();
 
-    var books = new Books(markets);
-    var trades = new Tapes(markets, 50);
+        desk.onBookChange(marketId, book -> System.out.println(book.bestPrice(OrderSide.BUY)));
+        desk.onSessionChange(s -> System.out.println(s.state()));
+        desk.onHoldingChange(h -> System.out.println(h.cash()));
 
-    while (true) {
-        Object event = queue.take();
-        switch (event) {
-            case Order[] orders -> { books.update(orders); trades.update(orders); }
-            case Session s      -> System.out.println(s.state());
-            case Holding h      -> System.out.println(h.cash());
-            default             -> { }
+        var one = desk.book(marketId);            // one market
+        for (var book : desk.books()) {           // every market in the marketplace
+            System.out.println(book.symbol() + " " + book.bestPrice(OrderSide.BUY));
         }
     }
 }
