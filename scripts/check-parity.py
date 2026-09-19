@@ -650,7 +650,7 @@ def check_surface(verbose: bool) -> list[str]:
 # newly documented in one SDK and not the others pushes it up and fails, and
 # closing one pushes it down and fails until the number is lowered to match.
 # Both directions are a one-line edit someone makes on purpose.
-DOC_DEBT = 45
+DOC_DEBT = 36
 
 _PY_DOCSTRING_OPENERS = ('"""', "'''", 'r"""')
 
@@ -698,7 +698,10 @@ def python_documented(path: Path) -> set[str]:
                 if not lines[after].strip():
                     continue
                 if lines[after].strip().startswith(_PY_DOCSTRING_OPENERS):
-                    documented.add(match.group(1))
+                    # camel, as python_methods spells them, or the ratchet
+                    # compares upload_state against uploadState and every
+                    # multi-word docstring in the Python SDK goes unseen.
+                    documented.add(camel(match.group(1)))
                 break
             break
 
