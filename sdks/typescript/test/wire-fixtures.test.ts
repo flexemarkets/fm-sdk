@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   parseAccount, parseConnection, parseHolding, parseMarket, parseMarketplace,
-  parseOrder, parsePerson, parseSecurity, parseSession, parseToken,
+  parseOrder, parseParticipantState, parsePerson, parseSecurity, parseSession, parseToken,
   embeddedOrders,
 } from "../src/client.ts";
 import { parseSession as parseSessionOverWs } from "../src/stomp.ts";
@@ -46,6 +46,7 @@ const PARSERS: Record<string, [string, (data: Json) => unknown][]> = {
   ClientConnection: [["client", (d) => parseConnection(d)]],
   Security: [["client", (d) => parseSecurity(d)]],
   Token: [["client", (d) => parseToken(d)]],
+  ParticipantState: [["client", (d) => parseParticipantState(d)]],
 };
 
 interface Fixture {

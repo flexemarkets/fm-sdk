@@ -20,6 +20,7 @@ import type {
   Market,
   Marketplace,
   Order,
+  ParticipantState,
   Person,
   Security,
   Session,
@@ -238,6 +239,16 @@ export function parseOrder(data: JsonObject): Order {
     clientDescription: (data.clientDescription as string) ?? null,
     createdDate: toInstant(data.createdDate as string),
     lastModifiedDate: toInstant(data.lastModifiedDate as string),
+  };
+}
+
+export function parseParticipantState(data: JsonObject): ParticipantState {
+  return {
+    marketplaceId: (data.marketplaceId as number) ?? null,
+    allocationId: (data.allocationId as number) ?? null,
+    ownerId: (data.ownerId as number) ?? null,
+    ownerEmail: (data.ownerEmail as string) ?? null,
+    fields: { ...((data.fields as Record<string, unknown>) ?? {}) },
   };
 }
 
@@ -1498,6 +1509,34 @@ export class Flexemarkets {
     const body = await resp.text();
     checkResponse(resp, body);
     return allotmentsToHoldings((JSON.parse(body) as JsonObject[]).map(parseAllotment));
+  }
+
+  /**
+   * Load per-participant private state from a CSV, returning what was stored.
+   *
+   * Staged on the same terms as {@link uploadHoldings}, against the allocation
+   * that call staged: it lands when a closed session is opened, and the order
+   * is a correctness constraint -- holdings, then state, then open. With no
+   * allocation staged the server refuses.
+   *
+   * The file keys on an `email` column. Every other column becomes a field of
+   * that name: a numeric cell is a number, otherwise text; a column whose
+   * header is bracketed, `[valuations]`, holds vectors and its cells are JSON
+   * arrays. An `id` column, when present, must agree with the person the email
+   * resolves to. A study's existing values file needs no change.
+   */
+  async uploadState(marketplaceId: number, filename: string): Promise<ParticipantState[]> {
+    const url = v1(this._endpoint, `/marketplaces/${marketplaceId}/state/uploads`);
+    const form = new FormData();
+    form.append("file", new Blob([readFileSync(filename)]), basename(filename));
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { ...this._authHeaders(), "User-Agent": FM_NETWORK_CLIENT },
+      body: form,
+    });
+    const body = await resp.text();
+    checkResponse(resp, body);
+    return (JSON.parse(body) as JsonObject[]).map(parseParticipantState);
   }
 
   // -- events / WebSocket ----------------------------------------------------

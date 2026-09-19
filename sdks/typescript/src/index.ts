@@ -14,6 +14,7 @@ export type {
   Marketplace,
   Session,
   Order,
+  ParticipantState,
   ClientConnection,
   TickGrid,
   Version,
