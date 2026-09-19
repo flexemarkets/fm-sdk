@@ -1,0 +1,33 @@
+{
+  "type": "ParticipantState",
+  "why": "The fields map is open: a number, a text and a vector of numbers arrive under names the server never saw before the upload. An SDK that types the map too narrowly, or drops the vector to a string, pays a study from the wrong schedule.",
+  "source": {
+    "constructed": "the state upload is a feat/panels route; capture from a server that serves it once one is released."
+  },
+  "payload": {
+    "marketplaceId": 3050,
+    "allocationId": 12,
+    "ownerId": 7,
+    "ownerEmail": "alice@example.com",
+    "fields": {
+      "count": 1,
+      "group": 3,
+      "side": "S",
+      "value": "H",
+      "valuations": [5, 8, 10]
+    }
+  },
+  "expect": {
+    "marketplaceId": 3050,
+    "allocationId": 12,
+    "ownerId": 7,
+    "ownerEmail": "alice@example.com",
+    "fields": {
+      "count": 1,
+      "group": 3,
+      "side": "S",
+      "value": "H",
+      "valuations": [5, 8, 10]
+    }
+  }
+}

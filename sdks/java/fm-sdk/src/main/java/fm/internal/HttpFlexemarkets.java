@@ -11,6 +11,7 @@ import fm.model.ManagerOtpBundle;
 import fm.model.Market;
 import fm.model.Marketplace;
 import fm.model.Order;
+import fm.model.ParticipantState;
 import fm.model.OrderSide;
 import fm.model.OrderType;
 import fm.model.Person;
@@ -156,6 +157,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     private static final TypeReference<List<String>>         SYMBOLS_TYPE      = new TypeReference<>() {};
     private static final TypeReference<List<Person>>         PERSONS_TYPE      = new TypeReference<>() {};
     private static final TypeReference<List<Allotment>>      ALLOTMENTS_TYPE   = new TypeReference<>() {};
+    private static final TypeReference<List<ParticipantState>> PARTICIPANT_STATES_TYPE = new TypeReference<>() {};
 
     /**
      * Who the server should treat the caller as, rather than whoever the
@@ -738,6 +740,14 @@ public class HttpFlexemarkets implements Flexemarkets {
         return _toHoldings(_postMultipart(
                 uriIdSegment(_apiRoot, "marketplaces", marketplaceId, "holdings/uploads"),
                 "file", csv, ALLOTMENTS_TYPE));
+    }
+
+    /** V1 route, addressed from the server rather than through a HAL link. */
+    @Override
+    public List<ParticipantState> uploadState(long marketplaceId, Path csv) {
+        return List.copyOf(_postMultipart(
+                _v1("/marketplaces/" + marketplaceId + "/state/uploads"),
+                "file", csv, PARTICIPANT_STATES_TYPE));
     }
 
     /*
