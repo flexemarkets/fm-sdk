@@ -57,6 +57,7 @@ from .types import (
     Market,
     Marketplace,
     Order,
+    ParticipantState,
     Person,
     Security,
     Session,
@@ -240,6 +241,16 @@ def _parse_allotment(data: dict[str, Any]) -> Allotment:
         owner_id=data.get("ownerId"),
         name=data.get("name"),
         assets=assets,
+    )
+
+
+def _parse_participant_state(data: dict[str, Any]) -> ParticipantState:
+    return ParticipantState(
+        marketplace_id=data.get("marketplaceId"),
+        allocation_id=data.get("allocationId"),
+        owner_id=data.get("ownerId"),
+        owner_email=data.get("ownerEmail"),
+        fields=dict(data.get("fields") or {}),
     )
 
 
@@ -1322,6 +1333,31 @@ class Flexemarkets:
         _check_response(resp)
         allotments = [_parse_allotment(a) for a in resp.json()]
         return _allotments_to_holdings(allotments)
+
+    def upload_state(self, marketplace_id: int, filename: str) -> list[ParticipantState]:
+        """Load per-participant private state from a CSV, returning what was stored.
+
+        Staged on the same terms as :meth:`upload_holdings`, against the
+        allocation that call staged: it lands when a closed session is opened,
+        and the order is a correctness constraint -- holdings, then state, then
+        open. With no allocation staged the server refuses.
+
+        The file keys on an ``email`` column. Every other column becomes a
+        field of that name: a numeric cell is a number, otherwise text; a
+        column whose header is bracketed, ``[valuations]``, holds vectors and
+        its cells are JSON arrays. An ``id`` column, when present, must agree
+        with the person the email resolves to. A study's existing values file
+        needs no change.
+        """
+        url = _v1(self._endpoint, f"/marketplaces/{marketplace_id}/state/uploads")
+        with open(filename, "rb") as f:
+            resp = self._http.post(
+                url,
+                files={"file": (Path(filename).name, f)},
+                headers=self._auth_headers(),
+            )
+        _check_response(resp)
+        return [_parse_participant_state(s) for s in resp.json()]
 
     def allotments(self, marketplace_id: int, allocation_id: int) -> list[Allotment]:
         """The opening positions of one allocation.
