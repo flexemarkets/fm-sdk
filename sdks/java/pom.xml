@@ -39,6 +39,7 @@
 
     <modules>
         <module>fm-spi</module>
+        <module>fm-expr</module>
         <module>fm-sdk</module>
         <module>examples/ticker</module>
     </modules>
@@ -342,6 +343,13 @@
                                      Remove this the next time the contract
                                      changes and set-spi-version moves it. -->
                                 <excludeArtifact>fm-spi</excludeArtifact>
+                                <!-- fm-expr is not published yet. It is on
+                                     its own version line like fm-spi and
+                                     consumed as a SNAPSHOT from ~/.m2 by
+                                     fm-server and fm-robots on feat/panels;
+                                     it gets a publish path when a release of
+                                     either pins it. -->
+                                <excludeArtifact>fm-expr</excludeArtifact>
                             </excludeArtifacts>
                         </configuration>
                     </plugin>
