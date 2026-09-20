@@ -311,6 +311,56 @@ An upload or allocation **stages** the next allocation. It lands when a
 guides (`/documentation/HOLDINGS-CSV`, `/documentation/USERS-CSV`,
 `/documentation/ORDERS-CSV`).
 
+### Widgets and series (panels)
+
+Content a robot pushes into a participant's view, and the price series the
+server samples for a return chart. Both are shown by panels a manager places
+in the marketplace's view (`fm.view`); a payload for a key no panel names is
+stored and not shown, so a robot can start before the view is finished.
+
+| Method & path | Role | Notes |
+|---------------|------|-------|
+| `POST /api/v1/marketplaces/{id}/widgets` | manager | push one widget, or a JSON array of them (one request for sixty traders, not sixty) |
+| `DELETE /api/v1/marketplaces/{id}/widgets/{key}[?userId=]` | manager | take a key down, the marketplace's or one participant's |
+| `GET /api/v1/marketplaces/{id}/widgets` | user | the caller's snapshot: the marketplace's widgets and their own |
+| `GET /api/v1/marketplaces/{id}/widgets/all` | manager | everything pushed, both scopes |
+| `GET /api/v1/marketplaces/{id}/widgets/limits` | user | the content caps and push rates |
+| `GET /api/v1/marketplaces/{id}/series` | user | the sampled price series of the current session, per market and period |
+
+A widget is:
+
+```jsonc
+{ "target": { "scope": "USER", "userId": 8123 },   // or {"scope":"MARKETPLACE"}, the default
+  "key": "role",                                    // [A-Za-z0-9_-]{1,64}; the panel's option
+  "title": "Your role",                             // optional
+  "emphasis": "strong",                             // normal | strong | warn
+  "ttlSeconds": 60,                                 // optional: blank the panel this long after the push
+  "content": { "kind": "text", "lines": ["You are a SELLER"] } }
+```
+
+`content` is one of four closed kinds; there is no markup kind and no
+formula language:
+
+| `kind` | Shape | Caps |
+|--------|-------|------|
+| `text` | `{"lines": [string]}` | 50 lines of 500 |
+| `kv` | `{"items": [{"label", "value", "format"?}]}` | 50 items |
+| `table` | `{"columns": [{"label", "align"?, "format"?}], "rows": [[cell]]}` | 8 columns × 50 rows, every row as wide as the columns |
+| `log` | `{"lines": [string], "cap"?}` | appends to the log already there; keeps the newest `cap` (default 100, at most 500) |
+
+Cells are strings, numbers or booleans. `format` is an enum — `plain`,
+`price` (cents, shown in dollars), `units`, `percent`, `signed-percent` —
+not a format string; the renderer owns presentation. `align` is `left`,
+`right` or `center`. The whole `content` is at most 8 KB.
+
+A push to the same `(scope, user, key)` **replaces** the last one — that is
+how stale content is cleared. A participant's own widget outranks the
+marketplace's of the same key for them. Widgets are cleared when the session
+closes and kept across a pause. Rates: about 200 pushes a second per
+marketplace and 2 a second per targeted participant, with a small burst; a
+batch over either is refused whole with `429 WIDGET_RATE_LIMITED`, and a
+malformed one with `400 WIDGET_INVALID` naming the field.
+
 ### Users and accounts
 
 | Method & path | Role | Notes |
@@ -442,6 +492,9 @@ Every frame carries a `message-type` header naming the payload:
 | `HOLDING-UPDATE` | the recipient's holding after a fill or allocation |
 | `ORDERS-UPDATE` | an array of order events — the book delta |
 | `SESSION-LIST` | the marketplace's sessions |
+| `PANELS-UPDATE` | the recipient's evaluated `score` panels, values only (user queue) |
+| `SERIES-UPDATE` | a market's sampled price series on one period grid: a snapshot in the subscribe burst, then one point per boundary (topic) |
+| `WIDGETS-UPDATE` | pushed widgets: a snapshot of what the recipient may see in the subscribe burst, then upserts and removals (topic for the marketplace's, user queue for their own) |
 | `ERROR` | `{"error": "…"}`, e.g. the marketplace isn't available |
 
 Additional headers on every frame: `system-current-time-millis`,
