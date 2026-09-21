@@ -52,6 +52,26 @@ class StudyPlanTest {
     }
 
     @Test
+    void aSettlementRowIsAsWideAsItsColumns() {
+        assertThatThrownBy(() -> new Settlement(List.of(), List.of("Email", "Profit"), List.of(List.of("a@dev"))))
+            .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("wide");
+        assertThat(new Settlement(List.of(new Payoff(1, "a@dev", "B01", 250)), List.of("Email"), List.of(List.of("a@dev"))).payoffs()).hasSize(1);
+    }
+
+    @Test
+    void aStudyWithoutASettlementSaysSo() {
+        StudyProvider bare = new StudyProvider() {
+            @Override public String id() { return "bare"; }
+            @Override public String name() { return "bare"; }
+            @Override public String description() { return ""; }
+            @Override public List<fm.manifest.ParameterSpec> parameters() { return List.of(); }
+            @Override public StudyPlan setup(java.util.Map<String, String> p, List<Participant> ps) { return null; }
+        };
+        assertThatThrownBy(() -> bare.settle(java.util.Map.of(), new Rotation(1, "x", "m", HOLDINGS, null), List.of()))
+            .isInstanceOf(UnsupportedOperationException.class).hasMessageContaining("bare");
+    }
+
+    @Test
     void aParticipantNeedsAnEmail() {
         assertThatThrownBy(() -> new Participant(1, " ", null, null)).isInstanceOf(IllegalArgumentException.class);
         assertThat(new Participant(1, "a@b", null, null).firstName()).isEmpty();

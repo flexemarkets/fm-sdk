@@ -50,6 +50,29 @@ public interface StudyProvider {
      */
     StudyPlan setup(Map<String, String> parameters, List<Participant> participants);
 
+    /**
+     * Settle one rotation: what each participant is paid, from what they
+     * held when its session closed and the private state the rotation was
+     * staged with.
+     *
+     * <p>The back half of a study's {@code start}: the platform stages the
+     * payoffs as the next allotment -- cash only, positions zeroed, trading
+     * locked -- and opens a settlement session for participants to see
+     * them. A study with nothing to settle leaves the default, which says
+     * so.
+     *
+     * @param parameters the answers the run was set up with
+     * @param rotation   the rotation that just ran, with the state it was
+     *                   staged with -- the study's own file, to read back
+     * @param holdings   every participant's holding at close
+     * @throws UnsupportedOperationException when the study has no settlement
+     * @throws IllegalArgumentException      for a holding the study cannot
+     *                                       settle, with the reason
+     */
+    default Settlement settle(Map<String, String> parameters, Rotation rotation, List<ParticipantHolding> holdings) {
+        throw new UnsupportedOperationException(id() + " has no settlement of its own");
+    }
+
     default String studySpiVersion() {
         return STUDY_SPI_VERSION;
     }

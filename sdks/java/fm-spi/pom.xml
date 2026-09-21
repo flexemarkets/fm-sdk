@@ -30,6 +30,8 @@
         0.0.12 adds fm.study: a study declares what it asks a manager and
         plans its marketplaces and rotations, so a host can set it up from a
         form and its command line from flags, through one implementation.
+        0.0.13 adds settle(): what each participant is paid when a rotation's
+        session closes, from their holding and the state it was staged with.
         Bump the patch for an additive change, and the major only alongside
         ServiceProvider.SPI_VERSION, since hosts reject a provider whose major
         differs from their own.
@@ -37,7 +39,7 @@
         Set with `make set-spi-version V=x.y.z`. `make set-version` moves the
         parent reference below but leaves this alone.
     -->
-    <version>0.0.12</version><!-- spi-version -->
+    <version>0.0.13</version><!-- spi-version -->
 
     <packaging>jar</packaging>
 
