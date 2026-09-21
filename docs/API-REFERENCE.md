@@ -361,6 +361,31 @@ marketplace and 2 a second per targeted participant, with a small burst; a
 batch over either is refused whole with `429 WIDGET_RATE_LIMITED`, and a
 malformed one with `400 WIDGET_INVALID` naming the field.
 
+### Studies
+
+A study the platform can set up for a manager from its page — its own
+logic, vendored into the server as the robots are, plans the marketplaces
+and rotations; the server creates and stages them. What `fm-<study>
+marketplace` and `allotments` do from a terminal, from a form.
+
+| Method & path | Role | Notes |
+|---------------|------|-------|
+| `GET /api/v1/studies` | user | the studies this server can set up: id, name, description, parameters (the manifest's `ParameterSpec`, with defaults) |
+| `GET /api/v1/studies/{id}` | user | one study |
+| `POST /api/v1/studies/{id}/preview` | manager | `{parameters, participantIds}` → the plan it would make: marketplaces, rotations, roster — nothing created |
+| `POST /api/v1/studies/{id}/setup` | manager | the same body → creates the study's marketplaces (markets, `fm.view`, an initial session), stages each one's first rotation (holdings, then private state), and returns the run |
+| `GET /api/v1/studies/runs` | manager | the account's runs, newest first |
+| `GET /api/v1/studies/runs/{runId}` | manager | one run: parameters, the whole plan, `marketplaceIds` by the study's key, `progress` — the rotation last staged per marketplace |
+| `POST /api/v1/studies/runs/{runId}/advance?marketplace={key}` | manager | stage the next rotation in that marketplace; it lands when a closed session is opened |
+| `GET /api/v1/studies/runs/{runId}/roster` | manager | the roster the study hands out, as CSV; empty when it has none |
+
+`parameters` is a map of parameter name to its value as text; a missing name
+takes the default. A parameter the study refuses answers `400
+STUDY_SETUP_INVALID` naming it, and creates nothing. Every `participantId`
+must be one of the caller's account's people. Smith 62 plans two
+marketplaces, `private` and `public`, and runs its four rotations private,
+public, public, private.
+
 ### Users and accounts
 
 | Method & path | Role | Notes |
