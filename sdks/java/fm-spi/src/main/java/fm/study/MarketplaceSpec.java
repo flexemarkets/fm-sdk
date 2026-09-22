@@ -21,6 +21,7 @@ public record MarketplaceSpec(
         List<MarketSpec> markets,
         Map<String, Object> configuration) {
 
+    /** A marketplace needs a key and something to trade. */
     public MarketplaceSpec {
         if (key == null || key.isBlank()) {
             throw new IllegalArgumentException("a marketplace spec needs a key");

@@ -12,6 +12,7 @@ import java.util.List;
  *                as wide as {@code columns}; numbers are already text
  */
 public record Settlement(List<Payoff> payoffs, List<String> columns, List<List<String>> rows) {
+    /** Every row is as wide as the columns, or the report cannot be read. */
     public Settlement {
         payoffs = payoffs == null ? List.of() : List.copyOf(payoffs);
         columns = columns == null ? List.of() : List.copyOf(columns);

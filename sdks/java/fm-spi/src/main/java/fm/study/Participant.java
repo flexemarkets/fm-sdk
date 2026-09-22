@@ -9,6 +9,7 @@ package fm.study;
  * @param lastName  may be empty
  */
 public record Participant(long id, String email, String firstName, String lastName) {
+    /** The email is what the study's files key on, so it is required; names are not. */
     public Participant {
         if (email == null || email.isBlank()) {
             throw new IllegalArgumentException("a participant needs an email");

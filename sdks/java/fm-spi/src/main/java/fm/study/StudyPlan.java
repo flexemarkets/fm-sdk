@@ -17,6 +17,12 @@ import java.util.Set;
  *                     a private valuation.
  */
 public record StudyPlan(List<MarketplaceSpec> marketplaces, List<Rotation> rotations, String roster) {
+    /**
+     * A plan is checked as it is made: distinct marketplace keys, rotations
+     * numbered from 1 in order, and every rotation in a marketplace the
+     * plan has. A host stages these one at a time, hours apart, so a plan
+     * that does not hold together is caught here rather than then.
+     */
     public StudyPlan {
         marketplaces = marketplaces == null ? List.of() : List.copyOf(marketplaces);
         rotations = rotations == null ? List.of() : List.copyOf(rotations);
@@ -41,7 +47,12 @@ public record StudyPlan(List<MarketplaceSpec> marketplaces, List<Rotation> rotat
         }
     }
 
-    /** The rotations that run in one marketplace, in order. */
+    /**
+     * The rotations that run in one marketplace, in order.
+     *
+     * @param marketplaceKey a {@link MarketplaceSpec#key}
+     * @return its rotations, empty when the key is not the plan's
+     */
     public List<Rotation> rotationsIn(String marketplaceKey) {
         return rotations.stream().filter(r -> r.marketplaceKey().equals(marketplaceKey)).toList();
     }

@@ -18,6 +18,7 @@ package fm.study;
  *                       study has none
  */
 public record Rotation(int index, String label, String marketplaceKey, String holdings, String state) {
+    /** A rotation runs somewhere, in some order, with something to stage. */
     public Rotation {
         if (index < 1) {
             throw new IllegalArgumentException("a rotation's index starts at 1");

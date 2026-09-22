@@ -25,16 +25,33 @@ public interface StudyProvider {
     /** The contract's major.minor; a host rejects a provider whose major differs from its own. */
     String STUDY_SPI_VERSION = "0.0";
 
-    /** The study's id, as its page and its command line name it: {@code smith62}. */
+    /**
+     * The study's id, as its page and its command line name it.
+     *
+     * @return the id, {@code smith62} and the like
+     */
     String id();
 
-    /** A short name, for a list. */
+    /**
+     * A short name, for a list.
+     *
+     * @return the name a manager sees beside the others
+     */
     String name();
 
-    /** A sentence or two, for the setup page. */
+    /**
+     * A sentence or two, for the setup page.
+     *
+     * @return what the study is, in the manager's terms
+     */
     String description();
 
-    /** What the manager is asked, with defaults; the host renders a form from these. */
+    /**
+     * What the manager is asked, with defaults; the host renders a form
+     * from these.
+     *
+     * @return the parameters, in the order the form should show them
+     */
     List<ParameterSpec> parameters();
 
     /**
@@ -65,6 +82,7 @@ public interface StudyProvider {
      * @param rotation   the rotation that just ran, with the state it was
      *                   staged with -- the study's own file, to read back
      * @param holdings   every participant's holding at close
+     * @return each participant's payoff, and the report to show them
      * @throws UnsupportedOperationException when the study has no settlement
      * @throws IllegalArgumentException      for a holding the study cannot
      *                                       settle, with the reason
@@ -73,6 +91,12 @@ public interface StudyProvider {
         throw new UnsupportedOperationException(id() + " has no settlement of its own");
     }
 
+    /**
+     * The contract this provider was built against.
+     *
+     * @return {@link #STUDY_SPI_VERSION}, unless a provider has reason to
+     *         say otherwise
+     */
     default String studySpiVersion() {
         return STUDY_SPI_VERSION;
     }
