@@ -338,11 +338,11 @@
                                 <!-- fm-spi is NOT excluded: the contract moved
                                      to 0.0.13 (fm.study), which Central does not
                                      have, so it is what this bundle is for. It
-                                     goes back on this list the moment 0.0.13 is
-                                     published and the SDK releases again without
-                                     the contract having moved -- an already
-                                     published coordinate in the bundle makes
-                                     Central refuse the whole thing. -->
+                                     goes back on this list for the next SDK
+                                     release that does not move the contract,
+                                     because an already published coordinate in
+                                     the bundle makes Central refuse the whole
+                                     thing. -->
                                 <!-- fm-expr is not published yet. It is on
                                      its own version line like fm-spi and
                                      consumed as a SNAPSHOT from ~/.m2 by
