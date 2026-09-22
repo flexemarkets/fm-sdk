@@ -6,7 +6,7 @@
 
     <groupId>com.flexemarkets</groupId>
     <artifactId>fm-sdk-parent</artifactId>
-    <version>0.3.0-SNAPSHOT</version><!-- fm-version -->
+    <version>0.3.0</version><!-- fm-version -->
     <packaging>pom</packaging>
 
     <name>Flexemarkets SDK Parent</name>
@@ -335,21 +335,19 @@
                             <excludeArtifacts>
                                 <excludeArtifact>fm-sdk-parent</excludeArtifact>
                                 <excludeArtifact>fm-ticker</excludeArtifact>
-                                <!-- fm-spi is NOT excluded: the contract moved
-                                     to 0.0.13 (fm.study), which Central does not
-                                     have, so it is what this bundle is for. It
-                                     goes back on this list for the next SDK
-                                     release that does not move the contract,
-                                     because an already published coordinate in
-                                     the bundle makes Central refuse the whole
-                                     thing. -->
-                                <!-- fm-expr is NOT excluded: 0.0.1 is its
-                                     first release, published with make
-                                     publish-expr because fm-server depends on
-                                     it and a server build cannot resolve a
-                                     SNAPSHOT from someone else's ~/.m2. It
-                                     goes back on this list for the next SDK
-                                     release that does not move it. -->
+                                <!-- fm-spi is excluded again: 0.0.13 went to
+                                     Central on 2026-09-22 and has not moved
+                                     since, so this bundle would carry an
+                                     already-published coordinate and Central
+                                     would refuse the whole thing, fm-sdk
+                                     included. Take it off this list the next
+                                     time set-spi-version moves the contract. -->
+                                <excludeArtifact>fm-spi</excludeArtifact>
+                                <!-- fm-expr is excluded again: 0.0.1 went to
+                                     Central on 2026-09-22 and has not moved
+                                     since. Same rule as fm-spi above -- take it
+                                     off when set-expr-version moves it. -->
+                                <excludeArtifact>fm-expr</excludeArtifact>
                             </excludeArtifacts>
                         </configuration>
                     </plugin>
