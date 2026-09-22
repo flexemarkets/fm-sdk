@@ -864,6 +864,8 @@ EXPORT_EXEMPTIONS: dict[str, str] = {
     "Providers":            "SPI lookup, same reason",
     "Endpoints":            "endpoint resolution for the -E flag; Python keeps it private in _hal, TypeScript has no CLI",
     "Orders":               "a holder class for statics; Python and TypeScript use plain functions in a module",
+    "StudyViews":           "the study views the SDK ships, read by the study CLIs and the server -- both JVM; a browser gets the document from the server, so there is nothing for Python or TypeScript to hold",
+    "StudyView":            "the record StudyViews hands back, same reason",
 
     # Members in Java, top-level names in the other two.
     "NO_SEQ":               "Snapshot.NO_SEQ in Java, a module constant in Python and TypeScript",
