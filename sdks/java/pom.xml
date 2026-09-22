@@ -345,7 +345,7 @@
                                 <excludeArtifact>fm-spi</excludeArtifact>
                                 <!-- fm-expr is excluded again: 0.0.1 went to
                                      Central on 2026-09-22 and has not moved
-                                     since. Same rule as fm-spi above -- take it
+                                     since. Same rule as fm-spi above: take it
                                      off when set-expr-version moves it. -->
                                 <excludeArtifact>fm-expr</excludeArtifact>
                             </excludeArtifacts>
