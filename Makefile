@@ -16,7 +16,8 @@ VERSION := $(shell cat VERSION)
        mcp-server \
        publish publish-python publish-typescript publish-java \
        check-publish check-publish-release check-publish-python check-publish-typescript check-publish-java \
-       publish-spi check-publish-spi set-expr-version expr-version
+       publish-spi check-publish-spi publish-expr check-publish-expr \
+       set-expr-version expr-version
 
 # ---------------------------------------------------------------------------
 # Aggregate targets
@@ -184,6 +185,12 @@ publish-java: check-sdks check-publish-java build-release-java
 publish-spi: check-sdks check-publish-spi
 	cd sdks/java && mvn deploy -P release -pl fm-spi
 
+# fm-expr alone, for a release where only the evaluator changed. Same shape
+# and same reason as publish-spi: its own version line, and -pl keeps the
+# already-published fm-sdk coordinate out of the bundle Central would refuse.
+publish-expr: check-sdks check-publish-expr
+	cd sdks/java && mvn deploy -P release -pl fm-expr
+
 # ---------------------------------------------------------------------------
 # MCP server
 # ---------------------------------------------------------------------------
@@ -290,6 +297,9 @@ check-publish-java:
 
 check-publish-spi:
 	@scripts/check-publish.sh spi
+
+check-publish-expr:
+	@scripts/check-publish.sh expr
 
 # ---------------------------------------------------------------------------
 # Version management

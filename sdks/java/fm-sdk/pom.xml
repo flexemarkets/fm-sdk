@@ -14,7 +14,18 @@
     <packaging>jar</packaging>
 
     <name>Flexemarkets SDK</name>
-    <description>Java SDK for the Flexemarkets trading API</description>
+    <description>
+        *** ALPHA SOFTWARE -- THE API IS NOT STABLE ***
+
+        Pre-1.0 and under active development. Anything public may be added,
+        renamed or removed in any release, breaking code that compiles today,
+        with no deprecation period first. A 0.x version carries no
+        compatibility promise and these are used that way: treat every bump
+        as potentially breaking. Pin an exact version. Not recommended for
+        production use.
+
+        Java SDK for the Flexemarkets trading API.
+    </description>
     <url>https://github.com/flexemarkets/fm-sdk</url>
 
     <properties>

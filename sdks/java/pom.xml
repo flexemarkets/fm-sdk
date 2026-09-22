@@ -343,13 +343,13 @@
                                      because an already published coordinate in
                                      the bundle makes Central refuse the whole
                                      thing. -->
-                                <!-- fm-expr is not published yet. It is on
-                                     its own version line like fm-spi and
-                                     consumed as a SNAPSHOT from ~/.m2 by
-                                     fm-server and fm-robots on feat/panels;
-                                     it gets a publish path when a release of
-                                     either pins it. -->
-                                <excludeArtifact>fm-expr</excludeArtifact>
+                                <!-- fm-expr is NOT excluded: 0.0.1 is its
+                                     first release, published with make
+                                     publish-expr because fm-server depends on
+                                     it and a server build cannot resolve a
+                                     SNAPSHOT from someone else's ~/.m2. It
+                                     goes back on this list for the next SDK
+                                     release that does not move it. -->
                             </excludeArtifacts>
                         </configuration>
                     </plugin>

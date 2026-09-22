@@ -22,12 +22,21 @@
         Set with `make set-expr-version V=x.y.z`. `make set-version` moves the
         parent reference above but leaves this alone.
     -->
-    <version>0.1.0-SNAPSHOT</version><!-- expr-version -->
+    <version>0.0.1</version><!-- expr-version -->
 
     <packaging>jar</packaging>
 
     <name>Flexemarkets Panel Expressions</name>
     <description>
+        *** ALPHA SOFTWARE -- THE API IS NOT STABLE ***
+
+        Pre-1.0 and under active development. Anything public may be added,
+        renamed or removed in any release, breaking code that compiles today,
+        with no deprecation period first. A 0.x version carries no
+        compatibility promise and these are used that way: treat every bump
+        as potentially breaking. Pin an exact version. Not recommended for
+        production use.
+
         The expression language a manager writes a participant panel in, and
         the one evaluator of it. A closed grammar over a participant's private
         state, the marketplace's shared state, and their holdings: field

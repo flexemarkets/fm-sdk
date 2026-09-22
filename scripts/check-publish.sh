@@ -65,7 +65,7 @@
 # answer; Maven Central's is a pair of secrets in the environment. So the
 # credential checks ask what that environment can actually answer.
 #
-# Usage: scripts/check-publish.sh [all|npm|pypi|java|spi] [--no-credentials]
+# Usage: scripts/check-publish.sh [all|npm|pypi|java|spi|expr] [--no-credentials]
 # Exit:  0 when the named registry could publish the current version, 1 otherwise.
 
 set -uo pipefail
@@ -82,7 +82,7 @@ done
 TARGET="${TARGET:-all}"
 
 case "$TARGET" in
-    all|npm|pypi|java|spi) ;;
+    all|npm|pypi|java|spi|expr) ;;
     -h|--help)
         # The whole header, however long it grows. A fixed line range silently
         # stopped showing the paragraphs added after it was written.
@@ -90,7 +90,7 @@ case "$TARGET" in
         exit 0
         ;;
     *)
-        echo "check-publish: unknown registry '$TARGET' (want: all, npm, pypi, java, spi)" >&2
+        echo "check-publish: unknown registry '$TARGET' (want: all, npm, pypi, java, spi, expr)" >&2
         exit 1
         ;;
 esac
@@ -99,6 +99,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION="$(cat "$ROOT/VERSION")"
 SPI_VERSION="$(grep -o '<version>[^<]*</version><!-- spi-version -->' \
                  "$ROOT/sdks/java/fm-spi/pom.xml" | sed 's|<version>\(.*\)</version>.*|\1|')"
+EXPR_VERSION="$(grep -o '<version>[^<]*</version><!-- expr-version -->' \
+                 "$ROOT/sdks/java/fm-expr/pom.xml" | sed 's|<version>\(.*\)</version>.*|\1|')"
 
 problems=0
 hints=()
@@ -387,6 +389,31 @@ excluded_artifacts() {
 # why the pom holds it back. The run then printed both "excluded from this
 # release by the pom" and "already published" about the same artifact, and
 # refused. A gate that contradicts itself teaches people to pass --force.
+# fm-expr is checked exactly as fm-spi is, and for the same reasons: its own
+# version line, its own tag, and the pom's exclusion list consulted so a run
+# never both holds an artifact back and refuses the release for it.
+check_expr_release_tag() {
+    if grep -qx "fm-expr" <<< "$(excluded_artifacts)"; then
+        pass "fm-expr-v$EXPR_VERSION" "excluded from this release by the pom"
+        return
+    fi
+    check_release_tag "fm-expr-v$EXPR_VERSION" "fm-expr" "$EXPR_VERSION"
+}
+
+check_expr_version() {
+    if grep -qx "fm-expr" <<< "$(excluded_artifacts)"; then
+        pass "central fm-expr $EXPR_VERSION" "excluded from this release by the pom"
+        return
+    fi
+    if curl -fsS --max-time 20 \
+         "https://repo1.maven.org/maven2/com/flexemarkets/fm-expr/maven-metadata.xml" 2>/dev/null \
+         | grep -q "<version>$EXPR_VERSION</version>"; then
+        fail "central fm-expr $EXPR_VERSION" "already published -- Central is immutable"
+    else
+        pass "central fm-expr $EXPR_VERSION" "not yet published"
+    fi
+}
+
 check_spi_version() {
     if grep -qx "fm-spi" <<< "$(excluded_artifacts)"; then
         pass "central fm-spi $SPI_VERSION" "excluded from this release by the pom"
@@ -431,6 +458,7 @@ case "$TARGET" in
     npm)  echo "Publishing fm-sdk $VERSION to npm" ;;
     pypi) echo "Publishing fm-sdk $VERSION to PyPI" ;;
     spi) echo "Publishing fm-spi $SPI_VERSION to Maven Central (fm-sdk $VERSION unchanged)" ;;
+    expr) echo "Publishing fm-expr $EXPR_VERSION to Maven Central (fm-sdk $VERSION unchanged)" ;;
     java)
         if grep -qx "fm-spi" <<< "$(excluded_artifacts)"; then
             echo "Publishing fm-sdk $VERSION to Maven Central (fm-spi $SPI_VERSION excluded)"
@@ -446,8 +474,9 @@ echo ""
 # being lost.
 echo "Release record:"
 if check_git_worktree; then
-    [[ "$TARGET" != "spi" ]] && check_release_tag "v$VERSION" "fm-sdk" "$VERSION"
+    [[ "$TARGET" != "spi" && "$TARGET" != "expr" ]] && check_release_tag "v$VERSION" "fm-sdk" "$VERSION"
     { wants java || [[ "$TARGET" == "spi" ]]; } && check_spi_release_tag
+    { wants java || [[ "$TARGET" == "expr" ]]; } && check_expr_release_tag
 fi
 echo ""
 
@@ -457,6 +486,7 @@ if (( CHECK_CREDENTIALS )); then
     wants pypi && check_pypi_credentials
     wants java && check_java_credentials
     wants spi  && check_java_credentials
+    wants expr && check_java_credentials
 else
     # Not skipped, deferred: each publishing job runs the full check for its own
     # registry before it uploads, in the only place its credential exists.
@@ -469,6 +499,7 @@ wants npm  && check_npm_version
 wants pypi && check_pypi_version
 wants java && check_java_version
 wants spi  && check_spi_version
+wants expr && check_expr_version
 
 echo ""
 
