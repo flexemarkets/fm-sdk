@@ -335,14 +335,14 @@
                             <excludeArtifacts>
                                 <excludeArtifact>fm-sdk-parent</excludeArtifact>
                                 <excludeArtifact>fm-ticker</excludeArtifact>
-                                <!-- fm-spi is on its own version line and has
-                                     not moved since 0.0.11, which is already on
-                                     Central. Left in, the bundle carries an
-                                     already-published coordinate and Central
-                                     refuses the whole thing, fm-sdk included.
-                                     Remove this the next time the contract
-                                     changes and set-spi-version moves it. -->
-                                <excludeArtifact>fm-spi</excludeArtifact>
+                                <!-- fm-spi is NOT excluded: the contract moved
+                                     to 0.0.13 (fm.study), which Central does not
+                                     have, so it is what this bundle is for. It
+                                     goes back on this list the moment 0.0.13 is
+                                     published and the SDK releases again without
+                                     the contract having moved -- an already
+                                     published coordinate in the bundle makes
+                                     Central refuse the whole thing. -->
                                 <!-- fm-expr is not published yet. It is on
                                      its own version line like fm-spi and
                                      consumed as a SNAPSHOT from ~/.m2 by
