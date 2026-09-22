@@ -56,17 +56,18 @@ class WireFixturesTest {
             Path.of("..", "..", "fixtures").toAbsolutePath().normalize();
 
     /** Wire type name -> the record the SDK deserializes it into. */
-    private static final Map<String, Class<?>> TYPES = Map.of(
-            "Order", fm.model.Order.class,
-            "Session", fm.model.Session.class,
-            "Holding", fm.model.Holding.class,
-            "Account", fm.model.Account.class,
-            "Person", fm.model.Person.class,
-            "Market", fm.model.Market.class,
-            "Marketplace", fm.model.Marketplace.class,
-            "ClientConnection", fm.model.ClientConnection.class,
-            "Security", fm.model.Security.class,
-            "Token", fm.model.Token.class);
+    private static final Map<String, Class<?>> TYPES = Map.ofEntries(
+            Map.entry("Order", fm.model.Order.class),
+            Map.entry("Session", fm.model.Session.class),
+            Map.entry("Holding", fm.model.Holding.class),
+            Map.entry("Account", fm.model.Account.class),
+            Map.entry("Person", fm.model.Person.class),
+            Map.entry("Market", fm.model.Market.class),
+            Map.entry("Marketplace", fm.model.Marketplace.class),
+            Map.entry("ClientConnection", fm.model.ClientConnection.class),
+            Map.entry("Security", fm.model.Security.class),
+            Map.entry("Token", fm.model.Token.class),
+            Map.entry("ParticipantState", fm.model.ParticipantState.class));
 
     /**
      * The snapshot envelope is not a record the mapper binds -- it is a shape
@@ -118,8 +119,13 @@ class WireFixturesTest {
                       fixture.name() + "." + entry.getKey()));
     }
 
-    /** The value of one record component, by its wire name. */
+    /** The value of one record component, by its wire name -- or of one
+     *  entry, where the wire carries an open map (ParticipantState.fields). */
     private static Object _read(Object parsed, String name) {
+        if (parsed instanceof java.util.Map<?, ?> map) {
+            assertTrue(map.containsKey(name), "map has no entry '" + name + "'");
+            return map.get(name);
+        }
         Method accessor;
         try {
             accessor = parsed.getClass().getMethod(name);

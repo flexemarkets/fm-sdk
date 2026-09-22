@@ -284,6 +284,26 @@ class Assets:
 
 
 @dataclass
+class ParticipantState:
+    """One participant's private study state for one allocation, as stored.
+
+    Private means the participant never receives it: panels that read it are
+    evaluated on the server and only their rendered values travel. Keyed on
+    the allocation because it is uploaded before the session that consumes
+    it exists -- staged like an allotment, landing when a closed session
+    opens, which is also what scopes it to that session.
+
+    ``fields`` is open: numbers, text, or lists of numbers under the names
+    the upload declared.
+    """
+    marketplace_id: int | None = None
+    allocation_id: int | None = None
+    owner_id: int | None = None
+    owner_email: str | None = None
+    fields: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class ClientConnection:
     marketplace_id: int = 0
     connection_id: int = 0

@@ -16,7 +16,7 @@ VERSION := $(shell cat VERSION)
        mcp-server \
        publish publish-python publish-typescript publish-java \
        check-publish check-publish-release check-publish-python check-publish-typescript check-publish-java \
-       publish-spi check-publish-spi
+       publish-spi check-publish-spi set-expr-version expr-version
 
 # ---------------------------------------------------------------------------
 # Aggregate targets
@@ -322,7 +322,7 @@ endif
 	@# here -- it is a contract on its own line, see set-spi-version. Its parent
 	@# reference is, so it keeps building against this parent.
 	sed -i 's|<version>[^<]*</version><!-- fm-version -->|<version>$(MAVEN_V)</version><!-- fm-version -->|g' \
-		sdks/java/pom.xml sdks/java/fm-sdk/pom.xml sdks/java/fm-spi/pom.xml sdks/java/examples/ticker/pom.xml
+		sdks/java/pom.xml sdks/java/fm-sdk/pom.xml sdks/java/fm-spi/pom.xml sdks/java/fm-expr/pom.xml sdks/java/examples/ticker/pom.xml
 	@# MCP server
 	sed -i 's|^version = ".*"|version = "$(V)"|' mcp-server/pyproject.toml
 	@# The Java README's dependency snippet. Marked rather than matched
@@ -355,4 +355,19 @@ endif
 
 spi-version:
 	@grep -o '<version>[^<]*</version><!-- spi-version -->' sdks/java/fm-spi/pom.xml \
+		| sed 's|<version>\(.*\)</version>.*|\1|'
+
+# The evaluator is on its own line for the same reason: it is the arithmetic
+# that pays people, consumed by fm-server and fm-robots, and a change to it is
+# a release someone reviews rather than a passenger on a client release.
+set-expr-version:
+ifndef V
+	$(error Usage: make set-expr-version V=x.y.z)
+endif
+	sed -i 's|<version>[^<]*</version><!-- expr-version -->|<version>$(V)</version><!-- expr-version -->|' \
+		sdks/java/fm-expr/pom.xml
+	@echo "fm-expr version set to $(V) (SDK line unchanged at $$(cat VERSION))"
+
+expr-version:
+	@grep -o '<version>[^<]*</version><!-- expr-version -->' sdks/java/fm-expr/pom.xml \
 		| sed 's|<version>\(.*\)</version>.*|\1|'

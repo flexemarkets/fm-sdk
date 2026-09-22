@@ -71,6 +71,26 @@ export interface Allotment {
   assets: Assets | null;
 }
 
+/**
+ * One participant's private study state for one allocation, as stored.
+ *
+ * Private means the participant never receives it: panels that read it are
+ * evaluated on the server and only their rendered values travel. Keyed on
+ * the allocation because it is uploaded before the session that consumes it
+ * exists -- staged like an allotment, landing when a closed session opens,
+ * which is also what scopes it to that session.
+ *
+ * `fields` is open: numbers, text, or arrays of numbers under the names the
+ * upload declared.
+ */
+export interface ParticipantState {
+  marketplaceId: number | null;
+  allocationId: number | null;
+  ownerId: number | null;
+  ownerEmail: string | null;
+  fields: Record<string, unknown>;
+}
+
 export interface Holding {
   marketplaceId: number;
   sessionId: number;

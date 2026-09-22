@@ -40,6 +40,7 @@ PARSERS: dict[str, list[tuple[str, Callable[[dict[str, Any]], Any]]]] = {
     "ClientConnection": [("client", rest._parse_connection)],
     "Security": [("client", rest._parse_security)],
     "Token": [("client", rest._parse_token)],
+    "ParticipantState": [("client", rest._parse_participant_state)],
     # Not a parser but a shape the SDK has to recognise, which is why it has
     # broken twice. This is exactly what active_orders/recent_trades do with a
     # response body.
@@ -53,6 +54,11 @@ def _snake(name: str) -> str:
 
 
 def _actual(parsed: Any, wire_name: str) -> Any:
+    # An open map -- ParticipantState.fields -- is read by key, as the wire
+    # spells it, not by attribute.
+    if isinstance(parsed, dict):
+        assert wire_name in parsed, f"map has no entry {wire_name!r}"
+        return parsed[wire_name]
     attr = _snake(wire_name)
     if not hasattr(parsed, attr):
         raise AssertionError(f"{type(parsed).__name__} has no field {attr!r} (wire {wire_name!r})")

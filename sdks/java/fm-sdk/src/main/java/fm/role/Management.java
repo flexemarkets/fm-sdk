@@ -1,6 +1,7 @@
 package fm.role;
 
 import fm.model.Holding;
+import fm.model.ParticipantState;
 import fm.model.Marketplace;
 import fm.model.Session;
 import java.nio.file.Path;
@@ -104,4 +105,29 @@ public interface Management {
      * @return the positions as staged, read back from the server
      */
     List<Holding> uploadHoldings(long marketplaceId, Path csv);
+
+    /**
+     * Load per-participant private state from a CSV, returning what was
+     * stored.
+     *
+     * <p>Staged on the same terms as {@link #uploadHoldings}, against the
+     * allocation that call staged: it lands when a closed session is opened,
+     * and the order is a correctness constraint rather than a habit --
+     * holdings, then state, then open. With no allocation staged there is
+     * nothing to attach the state to, and the server refuses.
+     *
+     * <p>The file keys on an {@code email} column, as a holdings file does.
+     * Every other column becomes a field of that name: a cell that reads as
+     * a number is a number, otherwise it is text; a column whose header is
+     * bracketed, {@code [valuations]}, holds vectors and its cells are JSON
+     * arrays. An {@code id} column, when present, must agree with the person
+     * the email resolves to, so a file generated without ids fails here
+     * rather than at settlement. A study's existing values file needs no
+     * change to be uploaded.
+     *
+     * @param marketplaceId the marketplace to stage state in
+     * @param csv           the state file to upload
+     * @return the state as stored, one row per participant
+     */
+    List<ParticipantState> uploadState(long marketplaceId, Path csv);
 }

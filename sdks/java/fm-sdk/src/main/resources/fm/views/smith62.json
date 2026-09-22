@@ -1,0 +1,58 @@
+{
+  "v": 1,
+  "slots": {
+    "header": [
+      {
+        "panel": "score",
+        "opts": {
+          "label": "Group",
+          "as": "badge",
+          "format": "number",
+          "expr": "me.group"
+        }
+      },
+      {
+        "panel": "score",
+        "opts": {
+          "label": "Your role",
+          "as": "badge",
+          "format": "text",
+          "expr": "if(me.side == \"S\", \"You are a SELLER\", \"You are a BUYER\")"
+        }
+      }
+    ],
+    "sidebar-bottom": [
+      {
+        "panel": "score",
+        "opts": {
+          "label": "Profit",
+          "format": "cents",
+          "fields": [
+            { "id": "n",     "show": false, "expr": "abs(now.units.{{symbol}} - open.units.{{symbol}})" },
+            { "id": "gross", "show": false, "expr": "abs(now.cash - open.cash)" },
+            { "id": "cost",  "show": false, "expr": "sum(take(me.valuations, f.n))" },
+            {
+              "id": "total",
+              "label": "Profit",
+              "expr": "if(me.side == \"S\", f.gross - f.cost, f.cost - f.gross)"
+            }
+          ]
+        }
+      }
+    ],
+    "sidebar": [
+      { "panel": "holdings" },
+      { "panel": "order-form" }
+    ],
+    "market-left": [ { "panel": "book" } ],
+    "market-right": [ { "panel": "trades" } ]
+  },
+  "state": {
+    "version": 1,
+    "private": {
+      "group":      { "type": "number" },
+      "side":       { "type": "text" },
+      "valuations": { "type": "vector", "unit": "cents" }
+    }
+  }
+}

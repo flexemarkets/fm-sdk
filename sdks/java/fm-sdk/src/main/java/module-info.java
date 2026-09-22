@@ -1,7 +1,7 @@
 /**
  * The Flexemarkets SDK.
  *
- * <p>Five packages are exported, split by what you do with what is in them
+ * <p>Five packages are exported (four as of 0.2.0; {@code fm.views} joined in 0.3.0), split by what you do with what is in them
  * rather than by subject. {@code fm} was flat until 0.2.0 -- fifty-two types in
  * one package, where the things you receive sat beside the things you call and
  * the things you catch.
@@ -18,6 +18,8 @@
  *       {@link fm.error.FlexemarketsException}.
  *   <li>{@code fm.event} -- what arrives on the queue passed to
  *       {@code listen}.
+ *   <li>{@code fm.views} -- the study views the SDK ships, for a study's
+ *       CLI and the server to read from one place.
  * </ul>
  *
  * <p>{@code fm.role} is <em>not</em> exported. The six interfaces
@@ -48,6 +50,7 @@ module fm {
     exports fm.error;
     exports fm.event;
     exports fm.model;
+    exports fm.views;
 
     opens fm to tools.jackson.databind;
     opens fm.model to tools.jackson.databind;
