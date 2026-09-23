@@ -92,6 +92,44 @@ below it.
 
 ---
 
+## 0.3.1: SDK diagnostics leave stderr
+
+A patch release, and it breaks no API — but it changes something a reader
+might be watching for, which is why it is here rather than only in the
+release notes.
+
+The Java SDK narrated transport trouble with `System.err.println`, prefixed
+`[Desk]` or `[fm-sdk]`:
+
+```
+[Desk] WS transport error on marketplace 3302: Connection reset
+[Desk] Reseed failed on marketplace 3302; desk is stale: ...
+[fm-sdk] The API root names accounts but this client dialled ...
+```
+
+Those five lines now go through `System.Logger`, and **the prefixes are gone** —
+the logger name (`fm.internal.DefaultDesk`, `fm.internal.HttpFlexemarkets`)
+carries the source, and every backend prints it.
+
+**If you grep for `[Desk]` in a terminal or a dyno log, that stops matching.**
+Nothing else about the lines changed except one improvement: a transport error
+whose cause carries no message — a reset connection, typically — used to print
+`null` and now names the exception class.
+
+**Where the lines go now depends on your application, which is the point.** With
+a `System.LoggerFinder` on the path — which a Spring Boot service has — they
+land in your own logging pipeline. With none, they go to `java.util.logging`,
+whose console format differs from a bare `println`.
+
+Python is unaffected: it has always used `logging.getLogger(__name__)`.
+TypeScript is unaffected: it keeps `console.warn`, which is the Node idiom.
+
+**None of this is the interface.** These lines are the fallback for a caller who
+subscribed to nothing. `onGap`/`on_gap` and `onRecovery`/`on_recovery` carry the
+same events as typed records, in all three SDKs, and are what you should act on.
+
+---
+
 ## If you are moving from 0.1.x
 
 Go through [UPGRADING-0.1.md](UPGRADING-0.1.md) and
