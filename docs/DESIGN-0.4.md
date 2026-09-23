@@ -7,8 +7,8 @@ consumer, which is why none of it fits a patch release.
 
 What 0.3.0 *settled* is in [UPGRADING-0.3.md](UPGRADING-0.3.md) and is not
 revisited. This file replaces `DESIGN-0.3.md`: 0.3.0 shipped without taking any
-of it, so both open items carry forward unchanged in substance, with their
-status brought up to date.
+of it, so both of that file's items carry forward unchanged in substance, with
+their status brought up to date. Items 2 and 3 are new.
 
 ---
 
@@ -92,6 +92,59 @@ never subscribed until 2026-09-23.
 
 So this is a convenience question, not a capability one, and it should be priced
 that way.
+
+### 3. Per-market subscriptions have no all-markets form
+
+*New in 0.4. Raised while reviewing the Desk surface on 2026-09-23.*
+
+The six subscriptions split two ways, and the split is clean:
+
+| Scope | Subscriptions | Bulk read |
+|---|---|---|
+| Per market | `onBookChange(marketId, ...)`, `onTrade(marketId, ...)` | `books()`, `tapes()` |
+| Marketplace-wide | `onSessionChange`, `onHoldingChange`, `onGap`, `onRecovery` | — |
+
+So a caller watching a whole marketplace loops:
+
+```java
+for (var m : desk.markets()) desk.onBookChange(m.id(), handler);
+```
+
+Note this is **not** a book-versus-tape asymmetry. Books and tapes are treated
+identically: both have a per-market subscription and an all-markets bulk read,
+in all three languages, with no overload anywhere. Whatever is decided applies
+to both or neither.
+
+**The case for an overload** is that the loop is boilerplate every consumer
+writes, and the handler then has no idea which market fired — so the signature
+is not the obvious one. `Consumer<Book>` would have to become
+`BiConsumer<Long, Book>`, or `Book` would have to carry its market id, and the
+second is a change to a published type rather than an addition beside it. That
+is three languages times two events, plus a decision about the payload.
+
+**The case against** is that the loop is exactly equivalent and one line. Which
+brings up the thing actually worth noticing:
+
+> **A desk's market set is fixed for its lifetime.** `markets()` is documented
+> as "captured when the desk was opened" — `List.copyOf` in the constructor,
+> with `BookIndex` and `TapeIndex` built from that list and never refreshed. A
+> market added to the marketplace after the desk opened has no book, no tape,
+> and cannot be subscribed to.
+
+An all-markets subscription would therefore **not** fix the case it looks like
+it fixes. Built on the same fixed index, it would miss a new market exactly as
+the loop does. So the two questions are separable, and the second is the
+interesting one:
+
+1. *Convenience.* Should the per-market subscriptions have an all-markets form?
+   Low value, real cost, and the loop is equivalent.
+2. *Lifetime.* Should a desk notice a market added while it is open, or is
+   "re-open the desk" the answer? That is a behaviour question, not a signature
+   one, and nobody has hit it — every study creates its markets before opening a
+   desk. Worth settling before anything is built on the assumption either way.
+
+Taking (1) without (2) would ship an API whose name promises what it does not
+do, which is worse than the loop.
 
 ---
 
