@@ -13,6 +13,10 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.text.MessageFormat;
+import java.util.logging.Handler;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 import java.util.Map;
 
 import com.sun.net.httpserver.HttpExchange;
@@ -158,7 +162,7 @@ class ApiRootRebasingTest {
      */
     @Test
     void aRewriteSaysSoAndNamesBothOrigins() {
-        String reported = _onStandardError(() -> HttpFlexemarkets.rebase(
+        String reported = _logged(() -> HttpFlexemarkets.rebase(
                 _rootNaming("http://api.example.com"), "https://api.example.com/api"));
 
         assertThat(reported)
@@ -170,7 +174,7 @@ class ApiRootRebasingTest {
     /** A correctly configured server is not nagged at. */
     @Test
     void aRootThatAlreadyAgreesIsSilent() {
-        String reported = _onStandardError(() -> HttpFlexemarkets.rebase(
+        String reported = _logged(() -> HttpFlexemarkets.rebase(
                 _rootNaming("https://api.example.com"), "https://api.example.com/api"));
 
         assertThat(reported).isEmpty();
@@ -181,15 +185,49 @@ class ApiRootRebasingTest {
                 "marketplaces", new ApiRoot.LinkObject(origin + "/api/marketplaces")));
     }
 
-    private static String _onStandardError(Runnable action) {
-        PrintStream original = System.err;
-        var captured = new ByteArrayOutputStream();
+    /**
+     * What the code logged while {@code action} ran.
+     *
+     * <p>NOT by capturing {@code System.err}, which is how this was written
+     * and why it broke. The warning goes through {@link System.Logger} now;
+     * with no LoggerFinder on the path that delegates to
+     * {@code java.util.logging}, whose ConsoleHandler holds the
+     * {@code System.err} it was given WHEN IT WAS CREATED. Swapping
+     * {@code System.err} afterwards redirects nothing.
+     *
+     * <p>Which made the test pass or fail on the order the suite ran in: if
+     * anything logged first the handler already existed, bound to the real
+     * stderr, and this saw an empty string. It passed locally and failed in
+     * CI for exactly that reason.
+     *
+     * <p>So it attaches a handler and reads the records. The message is
+     * formatted here because System.Logger passes parameters through to JUL
+     * unsubstituted, as {@code {0}} placeholders.
+     */
+    private static String _logged(Runnable action) {
+        Logger logger = Logger.getLogger(HttpFlexemarkets.class.getName());
+        var records = new ArrayList<LogRecord>();
+        Handler collector = new Handler() {
+            @Override public void publish(LogRecord record) { records.add(record); }
+            @Override public void flush() { }
+            @Override public void close() { }
+        };
+
+        logger.addHandler(collector);
         try {
-            System.setErr(new PrintStream(captured, true, StandardCharsets.UTF_8));
             action.run();
         } finally {
-            System.setErr(original);
+            logger.removeHandler(collector);
         }
-        return captured.toString(StandardCharsets.UTF_8);
+
+        var text = new StringBuilder();
+        for (LogRecord record : records) {
+            Object[] parameters = record.getParameters();
+            text.append(null == parameters || 0 == parameters.length
+                            ? record.getMessage()
+                            : MessageFormat.format(record.getMessage(), parameters))
+                .append(System.lineSeparator());
+        }
+        return text.toString();
     }
 }
