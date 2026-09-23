@@ -68,6 +68,22 @@ import java.util.function.Consumer;
  */
 public class DefaultDesk implements Desk {
 
+    /**
+     * Where this desk says what it could not keep to itself.
+     *
+     * <p>{@link System.Logger} rather than a facade, because this is a
+     * library published to three registries and imposing slf4j on every
+     * consumer to print four lines is not a trade worth making. The JDK's
+     * own facade costs nothing and routes itself: an application with a
+     * LoggerFinder on the path -- which is what a Spring service has --
+     * gets these in its own logs, and one with none gets java.util.logging.
+     *
+     * <p>These lines are the FALLBACK, not the interface. What a caller
+     * should act on is {@link Desk#onGap} and {@link Desk#onRecovery},
+     * which carry the same events as typed records.
+     */
+    private static final System.Logger LOG = System.getLogger(DefaultDesk.class.getName());
+
     private final Flexemarkets _flexemarkets;
     private final long _marketplaceId;
     private final List<Market> _markets;
@@ -306,16 +322,17 @@ public class DefaultDesk implements Desk {
                     for (var hh : _holdingHandlers) hh.accept(h);
                 } else if (event instanceof StreamDropped error) {
                     // The subscription restores itself; nothing to do but say so.
-                    System.err.println("[Desk] WS transport error on marketplace "
-                            + _marketplaceId + ": " + error.failure().getMessage());
+                    LOG.log(System.Logger.Level.WARNING,
+                            "WS transport error on marketplace {0}: {1}",
+                            _marketplaceId, _describe(error.failure()));
                 } else if (event instanceof StreamReconnected) {
                     _reseedAfterReconnect();
                 } else if (event instanceof FrameUnreadable ex) {
                     // STOMP ERROR / parse failure. Logged for
                     // visibility; reconnecting won't help with a
                     // malformed frame, so we leave the desk as-is.
-                    System.err.println("[Desk] WS error on marketplace "
-                            + _marketplaceId + ": " + ex.message());
+                    LOG.log(System.Logger.Level.WARNING,
+                            "WS error on marketplace {0}: {1}", _marketplaceId, ex.message());
                 }
                 // VERSION and SESSION-LIST aren't reflected in the
                 // public surface yet; ignore.
@@ -344,8 +361,9 @@ public class DefaultDesk implements Desk {
             _seedFromSnapshot();
             event = new DeskRecovery(_marketplaceId, true, null);
         } catch (Throwable t) {
-            System.err.println("[Desk] Reseed failed on marketplace "
-                    + _marketplaceId + "; desk is stale: " + t.getMessage());
+            LOG.log(System.Logger.Level.ERROR,
+                    "Reseed failed on marketplace {0}; the desk is stale: {1}",
+                    _marketplaceId, _describe(t));
             event = new DeskRecovery(_marketplaceId, false, t.getMessage());
         }
         for (var h : _reconnectHandlers) {
@@ -365,9 +383,9 @@ public class DefaultDesk implements Desk {
                 && _lastAppliedSeq != Snapshot.NO_SEQ
                 && update.seq() > _lastAppliedSeq + 1) {
             long expectedSeq = _lastAppliedSeq + 1;
-            System.err.println("[Desk] ORDERS-UPDATE seq gap on marketplace "
-                    + _marketplaceId + " — expected " + expectedSeq
-                    + ", got " + update.seq() + "; resyncing from snapshot");
+            LOG.log(System.Logger.Level.WARNING,
+                    "ORDERS-UPDATE seq gap on marketplace {0}: expected {1}, got {2}; resyncing from snapshot",
+                    _marketplaceId, expectedSeq, update.seq());
             GapEvent event = new GapEvent(_marketplaceId, expectedSeq, update.seq());
             for (var h : _gapHandlers) {
                 try { h.accept(event); } catch (Throwable ignored) { /* don't let one bad handler stop recovery */ }
@@ -440,4 +458,19 @@ public class DefaultDesk implements Desk {
     private record BookHandler(long marketId, Consumer<Book> handler) {}
 
     private record TradeHandler(long marketId, Consumer<fm.model.Trade> handler) {}
+
+    /**
+     * A failure in one line, and never the word "null". A transport error
+     * without a message is common -- a reset connection carries none -- and
+     * a log line reading "null" sends a reader looking for something that
+     * was never described.
+     */
+    private static String _describe(Throwable failure) {
+        if (failure == null) {
+            return "no cause reported";
+        }
+        return failure.getMessage() == null
+                ? failure.getClass().getSimpleName()
+                : failure.getClass().getSimpleName() + ": " + failure.getMessage();
+    }
 }

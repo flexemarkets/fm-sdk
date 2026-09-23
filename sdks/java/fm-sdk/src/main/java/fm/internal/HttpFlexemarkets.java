@@ -78,6 +78,17 @@ import tools.jackson.databind.json.JsonMapper;
 public class HttpFlexemarkets implements Flexemarkets {
 
     /**
+     * Where this client says what it could not keep to itself.
+     *
+     * <p>{@link System.Logger}, not a facade: this is a library published
+     * to three registries, and imposing slf4j on every consumer to print
+     * a misconfiguration warning is not a trade worth making. An
+     * application with a LoggerFinder on the path gets these in its own
+     * logs; one with none gets java.util.logging.
+     */
+    private static final System.Logger LOG = System.getLogger(HttpFlexemarkets.class.getName());
+
+    /**
      * The HTTP connection, built from the arguments {@link Flexemarkets#connect}
      * takes.
      *
@@ -1388,12 +1399,12 @@ public class HttpFlexemarkets implements Flexemarkets {
             // deployment that is genuinely misconfigured -- and a silent
             // correction here is how it stays misconfigured. The SDK keeps
             // working; the operator still gets told where to look.
-            System.err.println("[fm-sdk] The API root names " + String.join(", ", moved)
-                + " but this client dialled " + origin + "; rewriting " + moved.size()
-                + " link origin(s) to match.");
-            System.err.println("[fm-sdk] The server is behind a proxy that is not forwarding the"
-                + " request scheme, so its links are wrong. Fix it at the edge -- this rewrite only"
-                + " keeps calls working.");
+            LOG.log(System.Logger.Level.WARNING,
+                "The API root names {0} but this client dialled {1}; rewriting {2} link origin(s)"
+                + " to match. The server is behind a proxy that is not forwarding the request"
+                + " scheme, so its links are wrong. Fix it at the edge -- this rewrite only keeps"
+                + " calls working.",
+                String.join(", ", moved), origin, moved.size());
         }
 
         return new ApiRoot(Collections.unmodifiableMap(rebased));
