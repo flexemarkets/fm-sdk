@@ -41,6 +41,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.UnknownHostException;
 import java.net.http.HttpClient;
+import java.time.Duration;
 import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -201,6 +202,64 @@ public class HttpFlexemarkets implements Flexemarkets {
         java.util.regex.Pattern.compile("st=(\\d+)");
 
     private final Properties _properties;
+    /**
+     * How long to wait for a connection, and for the exchange that follows.
+     *
+     * <p>BOTH ARE SET BECAUSE NEITHER HAS A DEFAULT. {@code HttpClient}
+     * waits forever to connect and {@code HttpRequest} waits forever for a
+     * reply, so a connection that drops without the peer sending anything
+     * -- a laptop changing networks, a VPN going down, a NAT forgetting the
+     * flow -- leaves the call blocked with no exception to catch and
+     * nothing to retry. The process stays alive doing nothing.
+     *
+     * <p>That is not hypothetical. On 2026-09-22 three study runs on two
+     * laptops stopped that way within minutes of each other: no output, no
+     * exception, the session left OPEN on the server, the JVM still
+     * running. A Python client against the same server kept working, its
+     * library having timeouts by default.
+     *
+     * <p>Whether it hangs or surfaces as "Connection reset" is the
+     * operating system's choice, not ours -- Windows will sit on a dead
+     * socket far longer than macOS -- which is exactly why it cannot be
+     * left to the operating system.
+     *
+     * <p>Both are overridable for a caller on a slow link or fetching
+     * something large: {@code connect-timeout-seconds} and
+     * {@code request-timeout-seconds} in the credential properties. Zero
+     * or negative restores the old behaviour of waiting forever, which is
+     * a thing somebody may genuinely want while debugging and should not
+     * have to patch the SDK to get.
+     */
+    /**
+     * Thirty seconds, which is Reactor Netty's {@code CONNECT_TIMEOUT_MILLIS}
+     * and therefore what a Spring {@code WebClient} uses. Matching it is
+     * deliberate: this is the one of the two where Spring has a real
+     * default, and an SDK that timed out connecting sooner than the stack
+     * everything else here runs on would be surprising for no gain.
+     */
+    private static final Duration DEFAULT_CONNECT_TIMEOUT = Duration.ofSeconds(30);
+
+    /**
+     * Sixty seconds, and NOT what Spring uses, which is nothing.
+     *
+     * <p>Spring Boot sets no response timeout for WebClient and none for
+     * RestClient either -- {@code spring.http.client.read-timeout} exists
+     * and defaults to unset. Matching that would mean matching the defect:
+     * a jar on Spring WebClient is exactly what sat forever on a dead
+     * socket on 2026-09-22, while a Python client against the same server
+     * carried on, its library having a timeout.
+     *
+     * <p>Sixty is chosen against what this SDK actually asks for. The
+     * period loop's calls are small and answer in milliseconds; the
+     * largest is a holdings upload for a full marketplace, which is
+     * seconds. A minute is far outside normal and well inside "something
+     * is wrong".
+     */
+    private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(60);
+
+    private final Duration _connectTimeout;
+    private final Duration _requestTimeout;
+
     private final HttpClient _httpClient;
     private final String _bearerToken;
     private final Token _token;
@@ -222,7 +281,11 @@ public class HttpFlexemarkets implements Flexemarkets {
         // as the response -- which then fails as a JSON parse error, nowhere
         // near the cause. NORMAL declines to follow HTTPS back down to HTTP, so
         // an endpoint cannot be quietly downgraded.
+        this._connectTimeout = _timeout(properties, "connect-timeout-seconds", DEFAULT_CONNECT_TIMEOUT);
+        this._requestTimeout = _timeout(properties, "request-timeout-seconds", DEFAULT_REQUEST_TIMEOUT);
+
         this._httpClient = HttpClient.newBuilder()
+                .connectTimeout(_connectTimeout)
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .build();
 
@@ -924,6 +987,8 @@ public class HttpFlexemarkets implements Flexemarkets {
             .header("Accept", accept)
             .header("User-Agent", FM_SDK_CLIENT);
 
+        _applyTimeout(builder, _requestTimeout);
+
         if (_impersonateAccount != null) {
             builder.header(HEADER_IMPERSONATION, _impersonateAccount);
         }
@@ -1299,6 +1364,7 @@ public class HttpFlexemarkets implements Flexemarkets {
             // a comment recording that an earlier rewrite dropped it. Restored
             // here, and covered by a test so it cannot be dropped a third time.
             request = HttpRequest.newBuilder()
+                .timeout(DEFAULT_REQUEST_TIMEOUT)
                 .uri(URI.create(endpoint + "/refresh"))
                 .header("Authorization", "Bearer " + tokenValue)
                 .header("Accept", "application/json")
@@ -1427,6 +1493,32 @@ public class HttpFlexemarkets implements Flexemarkets {
      * URL, or null for anything else — a relative href, or a scheme the SDK has
      * no business rewriting.
      */
+    /** Applies a timeout unless it was configured away. */
+    static void _applyTimeout(HttpRequest.Builder builder, Duration timeout) {
+        if (null != timeout && !timeout.isZero() && !timeout.isNegative()) {
+            builder.timeout(timeout);
+        }
+    }
+
+    /**
+     * A timeout from the properties, or the default.
+     *
+     * <p>Unparseable means the default rather than an exception: a typo in
+     * a credential file must not stop a study starting, and the default is
+     * the safe answer.
+     */
+    static Duration _timeout(java.util.Properties properties, String key, Duration fallback) {
+        String configured = null == properties ? null : properties.getProperty(key);
+        if (null == configured || configured.isBlank()) {
+            return fallback;
+        }
+        try {
+            return Duration.ofSeconds(Long.parseLong(configured.trim()));
+        } catch (NumberFormatException x) {
+            return fallback;
+        }
+    }
+
     private static String _httpOrigin(String url) {
         if (null == url) {
             return null;
