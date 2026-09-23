@@ -150,9 +150,17 @@ class ClientTimingTest {
         var header = _reported().get(0);
 
         assertThat(_field(header, NET)).as("net= is present once the server has said").isNotNegative();
+
+        // max(0, rtt - server), which is what the client computes -- NOT
+        // rtt - server. On a fast machine the whole loopback round trip
+        // finishes inside the millisecond the server claims for itself, so
+        // the subtraction goes negative and the client floors it. This test
+        // asserted the bare subtraction and so passed only where the
+        // machine was slow enough: it failed in CI at rtt = 982us, expecting
+        // -17008 and getting 0.
         assertThat(_field(header, NET))
-                .as("the wire is what is left after the server's share")
-                .isEqualTo(_field(header, RTT) - 1_000_000);
+                .as("the wire is what is left after the server's share, and never less than none")
+                .isEqualTo(Math.max(0, _field(header, RTT) - 1_000_000));
     }
 
     /**
