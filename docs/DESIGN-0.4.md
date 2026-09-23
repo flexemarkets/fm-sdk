@@ -8,7 +8,7 @@ consumer, which is why none of it fits a patch release.
 What 0.3.0 *settled* is in [UPGRADING-0.3.md](UPGRADING-0.3.md) and is not
 revisited. This file replaces `DESIGN-0.3.md`: 0.3.0 shipped without taking any
 of it, so both of that file's items carry forward unchanged in substance, with
-their status brought up to date. Items 2 and 3 are new.
+their status brought up to date. Items 2, 3 and 4 are new.
 
 ---
 
@@ -145,6 +145,67 @@ interesting one:
 
 Taking (1) without (2) would ship an API whose name promises what it does not
 do, which is worse than the loop.
+
+### 4. One place for diagnostics, via `System.Logger` and a JUL handler
+
+*New in 0.4. Raised on 2026-09-23 while removing a duplicated reporter in
+fm-robots. Mostly CONSUMER-SIDE work: the SDK's half shipped in 0.3.1 and
+this item asks nothing further of it. Recorded here because it is the
+reason the SDK's posture matters, and because a reader of item 2 will
+want it.*
+
+The SDK reports transport trouble two ways, and they are not the same
+thing:
+
+| | Carries | Reaches |
+|---|---|---|
+| the listen queue | `StreamDropped`, `StreamReconnected`, `FrameUnreadable` | anyone who drains the queue |
+| `Desk.onRecovery` | `DeskRecovery` — re-seeded, or **stale** | only a Desk subscriber |
+
+`DeskRecovery` is built inside `DefaultDesk._reseedAfterReconnect` and
+dispatched to its own handlers; it never reaches a queue. That matters,
+because the failure case is the one nobody else can report:
+`success=false` means the socket came back and the re-seed did not, so the
+book is stale and every price read from it is wrong. `StreamReconnected`
+alone says the opposite.
+
+**So a consumer that wants the whole picture needs both, and fm-robots
+ended up with two implementations of the second** -- `StreamHealth` for
+the robots and a hand-rolled handler in the Venture study -- because they
+live in modules that cannot reach each other. They have already diverged
+once: a fix making a successful recovery visible on the terminal had to be
+applied to each.
+
+**The JDK already solves this shape**, and the SDK is on the right side of
+it since 0.3.1. `System.Logger` with a `LoggerFinder` is a specialised
+`ServiceLoader`: a component logs, a host decides where that goes, neither
+knows the other. Turn the consumer-side reporters around the same way --
+
+```
+today:   reporter ──► RunLog        (so it must live where RunLog is reachable)
+with it: reporter ──► System.Logger ──► whatever the host installed
+```
+
+-- and the reachability problem that forced the duplicate disappears, because
+a reporter that logs depends on nothing but the JDK. One implementation can
+then live in a module depending only on fm-sdk.
+
+The host side is one `java.util.logging.Handler` installed at startup,
+piping into the run's own log file. Without a `LoggerFinder` on the path
+`System.Logger` delegates to JUL, so a handler captures everything --
+**including the SDK's own narration, which is today the one source that
+cannot reach a run log**. A study's file would then carry its period lines
+and the SDK's reconnect narration, interleaved and timestamped, which is
+exactly what was missing on 2026-09-22.
+
+**The trap, for whoever takes this.** JUL's default console handler must be
+REPLACED, not added to, or every line prints twice -- once from the new
+handler and once from JUL's own. That failure passes every test and
+surprises an operator, which is the worst combination.
+
+Not scheduled. It moves every reporter's output path at once, and the
+value is tidiness plus one genuine gain (the SDK's narration reaching the
+run log) rather than a capability nobody has.
 
 ---
 
