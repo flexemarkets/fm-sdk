@@ -32,7 +32,8 @@ Client SDKs for the [Flexemarkets](https://api.flexemarkets.com) trading API —
 | [docs/FM-ROBOTS.md](docs/FM-ROBOTS.md) | The `fm-manager` CLI, the robot agents, and the `fm-spi` plugin contract |
 | [docs/UPGRADING-0.1.md](docs/UPGRADING-0.1.md) | Migrating a codebase from 0.0.x to 0.1.x, in all three languages |
 | [docs/UPGRADING-0.2.md](docs/UPGRADING-0.2.md) | Migrating a codebase from 0.1.x to 0.2.x — the package moves, the renames, and the five changes that are not renames |
-| [docs/DESIGN-0.3.md](docs/DESIGN-0.3.md) | Public API changes under consideration for 0.3, and the ones already rejected |
+| [docs/UPGRADING-0.3.md](docs/UPGRADING-0.3.md) | Moving from 0.2.x to 0.3.x — which is additive, and says so |
+| [docs/DESIGN-0.4.md](docs/DESIGN-0.4.md) | Public API changes under consideration for 0.4, and the ones already rejected |
 
 Per-language quickstarts are in each SDK's README, linked from [Usage](#usage)
 below.
