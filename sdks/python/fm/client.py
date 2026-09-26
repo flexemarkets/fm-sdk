@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.metadata
 import json
 import logging
 import os
@@ -65,11 +66,26 @@ from .types import (
     Token,
 )
 
-def _read_version() -> str:
-    version_file = Path(__file__).resolve().parent.parent.parent.parent / "VERSION"
+_VERSION_FILE = Path(__file__).resolve().parent.parent.parent.parent / "VERSION"
+
+
+def _read_version(version_file: Path = _VERSION_FILE, distribution: str = "fm-sdk") -> str:
+    """This SDK's version, for the User-Agent fm-server keys its metrics by.
+
+    The repository's VERSION file first, which is where a checkout and a
+    vendored copy keep it. An installed wheel has no such file -- it sits in
+    site-packages, and four levels up is somebody else's directory -- so this
+    used to report ``0.0.0`` for every pip install. hatch stamps the
+    distribution's metadata from VERSION at build time, so that is the answer
+    there. The parameters exist so a test can stand up the installed case.
+    """
     try:
         return version_file.read_text().strip()
     except FileNotFoundError:
+        pass
+    try:
+        return importlib.metadata.version(distribution)
+    except importlib.metadata.PackageNotFoundError:
         return "0.0.0"
 
 _FM_NETWORK_CLIENT = f"fm-sdk-python/{_read_version()}"
