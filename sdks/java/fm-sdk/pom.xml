@@ -54,6 +54,25 @@
     </dependencies>
 
     <build>
+        <!-- sdk-version.properties is filtered so the User-Agent carries the
+             version actually built; nothing else is, so ${...} in the view
+             JSON under fm/views stays literal. -->
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+                <includes>
+                    <include>fm/internal/sdk-version.properties</include>
+                </includes>
+            </resource>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+                <excludes>
+                    <exclude>fm/internal/sdk-version.properties</exclude>
+                </excludes>
+            </resource>
+        </resources>
         <plugins>
             <!-- Self-contained published POM (no <parent>); see parent pluginManagement. -->
             <plugin>

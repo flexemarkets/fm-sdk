@@ -123,7 +123,26 @@ public class HttpFlexemarkets implements Flexemarkets {
 
         return new HttpFlexemarkets(properties);
     }
-    private static final String FM_SDK_CLIENT = "fm-sdk-java/0.1.0";
+    /**
+     * The User-Agent, naming this SDK and the version built. fm-server keys
+     * its endpoint metrics by it (fm-server#1012), cut to major.minor, to know
+     * which clients still call a route before retiring it. It was a constant,
+     * "fm-sdk-java/0.1.0", for every release from 0.1.0 to 0.3.3.
+     */
+    static final String FM_SDK_CLIENT = "fm-sdk-java/" + sdkVersion();
+
+    /** The version Maven filtered into sdk-version.properties, or 0.0.0 if it is missing. */
+    static String sdkVersion() {
+        try (var in = HttpFlexemarkets.class.getResourceAsStream("sdk-version.properties")) {
+            if (null == in) return "0.0.0";
+            var properties = new Properties();
+            properties.load(in);
+            String version = properties.getProperty("version", "").trim();
+            return version.isEmpty() || version.startsWith("${") ? "0.0.0" : version;
+        } catch (IOException e) {
+            return "0.0.0";
+        }
+    }
 
     // Jackson 3 mappers are immutable and built, not configured after the fact.
     // java.time support is in databind now, so there is no module to register.
