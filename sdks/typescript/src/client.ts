@@ -7,7 +7,6 @@
 import { readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { orderedSecurities, toOrderType, toSide, unitGrid } from "./types.js";
 import { toInstant } from "./timestamps.js";
 import type {
@@ -36,15 +35,7 @@ import {
   type Subscription,
 } from "./desk.js";
 import type { Snapshot } from "./snapshot.js";
-
-function readVersion(): string {
-  try {
-    const dir = fileURLToPath(new URL(".", import.meta.url));
-    return readFileSync(join(dir, "..", "..", "..", "VERSION"), "utf-8").trim();
-  } catch {
-    return "0.0.0";
-  }
-}
+import { readVersion } from "./version.js";
 
 const FM_NETWORK_CLIENT = `fm-sdk-typescript/${readVersion()}`;
 const DEFAULT_ENDPOINT = "https://api.flexemarkets.com";
