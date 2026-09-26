@@ -16,48 +16,60 @@ their status brought up to date. Items 2, 3 and 4 are new.
 
 ### 1. HAL-less and V1-only
 
-*Carried from DESIGN-0.3 §1. Still the headline item, still blocked, and the
-blocker is now a single issue rather than three.*
+*Carried from DESIGN-0.3 §1. Still the headline item, and no longer blocked:
+every route it needs has been served since fm-server 4.5.0. What is left is
+SDK work.*
 
 The SDK reads `GET /api`, pulls hrefs out of `_links` and rebases them onto the
 configured endpoint. It should call versioned `/v1` routes and mention HAL
 nowhere.
 
-**The dependency is narrower than the call-site count suggests.** All three SDKs
-resolve exactly five HAL link names — `accounts`, `marketplaces`, `orders`,
-`users`, `usersJson` — and derive every other path by appending segments. The 42
-`_uri*` sites in `sdks/python/fm/client.py` are 42 uses of those five. A `_v1()`
-helper already exists and is used at three call sites, so the shape of the
-answer is settled; what is left is how many links can point at it.
+**Why it should not wait.** fm-server 4.5.6 (2026-09-25) stopped exporting
+three Spring Data repositories, and the `marketplaces`, `orders` and `users`
+links left the API root with them. From that deploy until 4.5.7 restored them
+48 minutes later, every SDK client failed with "Link 'marketplaces' not found
+in API root": fm-manager, the Python SDK, the robots. Nothing on the server
+noticed, because the root still answered 200; it just lacked the links.
+fm-server now checks the root against the links released SDKs navigate
+(`RepositoryExportTest`), but a client that finds its routes through the root
+stays one server refactor away from the same outage.
 
-**Three routes are still missing, and they are the whole blocker.**
-fm-server#964, #965 and #966 were each closed on 2026-09-06 — *consolidated*,
-not resolved — into **[fm-server#968](https://github.com/adhocmarkets/fm-server/issues/968)**,
-which is open. Its own reasoning is why they travel together: the SDK cannot
-stop reading `_links` while any single name still lacks a versioned route, so
-shipping one or two of three buys a caller nothing and pays the
-review-and-deploy cost three times for one decision repeated.
+**The server side is done.** fm-server#968 is still open, but only for this
+SDK half. The note this item used to carry ("three routes are still missing")
+was wrong by the time it was written: the routes shipped in 4.5.0 (fm-server
+`e2305ea29`, `7c45832a0`), and #964, #965 and #966 closed into #968 because it
+covered them, not because it had not been done. See the 2026-09-08 comments
+on #968.
 
-> Read the three closures carefully before concluding this is unblocked. Three
-> `CLOSED [COMPLETED]` issues look exactly like three delivered routes, and they
-> are not.
+**What the SDK resolves is seven links, not five.** `accounts`,
+`marketplaces`, `orders`, `usersJson`, `sessionOrdersJson`, `symbolOrdersJson`
+and `symbolTradesJson`. The Python SDK also uses `users`, which Java and
+TypeScript do not, so the switch has to be audited in all three languages, not
+against one. Every other path is built by appending segments. A `_v1()`
+helper already exists and is used at three call sites.
+
+**Where each one goes**, checked against fm-server 4.5.7:
+
+| Root link | v1 route | Note |
+|---|---|---|
+| `accounts` | `POST` and `GET /api/v1/accounts`, `GET` and `DELETE /api/v1/accounts/{id}` | all four verbs the SDKs use. Sign-up (`POST`) is anonymous |
+| `usersJson` | `GET /api/v1/users` | same handler as `/api/users-json`, unpaginated, keeps the owner flag |
+| `users` (Python only) | `DELETE /api/v1/users/{id}` | |
+| `orders` | `POST /api/v1/marketplaces/{id}/orders` | submit, and cancel as an order with `type: CANCEL`. The marketplace moves from the body to the path, and a body that disagrees is refused |
+| `marketplaces` | `/api/v1/marketplaces/...` | `symbols()` is retired: read `symbol` off `/{id}/markets`. `privateTraders` is `/{id}/private-names`, a segment rather than a link, which is why a link count missed it |
+| `symbolOrdersJson` | `GET /api/v1/marketplaces/{id}/orders/active?symbol=` | |
+| `symbolTradesJson` | `GET /api/v1/marketplaces/{id}/orders/recent-trades?symbol=` | |
+| `sessionOrdersJson` | `GET /api/v1/marketplaces/{id}/orders/by-sessions` | **the one shape change:** MANAGER-gated and `List<Order>`, where V0 was ungated and returned `List<OrderDto>` |
 
 **Everything else the SDK reaches is already versioned.** `MarketplaceV1Controller`
 publishes `/{id}/markets`, `/{id}/markets/{marketId}`, `/{id}/holdings` with
 `me`, `uploads` and `downloads`, `/{id}/allocations`, `/{id}/allotments`, and
-`/{id}/sessions` with `open`, `pause`, `close` and `current`.
-`OrderV1Controller` covers `/active`, `/by-sessions`,
-`/market/{marketId}/standing` and `/recent-trades`; `TradeV1Controller` covers
-trades.
+`/{id}/sessions` with `open`, `pause`, `close` and `current`. `TradeV1Controller`
+covers trades.
 
-**The two halves decouple.** Everything reachable through `marketplaces`,
-`orders` and `users` can move to `_v1()` now, without waiting on fm-server. That
-shrinks the HAL dependency from five links to three and is worth doing on its
-own: it is the bulk of the 42 sites, and it makes what remains a three-line
-change once the routes land.
-
-Once all five are gone, `ApiRoot` and `_process_template` go with them. `ApiRoot`
-is already private in all three languages, so deleting it needs no version bump.
+Once all seven are gone, `ApiRoot` and `_process_template` go with them.
+`ApiRoot` is already private in all three languages, so deleting it needs no
+version bump.
 
 ### 2. Diagnostics: three languages, three postures
 
