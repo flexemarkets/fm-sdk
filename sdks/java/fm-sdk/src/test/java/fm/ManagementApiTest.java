@@ -12,7 +12,11 @@ import fm.model.Order;
 import fm.model.Person;
 import fm.model.Security;
 import fm.model.Session;
+import fm.model.Widget;
+import fm.model.WidgetPush;
+import fm.model.WidgetTarget;
 import fm.error.ApiException;
+import fm.error.HttpException;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -22,8 +26,10 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 
 import com.sun.net.httpserver.HttpExchange;
@@ -131,6 +137,28 @@ class ManagementApiTest {
             _respond(exchange, 200, _allotmentsJson());
         });
 
+        // Widgets: a push answers with what was stored; a delete answers 204
+        // for the key that exists and an empty 404 for one that does not.
+        _server.createContext("/api/v1/marketplaces/1/widgets", exchange -> {
+            _record(exchange);
+            var path = exchange.getRequestURI().getPath();
+            switch (exchange.getRequestMethod()) {
+                case "DELETE" -> {
+                    exchange.sendResponseHeaders(path.endsWith("/score") ? 204 : 404, -1);
+                    exchange.close();
+                }
+                case "POST" -> _respond(exchange, 200, _widgetsJson());
+                default -> _respond(exchange, 200, _widgetsJson());
+            }
+        });
+
+        // A marketplace that is not there: the 404 carries a failure document.
+        _server.createContext("/api/v1/marketplaces/2/widgets", exchange -> {
+            _record(exchange);
+            _respond(exchange, 404,
+                    "{\"error\":\"MARKETPLACE_NOT_FOUND\",\"message\":\"no marketplace 2\",\"status\":\"NOT_FOUND\"}");
+        });
+
         _server.createContext("/api/v1/marketplaces", exchange -> {
             _record(exchange);
             _respond(exchange, 200, "{\"id\":77,\"name\":\"simple-dividend\",\"markets\":[]}");
@@ -170,6 +198,18 @@ class ManagementApiTest {
         return """
             [{"id":5,"allocationId":42,"marketplaceId":1,"ownerId":8,"name":"alice",
               "assets":{"cash":10000,"grants":[{"marketId":10,"units":50}]}}]
+            """;
+    }
+
+    /** One stored widget per scope, as fm-server answers a push or a read of all. */
+    private static String _widgetsJson() {
+        return """
+            [{"createdDate":"2026-10-01T09:00:00","lastModifiedDate":"2026-10-01T09:00:05",
+              "id":31,"marketplaceId":1,"scope":"MARKETPLACE","key":"score","title":"Score",
+              "content":{"kind":"text","lines":["round 1"]}},
+             {"id":32,"marketplaceId":1,"scope":"USER","userId":8,"key":"values",
+              "emphasis":"strong","ttlSeconds":60,
+              "content":{"kind":"kv","items":[{"label":"value","value":120,"format":"price"}]}}]
             """;
     }
 
@@ -515,6 +555,85 @@ class ManagementApiTest {
                 .contains("filename=\"holdings.csv\"")
                 .contains("owner,cash");
         assertThat(created).hasSize(1);
+    }
+
+    /**
+     * A list goes up as one JSON array, whatever its length -- the server's
+     * rate limit counts requests, and sixty single pushes at session open is
+     * what it is there to refuse. The target travels nested, as the server
+     * reads it, and a marketplace target carries no userId.
+     */
+    @Test
+    void pushWidgetsPostsOneArray() throws Exception {
+        var pushes = List.of(
+                new WidgetPush(new WidgetTarget("MARKETPLACE", null), "score", "Score", null, null,
+                        Map.of("kind", "text", "lines", List.of("round 1"))),
+                new WidgetPush(new WidgetTarget("USER", 8L), "values", null, "strong", 60,
+                        Map.of("kind", "kv", "items", List.of(Map.of("label", "value", "value", 120)))));
+
+        List<Widget> stored;
+        try (Flexemarkets fm = _connect()) {
+            stored = fm.pushWidgets(1, pushes);
+        }
+
+        assertThat(_requests).containsOnlyOnce("POST /api/v1/marketplaces/1/widgets");
+        var body = _bodyOf("POST /api/v1/marketplaces/1/widgets").replace(" ", "");
+        assertThat(body).startsWith("[").endsWith("]")
+                .contains("\"target\":{\"scope\":\"USER\",\"userId\":8}")
+                .contains("\"target\":{\"scope\":\"MARKETPLACE\"}")
+                .contains("\"ttlSeconds\":60")
+                .contains("\"lines\":[\"round1\"]");
+
+        assertThat(stored).hasSize(2);
+        assertThat(stored.get(0).id()).isEqualTo(31L);
+        assertThat(stored.get(0).lastModifiedDate()).isEqualTo(Instant.parse("2026-10-01T09:00:05Z"));
+        assertThat(stored.get(1).userId()).isEqualTo(8L);
+        assertThat(stored.get(1).ttlSeconds()).isEqualTo(60);
+    }
+
+    @Test
+    void allWidgetsReadsTheManagerRoute() throws Exception {
+        List<Widget> all;
+        try (Flexemarkets fm = _connect()) {
+            all = fm.allWidgets(1);
+        }
+
+        assertThat(_requests).contains("GET /api/v1/marketplaces/1/widgets/all");
+        assertThat(all).extracting(Widget::key).containsExactly("score", "values");
+        assertThat(all.get(1).content()).containsEntry("kind", "kv");
+    }
+
+    /**
+     * 204 is removed and an empty 404 is nothing to remove: both are answers,
+     * and a robot clearing a key it may never have pushed should not have to
+     * catch an exception to find out which.
+     */
+    @Test
+    void removeWidgetAnswersWhetherAnythingWasThere() throws Exception {
+        try (Flexemarkets fm = _connect()) {
+            assertThat(fm.removeWidget(1, "score")).isTrue();
+            assertThat(fm.removeWidget(1, "absent")).isFalse();
+            assertThat(fm.removeWidget(1, "score", 8)).isTrue();
+        }
+
+        assertThat(_requests)
+                .contains("DELETE /api/v1/marketplaces/1/widgets/score")
+                .contains("DELETE /api/v1/marketplaces/1/widgets/absent")
+                .contains("DELETE /api/v1/marketplaces/1/widgets/score?userId=8");
+    }
+
+    /**
+     * A 404 carrying a failure document is not "nothing there" -- it is a
+     * marketplace that does not exist, and reading it as false would let a
+     * robot pointed at the wrong marketplace believe its clean-up worked.
+     */
+    @Test
+    void removeWidgetRaisesA404ThatSaysSomethingElse() throws Exception {
+        try (Flexemarkets fm = _connect()) {
+            assertThatThrownBy(() -> fm.removeWidget(2, "score"))
+                    .isInstanceOf(HttpException.class)
+                    .satisfies(e -> assertThat(((HttpException) e).statusCode()).isEqualTo(404));
+        }
     }
 
     /**
