@@ -57,8 +57,10 @@ TYPESCRIPT = [TYPESCRIPT_SRC / "types.ts", TYPESCRIPT_SRC / "hal.ts",
 # had already taught this once -- three types moved to fm.internal and vanished
 # from the comparison -- and rglob fixed it there, which a wire/not-wire split
 # rules out here. So the count is the guard, and lowering it is an edit someone
-# has to make on purpose. It went 18 -> 19 when Trade was added to all three.
-EXPECTED_SHARED = 19
+# has to make on purpose. It went 18 -> 19 when Trade was added to all three,
+# and 20 -> 23 with Widget, WidgetPush and WidgetTarget (the floor had stayed at
+# 19 when ParticipantState made it 20).
+EXPECTED_SHARED = 23
 
 # Divergences that are intended. Each needs a reason, so that adding one is a
 # decision someone wrote down rather than a way to silence the check.

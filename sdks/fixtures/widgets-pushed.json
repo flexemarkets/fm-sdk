@@ -1,0 +1,77 @@
+{
+  "type": "Widgets",
+  "why": "What a push and a read of all widgets answer: an array, with nulls omitted. The marketplace widget has no userId or ttlSeconds on the wire, and each must read as null -- a ttlSeconds defaulted to 0 is a widget the client blanks at once, and a userId defaulted to 0 re-pushed as a USER target names nobody. content is open per kind (a list of strings, a list of objects with a number in them), and an SDK that types it narrowly drops what the participant was meant to see.",
+  "source": {
+    "constructed": "widgets are cleared when a session closes, so GET /v1/marketplaces/{marketplaceId}/widgets/all on a capture server is usually empty and has no shape to compare. Modelled on fm-server's fm.data.widget.Widget (JsonInclude NON_NULL; createdBy/lastModifiedBy are JsonIgnore'd) and checked against a local push on 2026-10-01: the server stores an absent emphasis as normal and omits an absent userId and ttlSeconds."
+  },
+  "payload": [
+    {
+      "createdDate": "2026-10-01T09:00:00.125",
+      "lastModifiedDate": "2026-10-01T09:00:05.5",
+      "id": 31,
+      "marketplaceId": 3050,
+      "scope": "MARKETPLACE",
+      "key": "score",
+      "title": "Score",
+      "emphasis": "normal",
+      "content": {
+        "kind": "text",
+        "lines": ["round 1", "you are a buyer"]
+      }
+    },
+    {
+      "createdDate": "2026-10-01T09:00:00.125",
+      "lastModifiedDate": "2026-10-01T09:00:00.125",
+      "id": 32,
+      "marketplaceId": 3050,
+      "scope": "USER",
+      "userId": 7,
+      "key": "values",
+      "title": "Your values",
+      "emphasis": "strong",
+      "ttlSeconds": 60,
+      "content": {
+        "kind": "kv",
+        "items": [
+          {"label": "unit 1", "value": 120, "format": "price"},
+          {"label": "unit 2", "value": 95.5}
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "widgets": [
+      {
+        "createdDate": {"epochMilli": 1790845200125},
+        "lastModifiedDate": {"epochMilli": 1790845205500},
+        "id": 31,
+        "marketplaceId": 3050,
+        "scope": "MARKETPLACE",
+        "userId": null,
+        "key": "score",
+        "title": "Score",
+        "emphasis": "normal",
+        "ttlSeconds": null,
+        "content": {
+          "kind": "text",
+          "lines": ["round 1", "you are a buyer"]
+        }
+      },
+      {
+        "id": 32,
+        "scope": "USER",
+        "userId": 7,
+        "key": "values",
+        "emphasis": "strong",
+        "ttlSeconds": 60,
+        "content": {
+          "kind": "kv",
+          "items": [
+            {"label": "unit 1", "value": 120, "format": "price"},
+            {"label": "unit 2", "value": 95.5}
+          ]
+        }
+      }
+    ]
+  }
+}

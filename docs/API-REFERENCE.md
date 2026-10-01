@@ -361,6 +361,42 @@ marketplace and 2 a second per targeted participant, with a small burst; a
 batch over either is refused whole with `429 WIDGET_RATE_LIMITED`, and a
 malformed one with `400 WIDGET_INVALID` naming the field.
 
+From the SDKs, on a manager's connection — the push, the take-down and the
+read-back of everything; the participant snapshot, `limits` and `series` have
+no SDK call:
+
+| | Push | Take down | Everything pushed |
+|---|---|---|---|
+| Java | `List<Widget> pushWidgets(long marketplaceId, List<WidgetPush> widgets)` | `boolean removeWidget(long marketplaceId, String key)`, and `(…, long userId)` | `List<Widget> allWidgets(long marketplaceId)` |
+| Python | `push_widgets(marketplace_id, widgets) -> list[Widget]` | `remove_widget(marketplace_id, key, user_id=None) -> bool` | `all_widgets(marketplace_id) -> list[Widget]` |
+| TypeScript | `pushWidgets(marketplaceId, widgets): Promise<Widget[]>` | `removeWidget(marketplaceId, key, userId?): Promise<boolean>` | `allWidgets(marketplaceId): Promise<Widget[]>` |
+
+```python
+from fm import WidgetPush, WidgetTarget
+
+fm.push_widgets(marketplace_id, [
+    WidgetPush(key="role", title="Your role", emphasis="strong",
+               target=WidgetTarget("USER", user_id=8123),
+               content={"kind": "text", "lines": ["You are a SELLER"]}),
+])
+fm.remove_widget(marketplace_id, "role", user_id=8123)   # True; False if nothing was there
+```
+
+`pushWidgets` always sends one array, however many widgets, since the rate
+limit counts requests. `WidgetPush` and `WidgetTarget` are the body above,
+field for field; `content` is passed through as a map and checked by the
+server alone. `Widget` is what the server stored: the push's fields flattened
+(`scope`, `userId`), plus `id`, `marketplaceId` and the `createdDate` /
+`lastModifiedDate` of the first and latest push — `ttlSeconds` counts from the
+latter. The server stores an absent `emphasis` as `normal`.
+
+`removeWidget` answers `true` for a 204 and `false` for the empty 404 that
+means nothing was there; a 404 with a failure body (`MARKETPLACE_NOT_FOUND`)
+raises like any other failure. `400 WIDGET_INVALID` raises the SDK's
+invalid-argument error. `429 WIDGET_RATE_LIMITED` has no type of its own: it
+raises the generic HTTP error (`HttpException` / `HttpError`) with
+`statusCode` 429 — back off and push the batch again.
+
 ### Studies
 
 A study the platform can set up for a manager from its page — its own
