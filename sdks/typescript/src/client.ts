@@ -25,6 +25,8 @@ import type {
   Session,
   TickGrid,
   Token,
+  Widget,
+  WidgetPush,
 } from "./types.js";
 import { EventListener, NO_SEQ, type EventCallback } from "./stomp.js";
 import type { ApiRoot } from "./hal.js";
@@ -241,6 +243,41 @@ export function parseParticipantState(data: JsonObject): ParticipantState {
     ownerEmail: (data.ownerEmail as string) ?? null,
     fields: { ...((data.fields as Record<string, unknown>) ?? {}) },
   };
+}
+
+export function parseWidget(data: JsonObject): Widget {
+  return {
+    id: (data.id as number) ?? null,
+    marketplaceId: (data.marketplaceId as number) ?? null,
+    scope: (data.scope as string) ?? null,
+    userId: (data.userId as number) ?? null,
+    key: (data.key as string) ?? null,
+    title: (data.title as string) ?? null,
+    emphasis: (data.emphasis as string) ?? null,
+    ttlSeconds: (data.ttlSeconds as number) ?? null,
+    content: { ...((data.content as Record<string, unknown>) ?? {}) },
+    createdDate: toInstant(data.createdDate as string),
+    lastModifiedDate: toInstant(data.lastModifiedDate as string),
+  };
+}
+
+/**
+ * The wire form of a push: the target nested, nothing null.
+ *
+ * Absent rather than null so the body reads as the server documents it -- a
+ * marketplace target is `{"scope":"MARKETPLACE"}`, with no userId.
+ */
+function widgetPushJson(push: WidgetPush): JsonObject {
+  const body: JsonObject = { key: push.key, content: push.content };
+  if (push.target != null) {
+    body.target = push.target.userId != null
+      ? { scope: push.target.scope, userId: push.target.userId }
+      : { scope: push.target.scope };
+  }
+  if (push.title != null) body.title = push.title;
+  if (push.emphasis != null) body.emphasis = push.emphasis;
+  if (push.ttlSeconds != null) body.ttlSeconds = push.ttlSeconds;
+  return body;
 }
 
 function parseAllotment(data: JsonObject): Allotment {
@@ -1528,6 +1565,61 @@ export class Flexemarkets {
     const body = await resp.text();
     checkResponse(resp, body);
     return (JSON.parse(body) as JsonObject[]).map(parseParticipantState);
+  }
+
+  /**
+   * Push widgets to participants' screens, returning them as stored.
+   *
+   * One request for the whole list, which is what the server's rate limit is
+   * shaped for: a session-open that tells sixty traders their values is one
+   * push of sixty, not sixty pushes. A push to a target and key that already
+   * has a widget replaces it.
+   *
+   * Not staged, unlike an allocation: it reaches the screen as soon as the
+   * server stores it, and it is cleared when the session closes.
+   *
+   * The server checks the content and refuses a list with anything wrong in it
+   * as an InvalidArgumentError; nothing in the list is stored. Pushing faster
+   * than the server allows is answered 429, which arrives as an HttpError with
+   * that status: back off and push again.
+   */
+  async pushWidgets(marketplaceId: number, widgets: WidgetPush[]): Promise<Widget[]> {
+    const url = v1(this._endpoint, `/marketplaces/${marketplaceId}/widgets`);
+    const data = await this._post(url, widgets.map(widgetPushJson));
+    return (data as unknown as JsonObject[]).map(parseWidget);
+  }
+
+  /**
+   * Take down a widget: the marketplace's for `key`, or one participant's.
+   *
+   * True if one was removed, false if there was none to remove. With `userId`,
+   * only that participant's widget goes; their marketplace widget for the same
+   * key, if any, shows again.
+   *
+   * An empty 404 is the server saying nothing was there. A 404 carrying a
+   * failure document -- no such marketplace -- still throws, so a robot pointed
+   * at the wrong marketplace does not read its clean-up as done.
+   */
+  async removeWidget(marketplaceId: number, key: string, userId?: number): Promise<boolean> {
+    let url = v1(this._endpoint, `/marketplaces/${marketplaceId}/widgets/${encodeURIComponent(key)}`);
+    if (userId !== undefined && userId !== null) url += `?userId=${userId}`;
+    const resp = await fetch(url, {
+      method: "DELETE",
+      headers: { ...this._authHeaders(), Accept: "application/json", "User-Agent": FM_NETWORK_CLIENT },
+    });
+    const body = await resp.text();
+    if (resp.status === 404 && body.trim() === "") return false;
+    checkResponse(resp, body);
+    return true;
+  }
+
+  /**
+   * Every widget pushed to the marketplace and still standing, for every
+   * participant -- what a manager reads to check on a robot.
+   */
+  async allWidgets(marketplaceId: number): Promise<Widget[]> {
+    const data = await this._get(v1(this._endpoint, `/marketplaces/${marketplaceId}/widgets/all`));
+    return (data as unknown as JsonObject[]).map(parseWidget);
   }
 
   // -- events / WebSocket ----------------------------------------------------
