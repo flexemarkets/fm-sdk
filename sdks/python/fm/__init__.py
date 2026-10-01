@@ -38,6 +38,9 @@ from .types import (
     TickGrid,
     Version,
     Token,
+    Widget,
+    WidgetPush,
+    WidgetTarget,
 )
 
 __all__ = [
@@ -59,6 +62,9 @@ __all__ = [
     "Security",
     "Session",
     "TickGrid",
+    "Widget",
+    "WidgetPush",
+    "WidgetTarget",
     "ConflictFailure",
     "ManagerOtpBundle",
     "Token",

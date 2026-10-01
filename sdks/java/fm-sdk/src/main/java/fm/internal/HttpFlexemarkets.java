@@ -12,6 +12,8 @@ import fm.model.Market;
 import fm.model.Marketplace;
 import fm.model.Order;
 import fm.model.ParticipantState;
+import fm.model.Widget;
+import fm.model.WidgetPush;
 import fm.model.OrderSide;
 import fm.model.OrderType;
 import fm.model.Person;
@@ -189,6 +191,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     private static final TypeReference<List<Person>>         PERSONS_TYPE      = new TypeReference<>() {};
     private static final TypeReference<List<Allotment>>      ALLOTMENTS_TYPE   = new TypeReference<>() {};
     private static final TypeReference<List<ParticipantState>> PARTICIPANT_STATES_TYPE = new TypeReference<>() {};
+    private static final TypeReference<List<Widget>>         WIDGETS_TYPE      = new TypeReference<>() {};
 
     /**
      * Who the server should treat the caller as, rather than whoever the
@@ -841,6 +844,51 @@ public class HttpFlexemarkets implements Flexemarkets {
         return List.copyOf(_postMultipart(
                 _v1("/marketplaces/" + marketplaceId + "/state/uploads"),
                 "file", csv, PARTICIPANT_STATES_TYPE));
+    }
+
+    /** Always an array on the wire, even for one widget, so the answer is always a list. */
+    @Override
+    public List<Widget> pushWidgets(long marketplaceId, List<WidgetPush> widgets) {
+        return List.copyOf(_post(_v1("/marketplaces/" + marketplaceId + "/widgets"),
+                widgets, WIDGETS_TYPE));
+    }
+
+    @Override
+    public boolean removeWidget(long marketplaceId, String key) {
+        return _removeWidget(_v1("/marketplaces/" + marketplaceId + "/widgets/" + _segment(key)));
+    }
+
+    @Override
+    public boolean removeWidget(long marketplaceId, String key, long userId) {
+        return _removeWidget(_v1("/marketplaces/" + marketplaceId + "/widgets/" + _segment(key))
+                + "?userId=" + userId);
+    }
+
+    /**
+     * 404 with no body is the server saying there was nothing under that key.
+     * A 404 that carries a failure document is something else -- a marketplace
+     * that does not exist -- and is raised, not read as "already gone".
+     */
+    private boolean _removeWidget(String url) {
+        try {
+            _delete(url);
+            return true;
+        } catch (HttpException e) {
+            if (e.statusCode() == 404 && (e.body() == null || e.body().isBlank())) {
+                return false;
+            }
+            throw e;
+        }
+    }
+
+    /** A key is {@code [A-Za-z0-9_-]} on the server; encoded anyway, so a bad one is refused there rather than rerouted here. */
+    private static String _segment(String key) {
+        return java.net.URLEncoder.encode(key, StandardCharsets.UTF_8).replace("+", "%20");
+    }
+
+    @Override
+    public List<Widget> allWidgets(long marketplaceId) {
+        return List.copyOf(_get(_v1("/marketplaces/" + marketplaceId + "/widgets/all"), WIDGETS_TYPE));
     }
 
     /*

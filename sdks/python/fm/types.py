@@ -304,6 +304,60 @@ class ParticipantState:
 
 
 @dataclass
+class WidgetTarget:
+    """Who a pushed widget is for: the whole marketplace, or one participant.
+
+    ``scope`` is ``"MARKETPLACE"`` or ``"USER"``; ``user_id`` names the
+    participant for a ``USER`` widget and is None otherwise. A user-scoped
+    widget outranks a marketplace one of the same key for that participant.
+    """
+    scope: str
+    user_id: int | None = None
+
+
+@dataclass
+class WidgetPush:
+    """One widget as a study pushes it: content for the panel naming ``key``.
+
+    A push to the same target and key replaces the last one. ``content`` is a
+    closed schema the server enforces -- ``text``, ``kv``, ``table`` or
+    ``log``, each a ``kind`` plus its own fields, never markup -- and is passed
+    through as a dict so the server's validator is the one place the rules
+    live. ``target`` None means the marketplace; ``emphasis`` is ``normal``
+    (when None), ``strong`` or ``warn``; ``ttl_seconds`` blanks the panel that
+    long after the push, None for never.
+    """
+    key: str
+    content: dict[str, Any]
+    target: WidgetTarget | None = None
+    title: str | None = None
+    emphasis: str | None = None
+    ttl_seconds: int | None = None
+
+
+@dataclass
+class Widget:
+    """One pushed widget as the server stored it.
+
+    Identity is the marketplace, scope, participant and key: a push to the same
+    four replaces what was there. Every widget in a marketplace is cleared when
+    its session closes. ``last_modified_date`` is the last push, which is what
+    ``ttl_seconds`` counts from.
+    """
+    id: int | None = None
+    marketplace_id: int | None = None
+    scope: str | None = None
+    user_id: int | None = None
+    key: str | None = None
+    title: str | None = None
+    emphasis: str | None = None
+    ttl_seconds: int | None = None
+    content: dict[str, Any] = field(default_factory=dict)
+    created_date: "datetime | None" = None
+    last_modified_date: "datetime | None" = None
+
+
+@dataclass
 class ClientConnection:
     marketplace_id: int = 0
     connection_id: int = 0

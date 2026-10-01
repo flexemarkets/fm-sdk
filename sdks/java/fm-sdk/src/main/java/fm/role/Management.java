@@ -4,6 +4,8 @@ import fm.model.Holding;
 import fm.model.ParticipantState;
 import fm.model.Marketplace;
 import fm.model.Session;
+import fm.model.Widget;
+import fm.model.WidgetPush;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -130,4 +132,56 @@ public interface Management {
      * @return the state as stored, one row per participant
      */
     List<ParticipantState> uploadState(long marketplaceId, Path csv);
+
+    /**
+     * Push widgets to participants' screens, returning them as stored.
+     *
+     * <p>One request for the whole list, which is what the server's rate limit
+     * is shaped for: a session-open that tells sixty traders their values is
+     * one push of sixty, not sixty pushes. A push to a target and key that
+     * already has a widget replaces it.
+     *
+     * <p>Unlike an allocation this is not staged -- it reaches the screen as
+     * soon as the server stores it, and it is cleared when the session closes.
+     *
+     * <p>The server checks the content and refuses a list with anything wrong
+     * in it, as an {@link fm.error.InvalidArgumentException} naming the
+     * problem; nothing in the list is stored. Pushing faster than the server
+     * allows is answered 429, which arrives as an
+     * {@link fm.error.HttpException} with that status: back off and push again.
+     *
+     * @param marketplaceId the marketplace to push to
+     * @param widgets       the widgets, at least one
+     * @return the widgets as stored, in the order they were pushed
+     */
+    List<Widget> pushWidgets(long marketplaceId, List<WidgetPush> widgets);
+
+    /**
+     * Take down the marketplace's widget for a key.
+     *
+     * @param marketplaceId the marketplace to remove it from
+     * @param key           the widget's key
+     * @return true if a widget was removed, false if there was none to remove
+     */
+    boolean removeWidget(long marketplaceId, String key);
+
+    /**
+     * Take down one participant's widget for a key. Their marketplace widget
+     * for the same key, if there is one, is left alone and shows again.
+     *
+     * @param marketplaceId the marketplace to remove it from
+     * @param key           the widget's key
+     * @param userId        the participant it was pushed to
+     * @return true if a widget was removed, false if there was none to remove
+     */
+    boolean removeWidget(long marketplaceId, String key, long userId);
+
+    /**
+     * Every widget pushed to the marketplace and still standing, for every
+     * participant -- what a manager reads to check on a robot.
+     *
+     * @param marketplaceId the marketplace to read
+     * @return the widgets, marketplace-scoped and user-scoped alike
+     */
+    List<Widget> allWidgets(long marketplaceId);
 }

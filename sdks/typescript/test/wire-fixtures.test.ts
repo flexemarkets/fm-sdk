@@ -22,6 +22,7 @@ import { fileURLToPath } from "node:url";
 import {
   parseAccount, parseConnection, parseHolding, parseMarket, parseMarketplace,
   parseOrder, parseParticipantState, parsePerson, parseSecurity, parseSession, parseToken,
+  parseWidget,
   embeddedOrders,
 } from "../src/client.ts";
 import { parseSession as parseSessionOverWs } from "../src/stomp.ts";
@@ -47,6 +48,9 @@ const PARSERS: Record<string, [string, (data: Json) => unknown][]> = {
   Security: [["client", (d) => parseSecurity(d)]],
   Token: [["client", (d) => parseToken(d)]],
   ParticipantState: [["client", (d) => parseParticipantState(d)]],
+  // A push and a read of all widgets both answer with a bare array, read as a
+  // list -- which is what pushWidgets and allWidgets do with the body.
+  Widgets: [["client", (d) => ({ widgets: (d as unknown as Json[]).map((w) => parseWidget(w)) })]],
 };
 
 interface Fixture {

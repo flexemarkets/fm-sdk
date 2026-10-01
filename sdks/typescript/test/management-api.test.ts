@@ -16,7 +16,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { Flexemarkets } from "../src/client.ts";
+import { Flexemarkets, HttpError } from "../src/client.ts";
 import type { Holding } from "../src/types.ts";
 
 const TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl";
@@ -30,6 +30,20 @@ const ALLOTMENTS = [
     ownerId: 8,
     name: "alice",
     assets: { cash: 10000, grants: [{ marketId: 10, units: 50 }] },
+  },
+];
+
+/** One stored widget per scope, as fm-server answers a push or a read of all. */
+const WIDGETS = [
+  {
+    createdDate: "2026-10-01T09:00:00", lastModifiedDate: "2026-10-01T09:00:05",
+    id: 31, marketplaceId: 1, scope: "MARKETPLACE", key: "score", title: "Score",
+    content: { kind: "text", lines: ["round 1"] },
+  },
+  {
+    id: 32, marketplaceId: 1, scope: "USER", userId: 8, key: "values",
+    emphasis: "strong", ttlSeconds: 60,
+    content: { kind: "kv", items: [{ label: "value", value: 120, format: "price" }] },
   },
 ];
 
@@ -74,6 +88,17 @@ before(async () => {
             usersJson: { href: `${api()}/usersJson` },
           },
         });
+      } else if (url.startsWith("/api/v1/marketplaces/2/widgets")) {
+        // A marketplace that is not there: the 404 carries a failure document.
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "MARKETPLACE_NOT_FOUND", message: "no marketplace 2" }));
+      } else if (url.startsWith("/api/v1/marketplaces/1/widgets/") && req.method === "DELETE") {
+        // 204 for the key that exists, an empty 404 for one that does not.
+        res.writeHead(url.split("?")[0].endsWith("/score") ? 204 : 404);
+        res.end();
+      } else if (url === "/api/v1/marketplaces/1/widgets/all"
+                 || (url === "/api/v1/marketplaces/1/widgets" && req.method === "POST")) {
+        send(WIDGETS);
       } else if (url === "/api/v1/marketplaces" && req.method === "POST") {
         send({ id: 77, name: "simple-dividend", markets: [] });
       } else if (url.startsWith("/api/v1/marketplaces/1/sessions")
@@ -525,6 +550,80 @@ test("isAdmin reads the roles on the token", async () => {
   try {
     assert.equal(fm.isAdmin(), false, "ROLE_MANAGER is not ROLE_ADMIN");
     assert.equal(fm.token().token, TOKEN);
+  } finally {
+    fm.close();
+  }
+});
+
+test("pushWidgets posts one array", async () => {
+  // A list goes up as one JSON array, whatever its length -- the server's rate
+  // limit counts requests, and sixty single pushes at session open is what it
+  // is there to refuse. The target travels nested, as the server reads it, and
+  // a marketplace target carries no userId.
+  const fm = await connect();
+  let stored;
+  try {
+    stored = await fm.pushWidgets(1, [
+      { key: "score", title: "Score", target: { scope: "MARKETPLACE" },
+        content: { kind: "text", lines: ["round 1"] } },
+      { key: "values", emphasis: "strong", ttlSeconds: 60, target: { scope: "USER", userId: 8 },
+        content: { kind: "kv", items: [{ label: "value", value: 120 }] } },
+    ]);
+  } finally {
+    fm.close();
+  }
+
+  assert.deepEqual(requests.filter((r) => r.startsWith("POST")), ["POST /api/v1/marketplaces/1/widgets"]);
+  const body = JSON.parse(bodies.get("POST /api/v1/marketplaces/1/widgets") ?? "null");
+  assert.ok(Array.isArray(body) && body.length === 2);
+  assert.deepEqual(body[0].target, { scope: "MARKETPLACE" });
+  assert.deepEqual(body[1].target, { scope: "USER", userId: 8 });
+  assert.equal(body[1].ttlSeconds, 60);
+  assert.ok(!("title" in body[1]), "an absent title is absent, not null");
+
+  assert.deepEqual(stored.map((w) => w.id), [31, 32]);
+  assert.equal(stored[0].lastModifiedDate?.getTime(), Date.UTC(2026, 9, 1, 9, 0, 5));
+  assert.equal(stored[1].userId, 8);
+  assert.equal(stored[1].ttlSeconds, 60);
+});
+
+test("allWidgets reads the manager route", async () => {
+  const fm = await connect();
+  try {
+    const widgets = await fm.allWidgets(1);
+    assert.deepEqual(widgets.map((w) => w.key), ["score", "values"]);
+    assert.equal(widgets[1].content.kind, "kv");
+  } finally {
+    fm.close();
+  }
+  assert.ok(requests.includes("GET /api/v1/marketplaces/1/widgets/all"));
+});
+
+test("removeWidget answers whether anything was there", async () => {
+  // 204 is removed and an empty 404 is nothing to remove: both are answers,
+  // and a robot clearing a key it may never have pushed should not have to
+  // catch an exception to find out which.
+  const fm = await connect();
+  try {
+    assert.equal(await fm.removeWidget(1, "score"), true);
+    assert.equal(await fm.removeWidget(1, "absent"), false);
+    assert.equal(await fm.removeWidget(1, "score", 8), true);
+  } finally {
+    fm.close();
+  }
+  assert.ok(requests.includes("DELETE /api/v1/marketplaces/1/widgets/score"));
+  assert.ok(requests.includes("DELETE /api/v1/marketplaces/1/widgets/absent"));
+  assert.ok(requests.includes("DELETE /api/v1/marketplaces/1/widgets/score?userId=8"));
+});
+
+test("removeWidget throws a 404 that says something else", async () => {
+  // A 404 carrying a failure document is not "nothing there" -- it is a
+  // marketplace that does not exist, and reading it as false would let a robot
+  // pointed at the wrong marketplace believe its clean-up worked.
+  const fm = await connect();
+  try {
+    await assert.rejects(fm.removeWidget(2, "score"),
+      (e: unknown) => e instanceof HttpError && e.statusCode === 404);
   } finally {
     fm.close();
   }

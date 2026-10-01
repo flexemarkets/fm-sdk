@@ -21,6 +21,7 @@ public record StudyView(String id, String label, String description, String temp
     /** The placeholder a template carries where the market's symbol goes. */
     public static final String SYMBOL = "{{symbol}}";
 
+    /** Refuses a view with any part missing: each is read by a menu or a renderer. */
     public StudyView {
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(label, "label");
@@ -28,7 +29,12 @@ public record StudyView(String id, String label, String description, String temp
         Objects.requireNonNull(template, "template");
     }
 
-    /** The document for a marketplace whose market is {@code symbol}. */
+    /**
+     * The document for a marketplace whose market is {@code symbol}.
+     *
+     * @param symbol the market's symbol
+     * @return the template with the placeholder replaced
+     */
     public String render(String symbol) {
         return template.replace(SYMBOL, Objects.requireNonNull(symbol, "symbol"));
     }

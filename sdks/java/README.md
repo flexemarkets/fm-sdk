@@ -153,6 +153,20 @@ try (var fm = Flexemarkets.connect(null, null, "my-study")) {
 `allotments(marketplaceId, allocationId)` reads back the opening positions of a
 particular allocation.
 
+During a run, a study can put content on participants' screens — the
+marketplace's panel, or one trader's — with `pushWidgets`, take it down with
+`removeWidget`, and read back everything standing with `allWidgets`:
+
+```java
+fm.pushWidgets(marketplaceId, List.of(
+        new WidgetPush(new WidgetTarget("USER", 8123L), "role", "Your role", "strong", null,
+                Map.of("kind", "text", "lines", List.of("You are a SELLER")))));
+boolean removed = fm.removeWidget(marketplaceId, "role", 8123L);
+```
+
+See the widgets section of [API-REFERENCE.md](../../docs/API-REFERENCE.md) for
+the content kinds and rate limits.
+
 These methods are `default` on `Flexemarkets` and throw
 `UnsupportedOperationException`, so an implementation that only trades — a test
 fake, a read-only provider — stays valid without stubbing them.

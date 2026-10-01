@@ -76,9 +76,19 @@ class WireFixturesTest {
      */
     record OrdersSnapshot(java.util.List<fm.model.Order> orders) { }
 
+    /**
+     * A push and a read of all widgets both answer with a bare array, and the
+     * SDK reads it as a list rather than one record at a time -- so the fixture
+     * does too.
+     */
+    record Widgets(java.util.List<fm.model.Widget> widgets) { }
+
+    private static final tools.jackson.core.type.TypeReference<java.util.List<fm.model.Widget>> WIDGETS =
+            new tools.jackson.core.type.TypeReference<>() { };
+
     /** Types the fixture run handles by a route other than {@link #TYPES}. */
     private static final java.util.Set<String> HANDLED_WITHOUT_A_TYPE =
-            java.util.Set.of("OrdersSnapshot");
+            java.util.Set.of("OrdersSnapshot", "Widgets");
 
     record Fixture(String name, String type, JsonNode payload, JsonNode expect) {
         @Override
@@ -107,6 +117,8 @@ class WireFixturesTest {
         if ("OrdersSnapshot".equals(fixture.type())) {
             parsed = new OrdersSnapshot(HttpFlexemarkets._unwrapOrders(
                     new fm.Snapshot<>(fixture.payload(), fm.Snapshot.NO_SEQ)).body());
+        } else if ("Widgets".equals(fixture.type())) {
+            parsed = new Widgets(HttpFlexemarkets.MAPPER.convertValue(fixture.payload(), WIDGETS));
         } else {
             var type = TYPES.get(fixture.type());
             assertNotNull(type, "no Java type mapped for " + fixture.type());

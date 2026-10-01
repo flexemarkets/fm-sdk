@@ -41,6 +41,10 @@ PARSERS: dict[str, list[tuple[str, Callable[[dict[str, Any]], Any]]]] = {
     "Security": [("client", rest._parse_security)],
     "Token": [("client", rest._parse_token)],
     "ParticipantState": [("client", rest._parse_participant_state)],
+    # A push and a read of all widgets both answer with a bare array, read as
+    # a list -- which is what push_widgets and all_widgets do with the body.
+    "Widgets": [("client", lambda body: SimpleNamespace(
+        widgets=[rest._parse_widget(w) for w in body]))],
     # Not a parser but a shape the SDK has to recognise, which is why it has
     # broken twice. This is exactly what active_orders/recent_trades do with a
     # response body.

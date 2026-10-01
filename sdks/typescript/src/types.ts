@@ -91,6 +91,60 @@ export interface ParticipantState {
   fields: Record<string, unknown>;
 }
 
+/**
+ * Who a pushed widget is for: the whole marketplace, or one participant.
+ *
+ * `scope` is `"MARKETPLACE"` or `"USER"`; `userId` names the participant for a
+ * `USER` widget. A user-scoped widget outranks a marketplace one of the same key
+ * for that participant.
+ */
+export interface WidgetTarget {
+  scope: string;
+  userId?: number | null;
+}
+
+/**
+ * One widget as a study pushes it: content for the panel naming `key`.
+ *
+ * A push to the same target and key replaces the last one. `content` is a
+ * closed schema the server enforces -- `text`, `kv`, `table` or `log`, each a
+ * `kind` plus its own fields, never markup -- and is passed through as an
+ * object so the server's validator is the one place the rules live. An absent
+ * `target` means the marketplace; `emphasis` is `normal` (when absent),
+ * `strong` or `warn`; `ttlSeconds` blanks the panel that long after the push,
+ * absent for never.
+ */
+export interface WidgetPush {
+  target?: WidgetTarget | null;
+  key: string;
+  title?: string | null;
+  emphasis?: string | null;
+  ttlSeconds?: number | null;
+  content: Record<string, unknown>;
+}
+
+/**
+ * One pushed widget as the server stored it.
+ *
+ * Identity is the marketplace, scope, participant and key: a push to the same
+ * four replaces what was there. Every widget in a marketplace is cleared when
+ * its session closes. `lastModifiedDate` is the last push, which is what
+ * `ttlSeconds` counts from.
+ */
+export interface Widget {
+  id: number | null;
+  marketplaceId: number | null;
+  scope: string | null;
+  userId: number | null;
+  key: string | null;
+  title: string | null;
+  emphasis: string | null;
+  ttlSeconds: number | null;
+  content: Record<string, unknown>;
+  createdDate: Date | null;
+  lastModifiedDate: Date | null;
+}
+
 export interface Holding {
   marketplaceId: number;
   sessionId: number;

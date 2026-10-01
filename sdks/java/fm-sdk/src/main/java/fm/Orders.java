@@ -51,6 +51,9 @@ public final class Orders {
      * order behind, so from the position's point of desk the original is
      * finished either way — which is why this is one predicate and not
      * {@code isConsumed(o) || isSplit(o)} spelled out at every call site.
+     *
+     * @param order the order to ask about; null is not consumed
+     * @return true if anything has consumed it
      */
     public static boolean isConsumedOrSplit(Order order) {
         return null != order && null != order.consumer();
@@ -62,6 +65,10 @@ public final class Orders {
      *
      * <p>Exactly the kind of question this class exists for: it cannot be
      * answered by either order alone, only by the reference between them.
+     *
+     * @param lhs the order that may have supplied {@code rhs}
+     * @param rhs the order that may have been supplied by {@code lhs}
+     * @return true if {@code rhs} names {@code lhs} as its supplier
      */
     public static boolean isSupplier(Order lhs, Order rhs) {
         return null != lhs && null != rhs && 0 == Long.compare(lhs.id(), rhs.supplier());
@@ -75,6 +82,12 @@ public final class Orders {
      * leaves the rest to the exchange. Naming those seven at the call site
      * beats a constructor of mostly nulls, and the alternative — every
      * consumer writing this factory — is how it came to exist twice already.
+     *
+     * @param market the market to trade in; its marketplace and symbol are used
+     * @param side   buy or sell
+     * @param units  how many units
+     * @param price  the limit price
+     * @return the order, with every server-assigned component left empty
      */
     public static Order limit(Market market, OrderSide side, long units, long price) {
         return new Order(
@@ -90,6 +103,13 @@ public final class Orders {
                 null, null);         // ownerTarget, clientDescription
     }
 
+    /**
+     * True once an order has a real consumer: neither null nor the {@code 0}
+     * a split leaves -- see {@code docs/ORDER-MODEL.md}.
+     *
+     * @param order the order to ask about; null is not consumed
+     * @return true if another order consumed it
+     */
     public static boolean isConsumed(Order order) {
         if (order != null) {
             var consumer = order.consumer();
