@@ -25,12 +25,21 @@ public final class StudyViews {
 
     private StudyViews() {}
 
-    /** Every study view shipped, in the index's order. */
+    /**
+     * Every study view shipped, in the index's order.
+     *
+     * @return the views
+     */
     public static List<StudyView> all() {
         return ALL;
     }
 
-    /** The view for the study named {@code id}, if one is shipped. */
+    /**
+     * The view for the study named {@code id}, if one is shipped.
+     *
+     * @param id the study's short name
+     * @return the view, or empty when none is shipped under that name
+     */
     public static Optional<StudyView> of(String id) {
         return ALL.stream().filter(view -> view.id().equals(id)).findFirst();
     }
