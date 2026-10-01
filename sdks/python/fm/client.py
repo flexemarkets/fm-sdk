@@ -11,6 +11,7 @@ import re
 import threading
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import quote
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -64,6 +65,8 @@ from .types import (
     Session,
     TickGrid,
     Token,
+    Widget,
+    WidgetPush,
 )
 
 _VERSION_FILE = Path(__file__).resolve().parent.parent.parent.parent / "VERSION"
@@ -268,6 +271,41 @@ def _parse_participant_state(data: dict[str, Any]) -> ParticipantState:
         owner_email=data.get("ownerEmail"),
         fields=dict(data.get("fields") or {}),
     )
+
+
+def _parse_widget(data: dict[str, Any]) -> Widget:
+    return Widget(
+        id=data.get("id"),
+        marketplace_id=data.get("marketplaceId"),
+        scope=data.get("scope"),
+        user_id=data.get("userId"),
+        key=data.get("key"),
+        title=data.get("title"),
+        emphasis=data.get("emphasis"),
+        ttl_seconds=data.get("ttlSeconds"),
+        content=dict(data.get("content") or {}),
+        created_date=_timestamp(data.get("createdDate")),
+        last_modified_date=_timestamp(data.get("lastModifiedDate")),
+    )
+
+
+def _widget_push_json(push: WidgetPush) -> dict[str, Any]:
+    """The wire form of a push: camelCase, the target nested, nothing null.
+
+    Absent rather than null so the body reads as the server documents it -- a
+    marketplace target is ``{"scope": "MARKETPLACE"}``, with no userId.
+    """
+    body: dict[str, Any] = {"key": push.key, "content": push.content}
+    if push.target is not None:
+        target: dict[str, Any] = {"scope": push.target.scope}
+        if push.target.user_id is not None:
+            target["userId"] = push.target.user_id
+        body["target"] = target
+    for name, value in (("title", push.title), ("emphasis", push.emphasis),
+                        ("ttlSeconds", push.ttl_seconds)):
+        if value is not None:
+            body[name] = value
+    return body
 
 
 def _parse_connection(data: dict[str, Any]) -> ClientConnection:
@@ -1374,6 +1412,56 @@ class Flexemarkets:
             )
         _check_response(resp)
         return [_parse_participant_state(s) for s in resp.json()]
+
+    def push_widgets(self, marketplace_id: int, widgets: list[WidgetPush]) -> list[Widget]:
+        """Push widgets to participants' screens, returning them as stored.
+
+        One request for the whole list, which is what the server's rate limit
+        is shaped for: a session-open that tells sixty traders their values is
+        one push of sixty, not sixty pushes. A push to a target and key that
+        already has a widget replaces it.
+
+        Not staged, unlike an allocation: it reaches the screen as soon as the
+        server stores it, and it is cleared when the session closes.
+
+        The server checks the content and refuses a list with anything wrong
+        in it as :class:`~fm.exceptions.InvalidArgumentError`; nothing in the
+        list is stored. Pushing faster than the server allows is answered 429,
+        which arrives as :class:`~fm.exceptions.HttpError` with that status:
+        back off and push again.
+        """
+        url = _v1(self._endpoint, f"/marketplaces/{marketplace_id}/widgets")
+        resp = self._post(url, [_widget_push_json(w) for w in widgets])
+        return [_parse_widget(w) for w in resp.json()]
+
+    def remove_widget(
+        self, marketplace_id: int, key: str, user_id: int | None = None,
+    ) -> bool:
+        """Take down a widget: the marketplace's for ``key``, or one participant's.
+
+        True if one was removed, False if there was none to remove. With
+        ``user_id``, only that participant's widget goes; their marketplace
+        widget for the same key, if any, shows again.
+
+        An empty 404 is the server saying nothing was there. A 404 carrying a
+        failure document -- no such marketplace -- still raises, so a robot
+        pointed at the wrong marketplace does not read its clean-up as done.
+        """
+        url = _v1(self._endpoint,
+                  f"/marketplaces/{marketplace_id}/widgets/{quote(key, safe='')}")
+        if user_id is not None:
+            url += f"?userId={user_id}"
+        resp = self._http.delete(url, headers=self._auth_headers())
+        if resp.status_code == 404 and not resp.text.strip():
+            return False
+        _check_response(resp)
+        return True
+
+    def all_widgets(self, marketplace_id: int) -> list[Widget]:
+        """Every widget pushed to the marketplace and still standing, for every
+        participant -- what a manager reads to check on a robot."""
+        url = _v1(self._endpoint, f"/marketplaces/{marketplace_id}/widgets/all")
+        return [_parse_widget(w) for w in self._get(url).json()]
 
     def allotments(self, marketplace_id: int, allocation_id: int) -> list[Allotment]:
         """The opening positions of one allocation.

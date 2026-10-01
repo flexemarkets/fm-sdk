@@ -14,8 +14,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import pytest
 
 from fm.client import Flexemarkets
-from fm.exceptions import InvalidArgumentError
-from fm.types import Holding, Security
+from fm.exceptions import HttpError, InvalidArgumentError
+from fm.types import Holding, Security, WidgetPush, WidgetTarget
 
 TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl"
 
@@ -31,6 +31,20 @@ ALLOTMENTS = [
     }
 ]
 
+# One stored widget per scope, as fm-server answers a push or a read of all.
+WIDGETS = [
+    {
+        "createdDate": "2026-10-01T09:00:00", "lastModifiedDate": "2026-10-01T09:00:05",
+        "id": 31, "marketplaceId": 1, "scope": "MARKETPLACE", "key": "score", "title": "Score",
+        "content": {"kind": "text", "lines": ["round 1"]},
+    },
+    {
+        "id": 32, "marketplaceId": 1, "scope": "USER", "userId": 8, "key": "values",
+        "emphasis": "strong", "ttlSeconds": 60,
+        "content": {"kind": "kv", "items": [{"label": "value", "value": 120, "format": "price"}]},
+    },
+]
+
 requests: list[tuple[str, str]] = []
 bodies: dict[str, str] = {}
 
@@ -39,9 +53,9 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):  # keep the test output clean
         pass
 
-    def _send(self, payload, content_type="application/json"):
+    def _send(self, payload, content_type="application/json", status=200):
         body = payload.encode() if isinstance(payload, str) else json.dumps(payload).encode()
-        self.send_response(200)
+        self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
@@ -62,6 +76,8 @@ class Handler(BaseHTTPRequestHandler):
                 "person": {"id": 7, "accountId": 1, "email": "dev@dev"},
                 "account": {"id": 1, "name": "dev"},
             })
+        elif self.path == "/api/v1/marketplaces/1/widgets/all":
+            self._send(WIDGETS)
         elif self.path.startswith("/api/v1/marketplaces/1/allotments"):
             self._send(ALLOTMENTS)
         elif self.path == "/api":
@@ -84,8 +100,24 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._send([])
 
+    def do_DELETE(self):
+        self._record()
+        if self.path.startswith("/api/v1/marketplaces/2/"):
+            # A marketplace that is not there: the 404 carries a failure document.
+            self._send({"error": "MARKETPLACE_NOT_FOUND", "message": "no marketplace 2",
+                        "status": "NOT_FOUND"}, status=404)
+            return
+        # 204 for the key that exists, an empty 404 for one that does not.
+        found = self.path.split("?")[0].endswith("/score")
+        self.send_response(204 if found else 404)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def do_POST(self):
         self._record()
+        if self.path == "/api/v1/marketplaces/1/widgets":
+            self._send(WIDGETS)
+            return
         if self.path == "/api/v1/marketplaces":
             self._send({"id": 77, "name": "simple-dividend", "markets": []})
             return
@@ -288,3 +320,62 @@ def test_the_token_is_the_one_signed_in_with(fm):
     identity without holding the password again.
     """
     assert fm.token().token == TOKEN
+
+
+def test_push_widgets_posts_one_array(fm):
+    """A list goes up as one JSON array, whatever its length -- the server's
+    rate limit counts requests, and sixty single pushes at session open is what
+    it is there to refuse. The target travels nested, as the server reads it,
+    and a marketplace target carries no userId.
+    """
+    stored = fm.push_widgets(1, [
+        WidgetPush(key="score", title="Score", target=WidgetTarget("MARKETPLACE"),
+                   content={"kind": "text", "lines": ["round 1"]}),
+        WidgetPush(key="values", emphasis="strong", ttl_seconds=60,
+                   target=WidgetTarget("USER", user_id=8),
+                   content={"kind": "kv", "items": [{"label": "value", "value": 120}]}),
+    ])
+
+    assert [r for r in requests if r[0] == "POST"] == [("POST", "/api/v1/marketplaces/1/widgets")]
+    body = json.loads(bodies["POST /api/v1/marketplaces/1/widgets"])
+    assert isinstance(body, list) and len(body) == 2
+    assert body[0]["target"] == {"scope": "MARKETPLACE"}
+    assert body[1]["target"] == {"scope": "USER", "userId": 8}
+    assert body[1]["ttlSeconds"] == 60
+    assert "ttl_seconds" not in body[1], "the wire is camelCase"
+    assert "title" not in body[1], "an absent title is absent, not null"
+
+    assert [w.id for w in stored] == [31, 32]
+    assert stored[0].last_modified_date == datetime(2026, 10, 1, 9, 0, 5, tzinfo=UTC)
+    assert stored[1].user_id == 8
+    assert stored[1].ttl_seconds == 60
+
+
+def test_all_widgets_reads_the_manager_route(fm):
+    widgets = fm.all_widgets(1)
+
+    assert ("GET", "/api/v1/marketplaces/1/widgets/all") in requests
+    assert [w.key for w in widgets] == ["score", "values"]
+    assert widgets[1].content["kind"] == "kv"
+
+
+def test_remove_widget_answers_whether_anything_was_there(fm):
+    """204 is removed and an empty 404 is nothing to remove: both are answers,
+    and a robot clearing a key it may never have pushed should not have to
+    catch an exception to find out which."""
+    assert fm.remove_widget(1, "score") is True
+    assert fm.remove_widget(1, "absent") is False
+    assert fm.remove_widget(1, "score", user_id=8) is True
+
+    assert ("DELETE", "/api/v1/marketplaces/1/widgets/score") in requests
+    assert ("DELETE", "/api/v1/marketplaces/1/widgets/absent") in requests
+    assert ("DELETE", "/api/v1/marketplaces/1/widgets/score?userId=8") in requests
+
+
+def test_remove_widget_raises_a_404_that_says_something_else(fm):
+    """A 404 carrying a failure document is not "nothing there" -- it is a
+    marketplace that does not exist, and reading it as False would let a robot
+    pointed at the wrong marketplace believe its clean-up worked."""
+    with pytest.raises(HttpError) as raised:
+        fm.remove_widget(2, "score")
+    assert raised.value.status_code == 404
