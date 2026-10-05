@@ -104,6 +104,37 @@ public class FlexemarketsEndpointTest {
         }
     }
 
+    /**
+     * {@code $FM_API_URL} names the server even when {@code ~/.fm/endpoint}
+     * names another. The help text says so, and the Python and TypeScript
+     * SDKs do so; Java read the environment first and then let the file
+     * overwrite it. A script that checks its target is local and exports
+     * {@code FM_API_URL} -- the scenarios' {@code lecture.sh} -- then created
+     * its users wherever {@code ~/.fm/endpoint} pointed.
+     */
+    @Test
+    public void fmApiUrlWinsOverTheEndpointFile(@TempDir Path home) throws Exception {
+        Files.createDirectories(home.resolve(".fm"));
+        Files.writeString(home.resolve(".fm/endpoint"), "endpoint=https://api.flexemarkets.com/api/marketplaces/2540\n");
+
+        var properties = HttpFlexemarkets.setDefaultProperties(
+            name -> "FM_API_URL".equals(name) ? "http://127.0.0.1:8090/api" : null, home);
+
+        assertThat(properties.getProperty("endpoint")).isEqualTo("http://127.0.0.1:8090/api");
+        assertThat(properties.getProperty("endpoint-source")).isEqualTo("$FM_API_URL");
+    }
+
+    /** Without {@code $FM_API_URL}, the endpoint file still names the server. */
+    @Test
+    public void theEndpointFileNamesTheServerWithoutFmApiUrl(@TempDir Path home) throws Exception {
+        Files.createDirectories(home.resolve(".fm"));
+        Files.writeString(home.resolve(".fm/endpoint"), "endpoint=http://localhost:8080/api/marketplaces/2540\n");
+
+        var properties = HttpFlexemarkets.setDefaultProperties(name -> null, home);
+
+        assertThat(properties.getProperty("endpoint")).isEqualTo("http://localhost:8080/api/marketplaces/2540");
+    }
+
     @Test
     public void nonIdNonFileNonUrlIsRejected() {
         assertThatThrownBy(() -> HttpFlexemarkets.loadProperties(null, "not a valid endpoint", "fm-endpoint-test"))
