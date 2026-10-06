@@ -51,7 +51,6 @@ import java.nio.channels.UnresolvedAddressException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -1439,16 +1438,16 @@ public class HttpFlexemarkets implements Flexemarkets {
                 .GET()
                 .build();
         } else {
+            // The credentials go in the body only. A Basic header as well made
+            // the server's Basic filter check the password before /tokens did,
+            // so every sign-in hashed it twice -- two of the few concurrent
+            // hashes fm-server allows during a class's sign-in burst.
             var username = account + "|" + email;
-            var basicAuth = "Basic " + Base64.getEncoder().encodeToString(
-                (username + ":" + password).getBytes(StandardCharsets.UTF_8));
-
             var body = Map.of("username", username, "password", password);
             try {
                 var json = MAPPER.writeValueAsString(body);
                 request = HttpRequest.newBuilder()
                     .uri(URI.create(endpoint))
-                    .header("Authorization", basicAuth)
                     .header("Content-Type", "application/json")
                     .header("Accept", "application/json")
                     .header("User-Agent", FM_SDK_CLIENT)
