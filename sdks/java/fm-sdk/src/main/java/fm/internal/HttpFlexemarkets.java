@@ -55,6 +55,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.function.Function;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
@@ -1865,7 +1866,7 @@ public class HttpFlexemarkets implements Flexemarkets {
      * @throws IOException if a named credential file cannot be read
      */
     public static Properties loadProperties(String credential, String endpoint, String clientDescription) throws IOException {
-        var properties = _setDefaultProperties();
+        var properties = setDefaultProperties(System::getenv, Path.of(System.getProperty("user.home")));
 
         if (credential != null) {
             _loadCredential(properties, credential);
@@ -1892,22 +1893,36 @@ public class HttpFlexemarkets implements Flexemarkets {
         return properties;
     }
 
-    private static Properties _setDefaultProperties() {
+    /**
+     * The endpoint and credential before any argument: {@code $FM_API_URL},
+     * {@code ~/.fm/credential} and {@code ~/.fm/endpoint}, and where the
+     * endpoint came from. The environment and home directory are parameters
+     * so that a test can supply them; callers pass the real ones.
+     */
+    static Properties setDefaultProperties(Function<String, String> env, Path home) {
         var properties = new Properties();
 
         properties.setProperty("account", "");
         properties.setProperty("email", "");
         properties.setProperty("password", "");
 
-        var envUrl = System.getenv("FM_API_URL");
-        properties.setProperty("endpoint", envUrl != null ? envUrl : Endpoints.DEFAULT_HOST);
-        properties.setProperty("endpoint-source", envUrl != null ? "$FM_API_URL" : "the default host");
+        properties.setProperty("endpoint", Endpoints.DEFAULT_HOST);
+        properties.setProperty("endpoint-source", "the default host");
 
         for (var file : List.of("credential", "endpoint")) {
-            var filePath = Path.of(System.getProperty("user.home"), ".fm", file);
+            var filePath = home.resolve(".fm").resolve(file);
             var before = properties.getProperty("endpoint");
             _loadConfiguration(properties, filePath);
             _noteEndpointSource(properties, before, _abbreviate(filePath));
+        }
+
+        // Last, so it wins over the files, as in the Python and TypeScript
+        // SDKs: a script that sets FM_API_URL to aim at a server must reach
+        // that server, not whichever one ~/.fm/endpoint names.
+        var envUrl = env.apply("FM_API_URL");
+        if (envUrl != null && !envUrl.isBlank()) {
+            properties.setProperty("endpoint", envUrl);
+            properties.setProperty("endpoint-source", "$FM_API_URL");
         }
 
         return properties;
