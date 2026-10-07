@@ -192,11 +192,9 @@ def _parse_event(frame: StompFrame) -> object | None:
         log.warning("Unresolved payload type, headers: %s", frame.headers)
         return None
 
-    try:
-        data = json.loads(frame.body) if frame.body else None
-    except json.JSONDecodeError:
-        log.warning("Failed to decode JSON body for %s", msg_type)
-        return None
+    # A body that is not JSON raises, and the receive loop reports the frame
+    # as unreadable -- as Java always has -- instead of it vanishing here.
+    data = json.loads(frame.body) if frame.body else None
 
     match msg_type:
         case "VERSION":
@@ -513,7 +511,18 @@ class EventListener:
                 frame = _decode_frame(raw)
 
                 if frame.command == "MESSAGE":
-                    event = _parse_event(frame)
+                    # A frame that cannot be read is reported and the next one
+                    # read. It used to raise out of this loop, which treats
+                    # anything that escapes as a dead stream: StreamDropped, a
+                    # full reconnect and a desk reseed, over one bad frame that
+                    # reconnecting cannot fix. Java reports it and carries on.
+                    try:
+                        event = _parse_event(frame)
+                    except Exception as exc:
+                        self._queue.put(FrameUnreadable(
+                            command=frame.command, headers=frame.headers,
+                            body=frame.body, exception=exc))
+                        continue
                     if event is not None:
                         self._queue.put(event)
                 elif frame.command == "ERROR":

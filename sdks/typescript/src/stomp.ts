@@ -176,12 +176,9 @@ function parseEvent(
   const msgType = frame.headers[MESSAGE_TYPE];
   if (msgType === undefined) return null;
 
-  let data: unknown;
-  try {
-    data = frame.body ? JSON.parse(frame.body) : null;
-  } catch {
-    return null;
-  }
+  // A body that is not JSON throws, and the receive loop reports the frame as
+  // unreadable -- as Java always has -- instead of it vanishing here.
+  const data: unknown = frame.body ? JSON.parse(frame.body) : null;
 
   switch (msgType) {
     case "VERSION":
@@ -521,7 +518,22 @@ export class EventListener {
       const frame = decodeFrame(data);
 
       if (frame.command === "MESSAGE") {
-        const event = parseEvent(frame, this._parseHolding, this._parseOrder);
+        // A frame that cannot be read is reported and the next one read. A
+        // non-JSON body used to vanish without a word, and one whose orders
+        // could not be parsed threw out of this callback. Java reports both.
+        let event: FmEvent | null;
+        try {
+          event = parseEvent(frame, this._parseHolding, this._parseOrder);
+        } catch (e) {
+          this._callback({
+            kind: "frame-unreadable",
+            command: frame.command,
+            headers: frame.headers,
+            body: frame.body,
+            exception: e instanceof Error ? e : new Error(String(e)),
+          });
+          return;
+        }
         if (event !== null) {
           this._callback(event);
         }
