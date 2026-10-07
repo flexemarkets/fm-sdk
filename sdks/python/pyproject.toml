@@ -30,6 +30,7 @@ dependencies = [
 [project.optional-dependencies]
 test = [
     "pytest>=8",
+    "coverage>=7",
 ]
 
 [project.urls]
@@ -44,3 +45,21 @@ pattern = "(?P<version>.+)"
 
 [tool.hatch.build.targets.wheel]
 packages = ["fm"]
+
+[tool.coverage.run]
+source = ["fm"]
+
+# The release gate over critical code: what places and cancels orders, signs
+# in, and keeps a desk's books current. fail_under is today's coverage, so it
+# can only go up; raise it as tests land, toward 90. `make test-python`.
+[tool.coverage.report]
+include = [
+    "fm/client.py",
+    "fm/desk.py",
+    "fm/events.py",
+    "fm/order_utils.py",
+    "fm/orderbook.py",
+    "fm/trades.py",
+]
+fail_under = 73.5
+precision = 1

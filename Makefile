@@ -101,7 +101,7 @@ check-python:
 	$(VENV_PY) -c "import fm; print('python sdk ok')"
 
 test-python:
-	cd sdks/python && ../../$(VENV_PY) -m pytest -q
+	cd sdks/python && ../../$(VENV_PY) -m coverage run -m pytest -q && ../../$(VENV_PY) -m coverage report; s=$$?; rm -f .coverage; exit $$s
 
 ticker-python:
 	$(VENV_PY) sdks/python/ticker.py $(ARGS)
