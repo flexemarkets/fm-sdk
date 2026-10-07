@@ -40,7 +40,7 @@ import type { Snapshot } from "./snapshot.js";
 import { readVersion } from "./version.js";
 
 const FM_NETWORK_CLIENT = `fm-sdk-typescript/${readVersion()}`;
-const DEFAULT_ENDPOINT = "https://api.flexemarkets.com";
+export const DEFAULT_ENDPOINT = "https://api.flexemarkets.com";
 
 const BCRYPT_RE = /^\$2[abxy]?\$\d{2}\$[./A-Za-z0-9]{53}$/;
 const JWT_RE = /^[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+$/;
@@ -640,7 +640,7 @@ function sessionIdsParam(sessionIds: number[] | null): string {
   return "sessionIds=" + sessionIds.join(",");
 }
 
-function loadPropertiesFile(path: string): Record<string, string> {
+export function loadPropertiesFile(path: string): Record<string, string> {
   const props: Record<string, string> = {};
   if (!existsSync(path)) return props;
   const content = readFileSync(path, "utf-8");
@@ -655,7 +655,7 @@ function loadPropertiesFile(path: string): Record<string, string> {
   return props;
 }
 
-function loadConfig(): Record<string, string> {
+export function loadConfig(): Record<string, string> {
   const config: Record<string, string> = {};
 
   const fmDir = join(homedir(), ".fm");

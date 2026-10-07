@@ -61,5 +61,5 @@ include = [
     "fm/orderbook.py",
     "fm/trades.py",
 ]
-fail_under = 73.5
+fail_under = 73.8
 precision = 1
