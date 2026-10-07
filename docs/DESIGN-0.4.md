@@ -1,5 +1,13 @@
 # Public API changes under consideration for 0.4
 
+**0.4.0 ships with fm-server 4.6 and moves straight onto its model-REST
+routes** (fm-server `docs/API-V1.md` §4, decided 2026-10-07). That release and
+this one are the same release: item 1 lands on the model forms, not on today's
+V1 routes, so the SDK migrates once. The panel calls (`participants/me/panels`,
+the filtered `GET panels`, the `config/fm.view?dryRun=true` preview) arrive
+then too. Widgets and `uploadState` ship earlier, in 0.3.x, on routes 4.6 keeps
+as aliases.
+
 What 0.3.0 left on the table. Each item carries the reasoning that produced it,
 so a later reader can tell what has not been got to from what was looked at and
 declined. Nothing here is scheduled, and everything under **Open** breaks a
