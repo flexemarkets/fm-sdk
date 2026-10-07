@@ -221,6 +221,27 @@ jobs:
           echo "append-only, and a partially landed version cannot be replaced, only renumbered."
           exit $STATUS
 
+      # 0.3.4's bundle was refused twice with "Bundle has content that does NOT
+      # have a .pom file: com/flexemarkets/fm-sdk", while the same tag built
+      # locally passed the portal's validation. The log names only the files
+      # staged, not what went into the zip, so a refusal could not be read.
+      # Keep the zip and print its listing whatever the outcome.
+      - name: List the bundle uploaded to Central
+        if: always()
+        run: |
+          BUNDLE=sdks/java/target/central-publishing/central-bundle.zip
+          if [ -f "$BUNDLE" ]; then unzip -l "$BUNDLE"; else echo "no bundle at $BUNDLE"; fi
+          find sdks/java/target/central-staging -print 2>/dev/null | sort || true
+
+      - name: Keep the bundle uploaded to Central
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: central-bundle
+          path: sdks/java/target/central-publishing/central-bundle.zip
+          if-no-files-found: warn
+          retention-days: 30
+
   github-release:
     name: Create GitHub Release
     needs: [validate, publish-python, publish-typescript, publish-java]
