@@ -629,16 +629,39 @@ def _load_config() -> dict[str, str]:
 # Response status handling
 # ---------------------------------------------------------------------------
 
+def _detail(body: str) -> str:
+    """What the server said, rather than the envelope it said it in.
+
+    Failures arrive as ``{"error","message","path","shortDigest","status"}``
+    and the message is the only part a caller can act on. Falls back to the
+    raw body when it does not parse, since that is when the caller most needs
+    to see what came back. As the Java SDK's ``_detail``, which had this fix
+    alone: here a refused sign-in said only "Authentication failed.", and a
+    refused order carried the whole JSON document.
+    """
+    if not body or not body.strip():
+        return "(no response body)"
+    try:
+        parsed = json.loads(body)
+    except ValueError:
+        return body
+    if isinstance(parsed, dict):
+        message = parsed.get("message")
+        if isinstance(message, str) and message.strip():
+            return message
+    return body
+
+
 def _check_response(response: httpx.Response) -> None:
     status = response.status_code
     if 200 <= status < 300:
         return
     if status == 400:
-        raise InvalidArgumentError(response.text)
+        raise InvalidArgumentError("Invalid request: " + _detail(response.text))
     if status == 401:
-        raise AuthenticationError(response.text)
+        raise AuthenticationError("Authentication failed: " + _detail(response.text))
     if status == 403:
-        raise AuthorizationError(response.text)
+        raise AuthorizationError("Not permitted: " + _detail(response.text))
     if status == 409:
         raise ConflictError(response.text)
     if status >= 500:
@@ -869,8 +892,6 @@ class Flexemarkets:
                     "Accept": "application/json",
                 },
             )
-            if resp.status_code == 401:
-                raise AuthenticationError("Authentication failed with provided token.")
             _check_response(resp)
             return _parse_token(resp.json())
 
@@ -891,8 +912,6 @@ class Flexemarkets:
             json={"username": f"{acct}|{email}", "password": password},
             headers={"Accept": "application/json"},
         )
-        if resp.status_code == 401:
-            raise AuthenticationError("Authentication failed.")
         _check_response(resp)
         return _parse_token(resp.json())
 

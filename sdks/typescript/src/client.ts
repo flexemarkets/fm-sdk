@@ -674,12 +674,36 @@ export function loadConfig(): Record<string, string> {
 // Response handling
 // ---------------------------------------------------------------------------
 
+/**
+ * What the server said, rather than the envelope it said it in.
+ *
+ * Failures arrive as `{"error","message","path","shortDigest","status"}` and
+ * the message is the only part a caller can act on. Falls back to the raw
+ * body when it does not parse, since that is when the caller most needs to
+ * see what came back. As the Java SDK's `_detail`, which had this fix alone:
+ * here a refused sign-in said only "Authentication failed.", and a refused
+ * order carried the whole JSON document.
+ */
+export function detail(body: string): string {
+  if (!body || !body.trim()) return "(no response body)";
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const message = (parsed as { message?: unknown }).message;
+      if (typeof message === "string" && message.trim()) return message;
+    }
+  } catch {
+    // not JSON: report it as it came
+  }
+  return body;
+}
+
 function checkResponse(response: Response, body: string): void {
   const status = response.status;
   if (status >= 200 && status < 300) return;
-  if (status === 400) throw new InvalidArgumentError(body);
-  if (status === 401) throw new AuthenticationError(body);
-  if (status === 403) throw new AuthorizationError(body);
+  if (status === 400) throw new InvalidArgumentError("Invalid request: " + detail(body));
+  if (status === 401) throw new AuthenticationError("Authentication failed: " + detail(body));
+  if (status === 403) throw new AuthorizationError("Not permitted: " + detail(body));
   if (status === 409) throw new ConflictError(body);
   if (status >= 500) throw new ConnectionFailedError(body);
   throw new HttpError(status, body);
@@ -1787,9 +1811,6 @@ async function signIn(
       },
     });
     const body = await resp.text();
-    if (resp.status === 401) {
-      throw new AuthenticationError("Authentication failed with provided token.");
-    }
     checkResponse(resp, body);
     return parseToken(JSON.parse(body));
   }
@@ -1816,9 +1837,6 @@ async function signIn(
     }),
   });
   const body = await resp.text();
-  if (resp.status === 401) {
-    throw new AuthenticationError("Authentication failed.");
-  }
   checkResponse(resp, body);
   return parseToken(JSON.parse(body));
 }

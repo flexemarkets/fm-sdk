@@ -19,7 +19,7 @@
     "ticker": "tsx src/ticker.ts",
     "build": "tsc",
     "check": "tsc --noEmit",
-    "test": "node --import tsx --import ./test/isolated-home.ts --test --experimental-test-coverage --test-coverage-include=src/client.ts --test-coverage-include=src/desk.ts --test-coverage-include=src/stomp.ts --test-coverage-include=src/order-utils.ts --test-coverage-include=src/orderbook.ts --test-coverage-include=src/trades.ts --test-coverage-lines=93.5 test/*.test.ts",
+    "test": "node --import tsx --import ./test/isolated-home.ts --test --experimental-test-coverage --test-coverage-include=src/client.ts --test-coverage-include=src/desk.ts --test-coverage-include=src/stomp.ts --test-coverage-include=src/order-utils.ts --test-coverage-include=src/orderbook.ts --test-coverage-include=src/trades.ts --test-coverage-lines=93.9 test/*.test.ts",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
