@@ -20,11 +20,16 @@ make check          # parity, then each SDK's own checks
 make test           # all three test suites
 ```
 
-**GitHub Actions does not run either of these.** `ci.yml` builds all three and
-runs Java's tests as a side effect of `mvn package`; it does not run `pytest`,
-`npm test`, or `scripts/check-parity.py`. A green board means the three SDKs
-compile — not that they agree, and not that Python or TypeScript work. Run them
-locally or your change is unverified.
+**GitHub Actions runs only part of these.** `ci.yml` runs each SDK's tests
+(Java's through `mvn package`) but not `scripts/check-parity.py`, the fixture
+audit, or the quickstart check. A green board means the three SDKs work on
+their own, not that they agree. Run both locally or your change is unverified.
+
+Each test run also fails if line coverage of the SDK's critical code drops
+below a floor: `critical-coverage` in `sdks/java/fm-sdk/pom.xml`,
+`fail_under` in `sdks/python/pyproject.toml`, `--test-coverage-lines` in
+`sdks/typescript/package.json`. A floor is the coverage when it was last set;
+raise it when tests land, never lower it to get a change through.
 
 Java additionally holds **zero javadoc warnings**. Check on a clean build; a
 dirty build and `mvn -q` both report a false zero.

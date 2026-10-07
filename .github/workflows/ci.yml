@@ -21,11 +21,17 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e sdks/python
+          pip install -e "sdks/python[test]"
           pip install build
 
       - name: Type check
         run: python -c "import fm; print('python sdk ok')"
+
+      # Tests, and the floor on critical code's coverage (pyproject.toml).
+      # The live-server tests skip without a server.
+      - name: Test
+        run: python -m coverage run -m pytest -q && python -m coverage report
+        working-directory: sdks/python
 
       - name: Build distribution
         run: python -m build sdks/python
@@ -52,6 +58,11 @@ jobs:
 
       - name: Type check
         run: npm run check
+        working-directory: sdks/typescript
+
+      # Tests, and the floor on critical code's coverage (package.json).
+      - name: Test
+        run: npm test
         working-directory: sdks/typescript
 
       - name: Build
