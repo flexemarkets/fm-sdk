@@ -169,6 +169,65 @@ class DeskTest {
         }
     }
 
+    /**
+     * A reconnect is the largest possible gap: whatever happened while the
+     * socket was down is missing, so the desk reseeds from the snapshot and
+     * tells its recovery handlers it did. No test reached this before
+     * 2026-10-06 (test risk map, plan item 5).
+     */
+    @Test
+    @Timeout(20)
+    void aReconnectReseedsTheBookAndSaysSo() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha),
+            new Snapshot<>(List.of(_limit(alpha, 101L, OrderSide.BUY, 5, 1000)), 4L),
+            new Snapshot<>(List.of(), 4L));
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            var recoveries = new java.util.concurrent.CopyOnWriteArrayList<fm.event.DeskRecovery>();
+            desk.onRecovery(recoveries::add);
+            fake.nextActiveOrders(new Snapshot<>(List.of(_limit(alpha, 201L, OrderSide.BUY, 9, 1500)), 40L));
+
+            fake.post(new fm.event.StreamReconnected(MP));
+
+            _await("the reseeded book", () -> desk.book(alpha.id()).bestBuyPrice() == 1500L);
+            _await("the recovery handler", () -> !recoveries.isEmpty());
+            assertThat(recoveries).containsExactly(new fm.event.DeskRecovery(MP, true, null));
+        }
+    }
+
+    /**
+     * A reseed that fails leaves the stream live and the book stale. Handlers
+     * hear that it failed and why, and the desk keeps applying what arrives
+     * rather than dying with the snapshot read.
+     */
+    @Test
+    @Timeout(20)
+    void aReseedThatFailsSaysTheDeskIsStaleAndKeepsGoing() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha),
+            new Snapshot<>(List.of(_limit(alpha, 101L, OrderSide.BUY, 5, 1000)), 4L),
+            new Snapshot<>(List.of(), 4L));
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            var recoveries = new java.util.concurrent.CopyOnWriteArrayList<fm.event.DeskRecovery>();
+            desk.onRecovery(recoveries::add);
+            fake.failActiveOrders(new IllegalStateException("503 from the server"));
+
+            fake.post(new fm.event.StreamReconnected(MP));
+            _await("the recovery handler", () -> !recoveries.isEmpty());
+
+            assertThat(recoveries.get(0).success()).isFalse();
+            assertThat(recoveries.get(0).reason()).contains("503");
+
+            fake.failActiveOrders(null);
+            fake.post(new OrdersUpdate(new Order[] { _limit(alpha, 102L, OrderSide.BUY, 3, 1100) }, 5L));
+            _await("a delta after the failed reseed", () -> desk.book(alpha.id()).bestBuyPrice() == 1100L);
+        }
+    }
+
     @Test
     @Timeout(20)
     void consecutiveFramesAreNotAGap() throws Exception {

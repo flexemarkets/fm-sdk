@@ -34,6 +34,7 @@ class FakeFlexemarkets implements Flexemarkets {
     private final AtomicReference<Snapshot<List<Order>>> _recent;
     private final AtomicReference<BlockingQueue<Object>> _queue = new AtomicReference<>();
     private volatile int _activeReads = 0;
+    private volatile RuntimeException _activeFailure;
 
     FakeFlexemarkets(List<Market> markets, Snapshot<List<Order>> active, Snapshot<List<Order>> recent) {
         this._markets = List.copyOf(markets);
@@ -44,6 +45,11 @@ class FakeFlexemarkets implements Flexemarkets {
     /** Replace what the next seed reads, so a reseed can differ from the first. */
     void nextActiveOrders(Snapshot<List<Order>> next) {
         _active.set(next);
+    }
+
+    /** Make the next active-book reads fail with this, as a server that is down would; null to stop. */
+    void failActiveOrders(RuntimeException failure) {
+        _activeFailure = failure;
     }
 
     /** How many times a seed has read the active book -- one per open, one per gap. */
@@ -64,6 +70,8 @@ class FakeFlexemarkets implements Flexemarkets {
 
     @Override public Snapshot<List<Order>> activeOrders(long marketplaceId) {
         _activeReads++;
+        RuntimeException failure = _activeFailure;
+        if (failure != null) throw failure;
         return _active.get();
     }
 
