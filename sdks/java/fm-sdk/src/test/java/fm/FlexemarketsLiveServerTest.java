@@ -44,7 +44,7 @@ public class FlexemarketsLiveServerTest {
 
     @BeforeAll
     static void resolveConfig() {
-        var home = System.getProperty("user.home");
+        var home = _realHome();
         _credentialPath = Paths.get(home, ".fm", "credential");
         _endpointPath = Paths.get(home, ".fm", "endpoint");
     }
@@ -55,7 +55,7 @@ public class FlexemarketsLiveServerTest {
      *  so CI doesn't false-fail. */
     static boolean liveServerReady() {
         if (!"1".equals(System.getenv("FM_LIVE_TESTS"))) return false;
-        var home = System.getProperty("user.home");
+        var home = _realHome();
         return Files.exists(Paths.get(home, ".fm", "credential"))
             && Files.exists(Paths.get(home, ".fm", "endpoint"));
     }
@@ -127,6 +127,11 @@ public class FlexemarketsLiveServerTest {
         // Intentionally don't close 'desk' — Flexemarkets.close() must
         // sweep it up so the WS subscription is released.
         assertThatNoException().isThrownBy(fm::close);
+    }
+
+    /** The surefire configuration gives tests an empty user.home; this test wants the real one. */
+    private static String _realHome() {
+        return System.getProperty("fm.test.real-home", System.getProperty("user.home"));
     }
 
     private static Flexemarkets _connect(String clientDescription) throws IOException {

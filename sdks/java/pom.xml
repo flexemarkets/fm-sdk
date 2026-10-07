@@ -198,6 +198,20 @@
                          consumer may reach; it should not dictate how the suite
                          that tests the internals is run. -->
                     <useModulePath>false</useModulePath>
+                    <!-- The client reads ~/.fm/credential and ~/.fm/endpoint
+                         before anything else, so without this a test runs as
+                         whoever runs it: their account, their password, and their
+                         endpoint, which can be production. Tests get an empty
+                         home; FlexemarketsLiveServerTest, whose job is to read
+                         the real ~/.fm, finds it through fm.test.real-home. -->
+                    <systemPropertyVariables>
+                        <user.home>${project.build.directory}/test-home</user.home>
+                        <fm.test.real-home>${user.home}</fm.test.real-home>
+                    </systemPropertyVariables>
+                    <excludedEnvironmentVariables>
+                        <excludedEnvironmentVariable>FM_API_URL</excludedEnvironmentVariable>
+                        <excludedEnvironmentVariable>FM_URL</excludedEnvironmentVariable>
+                    </excludedEnvironmentVariables>
                 </configuration>
             </plugin>
         </plugins>
