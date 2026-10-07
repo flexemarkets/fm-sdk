@@ -20,6 +20,7 @@ import pytest
 
 from fm.client import Flexemarkets
 from fm.exceptions import (
+    ApiError,
     AuthenticationError,
     AuthorizationError,
     ConflictError,
@@ -175,5 +176,33 @@ def test_a_refused_snapshot_is_the_servers_refusal(base: str) -> None:
         with pytest.raises(AuthorizationError) as e:
             fm.active_orders(1)
         assert str(e.value) == "Not permitted: Not your marketplace."
+    finally:
+        fm.close()
+
+
+# --- an answer that arrives but does not parse --------------------------------
+
+def test_an_order_answer_that_cannot_be_read_says_so(base: str) -> None:
+    """As Java's anOrderAnswerThatCannotBeReadSaysSo: a 200 that is not JSON is
+    an ApiError, not a json.JSONDecodeError escaping past FlexemarketsError."""
+    answers["/api"] = (200, {"_links": {"orders": {"href": f"{base}/orders"}}}, None)
+    answers["/api/orders"] = (200, "<html>edge error page</html>", None)
+    fm = _connect(base)
+    try:
+        with pytest.raises(ApiError) as e:
+            fm.submit_limit(1, 11, "BUY", 1, 100)
+        assert str(e.value) == "Failed to parse the response body"
+        assert isinstance(e.value, FlexemarketsError)
+    finally:
+        fm.close()
+
+
+def test_a_snapshot_that_cannot_be_read_says_so(base: str) -> None:
+    answers["/api/v1/marketplaces/1/orders/active"] = (200, "<html>edge error page</html>", "41")
+    fm = _connect(base)
+    try:
+        with pytest.raises(ApiError) as e:
+            fm.active_orders(1)
+        assert str(e.value) == "Failed to parse the response body"
     finally:
         fm.close()

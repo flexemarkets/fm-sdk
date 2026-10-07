@@ -652,6 +652,20 @@ def _detail(body: str) -> str:
     return body
 
 
+def _json(response: httpx.Response) -> Any:
+    """The body of a successful answer, parsed.
+
+    A 200 that is not JSON -- an edge proxy's HTML error page, a truncated
+    body -- is an answer the SDK cannot read, so it is an :class:`ApiError`,
+    as in the Java SDK, rather than a bare ``json.JSONDecodeError`` escaping
+    past a caller who catches :class:`FlexemarketsError`.
+    """
+    try:
+        return response.json()
+    except ValueError as e:
+        raise ApiError("Failed to parse the response body") from e
+
+
 def _check_response(response: httpx.Response) -> None:
     status = response.status_code
     if 200 <= status < 300:
@@ -893,7 +907,7 @@ class Flexemarkets:
                 },
             )
             _check_response(resp)
-            return _parse_token(resp.json())
+            return _parse_token(_json(resp))
 
         acct = config.get("account", "")
         email = config.get("email", "")
@@ -913,12 +927,12 @@ class Flexemarkets:
             headers={"Accept": "application/json"},
         )
         _check_response(resp)
-        return _parse_token(resp.json())
+        return _parse_token(_json(resp))
 
     def _fetch_api_root(self) -> ApiRoot:
         url = _server(self._endpoint)
         resp = self._get(url)
-        return _rebase_api_root(_parse_api_root(resp.json()), url)
+        return _rebase_api_root(_parse_api_root(_json(resp)), url)
 
     # ======================================================================
     # REST APIs
@@ -928,7 +942,7 @@ class Flexemarkets:
 
     def accounts(self) -> list[Account]:
         url = _uri_param(self._api_root, "accounts", "format=application/json")
-        data = self._get(url).json()
+        data = _json(self._get(url))
         return [_parse_account(a) for a in data]
 
     def signup(
@@ -959,12 +973,12 @@ class Flexemarkets:
             },
         )
         _check_conflict_account(resp, account_name)
-        return _parse_token(resp.json())
+        return _parse_token(_json(resp))
 
     def approve_account(self, account_name: str) -> Account:
         url = _server(self._endpoint) + "/approvals"
         resp = self._post(url, {"name": account_name, "approval": True})
-        approval_data = resp.json()
+        approval_data = _json(resp)
         return _parse_account(approval_data.get("account"))  # type: ignore[return-value]
 
     def delete_account(self, account_id: int) -> None:
@@ -978,7 +992,7 @@ class Flexemarkets:
         delivered to the person they belong to.
         """
         url = _server(self._endpoint) + "/otp/manager"
-        data = self._post(url, {"userIds": user_ids}).json()
+        data = _json(self._post(url, {"userIds": user_ids}))
         return ManagerOtpBundle(
             expires_at=_timestamp(data.get("expiresAt")),
             otps=[
@@ -999,7 +1013,7 @@ class Flexemarkets:
 
     def users(self) -> list[Person]:
         url = _uri(self._api_root, "usersJson")
-        data = self._get(url).json()
+        data = _json(self._get(url))
         return [_parse_person(u) for u in data]  # type: ignore[misc]
 
     def create_user(
@@ -1018,7 +1032,7 @@ class Flexemarkets:
             "lastName": last_name,
             "roles": list(roles),
         })
-        return _parse_person(resp.json())  # type: ignore[return-value]
+        return _parse_person(_json(resp))  # type: ignore[return-value]
 
     def delete_user(self, user_id: int) -> None:
         url = _uri_id(self._api_root, "users", user_id)
@@ -1029,12 +1043,12 @@ class Flexemarkets:
 
     def marketplaces(self) -> list[Marketplace]:
         url = _uri_param(self._api_root, "marketplaces", "format=application/json")
-        data = self._get(url).json()
+        data = _json(self._get(url))
         return [_parse_marketplace(m) for m in data]
 
     def marketplace(self, marketplace_id: int) -> Marketplace:
         url = _uri_id(self._api_root, "marketplaces", marketplace_id)
-        return _parse_marketplace(self._get(url).json())
+        return _parse_marketplace(_json(self._get(url)))
 
     def create_marketplace_from_json(self, definition: str) -> Marketplace:
         """Create a marketplace from its JSON definition, returning what was made.
@@ -1055,7 +1069,7 @@ class Flexemarkets:
                 f"Marketplace definition is not valid JSON: {e}") from e
 
         url = f"{_server(self.endpoint_url)}/v1/marketplaces"
-        return _parse_marketplace(self._post(url, parsed).json())
+        return _parse_marketplace(_json(self._post(url, parsed)))
 
     def delete_marketplace(self, marketplace_id: int) -> None:
         url = _uri_id(self._api_root, "marketplaces", marketplace_id)
@@ -1068,12 +1082,12 @@ class Flexemarkets:
             self._api_root, "marketplaces", marketplace_id, "markets",
             "format=application/json",
         )
-        data = self._get(url).json()
+        data = _json(self._get(url))
         return [_parse_market(m) for m in data]
 
     def symbols(self, marketplace_id: int) -> list[str]:
         url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "symbols")
-        return self._get(url).json()
+        return _json(self._get(url))
 
     def create_market(
         self,
@@ -1105,7 +1119,7 @@ class Flexemarkets:
             "unitTick": units.tick,
             "privateMarket": private_market,
         })
-        return _parse_market(resp.json())
+        return _parse_market(_json(resp))
 
     # -- sessions ----------------------------------------------------------
 
@@ -1123,11 +1137,11 @@ class Flexemarkets:
         avoid HAL.
         """
         url = _v1(self._endpoint, f"/marketplaces/{marketplace_id}/sessions")
-        return [_parse_session(s) for s in self._get(url).json()]
+        return [_parse_session(s) for s in _json(self._get(url))]
 
     def session(self, marketplace_id: int) -> Session:
         url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "currentSession")
-        return _parse_session(self._get(url).json())
+        return _parse_session(_json(self._get(url)))
 
     def account_by_id(self, account_id: int) -> Account:
         """One account by id.
@@ -1136,28 +1150,28 @@ class Flexemarkets:
         connection signed in to. Java overloads the two; a property cannot
         take an argument, so here they are separate names.
         """
-        return _parse_account(self._get(_uri_id(self._api_root, "accounts", account_id)).json())
+        return _parse_account(_json(self._get(_uri_id(self._api_root, "accounts", account_id))))
 
     def user_by_id(self, user_id: int) -> Person:
         """One user by id; see :meth:`account_by_id` for the name."""
         url = _v1(self._endpoint, f"/users/{user_id}")
-        return _parse_person(self._get(url).json())
+        return _parse_person(_json(self._get(url)))
 
     def identifiers(self, marketplace_id: int) -> list[str]:
         url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "privateTraders")
-        return self._get(url).json()
+        return _json(self._get(url))
 
     def open_session(self, marketplace_id: int) -> Session:
         url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "open")
-        return _parse_session(self._patch(url).json())
+        return _parse_session(_json(self._patch(url)))
 
     def pause_session(self, marketplace_id: int) -> Session:
         url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "pause")
-        return _parse_session(self._patch(url).json())
+        return _parse_session(_json(self._patch(url)))
 
     def close_session(self, marketplace_id: int) -> Session:
         url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "close")
-        return _parse_session(self._patch(url).json())
+        return _parse_session(_json(self._patch(url)))
 
     # -- orders ------------------------------------------------------------
 
@@ -1179,7 +1193,7 @@ class Flexemarkets:
             "price": price,
             "clientDescription": self._client_description,
         })
-        return _parse_order(resp.json())
+        return _parse_order(_json(resp))
 
     def submit_market(
         self, marketplace_id: int, market_id: int, side: str, units: int,
@@ -1237,7 +1251,7 @@ class Flexemarkets:
             "supplier": original_id,
             "clientDescription": self._client_description,
         })
-        return _parse_order(resp.json())
+        return _parse_order(_json(resp))
 
     def active_orders(self, marketplace_id: int) -> "Snapshot[list[Order]]":
         """The active-orders snapshot: every resting limit order on the
@@ -1290,7 +1304,7 @@ class Flexemarkets:
             as_of_seq = int(raw) if raw is not None else NO_SEQ
         except ValueError:
             as_of_seq = NO_SEQ
-        return resp.json(), as_of_seq
+        return _json(resp), as_of_seq
 
     def orders(
         self,
@@ -1303,7 +1317,7 @@ class Flexemarkets:
             url = _uri_param_marketplace_id_param(
                 self._api_root, "symbolOrdersJson", marketplace_id, f"symbol={symbol}",
             )
-            data = self._get(url).json()
+            data = _json(self._get(url))
             orders = [_parse_order(o) for o in data]
             for o in orders:
                 o.symbol = symbol
@@ -1313,10 +1327,10 @@ class Flexemarkets:
                 self._api_root, "sessionOrdersJson", marketplace_id,
                 _session_ids_param(session_ids),
             )
-            data = self._get(url).json()
+            data = _json(self._get(url))
             return [_parse_order(o) for o in data]
         url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "orders")
-        data = self._get(url).json()
+        data = _json(self._get(url))
         return [_parse_order(o) for o in data]
 
     def trades(self, marketplace_id: int, symbol: str) -> list[Order]:
@@ -1336,7 +1350,7 @@ class Flexemarkets:
         url = _uri_param_marketplace_id_param(
             self._api_root, "symbolTradesJson", marketplace_id, f"symbol={symbol}",
         )
-        data = self._get(url).json()
+        data = _json(self._get(url))
         orders = [_parse_order(o) for o in data]
         for o in orders:
             # The symbol-keyed route answers with the trade id in "original"
@@ -1361,7 +1375,7 @@ class Flexemarkets:
             )
         else:
             url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "holdings")
-        data = self._get(url).json()
+        data = _json(self._get(url))
         return [_parse_holding(h) for h in data]
 
     def holding(self, marketplace_id: int) -> Holding:
@@ -1374,7 +1388,7 @@ class Flexemarkets:
         Java and TypeScript always took the marketplace alone.
         """
         url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "currentHolding")
-        return _parse_holding(self._get(url).json())
+        return _parse_holding(_json(self._get(url)))
 
     def download_holdings(
         self, marketplace_id: int, session_ids: list[int] | None = None,
@@ -1404,7 +1418,7 @@ class Flexemarkets:
                 headers=self._auth_headers(),
             )
         _check_response(resp)
-        allotments = [_parse_allotment(a) for a in resp.json()]
+        allotments = [_parse_allotment(a) for a in _json(resp)]
         return _allotments_to_holdings(allotments)
 
     def upload_state(self, marketplace_id: int, filename: str) -> list[ParticipantState]:
@@ -1430,7 +1444,7 @@ class Flexemarkets:
                 headers=self._auth_headers(),
             )
         _check_response(resp)
-        return [_parse_participant_state(s) for s in resp.json()]
+        return [_parse_participant_state(s) for s in _json(resp)]
 
     def push_widgets(self, marketplace_id: int, widgets: list[WidgetPush]) -> list[Widget]:
         """Push widgets to participants' screens, returning them as stored.
@@ -1451,7 +1465,7 @@ class Flexemarkets:
         """
         url = _v1(self._endpoint, f"/marketplaces/{marketplace_id}/widgets")
         resp = self._post(url, [_widget_push_json(w) for w in widgets])
-        return [_parse_widget(w) for w in resp.json()]
+        return [_parse_widget(w) for w in _json(resp)]
 
     def remove_widget(
         self, marketplace_id: int, key: str, user_id: int | None = None,
@@ -1480,7 +1494,7 @@ class Flexemarkets:
         """Every widget pushed to the marketplace and still standing, for every
         participant -- what a manager reads to check on a robot."""
         url = _v1(self._endpoint, f"/marketplaces/{marketplace_id}/widgets/all")
-        return [_parse_widget(w) for w in self._get(url).json()]
+        return [_parse_widget(w) for w in _json(self._get(url))]
 
     def allotments(self, marketplace_id: int, allocation_id: int) -> list[Allotment]:
         """The opening positions of one allocation.
@@ -1492,7 +1506,7 @@ class Flexemarkets:
             f"{_server(self.endpoint_url)}/v1/marketplaces/{marketplace_id}"
             f"/allotments?allocation={allocation_id}"
         )
-        return [_parse_allotment(a) for a in self._get(url).json()]
+        return [_parse_allotment(a) for a in _json(self._get(url))]
 
     def allocate(self, marketplace_id: int, holdings: list[Holding]) -> list[Holding]:
         """Stage the opening positions for the next session.
@@ -1509,7 +1523,7 @@ class Flexemarkets:
         url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "allocations")
         body = [_holding_to_allotment(marketplace_id, h) for h in holdings]
         resp = self._post(url, body)
-        return _allotments_to_holdings([_parse_allotment(a) for a in resp.json()])
+        return _allotments_to_holdings([_parse_allotment(a) for a in _json(resp)])
 
     # -- connections -------------------------------------------------------
 
@@ -1524,7 +1538,7 @@ class Flexemarkets:
             self._api_root, "marketplaces", marketplace_id, "connections",
             "format=application/json",
         )
-        return [_parse_connection(c) for c in self._get(url).json()]
+        return [_parse_connection(c) for c in _json(self._get(url))]
 
     # -- events / WebSocket ------------------------------------------------
 
