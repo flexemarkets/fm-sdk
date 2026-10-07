@@ -17,6 +17,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  ApiError,
   AuthenticationError,
   AuthorizationError,
   ConflictError,
@@ -162,5 +163,27 @@ test("a refused snapshot is the server's refusal", async () => {
   try {
     await assert.rejects(fm.activeOrders(1),
       (e: unknown) => e instanceof AuthorizationError && e.message === "Not permitted: Not your marketplace.");
+  } finally { fm.close(); }
+});
+
+// --- an answer that arrives but does not parse --------------------------------
+
+test("an order answer that cannot be read says so", async () => {
+  answers.set("/api", [200, { _links: { orders: { href: `${base}/orders` } } }, null]);
+  answers.set("/api/orders", [200, "<html>edge error page</html>", null]);
+  const fm = await connect();
+  try {
+    await assert.rejects(fm.submitLimit(1, 11, "BUY", 1, 100),
+      (e: unknown) => e instanceof ApiError && e instanceof FlexemarketsError
+        && e.message === "Failed to parse the response body");
+  } finally { fm.close(); }
+});
+
+test("a snapshot that cannot be read says so", async () => {
+  answers.set("/api/v1/marketplaces/1/orders/active", [200, "<html>edge error page</html>", "41"]);
+  const fm = await connect();
+  try {
+    await assert.rejects(fm.activeOrders(1),
+      (e: unknown) => e instanceof ApiError && e.message === "Failed to parse the response body");
   } finally { fm.close(); }
 });

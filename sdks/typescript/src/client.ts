@@ -698,6 +698,20 @@ export function detail(body: string): string {
   return body;
 }
 
+/**
+ * The body of a successful answer, parsed. A 200 that is not JSON -- an edge
+ * proxy's HTML error page, a truncated body -- is an answer the SDK cannot
+ * read, so it is an {@link ApiError}, as in the Java SDK, rather than a bare
+ * SyntaxError escaping past a caller who catches FlexemarketsError.
+ */
+function readBody(body: string): any {
+  try {
+    return JSON.parse(body);
+  } catch {
+    throw new ApiError("Failed to parse the response body");
+  }
+}
+
 function checkResponse(response: Response, body: string): void {
   const status = response.status;
   if (status >= 200 && status < 300) return;
@@ -835,7 +849,7 @@ export class Flexemarkets {
     });
     const body = await resp.text();
     checkResponse(resp, body);
-    return JSON.parse(body);
+    return readBody(body);
   }
 
   /**
@@ -856,7 +870,7 @@ export class Flexemarkets {
     checkResponse(resp, body);
     const raw = resp.headers.get("x-fm-as-of-seq");
     const asOfSeq = raw === null ? NO_SEQ : Number.parseInt(raw, 10);
-    return { data: JSON.parse(body), asOfSeq: Number.isFinite(asOfSeq) ? asOfSeq : NO_SEQ };
+    return { data: readBody(body), asOfSeq: Number.isFinite(asOfSeq) ? asOfSeq : NO_SEQ };
   }
 
   /**
@@ -874,7 +888,7 @@ export class Flexemarkets {
     });
     const body = await resp.text();
     checkResponse(resp, body);
-    return JSON.parse(body);
+    return readBody(body);
   }
 
   /**
@@ -908,7 +922,7 @@ export class Flexemarkets {
     });
     const body = await resp.text();
     checkResponse(resp, body);
-    return JSON.parse(body);
+    return readBody(body);
   }
 
   // -- administration --------------------------------------------------------
@@ -1560,7 +1574,7 @@ export class Flexemarkets {
     });
     const body = await resp.text();
     checkResponse(resp, body);
-    return allotmentsToHoldings((JSON.parse(body) as JsonObject[]).map(parseAllotment));
+    return allotmentsToHoldings((readBody(body) as JsonObject[]).map(parseAllotment));
   }
 
   /**
@@ -1588,7 +1602,7 @@ export class Flexemarkets {
     });
     const body = await resp.text();
     checkResponse(resp, body);
-    return (JSON.parse(body) as JsonObject[]).map(parseParticipantState);
+    return (readBody(body) as JsonObject[]).map(parseParticipantState);
   }
 
   /**
@@ -1812,7 +1826,7 @@ async function signIn(
     });
     const body = await resp.text();
     checkResponse(resp, body);
-    return parseToken(JSON.parse(body));
+    return parseToken(readBody(body));
   }
 
   const acct = config.account ?? "";
@@ -1838,5 +1852,5 @@ async function signIn(
   });
   const body = await resp.text();
   checkResponse(resp, body);
-  return parseToken(JSON.parse(body));
+  return parseToken(readBody(body));
 }
