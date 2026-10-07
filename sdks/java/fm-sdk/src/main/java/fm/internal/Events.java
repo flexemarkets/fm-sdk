@@ -472,8 +472,15 @@ public class Events implements Subscription {
                     _connectedLatch.countDown();
                 }
 
-                // Dispatch in a virtual thread to avoid blocking the WS receive thread
-                Thread.startVirtualThread(() -> _dispatchStompMessage(frame));
+                // On this thread, in arrival order. Each frame used to go to a
+                // virtual thread of its own, so nothing kept them in sequence:
+                // 300 ORDERS-UPDATEs sent 1..300 reached the queue as
+                // 9, 21, 13, 18, ... (EventsSocketTest). A Desk read the jumps as
+                // gaps and re-fetched its snapshot; a listen() consumer saw a
+                // cancel before the order it cancelled. The listener is called
+                // one message at a time, and dispatch only parses and offers
+                // to the queue, so there is nothing here worth a thread.
+                _dispatchStompMessage(frame);
             }
             webSocket.request(1);
             return CompletableFuture.completedFuture(null);
