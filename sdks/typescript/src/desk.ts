@@ -410,12 +410,12 @@ export class DefaultDesk implements Desk {
     }
     if (_isSession(event)) {
       this._session = event;
-      for (const h of this._sessionHandlers) h(event);
+      for (const h of this._sessionHandlers) this._notify(h, event);
       return;
     }
     if (_isHolding(event)) {
       this._holding = event;
-      for (const h of this._holdingHandlers) h(event);
+      for (const h of this._holdingHandlers) this._notify(h, event);
       return;
     }
     if (_isStreamDropped(event)) {
@@ -476,6 +476,22 @@ export class DefaultDesk implements Desk {
     })();
   }
 
+  /**
+   * Call a caller's handler; what it throws is logged, not propagated.
+   *
+   * The handler is the caller's code and runs inside the stream's message
+   * callback. One that threw escaped it, and skipped recording the update's
+   * seq, so the next frame read as a gap. Gap and recovery handlers were
+   * already guarded; session, holding, book and trade handlers were not.
+   */
+  private _notify<T>(handler: (event: T) => void, event: T): void {
+    try {
+      handler(event);
+    } catch (e) {
+      console.warn(`A desk handler threw on marketplace ${this.marketplaceId}; the desk carries on:`, e);
+    }
+  }
+
   private _applyOrdersUpdate(update: OrdersUpdate): void {
     // Phase 2a seq filter: drop deltas the snapshot already reflects.
     // NO_SEQ disables filtering for older fm-server builds that don't
@@ -498,7 +514,7 @@ export class DefaultDesk implements Desk {
     // which handler hears about it first.
     for (const [marketId, fresh] of traded) {
       for (const h of this._tradeHandlers) {
-        if (h.marketId === marketId) for (const trade of fresh) h.handler(trade);
+        if (h.marketId === marketId) for (const trade of fresh) this._notify(h.handler, trade);
       }
     }
 
@@ -506,7 +522,7 @@ export class DefaultDesk implements Desk {
       const book = this._books.get(marketId);
       if (!book) continue;
       for (const h of this._bookHandlers) {
-        if (h.marketId === marketId) h.handler(book);
+        if (h.marketId === marketId) this._notify(h.handler, book);
       }
     }
     if (update.seq !== NO_SEQ) this._lastAppliedSeq = update.seq;

@@ -228,6 +228,31 @@ class DeskTest {
         }
     }
 
+    /**
+     * A caller's handler is the caller's code, run on the desk's dispatcher.
+     * One that throws must not end it: gap and recovery handlers were already
+     * guarded, but a book, trade, session or holding handler that threw
+     * escaped _drain, the dispatcher thread died, and the desk stopped
+     * applying updates with nothing to say so.
+     */
+    @Test
+    @Timeout(20)
+    void aHandlerThatThrowsDoesNotStopTheDesk() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha), new Snapshot<>(List.of(), 1L), new Snapshot<>(List.of(), 1L));
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            desk.onBookChange(alpha.id(), book -> { throw new IllegalStateException("a bug in the caller's handler"); });
+
+            fake.post(new OrdersUpdate(new Order[] { _limit(alpha, 101L, OrderSide.BUY, 5, 1000) }, 2L));
+            fake.post(new OrdersUpdate(new Order[] { _limit(alpha, 102L, OrderSide.BUY, 3, 1100) }, 3L));
+
+            _await("the update after the throwing handler",
+                   () -> desk.book(alpha.id()).bestBuyPrice() == 1100L);
+        }
+    }
+
     @Test
     @Timeout(20)
     void consecutiveFramesAreNotAGap() throws Exception {

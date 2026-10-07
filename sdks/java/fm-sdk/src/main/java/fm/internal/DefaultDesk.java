@@ -316,10 +316,10 @@ public class DefaultDesk implements Desk {
                     _processOrdersUpdate(update);
                 } else if (event instanceof Session s) {
                     _session.set(s);
-                    for (var h : _sessionHandlers) h.accept(s);
+                    for (var h : _sessionHandlers) _notify(h, s);
                 } else if (event instanceof Holding h) {
                     _holding.set(h);
-                    for (var hh : _holdingHandlers) hh.accept(h);
+                    for (var hh : _holdingHandlers) _notify(hh, h);
                 } else if (event instanceof StreamDropped error) {
                     // The subscription restores itself; nothing to do but say so.
                     LOG.log(System.Logger.Level.WARNING,
@@ -355,6 +355,25 @@ public class DefaultDesk implements Desk {
      * the stream is live and the desk is stale, which is worth telling handlers
      * apart from a dead connection.
      */
+    /**
+     * Call a caller's handler; what it throws is logged, not propagated.
+     *
+     * <p>The handler is the caller's code and runs on the dispatcher. One
+     * that threw escaped {@link #_drain}, which catches only interruption, so
+     * the thread ended and the desk stopped applying updates with nothing to
+     * say so. Gap and recovery handlers were already guarded; session,
+     * holding, book and trade handlers were not.
+     */
+    private <T> void _notify(Consumer<T> handler, T event) {
+        try {
+            handler.accept(event);
+        } catch (RuntimeException e) {
+            LOG.log(System.Logger.Level.WARNING,
+                    "A desk handler threw on marketplace {0}; the desk carries on: {1}",
+                    _marketplaceId, _describe(e));
+        }
+    }
+
     private void _reseedAfterReconnect() {
         DeskRecovery event;
         try {
@@ -411,7 +430,7 @@ public class DefaultDesk implements Desk {
         for (var market : traded.entrySet()) {
             for (var h : _tradeHandlers) {
                 if (h.marketId == market.getKey()) {
-                    market.getValue().forEach(h.handler);
+                    for (var trade : market.getValue()) _notify(h.handler, trade);
                 }
             }
         }
@@ -420,7 +439,7 @@ public class DefaultDesk implements Desk {
             var book = _books.get(marketId);
             if (book == null) continue;
             for (var h : _bookHandlers) {
-                if (h.marketId == marketId) h.handler.accept(book);
+                if (h.marketId == marketId) _notify(h.handler, book);
             }
         }
         if (update.seq() != Snapshot.NO_SEQ) {

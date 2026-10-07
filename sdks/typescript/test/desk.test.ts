@@ -171,3 +171,22 @@ test("consecutive frames are not a gap", async () => {
     assert.equal(fake.activeReads, 1, "no reseed");
   } finally { desk.close(); }
 });
+
+test("a handler that throws does not stop the desk", async () => {
+  // A caller's handler is the caller's code. Gap and recovery handlers were
+  // already guarded; a book, trade, session or holding handler that threw
+  // escaped the stream's message callback, and left the update's seq
+  // unrecorded so the next frame read as a gap.
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([], 1), snapshot([], 1));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  try {
+    desk.onBookChange(alpha.id, () => { throw new Error("a bug in the caller's handler"); });
+
+    assert.doesNotThrow(() => fake.post(update([limit(alpha, 101, "BUY", 5, 1000)], 2)));
+    fake.post(update([limit(alpha, 102, "BUY", 3, 1100)], 3));
+
+    assert.equal(desk.book(alpha.id)!.bestBuyPrice(), 1100);
+    assert.equal(fake.activeReads, 1, "the second frame was not mistaken for a gap");
+  } finally { desk.close(); }
+});

@@ -16,7 +16,7 @@ import logging
 import queue
 import threading
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 log = logging.getLogger(__name__)
 
@@ -363,13 +363,13 @@ class Desk:
             if isinstance(event, Session):
                 self._session = event
                 for h in self._session_handlers:
-                    h(event)
+                    self._notify(h, event)
                 continue
 
             if isinstance(event, Holding):
                 self._holding = event
                 for h in self._holding_handlers:
-                    h(event)
+                    self._notify(h, event)
                 continue
 
             if isinstance(event, StreamDropped):
@@ -454,7 +454,7 @@ class Desk:
             for entry_id, handler in self._trade_handlers:
                 if entry_id == market_id:
                     for trade in fresh:
-                        handler(trade)
+                        self._notify(handler, trade)
 
         for market_id in touched:
             book = self._books.get(market_id)
@@ -462,7 +462,7 @@ class Desk:
                 continue
             for entry_id, handler in self._book_handlers:
                 if entry_id == market_id:
-                    handler(book)
+                    self._notify(handler, book)
         if event.seq != NO_SEQ:
             self._last_applied_seq = event.seq
 
@@ -499,6 +499,23 @@ class Desk:
                 h(outcome)
             except Exception:
                 pass  # don't let one bad handler stop dispatch
+
+    def _notify(self, handler: Callable[[Any], None], event: object) -> None:
+        """Call a caller's handler; what it raises is logged, not propagated.
+
+        The handler is the caller's code and runs on the dispatcher thread.
+        Unguarded, one that raised ended the thread, and the desk stopped
+        applying updates with nothing to say so -- books frozen at whatever
+        the last frame left. Gap and recovery handlers were already guarded;
+        session, holding, book and trade handlers were not.
+        """
+        try:
+            handler(event)
+        except Exception:
+            log.exception(
+                "A desk handler raised on marketplace %d; the desk carries on",
+                self.marketplace_id,
+            )
 
     def _ensure_open(self) -> None:
         if self._closed:

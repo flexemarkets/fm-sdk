@@ -268,3 +268,29 @@ def test_session_and_holding_updates_reach_the_desk_and_its_handlers():
     finally:
         desk.close()
 
+
+def test_a_handler_that_raises_does_not_stop_the_desk():
+    """A caller's handler is the caller's code. One that raises must not end
+    the dispatcher: gap and recovery handlers were already guarded, but a
+    session, holding, book or trade handler that raised took the thread down,
+    and the desk stopped applying anything -- silently, books frozen."""
+    alpha = _market(1, "ALPHA")
+    fake = FakeClient([alpha], Snapshot(body=[], as_of_seq=1), Snapshot(body=[], as_of_seq=1))
+    desk = _desk(fake, [alpha])
+    try:
+        def explode(_event: object) -> None:
+            raise ValueError("a bug in the caller's handler")
+
+        desk.on_session_change(explode)
+        desk.on_holding_change(explode)
+        desk.on_book_change(alpha.id, explode)
+
+        fake.post(Session(marketplace_id=MP, id=30, original=30, state="OPEN"))
+        fake.post(Holding(marketplace_id=MP, session_id=30, cash=1500))
+        fake.post(OrdersUpdate(orders=[_limit(alpha, 101, "BUY", 5, 1000)], seq=2))
+        fake.post(OrdersUpdate(orders=[_limit(alpha, 102, "BUY", 3, 1100)], seq=3))
+
+        _await("the update after the raising handlers", lambda: desk.book(alpha.id).best_buy_price() == 1100)
+        assert desk.holding().cash == 1500
+    finally:
+        desk.close()
