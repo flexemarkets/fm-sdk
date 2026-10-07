@@ -23,11 +23,11 @@ from typing import Any, Callable
 
 import pytest
 
-from fm.desk import Desk
+from fm.desk import Desk, DeskRecovery
 from fm.orderbook import Book
 from fm.snapshot import Snapshot
-from fm.events import OrdersUpdate
-from fm.types import Market, Order
+from fm.events import OrdersUpdate, StreamReconnected
+from fm.types import Holding, Market, Order, Session
 
 MP = 7
 
@@ -54,6 +54,7 @@ class FakeClient:
         self._recent = recent
         self._queue: queue.Queue[object] | None = None
         self.active_reads = 0
+        self.active_failure: Exception | None = None
 
     def next_active_orders(self, snapshot: Snapshot) -> None:
         """What the next seed reads, so a reseed can differ from the first."""
@@ -66,6 +67,8 @@ class FakeClient:
     # --- what a desk uses ---
     def active_orders(self, marketplace_id: int) -> Snapshot:
         self.active_reads += 1
+        if self.active_failure is not None:
+            raise self.active_failure
         return self._active
 
     def recent_trades(self, marketplace_id: int) -> Snapshot:
@@ -197,3 +200,71 @@ def test_consecutive_frames_are_not_a_gap():
         assert fake.active_reads == 1, "no reseed"
     finally:
         desk.close()
+
+
+def test_a_reconnect_reseeds_the_book_and_says_so():
+    """A reconnect is the largest possible gap: the desk reseeds from the
+    snapshot and tells its recovery handlers. Mirrors Java's
+    aReconnectReseedsTheBookAndSaysSo; no test reached this before 2026-10-06."""
+    alpha = _market(1, "ALPHA")
+    fake = FakeClient([alpha],
+                      Snapshot(body=[_limit(alpha, 101, "BUY", 5, 1000)], as_of_seq=4),
+                      Snapshot(body=[], as_of_seq=4))
+    desk = _desk(fake, [alpha])
+    try:
+        recoveries: list[DeskRecovery] = []
+        desk.on_recovery(recoveries.append)
+        fake.next_active_orders(Snapshot(body=[_limit(alpha, 201, "BUY", 9, 1500)], as_of_seq=40))
+
+        fake.post(StreamReconnected(marketplace_id=MP))
+
+        _await("the reseeded book", lambda: desk.book(alpha.id).best_buy_price() == 1500)
+        _await("the recovery handler", lambda: len(recoveries) == 1)
+        assert recoveries[0] == DeskRecovery(marketplace_id=MP, success=True, reason=None)
+    finally:
+        desk.close()
+
+
+def test_a_reseed_that_fails_says_the_desk_is_stale_and_keeps_going():
+    alpha = _market(1, "ALPHA")
+    fake = FakeClient([alpha],
+                      Snapshot(body=[_limit(alpha, 101, "BUY", 5, 1000)], as_of_seq=4),
+                      Snapshot(body=[], as_of_seq=4))
+    desk = _desk(fake, [alpha])
+    try:
+        recoveries: list[DeskRecovery] = []
+        desk.on_recovery(recoveries.append)
+        fake.active_failure = RuntimeError("503 from the server")
+
+        fake.post(StreamReconnected(marketplace_id=MP))
+        _await("the recovery handler", lambda: len(recoveries) == 1)
+
+        assert recoveries[0].success is False
+        assert "503" in (recoveries[0].reason or "")
+
+        fake.active_failure = None
+        fake.post(OrdersUpdate(orders=[_limit(alpha, 102, "BUY", 3, 1100)], seq=5))
+        _await("a delta after the failed reseed", lambda: desk.book(alpha.id).best_buy_price() == 1100)
+    finally:
+        desk.close()
+
+
+def test_session_and_holding_updates_reach_the_desk_and_its_handlers():
+    alpha = _market(1, "ALPHA")
+    fake = FakeClient([alpha], Snapshot(body=[], as_of_seq=1), Snapshot(body=[], as_of_seq=1))
+    desk = _desk(fake, [alpha])
+    try:
+        sessions: list[Session] = []
+        holdings: list[Holding] = []
+        desk.on_session_change(sessions.append)
+        desk.on_holding_change(holdings.append)
+
+        fake.post(Session(marketplace_id=MP, id=30, original=30, state="PAUSED"))
+        fake.post(Holding(marketplace_id=MP, session_id=30, cash=1500))
+
+        _await("both handlers", lambda: sessions and holdings)
+        assert desk.session().state == "PAUSED"
+        assert desk.holding().cash == 1500
+    finally:
+        desk.close()
+
