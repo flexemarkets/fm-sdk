@@ -42,28 +42,33 @@ class SubmitTargetedTest {
 
     private HttpServer server;
     private final List<String> submitted = new ArrayList<>();
+    private final List<String> stray = new ArrayList<>();
 
     @BeforeEach
     void startServer() throws IOException {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 
-        server.createContext("/api/tokens", exchange -> respond(exchange, """
+        server.createContext("/api/tokens", exchange -> respond(exchange, 200, """
             {"token":"%s",
              "person":{"id":7,"accountId":1,"email":"dev@dev"},
              "account":{"id":1,"name":"dev"}}
             """.formatted(TOKEN)));
 
-        server.createContext("/api/orders", exchange -> {
+        server.createContext("/api/v1/marketplaces/1/orders", exchange -> {
+            if (!"POST".equals(exchange.getRequestMethod())
+                    || !"/api/v1/marketplaces/1/orders".equals(exchange.getRequestURI().toString())) {
+                stray.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+                respond(exchange, 404, "");
+                return;
+            }
             submitted.add(body(exchange));
-            respond(exchange, "{\"id\":42,\"marketplaceId\":1,\"marketId\":11}");
+            respond(exchange, 200, "{\"id\":42,\"marketplaceId\":1,\"marketId\":11}");
         });
 
-        server.createContext("/api", exchange -> {
-            String base = "http://127.0.0.1:" + server.getAddress().getPort() + "/api";
-            respond(exchange, """
-                {"_links":{"marketplaces":{"href":"%s/marketplaces"},
-                           "orders":{"href":"%s/orders"}}}
-                """.formatted(base, base));
+        // No API root, and no V0 /api/orders: either is recorded and refused.
+        server.createContext("/", exchange -> {
+            stray.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+            respond(exchange, 404, "");
         });
 
         server.start();
@@ -80,13 +85,20 @@ class SubmitTargetedTest {
         return new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
     }
 
-    private static void respond(HttpExchange exchange, String json) throws IOException {
+    private static void respond(HttpExchange exchange, int status, String json) throws IOException {
         byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
-        exchange.sendResponseHeaders(200, bytes.length);
-        try (OutputStream out = exchange.getResponseBody()) {
-            out.write(bytes);
+        exchange.sendResponseHeaders(status, bytes.length == 0 ? -1 : bytes.length);
+        if (bytes.length > 0) {
+            try (OutputStream out = exchange.getResponseBody()) {
+                out.write(bytes);
+            }
         }
+    }
+
+    @AfterEach
+    void nothingStrayed() {
+        assertThat(stray).as("requests to anything but POST /api/v1/marketplaces/1/orders").isEmpty();
     }
 
     private Flexemarkets connect() throws IOException {

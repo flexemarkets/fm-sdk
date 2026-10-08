@@ -56,9 +56,11 @@ Every fixture declares a `source`, and it is one of two things:
 
 A **captured** fixture names a route, and `scripts/capture-fixtures.py --check`
 re-fetches it and compares the *shape* — field names and JSON types, recursively
-— against what is stored. Use `link` instead of `path` for a route the API root
-advertises, so a link the root stops advertising is itself a finding. A
-**constructed** fixture is an envelope an older server sends, a value the SDK
+— against what is stored. The route is a `path`, as the SDKs spell it; since
+0.4 no SDK reads the API root, so a fixture naming one of its links would be
+checking a route no client takes. Three fixtures captured through links in
+4.3.1 now name the V1 path of the same read, and their next `--check` says
+whether the V1 shape is the one they hold. A **constructed** fixture is an alias the SDK must accept, a value the SDK
 must tolerate, or a state this server has no example of. Both are legitimate;
 not saying which is not.
 

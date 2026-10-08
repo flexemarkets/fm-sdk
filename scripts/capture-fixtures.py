@@ -70,15 +70,15 @@ def _post(url: str, body: dict[str, Any]) -> Any:
 def _get(url: str, token: str) -> Any:
     request = urllib.request.Request(url, headers={
         "Authorization": f"Bearer {token}",
-        "Accept": "application/json, application/hal+json"})
+        "Accept": "application/json"})
     with urllib.request.urlopen(request, timeout=30) as response:
         return json.load(response)
 
 
 class Server:
-    """A connected server, resolving routes the way the SDKs do -- through the
-    API root's link table rather than through paths spelled out here. A fixture
-    naming a link that the root stops advertising is itself a finding."""
+    """A connected server. Routes are paths, as the SDKs spell them since 0.4:
+    none of the three reads the API root any more, so a fixture naming one of
+    its links would be checking a route no client takes."""
 
     def __init__(self, endpoint: str, credential: Path):
         self.api = endpoint.split("/marketplaces/")[0].rstrip("/")
@@ -91,21 +91,11 @@ class Server:
             "username": f"{account}|{config['email']}",
             "password": config["password"]})["token"]
 
-        root = _get(self.api, self.token)
-        self.links = {name: (value.get("href") if isinstance(value, dict) else value)
-                      for name, value in root.get("_links", root).items()}
-
     def fetch(self, captured: dict[str, Any]) -> Any:
-        if "link" in captured:
-            href = self.links.get(captured["link"])
-            if href is None:
-                raise LookupError(
-                    f"the API root no longer advertises {captured['link']!r} "
-                    f"(it has: {', '.join(sorted(self.links))})")
-            url = href.split("{")[0]
-        else:
-            url = self.api + captured["path"].replace(
-                "{marketplaceId}", str(self.marketplace_id))
+        if "path" not in captured:
+            raise LookupError(f"a captured fixture names its route by path: {captured}")
+        url = self.api + captured["path"].replace(
+            "{marketplaceId}", str(self.marketplace_id))
 
         query = captured.get("query", "")
         if query:
@@ -274,7 +264,7 @@ def check(server: Server, write: bool, verbose: bool = False) -> int:
 
         drifted += 1
         print(f"\n  {path.name} no longer matches "
-              f"{captured.get('link') or captured.get('path')}:", file=sys.stderr)
+              f"{captured.get('path')}:", file=sys.stderr)
         print("\n".join(problems), file=sys.stderr)
 
         if write:

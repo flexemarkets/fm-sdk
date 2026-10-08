@@ -13,7 +13,6 @@ For a task-level introduction aimed at non-developers, see the in-app
 - [Authentication](#authentication)
 - [Acting on behalf of participants (OTP)](#acting-on-behalf-of-participants-otp)
 - [Error responses](#error-responses)
-- [API root](#api-root)
 - [REST surface](#rest-surface)
 - [Snapshots and the sequence contract](#snapshots-and-the-sequence-contract)
 - [WebSocket (STOMP)](#websocket-stomp)
@@ -72,14 +71,14 @@ roles without a second round trip.
 |----------|---------|
 | `POST /api/tokens` | credential body (above) → token |
 | `POST /api/tokens/basic` | same result from an HTTP Basic header, `account\|email:password` |
-| `GET /api/tokens/refresh` | re-issue a token for the current session; `401` once the user or account is gone |
+| `POST /api/tokens/refresh` | re-issue a token for the current session; `401` once the user or account is gone (`GET` also answers, for older clients) |
 
 Already holding a bearer token? `POST /api/tokens` with the token in the
 `Authorization` header and an empty password exchanges it for the full
 `TokenResult` above — this is what the SDKs do when `~/.fm/credential` contains
 a `token=` line instead of a password.
 
-> The API root and most resources reject HTTP Basic directly; authenticate
+> Resources reject HTTP Basic directly; authenticate
 > first, then send the bearer token.
 
 ## Acting on behalf of participants (OTP)
@@ -131,7 +130,7 @@ Failures share one body shape:
   "status": "NOT_FOUND",
   "error": "MARKETPLACE_NOT_FOUND",
   "message": "Marketplace not found.",
-  "path": "/api/marketplaces/99999999",
+  "path": "/api/v1/marketplaces/99999999",
   "shortDigest": "F87256"
 }
 ```
@@ -169,87 +168,98 @@ Failure kinds are grouped by domain: `ACCOUNT_*`, `PERSON_*`, `MARKETPLACE_*`,
 `SERVER_ERROR` is internal and should never reach a client; if you see one, the
 `shortDigest` is the fastest route to a diagnosis.
 
-## API root
-
-`GET /api` (authenticated) returns a HAL document whose `_links` are the
-entry points the SDKs resolve everything else from. Templated links are
-truncated at the first `{`:
-
-| Link | Href |
-|------|------|
-| `accounts` | `/api/accounts` |
-| `users` | `/api/users{?page,size,sort*}` |
-| `marketplaces` | `/api/marketplaces{?page,size,sort*}` |
-| `orders` | `/api/orders{?page,size,sort*}` |
-| `usersJson` | `/api/users-json` |
-| `marketplacesJson` | `/api/marketplaces-json` |
-| `sessionsJson` | `/api/sessions-json` |
-| `symbolOrdersJson` | `/api/orders-json/symbol-orders` |
-| `symbolTradesJson` | `/api/orders-json/symbol-trades` |
-| `sessionOrdersJson` | `/api/orders-json/by-sessions` |
-| `profile` | `/api/profile` |
-
-The `*Json` links are plain-JSON projections of the HAL resources — smaller
-payloads, no `_embedded` unwrapping. The SDKs prefer them for list reads and
-take `marketplaceId=` plus `symbol=` or `sessionIds=` as query parameters.
-
-Prefer resolving links from the root over hard-coding paths: it is the one part
-of the contract designed to survive a move.
-
 ## REST surface
 
-Roles below are the *minimum* required. `ROLE_ADMIN` endpoints are platform
-operations, listed for completeness rather than for client use.
+Everything below is under `/api/v1`, in the model-REST forms of fm-server's
+`docs/API-V1.md` §4. Paths in the tables are relative to
+`/api/v1/marketplaces/{id}` unless they start with `/`. Roles are the
+*minimum* required; `ROLE_ADMIN` routes are platform operations, listed for
+completeness.
+
+The fm-sdk calls only these. Older spellings — the HAL root at `GET /api`
+and its links, the V0 routes under `/api/...`, and the V1 segment routes
+these replaced (`orders/active`, `sessions/open`, `holdings/downloads`, ...)
+— still answer, for the FM-3 and FM-4 clients built on them, but a new client
+should not start there. A superseded V1 route says so in a `Deprecation`
+header, with a `Link: <...>; rel="successor-version"` naming its replacement
+where the request lets the server spell it.
+
+### Conventions
+
+The same rules hold on every route, so a route you have not read yet works the
+way the last one did:
+
+- **Containment.** What belongs to a marketplace is under
+  `/marketplaces/{id}/...`; what belongs to one participant in it is under
+  `.../participants/{userId}/...`.
+- **`me` and `current`.** `me` goes wherever a user id does — and is the
+  only one a participant may name; another participant's id is a manager's
+  (`participants/me/holding`, `/users/me`, `/accounts/me`), `current`
+  wherever a session id does (`sessions/current`).
+- **Verbs.** `GET` reads, `POST` to a collection creates, `PUT` creates or
+  replaces at a key you chose, `PATCH` changes the fields you send, `DELETE`
+  removes — for an order, cancels.
+- **A lifecycle is a `state`.** Opening a session, stopping a robot,
+  cancelling a transfer: `PATCH` the resource with `{"state": "..."}`.
+  Asking for the state it already has is a quiet success; asking for one it
+  cannot reach from where it is is refused.
+- **Filters are query parameters**, never path segments, and one thing has
+  one name everywhere: a market is `?market={marketId}` or `?symbol=`; a
+  count is `?limit=`; runs are `?sessions=`; one item is singular, a list
+  plural. Enumerated values are upper case (`?state=ACTIVE`). A parameter a
+  route does not take is refused with 400, not ignored.
+- **Format by header.** CSV is `Accept: text/csv` to read and
+  `Content-Type: text/csv` to send; there are no `/uploads` or `/downloads`.
+- **`?dryRun=true`** on a request answers what it would do and does nothing.
+- **Status.** A create answers 201 where it is new to V1 (200 where it was
+  not, unchanged); a `DELETE` answers 204, except where the answer carries
+  something — cancelling an order answers the CANCEL the exchange recorded.
 
 ### Marketplaces and markets
 
 | Method & path | Role | Notes |
-|---------------|------|-------|
-| `GET /api/marketplaces` | user | marketplaces visible to the caller |
-| `GET /api/marketplaces/{id}` | user | one marketplace |
-| `GET /api/marketplaces/{id}/markets` | user | markets (assets) in the marketplace |
-| `GET /api/marketplaces/{id}/symbols` | user | symbols only |
-| `POST /api/marketplaces/{id}/markets` | manager | create a market |
-| `POST /api/v1/marketplaces` | manager | create a marketplace (V1; V0 `POST /api/marketplaces` is deprecated) |
-| `PUT /api/v1/marketplaces/{id}` | manager | update marketplace configuration |
-| `DELETE /api/marketplaces/{id}` | manager | delete a marketplace |
-| `GET /api/marketplaces/{id}/definition` | manager | full market-design definition |
+|---|---|---|
+| `GET /marketplaces` | user | the marketplaces the caller may see |
+| `POST /marketplaces` | manager | create one from a definition |
+| `GET` · `PUT` · `DELETE /marketplaces/{id}` | user · manager · manager | one marketplace |
+| `GET markets` | user | its markets; a market's `symbol` is on it |
+| `POST markets` | manager | add a market |
+| `DELETE markets/{marketId}` | manager | remove a market no order has used |
+| `GET participants` | user | the participants the caller may name in a private order: `{name}`, and `userId` for a manager |
 
 ### Sessions
 
 | Method & path | Role | Notes |
-|---------------|------|-------|
-| `GET /api/marketplaces/{id}/session` | user | current session (alias `…/currentSession`) |
-| `GET /api/marketplaces/{id}/sessions` | manager | session history |
-| `PATCH /api/marketplaces/{id}/open` | manager | open the session |
-| `PATCH /api/marketplaces/{id}/pause` | manager | pause the session |
-| `PATCH /api/marketplaces/{id}/close` | manager | close the session |
-| `GET /api/v1/marketplaces/{id}/sessions` | manager | V1 session list |
+|---|---|---|
+| `GET sessions` | manager | every session, oldest first |
+| `GET sessions/current` | user | the live session |
+| `PATCH sessions/current` | manager | `{"state": "OPEN" \| "PAUSED" \| "CLOSED"}`; 200 with the session as it now stands, 400 `SESSION_INVALID` for a state it cannot reach |
 
 Opening a **closed** session is what consumes a staged allocation — pausing and
-re-opening does not.
+re-opening does not. Resuming a paused session writes a new row, so its `id`
+can change; `original` names the run.
 
 ### Orders and trades
 
 | Method & path | Role | Notes |
-|---------------|------|-------|
-| `POST /api/orders` | user | submit a LIMIT or CANCEL order |
-| `GET /api/orders/{id}` | user | one order |
-| `GET /api/marketplaces/{id}/orders` | manager | orders in the current session |
-| `GET /api/v1/marketplaces/{id}/orders/active` | user | resting-book snapshot + `x-fm-as-of-seq` |
-| `GET /api/v1/marketplaces/{id}/orders/recent-trades?size=n` | user | recent trades snapshot + `x-fm-as-of-seq` |
-| `GET /api/v1/marketplaces/{id}/orders/by-sessions?sessions=…` | manager | raw unfiltered lifecycle, for audit/replay |
-| `DELETE /api/v1/marketplaces/{id}/orders/market/{marketId}/standing` | manager | cancel every standing order in one market; the session must be **PAUSED**. Returns the count cleared |
+|---|---|---|
+| `POST orders` | user | submit a LIMIT (or a CANCEL, the older way to cancel) |
+| `DELETE orders/{orderId}` | user | cancel what is left of an order; 200 with the CANCEL order, 404 `ORDER_NOT_IN_MARKETPLACE` |
+| `GET orders?state=ACTIVE[&market=\|&symbol=]` | user | the resting book of the current session, with `x-fm-as-of-seq` |
+| `GET orders?state=TRADED[&market=\|&symbol=][&limit=]` | user | the newest `limit` trade legs (default 1000, at most 5000), oldest first, with `x-fm-as-of-seq` |
+| `GET orders[?sessions=]` | manager | every LIMIT and CANCEL row of the runs, unfiltered: the audit and replay view |
+| `GET orders?cancelled=false[&sessions=]` | manager | the same less cancelled orders, their CANCELs, and self-crosses |
+| `DELETE orders?market=\|symbol=&state=ACTIVE` | manager | withdraw every standing order in one market of a **PAUSED** session; answers the count |
+| `GET trades[?market=\|&symbol=][&limit=]` | user | the newest `limit` trades (default 500, at most 2500), each with both orders, oldest first |
 
 Submit a limit order:
 
 ```http
-POST /api/orders
+POST /api/v1/marketplaces/2540/orders
 Authorization: Bearer <token>
 Content-Type: application/json
 
 {
-  "marketplaceId": 2540,
   "marketId": 8801,
   "type": "LIMIT",
   "side": "BUY",
@@ -259,29 +269,17 @@ Content-Type: application/json
 }
 ```
 
-Cancel by referencing the original order id in all three of `id`, `original`
-and `supplier`:
-
-```json
-{
-  "marketplaceId": 2540,
-  "marketId": 8801,
-  "type": "CANCEL",
-  "id": 771002,
-  "original": 771002,
-  "supplier": 771002,
-  "clientDescription": "my-bot"
-}
-```
+The marketplace is the path's; a body that names a different one is refused.
+Cancel with `DELETE /api/v1/marketplaces/2540/orders/771002`, naming any order
+of the lineage — a split's remainder cancels the order it came from.
 
 **Prices are integer cents.** `950` is $9.50. Prices must land on the market's
 tick and inside its bounds, or the submit fails with `ORDER_INVALID`.
 `clientDescription` is free text that surfaces in manager exports and the
 connections desk — set it to something you can grep for.
 
-Reads default to the **current** run. `/api/marketplaces/{id}/orders`,
-`…/holdings` and `…/holdings/downloads` take a `sessions` parameter to widen
-that:
+Reads default to the **current** run. `orders`, `holdings` and
+`connections` take `sessions` to widen that:
 
 | `sessions=` | Selects |
 |-------------|---------|
@@ -296,22 +294,24 @@ run's orders.
 ### Holdings and allocations
 
 | Method & path | Role | Notes |
-|---------------|------|-------|
-| `GET /api/marketplaces/{id}/holding` | user | the caller's own holding (alias `…/currentHolding`) |
-| `GET /api/marketplaces/{id}/holdings` | manager | every participant's holdings |
-| `GET /api/marketplaces/{id}/holdings/downloads` | manager | holdings as CSV |
-| `POST /api/marketplaces/{id}/holdings/uploads` | manager | upload a holdings CSV (`multipart/form-data`, field `file`) |
-| `POST /api/marketplaces/{id}/allocations` | manager | stage an allocation |
-| `GET /api/marketplaces/{id}/allocations/impact` | manager | preview an allocation's effect |
-| `DELETE /api/marketplaces/{id}/allocations/{allocationId}` | manager | drop a staged allocation |
-| `GET /api/v1/marketplaces/{id}/allotments` | manager | per-participant allotments |
+|---|---|---|
+| `GET participants/{userId}/holding` | user | one participant's holding; `me` for the caller's own |
+| `GET holdings[?sessions=]` | user | every holding the caller may see: all of them to a manager, their own to a participant |
+| `GET holdings[?sessions=]`, `Accept: text/csv` | manager | the holdings export, as FM-3 wrote it |
+| `POST allocations` | manager | stage an allocation from allotments (JSON) |
+| `POST allocations`, `Content-Type: text/csv` | manager | stage one from a holdings CSV, the file as the body |
+| `GET allocations/{allocationId}/allotments` | manager | an allocation's allotments |
+| `GET allocations/impact` | manager | what re-allocating would reset |
+| `DELETE allocations` | manager | drop the staged allocation |
+| `DELETE participants/{userId}/allotments` | manager | remove one participant's allotments |
+| `GET state` · `PUT state` (`text/csv`) | manager | the staged per-participant private state |
 
 An upload or allocation **stages** the next allocation. It lands when a
 **closed** session is opened. CSV column formats are documented in the in-app
 guides (`/documentation/HOLDINGS-CSV`, `/documentation/USERS-CSV`,
 `/documentation/ORDERS-CSV`).
 
-### Widgets and series (panels)
+### Widgets, panels and series
 
 Content a robot pushes into a participant's view, and the price series the
 server samples for a return chart. Both are shown by panels a manager places
@@ -319,13 +319,18 @@ in the marketplace's view (`fm.view`); a payload for a key no panel names is
 stored and not shown, so a robot can start before the view is finished.
 
 | Method & path | Role | Notes |
-|---------------|------|-------|
-| `POST /api/v1/marketplaces/{id}/widgets` | manager | push one widget, or a JSON array of them (one request for sixty traders, not sixty) |
-| `DELETE /api/v1/marketplaces/{id}/widgets/{key}[?userId=]` | manager | take a key down, the marketplace's or one participant's |
-| `GET /api/v1/marketplaces/{id}/widgets` | user | the caller's snapshot: the marketplace's widgets and their own |
-| `GET /api/v1/marketplaces/{id}/widgets/all` | manager | everything pushed, both scopes |
-| `GET /api/v1/marketplaces/{id}/widgets/limits` | user | the content caps and push rates |
-| `GET /api/v1/marketplaces/{id}/series` | user | the sampled price series of the current session, per market and period |
+|---|---|---|
+| `POST widgets` | manager | push one widget, or a JSON array of them (one request for sixty traders, not sixty) |
+| `PUT widgets/{key}` | manager | the marketplace's widget at that key |
+| `PUT participants/{userId}/widgets/{key}` | manager | one participant's |
+| `DELETE widgets/{key}` · `DELETE participants/{userId}/widgets/{key}` | manager | take a key down; 204, or an empty 404 when nothing was there |
+| `GET widgets` | user | the caller's snapshot: the marketplace's widgets and their own |
+| `GET widgets?participant=all` | manager | everything pushed, both scopes |
+| `GET participants/{userId}/widgets` | user | what one participant sees; `me` for the caller |
+| `GET widget-limits` | user | the content caps and push rates |
+| `GET panels` · `GET participants/{userId}/panels` | user | the panels' values: every participant's to a manager, the caller's own otherwise |
+| `PUT config/fm.view?dryRun=true&participant={userId}` | manager | what a draft view would show that participant, saving nothing |
+| `GET series` | user | the sampled price series of the current session, per market and period |
 
 A widget is:
 
@@ -362,8 +367,8 @@ batch over either is refused whole with `429 WIDGET_RATE_LIMITED`, and a
 malformed one with `400 WIDGET_INVALID` naming the field.
 
 From the SDKs, on a manager's connection — the push, the take-down and the
-read-back of everything; the participant snapshot, `limits` and `series` have
-no SDK call:
+read-back of everything; the participant snapshot, `widget-limits` and
+`series` have no SDK call:
 
 | | Push | Take down | Everything pushed |
 |---|---|---|---|
@@ -397,6 +402,14 @@ invalid-argument error. `429 WIDGET_RATE_LIMITED` has no type of its own: it
 raises the generic HTTP error (`HttpException` / `HttpError`) with
 `statusCode` 429 — back off and push the batch again.
 
+### Robots
+
+| Method & path | Role | Notes |
+|---|---|---|
+| `POST participants/me/robot-launches` | user | `{robotId, ...}` → 201 with `Location` |
+| `GET robot-launches[?state=LIVE]` · `GET robot-launches/{launchId}` | user | launches, or one |
+| `PATCH robot-launches/{launchId}` | manager | `{"state": "STOPPED"}` |
+
 ### Studies
 
 A study the platform can set up for a manager from its page — its own
@@ -405,15 +418,14 @@ and rotations; the server creates and stages them. What `fm-<study>
 marketplace` and `allotments` do from a terminal, from a form.
 
 | Method & path | Role | Notes |
-|---------------|------|-------|
-| `GET /api/v1/studies` | user | the studies this server can set up: id, name, description, parameters (the manifest's `ParameterSpec`, with defaults) |
-| `GET /api/v1/studies/{id}` | user | one study |
-| `POST /api/v1/studies/{id}/preview` | manager | `{parameters, participantIds}` → the plan it would make: marketplaces, rotations, roster — nothing created |
-| `POST /api/v1/studies/{id}/setup` | manager | the same body → creates the study's marketplaces (markets, `fm.view`, an initial session), stages each one's first rotation (holdings, then private state), and returns the run |
-| `GET /api/v1/studies/runs` | manager | the account's runs, newest first |
-| `GET /api/v1/studies/runs/{runId}` | manager | one run: parameters, the whole plan, `marketplaceIds` by the study's key, `progress` — the rotation last staged per marketplace |
-| `POST /api/v1/studies/runs/{runId}/advance?marketplace={key}` | manager | stage the next rotation in that marketplace; it lands when a closed session is opened |
-| `GET /api/v1/studies/runs/{runId}/roster` | manager | the roster the study hands out, as CSV; empty when it has none |
+|---|---|---|
+| `GET /studies` · `GET /studies/{id}` | user | the studies this server can set up: id, name, description, parameters (the manifest's `ParameterSpec`, with defaults) |
+| `POST /studies/{id}/runs` | manager | `{parameters, participantIds}` → creates the study's marketplaces (markets, `fm.view`, an initial session), stages each one's first rotation, and answers 201 with the run |
+| `POST /studies/{id}/runs?dryRun=true` | manager | the same body → the plan it would make: marketplaces, rotations, roster — nothing created |
+| `GET /studies/runs[?marketplace={marketplaceId}]` | manager | the account's runs, newest first |
+| `GET /studies/runs/{runId}` | manager | one run: parameters, the whole plan, `marketplaceIds` by the study's key, `progress` |
+| `PATCH /studies/runs/{runId}/rotations/{n}` | manager | `{"state": "STAGED"}` stages rotation `n` (1-based, across the run); `{"state": "SETTLED"}` settles it |
+| `GET /studies/runs/{runId}/roster` | manager | the roster the study hands out, as CSV; empty when it has none |
 
 `parameters` is a map of parameter name to its value as text; a missing name
 takes the default. A parameter the study refuses answers `400
@@ -425,30 +437,36 @@ public, public, private.
 ### Users and accounts
 
 | Method & path | Role | Notes |
-|---------------|------|-------|
-| `GET /api/v1/users` | user | users in the account |
-| `GET /api/v1/users/me` | user | the caller |
-| `GET /api/v1/users/{id}` | user | one user |
-| `POST /api/v1/users` | manager | create a user |
-| `PATCH /api/v1/users/{id}` | manager | update a user |
-| `POST /api/v1/users/uploads` | manager | bulk-create from CSV |
-| `POST /api/v1/users/{id}/roles` | manager | grant a role |
-| `DELETE /api/v1/users/{id}/roles/{role}` | manager | revoke a role |
-| `GET /api/v1/users/{id}/delete-check` | manager | whether a user can be hard-deleted |
-| `DELETE /api/v1/users/{id}` | manager | delete a user |
-| `GET /api/accounts` | manager | accounts (admin sees all) |
-| `POST /api/accounts` | — | sign up |
-| `DELETE /api/accounts/me` | manager | delete own account |
+|---|---|---|
+| `GET /users` · `GET /users/me` · `GET /users/{id}` | user | users in the account, the caller, one user |
+| `POST /users` | manager | create a user; with `Content-Type: text/csv`, create many |
+| `PATCH /users/{id}` | manager | change the fields sent |
+| `PUT` · `DELETE /users/{id}/roles/{role}` | manager | grant · revoke a role |
+| `PUT` · `DELETE /users/{id}/archive` | manager | archive · unarchive |
+| `DELETE /users/{id}[?dryRun=true]` | manager | delete a user, or ask whether it can be |
+| `PUT /users/me/password` | user | change the caller's password |
+| `POST /accounts` | — | sign up |
+| `GET /accounts[?approval=PENDING\|APPROVED\|SUSPENDED]` | manager | accounts (an administrator sees all) |
+| `GET` · `DELETE /accounts/{id}` | admin | one account |
+| `POST /accounts/{id}/approvals` | admin | `{approve, description}` → 201 |
+| `PATCH` · `DELETE /accounts/me` | manager | change · close the caller's account |
 
-The `/api/users` (V0) equivalents still respond but are deprecated; new clients
-should use `/api/v1/users`.
+### Configuration and notifications
+
+| Method & path | Role | Notes |
+|---|---|---|
+| `GET config` · `PUT` · `DELETE config/{key}` | user · manager | a marketplace's configuration, raw strings |
+| `GET /accounts/me/config` · `PUT` · `DELETE /accounts/me/config/{key}` | user · manager | the account's |
+| `GET /users/me/notifications` · `GET notifications` | user | what is showing to the caller, and in a marketplace |
+| `PUT /notifications/{id}/dismissals/me` | user | dismiss one, for the caller |
 
 ### Connections and version
 
 | Method & path | Role | Notes |
-|---------------|------|-------|
-| `GET /api/marketplaces/{id}/connections` | manager | live client connections (alias `…/agents`) |
-| `GET /api/version` | — | server build version |
+|---|---|---|
+| `GET connections[?open=true][&sessions=]` | manager | every client connection to the marketplace, terminated included, unless filtered |
+| `GET /connections` | manager | open connections across the account |
+| `GET /api/version` | — | server build version (unversioned, as the bootstrap routes are) |
 
 ## Snapshots and the sequence contract
 
@@ -466,7 +484,7 @@ moment the snapshot was read. The reconciliation rule is:
 > `as-of-seq`. **Skip** one whose `seq` is less than or equal.
 
 The recommended seeding order is: subscribe first (buffer incoming deltas), then
-`GET …/orders/active`, then drain the buffer under the rule above. Subscribing
+`GET …/orders?state=ACTIVE`, then drain the buffer under the rule above. Subscribing
 after the snapshot leaves a hole.
 
 The counter is per-marketplace and advances once per logical broadcast, shared
@@ -475,9 +493,9 @@ The snapshot's own read is not locked against concurrent publishes, so a
 narrow race window remains; treat a one-frame overlap as normal and re-snapshot
 if your book detects a crossed state.
 
-`recent-trades` accepts `size` (default 1000, hard ceiling 5000) and returns
+`orders?state=TRADED` accepts `limit` (default 1000, hard ceiling 5000) and returns
 both legs of each trade, **oldest first**. Which trades and what order they
-arrive in are separate decisions: you get the newest `size` of them, handed
+arrive in are separate decisions: you get the newest `limit` of them, handed
 back in the order they happened, so appending the snapshot to a trade tape
 leaves the newest trade at the end.
 
@@ -526,7 +544,7 @@ The `/app` subscription is what selects the **wire version**:
   snapshot of the whole book.
 - `/app/v1/marketplaces/{id}` — **V1**. Same lifecycle messages, but the bulk
   `ORDERS-UPDATE` is empty; pull the book from
-  `GET /api/v1/marketplaces/{id}/orders/active` instead. V1 exists because a
+  `GET /api/v1/marketplaces/{id}/orders?state=ACTIVE` instead. V1 exists because a
   busy marketplace's bulk snapshot could exceed the per-session outbound buffer
   and kill the connection. **Prefer V1 for anything that might see load.**
 

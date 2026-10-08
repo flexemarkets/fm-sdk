@@ -35,7 +35,7 @@ const NULL = "\x00";
  *
  * NB: V1 SUBSCRIBE delivers an empty ORDERS-UPDATE; consumers that
  * need the active book at startup should fetch it via REST
- * (`GET /api/v1/marketplaces/{id}/orders/active`) and reconcile
+ * (`GET /api/v1/marketplaces/{id}/orders?state=ACTIVE`) and reconcile
  * against incoming deltas using the `seq` header.
  */
 const API_VERSION_PREFIX = ((): string => {

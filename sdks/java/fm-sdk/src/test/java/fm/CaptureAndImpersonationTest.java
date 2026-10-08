@@ -41,6 +41,7 @@ class CaptureAndImpersonationTest {
     private HttpServer _server;
     private final List<String> _requests = new ArrayList<>();
     private final List<String> _impersonations = new ArrayList<>();
+    private final List<String> _stray = new ArrayList<>();
 
     @BeforeEach
     void startServer() throws IOException {
@@ -55,7 +56,7 @@ class CaptureAndImpersonationTest {
                 """.formatted(TOKEN));
         });
 
-        _server.createContext("/api/marketplaces", exchange -> {
+        _server.createContext("/api/v1/marketplaces", exchange -> {
             _record(exchange);
             if ("DELETE".equals(exchange.getRequestMethod())) {
                 _respond(exchange, 204, "");
@@ -64,18 +65,18 @@ class CaptureAndImpersonationTest {
             }
         });
 
-        _server.createContext("/api/users", exchange -> {
+        _server.createContext("/api/v1/users", exchange -> {
             _record(exchange);
             _respond(exchange, 200, "{\"id\":42,\"accountId\":1,\"email\":\"alice@lab.edu\"}");
         });
 
-        _server.createContext("/api", exchange -> {
+        // No API root: 0.4 reads none. Anything else -- GET /api, a V0 route --
+        // is recorded as stray and refused, so a client drifting back to the
+        // root or to the old routes fails here rather than being answered.
+        _server.createContext("/", exchange -> {
             _record(exchange);
-            _respond(exchange, 200, """
-                {"_links":{"marketplaces":{"href":"%1$s/marketplaces"},
-                           "accounts":{"href":"%1$s/accounts"},
-                           "users":{"href":"%1$s/users"}}}
-                """.formatted(_api()));
+            _stray.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+            _respond(exchange, 404, "");
         });
 
         _server.start();
@@ -94,10 +95,11 @@ class CaptureAndImpersonationTest {
             fm.deleteMarketplace(1);
         }
 
-        // The API root and both marketplace calls -- a GET and a DELETE, so the
-        // header is not merely on the one verb that was easiest to reach.
-        assertThat(_authenticated()).isNotEmpty().allMatch("acme"::equals);
-        assertThat(_requests).anyMatch(r -> r.startsWith("DELETE"));
+        // Both marketplace calls -- a GET and a DELETE, so the header is not
+        // merely on the one verb that was easiest to reach -- on the V1 route.
+        assertThat(_stray).isEmpty();
+        assertThat(_requests).contains("GET /api/v1/marketplaces/1", "DELETE /api/v1/marketplaces/1");
+        assertThat(_authenticated()).hasSize(2).allMatch("acme"::equals);
     }
 
     /**
@@ -167,7 +169,9 @@ class CaptureAndImpersonationTest {
             }
         });
 
+        assertThat(_stray).isEmpty();
         assertThat(traced).contains("> GET");
+        assertThat(traced).contains("/api/v1/marketplaces/1");
         assertThat(traced).contains("< 200");
         assertThat(traced).contains("course");
     }

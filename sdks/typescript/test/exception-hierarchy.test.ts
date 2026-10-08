@@ -25,7 +25,7 @@ import {
 
 const TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl";
 
-/** A server that answers every write with a 409 carrying a suggestion. */
+/** A server that answers signup and a user delete with a 409 carrying a suggestion. */
 function conflictingServer(): http.Server {
   return http.createServer((req, res) => {
     if (req.method === "POST" && req.url === "/api/tokens") {
@@ -37,7 +37,7 @@ function conflictingServer(): http.Server {
       }));
       return;
     }
-    if (req.method === "GET" && req.url === "/api/tokens/refresh") {
+    if (req.method === "POST" && req.url === "/api/tokens/refresh") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         token: TOKEN,
@@ -46,15 +46,12 @@ function conflictingServer(): http.Server {
       }));
       return;
     }
-    if (req.method === "GET" && req.url === "/api") {
-      const base = `http://127.0.0.1:${(req.socket.localPort ?? 0)}/api`;
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({
-        _links: {
-          accounts: { href: `${base}/accounts` },
-          users: { href: `${base}/users` },
-        },
-      }));
+    const conflicting =
+      (req.method === "POST" && req.url === "/api/v1/accounts") ||
+      (req.method === "DELETE" && req.url === "/api/v1/users/7");
+    if (!conflicting) {
+      res.writeHead(404);
+      res.end();
       return;
     }
     res.writeHead(409, { "Content-Type": "application/json" });

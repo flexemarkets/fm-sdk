@@ -25,6 +25,7 @@ from fm.types import Market
 TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl"
 
 submitted: list[dict] = []
+cancelled: list[str] = []
 
 # price_minimum 110, tick 25 -> the legal prices are 110, 135, 160, 185.
 MARKETS = [{
@@ -47,34 +48,27 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        if self.path == "/api/tokens/refresh":
-            self._send({
-                "token": TOKEN,
-                "person": {"id": 7, "accountId": 1, "email": "dev@dev"},
-                "account": {"id": 1, "name": "dev"},
-            })
-            return
-        if self.path == "/api":
-            base = f"http://127.0.0.1:{self.server.server_address[1]}/api"
-            self._send({"_links": {
-                "marketplaces": {"href": f"{base}/marketplaces"},
-                "orders": {"href": f"{base}/orders"},
-            }})
-        elif self.path.startswith("/api/marketplaces/1/markets"):
+        if self.path == "/api/v1/marketplaces/1/markets":
             self._send(MARKETS)
         else:
             self._send([])
 
+    def do_DELETE(self):
+        cancelled.append(self.path)
+        self._send({"id": 43, "original": 42, "consumer": 42, "type": "CANCEL",
+                    "marketplaceId": 1, "marketId": 11})
+
     def do_POST(self):
         length = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(length).decode() if length else "{}"
-        if self.path.endswith("/tokens"):
+        if self.path.startswith("/api/tokens"):
             self._send({
                 "token": TOKEN,
                 "person": {"id": 7, "accountId": 1, "email": "dev@dev"},
                 "account": {"id": 1, "name": "dev"},
             })
             return
+        assert self.path == "/api/v1/marketplaces/1/orders", self.path
         submitted.append(json.loads(raw))
         self._send({"id": 42, "marketplaceId": 1, "marketId": 11})
 
@@ -82,6 +76,7 @@ class Handler(BaseHTTPRequestHandler):
 @pytest.fixture
 def client():
     submitted.clear()
+    cancelled.clear()
     httpd = HTTPServer(("127.0.0.1", 0), Handler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     base = f"http://127.0.0.1:{httpd.server_address[1]}/api"
@@ -107,9 +102,8 @@ def test_a_sell_offers_the_lowest_legal_price(client):
 def test_whatever_does_not_fill_is_cancelled(client):
     client.submit_market(1, 11, "BUY", 5)
 
-    assert len(submitted) == 2, "submit then cancel"
-    assert submitted[1]["type"] == "CANCEL"
-    assert submitted[1]["original"] == 42
+    assert len(submitted) == 1, "one limit order"
+    assert cancelled == ["/api/v1/marketplaces/1/orders/42"], "then a DELETE of its remainder"
 
 
 def test_an_unknown_market_says_so_rather_than_guessing_a_price(client):
@@ -117,6 +111,7 @@ def test_an_unknown_market_says_so_rather_than_guessing_a_price(client):
         client.submit_market(1, 99, "BUY", 5)
 
     assert submitted == [], "nothing was sent"
+    assert cancelled == [], "nothing was cancelled"
 
 
 # --- the price rule itself, without a server --------------------------------

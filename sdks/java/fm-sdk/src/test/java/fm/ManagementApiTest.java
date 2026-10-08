@@ -63,6 +63,9 @@ class ManagementApiTest {
     private HttpServer _server;
     private final List<String> _requests = new ArrayList<>();
     private final List<String> _bodies = new ArrayList<>();
+    private final List<String> _contentTypes = new ArrayList<>();
+    private final List<String> _accepts = new ArrayList<>();
+    private final List<String> _stray = new ArrayList<>();
 
     @BeforeEach
     void startServer() throws IOException {
@@ -75,122 +78,78 @@ class ManagementApiTest {
                      "account":{"id":1,"name":"dev"}}
                     """.formatted(TOKEN)));
 
-        // Session transitions: one handler, echoing back the state implied by
-        // the path so a test can tell open from close.
-        for (var transition : List.of("open", "pause", "close")) {
-            _server.createContext("/api/marketplaces/1/" + transition, exchange -> {
-                _record(exchange);
-                var state = switch (transition) {
-                    case "open" -> "OPEN";
-                    case "pause" -> "PAUSED";
-                    default -> "CLOSED";
-                };
-                _respond(exchange, 200,
-                        "{\"id\":99,\"marketplaceId\":1,\"state\":\"%s\"}".formatted(state));
-            });
-        }
-
-        _server.createContext("/api/marketplaces/1/holdings", exchange -> {
+        // The V1 routes, each answered only for the verb, path and query this
+        // client sends. There is no API root and no V0 route: anything else is
+        // recorded as stray and answered 404, so a call that drifted back to
+        // either fails here rather than reading a plausible answer.
+        _server.createContext("/", exchange -> {
             _record(exchange);
-            _respond(exchange, 200,
-                    "[{\"ownerId\":8,\"name\":\"alice\",\"cash\":10000,\"sessionId\":300}]");
-        });
-
-        _server.createContext("/api/v1/marketplaces/1/sessions", exchange -> {
-            _record(exchange);
-            _respond(exchange, 200, "[{\"id\":300,\"state\":\"CLOSED\"}]");
-        });
-
-        _server.createContext("/api/marketplaces/1/connections", exchange -> {
-            _record(exchange);
-            _respond(exchange, 200,
-                    "[{\"id\":9,\"ownerId\":8,\"marketplaceId\":1,\"sessionId\":300}]");
-        });
-
-        _server.createContext("/api/symbolOrdersJson", exchange -> {
-            _record(exchange);
-            // An order keeps its own id; only the symbol is absent.
-            _respond(exchange, 200,
-                    "[{\"id\":11,\"original\":7,\"units\":5,\"price\":950}]");
-        });
-
-        _server.createContext("/api/sessionOrdersJson", exchange -> {
-            _record(exchange);
-            _respond(exchange, 200, "[{\"id\":12,\"original\":12,\"sessionId\":300}]");
-        });
-
-        _server.createContext("/api/symbolTradesJson", exchange -> {
-            _record(exchange);
-            // The symbol-keyed route answers with the trade id in "original"
-            // and no symbol on the order.
-            _respond(exchange, 200,
-                    "[{\"id\":0,\"original\":4242,\"units\":5,\"price\":950}]");
-        });
-
-        _server.createContext("/api/usersJson", exchange -> {
-            _record(exchange);
-            _respond(exchange, 200, "[{\"id\":7,\"email\":\"dev@dev\"},{\"id\":8,\"email\":\"t1@dev\"}]");
-        });
-
-        _server.createContext("/api/v1/marketplaces/1/allotments", exchange -> {
-            _record(exchange);
-            _respond(exchange, 200, _allotmentsJson());
-        });
-
-        // Widgets: a push answers with what was stored; a delete answers 204
-        // for the key that exists and an empty 404 for one that does not.
-        _server.createContext("/api/v1/marketplaces/1/widgets", exchange -> {
-            _record(exchange);
-            var path = exchange.getRequestURI().getPath();
-            switch (exchange.getRequestMethod()) {
-                case "DELETE" -> {
-                    exchange.sendResponseHeaders(path.endsWith("/score") ? 204 : 404, -1);
-                    exchange.close();
+            var method = exchange.getRequestMethod();
+            var uri = exchange.getRequestURI().toString();
+            var accept = String.valueOf(exchange.getRequestHeaders().getFirst("Accept"));
+            var mp = "/api/v1/marketplaces/1";
+            switch (method + " " + uri) {
+                // A session's lifecycle is its state, PATCHed; echoed back so a
+                // test can tell open from close.
+                case "PATCH /api/v1/marketplaces/1/sessions/current" -> _respond(exchange, 200,
+                        "{\"id\":99,\"marketplaceId\":1,\"state\":%s}".formatted(
+                                _stateOf(_bodies.getLast())));
+                case "GET /api/v1/marketplaces/1/sessions" -> _respond(exchange, 200,
+                        "[{\"id\":300,\"state\":\"CLOSED\"}]");
+                case "GET /api/v1/marketplaces/1/connections" -> _respond(exchange, 200,
+                        "[{\"id\":9,\"ownerId\":8,\"marketplaceId\":1,\"sessionId\":300}]");
+                case "GET /api/v1/marketplaces/1/holdings",
+                     "GET /api/v1/marketplaces/1/holdings?sessions=300",
+                     "GET /api/v1/marketplaces/1/holdings?sessions=300,301" -> {
+                    // One route, two representations: the download is the
+                    // same read asked for as CSV.
+                    if (accept.contains("text/csv")) {
+                        _respondCsv(exchange, "owner,cash\nalice,10000\n");
+                    } else {
+                        _respond(exchange, 200,
+                                "[{\"ownerId\":8,\"name\":\"alice\",\"cash\":10000,\"sessionId\":300}]");
+                    }
                 }
-                case "POST" -> _respond(exchange, 200, _widgetsJson());
-                default -> _respond(exchange, 200, _widgetsJson());
+                // An order keeps its own id; only the symbol is absent.
+                case "GET /api/v1/marketplaces/1/orders?state=ACTIVE&symbol=STK" -> _respond(exchange, 200,
+                        "[{\"id\":11,\"original\":7,\"units\":5,\"price\":950}]");
+                case "GET /api/v1/marketplaces/1/orders?sessions=300" -> _respond(exchange, 200,
+                        "[{\"id\":12,\"original\":12,\"sessionId\":300}]");
+                // The traded legs answer with the trade id in "original" and
+                // no symbol on the order.
+                case "GET /api/v1/marketplaces/1/orders?state=TRADED&symbol=STK&limit=5000" -> _respond(exchange, 200,
+                        "[{\"id\":0,\"original\":4242,\"units\":5,\"price\":950}]");
+                case "GET /api/v1/users" -> _respond(exchange, 200,
+                        "[{\"id\":7,\"email\":\"dev@dev\"},{\"id\":8,\"email\":\"t1@dev\"}]");
+                case "GET /api/v1/marketplaces/1/allocations/42/allotments",
+                     "POST /api/v1/marketplaces/1/allocations" -> _respond(exchange, 200, _allotmentsJson());
+                case "POST /api/v1/marketplaces" -> _respond(exchange, 200,
+                        "{\"id\":77,\"name\":\"simple-dividend\",\"markets\":[]}");
+                // Widgets: a push or a read of all answers with what is stored;
+                // a delete answers 204 for the key that exists and an empty
+                // 404 for one that does not.
+                case "POST /api/v1/marketplaces/1/widgets",
+                     "GET /api/v1/marketplaces/1/widgets?participant=all" -> _respond(exchange, 200, _widgetsJson());
+                case "DELETE /api/v1/marketplaces/1/widgets/score",
+                     "DELETE /api/v1/marketplaces/1/participants/8/widgets/score" -> _respond(exchange, 204, "");
+                case "DELETE /api/v1/marketplaces/1/widgets/absent" -> _respond(exchange, 404, "");
+                // A marketplace that is not there: the 404 carries a failure document.
+                case "DELETE /api/v1/marketplaces/2/widgets/score" -> _respond(exchange, 404,
+                        "{\"error\":\"MARKETPLACE_NOT_FOUND\",\"message\":\"no marketplace 2\",\"status\":\"NOT_FOUND\"}");
+                default -> {
+                    _stray.add(method + " " + uri);
+                    _respond(exchange, 404, "");
+                }
             }
         });
 
-        // A marketplace that is not there: the 404 carries a failure document.
-        _server.createContext("/api/v1/marketplaces/2/widgets", exchange -> {
-            _record(exchange);
-            _respond(exchange, 404,
-                    "{\"error\":\"MARKETPLACE_NOT_FOUND\",\"message\":\"no marketplace 2\",\"status\":\"NOT_FOUND\"}");
-        });
-
-        _server.createContext("/api/v1/marketplaces", exchange -> {
-            _record(exchange);
-            _respond(exchange, 200, "{\"id\":77,\"name\":\"simple-dividend\",\"markets\":[]}");
-        });
-
-        _server.createContext("/api/marketplaces/1/allocations", exchange -> {
-            _record(exchange);
-            _respond(exchange, 200, _allotmentsJson());
-        });
-
-        _server.createContext("/api/marketplaces/1/holdings/downloads", exchange -> {
-            _record(exchange);
-            _respondCsv(exchange, "owner,cash\nalice,10000\n");
-        });
-
-        _server.createContext("/api/marketplaces/1/holdings/uploads", exchange -> {
-            _record(exchange);
-            _respond(exchange, 200, _allotmentsJson());
-        });
-
-        _server.createContext("/api", exchange -> {
-            _record(exchange);
-            _respond(exchange, 200, """
-                {"_links":{"marketplaces":{"href":"%1$s/marketplaces"},
-                           "symbolTradesJson":{"href":"%1$s/symbolTradesJson"},
-                           "symbolOrdersJson":{"href":"%1$s/symbolOrdersJson"},
-                           "sessionOrdersJson":{"href":"%1$s/sessionOrdersJson"},
-                           "usersJson":{"href":"%1$s/usersJson"}}}
-                """.formatted(_api()));
-        });
-
         _server.start();
+    }
+
+    /** The {@code state} a PATCH body names, as JSON, for the echo. */
+    private static String _stateOf(String body) {
+        var m = java.util.regex.Pattern.compile("\"state\"\\s*:\\s*(\"[A-Z]+\")").matcher(body);
+        return m.find() ? m.group(1) : "null";
     }
 
     /** One allotment, spelling capital the way the server does: "grants". */
@@ -218,19 +177,26 @@ class ManagementApiTest {
         if (_server != null) {
             _server.stop(0);
         }
+        assertThat(_stray).as("requests to routes 0.4 does not use").isEmpty();
     }
 
     private void _record(HttpExchange exchange) throws IOException {
         _requests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
         _bodies.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+        _contentTypes.add(exchange.getRequestHeaders().getFirst("Content-Type"));
+        _accepts.add(exchange.getRequestHeaders().getFirst("Accept"));
     }
 
     private static void _respond(HttpExchange exchange, int status, String body) throws IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
-        exchange.sendResponseHeaders(status, bytes.length);
-        try (OutputStream out = exchange.getResponseBody()) {
-            out.write(bytes);
+        exchange.sendResponseHeaders(status, bytes.length == 0 ? -1 : bytes.length);
+        if (bytes.length > 0) {
+            try (OutputStream out = exchange.getResponseBody()) {
+                out.write(bytes);
+            }
+        } else {
+            exchange.close();
         }
     }
 
@@ -251,31 +217,43 @@ class ManagementApiTest {
         return Flexemarkets.connect(TOKEN, _api() + "/marketplaces/1", "management-test");
     }
 
-    private String _bodyOf(String requestPrefix) {
-        for (int i = 0; i < _requests.size(); i++) {
-            if (_requests.get(i).startsWith(requestPrefix)) {
-                return _bodies.get(i);
-            }
-        }
-        throw new AssertionError("no request matching '" + requestPrefix + "' in " + _requests);
+    /** The body of the first request whose method and URI are exactly {@code request}. */
+    private String _bodyOf(String request) {
+        return _bodies.get(_indexOf(request));
     }
 
+    private int _indexOf(String request) {
+        int i = _requests.indexOf(request);
+        if (i < 0) {
+            throw new AssertionError("no request '" + request + "' in " + _requests);
+        }
+        return i;
+    }
+
+    /**
+     * Open, pause and close are one route: the current session, PATCHed with
+     * the state it is to be in. The server echoes the state, so the body is
+     * what decides which transition happened.
+     */
     @Test
-    void sessionTransitionsArePatchesToTheirOwnRoutes() throws Exception {
+    void sessionTransitionsArePatchesOfTheCurrentSessionsState() throws Exception {
         try (Flexemarkets fm = _connect()) {
             assertThat(fm.openSession(1).state()).isEqualTo("OPEN");
             assertThat(fm.pauseSession(1).state()).isEqualTo("PAUSED");
             assertThat(fm.closeSession(1).state()).isEqualTo("CLOSED");
         }
 
-        assertThat(_requests)
-                .contains("PATCH /api/marketplaces/1/open")
-                .contains("PATCH /api/marketplaces/1/pause")
-                .contains("PATCH /api/marketplaces/1/close");
+        assertThat(_requests).containsExactly(
+                "PATCH /api/v1/marketplaces/1/sessions/current",
+                "PATCH /api/v1/marketplaces/1/sessions/current",
+                "PATCH /api/v1/marketplaces/1/sessions/current");
+        assertThat(_bodies).containsExactly(
+                "{\"state\":\"OPEN\"}", "{\"state\":\"PAUSED\"}", "{\"state\":\"CLOSED\"}");
+        assertThat(_contentTypes).allSatisfy(t -> assertThat(t).startsWith("application/json"));
     }
 
     @Test
-    void usersReadsTheJsonRouteRatherThanTheHalOne() throws Exception {
+    void usersAreReadFromTheV1UsersRoute() throws Exception {
         List<Person> users;
         try (Flexemarkets fm = _connect()) {
             users = fm.users();
@@ -283,7 +261,7 @@ class ManagementApiTest {
 
         assertThat(users).hasSize(2);
         assertThat(users.get(1).email()).isEqualTo("t1@dev");
-        assertThat(_requests).contains("GET /api/usersJson");
+        assertThat(_requests).containsExactly("GET /api/v1/users");
     }
 
     @Test
@@ -295,7 +273,7 @@ class ManagementApiTest {
 
         assertThat(allotments).hasSize(1);
         assertThat(allotments.get(0).assets().securities().get(0).units()).isEqualTo(50L);
-        assertThat(_requests).contains("GET /api/v1/marketplaces/1/allotments?allocation=42");
+        assertThat(_requests).containsExactly("GET /api/v1/marketplaces/1/allocations/42/allotments");
     }
 
     /**
@@ -319,7 +297,9 @@ class ManagementApiTest {
             fm.allocate(1, List.of(holding));
         }
 
-        var body = _bodyOf("POST /api/marketplaces/1/allocations");
+        var body = _bodyOf("POST /api/v1/marketplaces/1/allocations");
+        assertThat(_contentTypes.get(_indexOf("POST /api/v1/marketplaces/1/allocations")))
+                .startsWith("application/json");
         assertThat(body)
                 .as("the server reads positions from 'grants'")
                 .contains("\"grants\"")
@@ -336,6 +316,7 @@ class ManagementApiTest {
             created = fm.allocate(1, List.of(holding));
         }
 
+        assertThat(_requests).containsExactly("POST /api/v1/marketplaces/1/allocations");
         assertThat(created).hasSize(1);
         var back = created.get(0);
         assertThat(back.ownerId()).isEqualTo(8L);
@@ -393,7 +374,7 @@ class ManagementApiTest {
 
         assertThat(holdings).singleElement()
                 .satisfies(h -> assertThat(h.sessionId()).isEqualTo(300L));
-        assertThat(_requests).contains("GET /api/marketplaces/1/holdings?sessions=300,301");
+        assertThat(_requests).containsExactly("GET /api/v1/marketplaces/1/holdings?sessions=300,301");
     }
 
     /** An empty filter means "now", not "no sessions" — and asks for no filter. */
@@ -403,7 +384,7 @@ class ManagementApiTest {
             fm.holdings(1, List.of());
         }
 
-        assertThat(_requests).contains("GET /api/marketplaces/1/holdings");
+        assertThat(_requests).containsExactly("GET /api/v1/marketplaces/1/holdings");
     }
 
     /**
@@ -424,24 +405,25 @@ class ManagementApiTest {
             fm.connections(1);
         }
 
-        assertThat(_requests).noneSatisfy(r -> assertThat(r).contains("sessionIds="));
-        // sessions moved to V1, which needs no format= to avoid HAL; connections
-        // has no V1 equivalent with these semantics and stays on V0 for now.
-        assertThat(_requests).anySatisfy(r -> assertThat(r)
-                .contains("/api/v1/marketplaces/1/sessions"));
-        assertThat(_requests).anySatisfy(r -> assertThat(r)
-                .contains("/api/marketplaces/1/connections?format="));
+        // Both on V1, and with no query at all: V1 needs no format= to avoid
+        // HAL, and has no filter on either for one to pretend to be.
+        assertThat(_requests).containsExactly(
+                "GET /api/v1/marketplaces/1/sessions",
+                "GET /api/v1/marketplaces/1/connections");
     }
 
-    /** The holdings download spells it {@code sessions}. */
+    /**
+     * The holdings download spells it {@code sessions}, and is the holdings
+     * read itself asked for as CSV -- V1 has no {@code /downloads}.
+     */
     @Test
     void theHoldingsDownloadFiltersOnSessions() throws Exception {
         try (Flexemarkets fm = _connect()) {
             fm.downloadHoldings(1, List.of(300L));
         }
 
-        assertThat(_requests).anySatisfy(r -> assertThat(r)
-                .contains("/api/marketplaces/1/holdings/downloads?sessions=300"));
+        assertThat(_requests).containsExactly("GET /api/v1/marketplaces/1/holdings?sessions=300");
+        assertThat(_accepts.get(0)).contains("text/csv");
     }
 
     /**
@@ -476,13 +458,14 @@ class ManagementApiTest {
             assertThat(t.id()).as("the trade id, taken from original").isEqualTo(4242L);
             assertThat(t.symbol()).isEqualTo("STK");
         });
-        assertThat(_requests).anySatisfy(r -> assertThat(r).contains("symbol=STK"));
+        assertThat(_requests).containsExactly(
+                "GET /api/v1/marketplaces/1/orders?state=TRADED&symbol=STK&limit=5000");
     }
 
     /**
-     * Orders from a finished run come off a different route: the marketplace's
-     * orders collection is current-session only, so filtering it is not
-     * possible and asking it for an old session silently answers about now.
+     * Orders from a finished run are the marketplace's orders filtered on
+     * {@code sessions}. Unfiltered, the read is the current session's, so
+     * dropping the filter would silently answer about now.
      */
     @Test
     void ordersCanBeReadForParticularSessions() throws Exception {
@@ -493,8 +476,7 @@ class ManagementApiTest {
 
         assertThat(orders).singleElement()
                 .satisfies(o -> assertThat(o.sessionId()).isEqualTo(300L));
-        assertThat(_requests).anySatisfy(r -> assertThat(r)
-                .contains("/api/sessionOrdersJson?marketplaceId=1&sessionIds=300"));
+        assertThat(_requests).containsExactly("GET /api/v1/marketplaces/1/orders?sessions=300");
     }
 
     /**
@@ -515,6 +497,7 @@ class ManagementApiTest {
             assertThat(o.original()).isEqualTo(7L);
             assertThat(o.symbol()).isEqualTo("STK");
         });
+        assertThat(_requests).containsExactly("GET /api/v1/marketplaces/1/orders?state=ACTIVE&symbol=STK");
     }
 
     /** An empty filter means "now", and asks for no filter at all. */
@@ -524,7 +507,7 @@ class ManagementApiTest {
             fm.downloadHoldings(1, List.of());
         }
 
-        assertThat(_requests).noneSatisfy(r -> assertThat(r).contains("?sessions="));
+        assertThat(_requests).containsExactly("GET /api/v1/marketplaces/1/holdings");
     }
 
     /** A CSV, returned as-is. Parsing it as JSON would fail on the header row. */
@@ -536,10 +519,16 @@ class ManagementApiTest {
         }
 
         assertThat(csv).isEqualTo("owner,cash\nalice,10000\n");
+        assertThat(_requests).containsExactly("GET /api/v1/marketplaces/1/holdings");
+        assertThat(_accepts.get(0)).contains("text/csv");
     }
 
+    /**
+     * An upload is an allocation, sent as the file itself: the CSV is the
+     * body, {@code Content-Type: text/csv}, not a multipart form wrapping it.
+     */
     @Test
-    void uploadHoldingsPostsTheFileAsMultipart(@TempDir Path dir) throws Exception {
+    void uploadHoldingsPostsTheRawCsvAsAnAllocation(@TempDir Path dir) throws Exception {
         var csv = dir.resolve("holdings.csv");
         Files.writeString(csv, "owner,cash\nalice,10000\n");
 
@@ -548,13 +537,13 @@ class ManagementApiTest {
             created = fm.uploadHoldings(1, csv);
         }
 
-        var body = _bodyOf("POST /api/marketplaces/1/holdings/uploads");
-        assertThat(body)
-                .as("the part must be named 'file' and carry the file's own name")
-                .contains("name=\"file\"")
-                .contains("filename=\"holdings.csv\"")
-                .contains("owner,cash");
+        assertThat(_requests).containsExactly("POST /api/v1/marketplaces/1/allocations");
+        assertThat(_contentTypes.get(0)).startsWith("text/csv");
+        assertThat(_bodyOf("POST /api/v1/marketplaces/1/allocations"))
+                .as("the file verbatim, with no multipart envelope")
+                .isEqualTo("owner,cash\nalice,10000\n");
         assertThat(created).hasSize(1);
+        assertThat(created.get(0).allocationId()).isEqualTo(42L);
     }
 
     /**
@@ -598,7 +587,7 @@ class ManagementApiTest {
             all = fm.allWidgets(1);
         }
 
-        assertThat(_requests).contains("GET /api/v1/marketplaces/1/widgets/all");
+        assertThat(_requests).containsExactly("GET /api/v1/marketplaces/1/widgets?participant=all");
         assertThat(all).extracting(Widget::key).containsExactly("score", "values");
         assertThat(all.get(1).content()).containsEntry("kind", "kv");
     }
@@ -619,7 +608,7 @@ class ManagementApiTest {
         assertThat(_requests)
                 .contains("DELETE /api/v1/marketplaces/1/widgets/score")
                 .contains("DELETE /api/v1/marketplaces/1/widgets/absent")
-                .contains("DELETE /api/v1/marketplaces/1/widgets/score?userId=8");
+                .contains("DELETE /api/v1/marketplaces/1/participants/8/widgets/score");
     }
 
     /**

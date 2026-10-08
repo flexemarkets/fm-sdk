@@ -53,7 +53,7 @@ export function tradeOf(resting: Order, aggressor: Order): Trade {
  * Bounded FIFO queue of executed trades for a single market, newest last.
  *
  * Updated incrementally from WebSocket ORDERS-UPDATE events, and seeded from
- * the `/v1/orders/recent-trades` snapshot. Keeps the most recent `capacity`
+ * the traded-orders snapshot (`orders?state=TRADED`). Keeps the most recent `capacity`
  * trades.
  *
  * Each batch is sorted by the time the aggressor arrived before it is appended,

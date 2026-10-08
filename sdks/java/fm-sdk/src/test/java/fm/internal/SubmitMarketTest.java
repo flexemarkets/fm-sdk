@@ -44,7 +44,9 @@ class SubmitMarketTest {
             "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl";
 
     private HttpServer _server;
+    /** Each order request as {@code METHOD uri body}. */
     private final List<String> _submitted = new ArrayList<>();
+    private final List<String> _stray = new ArrayList<>();
 
     /** priceMinimum 110, tick 25 — so the legal prices are 110, 135, 160, 185. */
     private String _marketsJson = """
@@ -57,25 +59,30 @@ class SubmitMarketTest {
     void startServer() throws IOException {
         _server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 
-        _server.createContext("/api/tokens", exchange -> _respond(exchange, """
+        _server.createContext("/api/tokens", exchange -> _respond(exchange, 200, """
             {"token":"%s",
              "person":{"id":7,"accountId":1,"email":"dev@dev"},
              "account":{"id":1,"name":"dev"}}
             """.formatted(TOKEN)));
 
-        _server.createContext("/api/marketplaces/1/markets", exchange -> _respond(exchange, _marketsJson));
-
-        _server.createContext("/api/orders", exchange -> {
-            _submitted.add(_body(exchange));
-            _respond(exchange, "{\"id\":42,\"marketplaceId\":1,\"marketId\":11}");
-        });
-
-        _server.createContext("/api", exchange -> {
-            String base = "http://127.0.0.1:" + _server.getAddress().getPort() + "/api";
-            _respond(exchange, """
-                {"_links":{"marketplaces":{"href":"%s/marketplaces"},
-                           "orders":{"href":"%s/orders"}}}
-                """.formatted(base, base));
+        // The V1 routes only. No API root, and no V0 /api/orders: a request
+        // to either is recorded as stray and refused.
+        _server.createContext("/", exchange -> {
+            String method = exchange.getRequestMethod();
+            String uri = exchange.getRequestURI().toString();
+            if ("GET".equals(method) && "/api/v1/marketplaces/1/markets".equals(uri)) {
+                _respond(exchange, 200, _marketsJson);
+            } else if ("POST".equals(method) && "/api/v1/marketplaces/1/orders".equals(uri)) {
+                _submitted.add(method + " " + uri + " " + _body(exchange));
+                _respond(exchange, 200, "{\"id\":42,\"marketplaceId\":1,\"marketId\":11}");
+            } else if ("DELETE".equals(method) && uri.startsWith("/api/v1/marketplaces/1/orders/")) {
+                _submitted.add(method + " " + uri + " " + _body(exchange));
+                _respond(exchange, 200, """
+                    {"id":43,"original":42,"consumer":42,"type":"CANCEL","marketplaceId":1,"marketId":11}""");
+            } else {
+                _stray.add(method + " " + uri);
+                _respond(exchange, 404, "");
+            }
         });
 
         _server.start();
@@ -86,18 +93,21 @@ class SubmitMarketTest {
         if (_server != null) {
             _server.stop(0);
         }
+        assertThat(_stray).as("requests to routes 0.4 does not use").isEmpty();
     }
 
     private static String _body(HttpExchange exchange) throws IOException {
         return new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
     }
 
-    private static void _respond(HttpExchange exchange, String json) throws IOException {
+    private static void _respond(HttpExchange exchange, int status, String json) throws IOException {
         byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
-        exchange.sendResponseHeaders(200, bytes.length);
-        try (OutputStream out = exchange.getResponseBody()) {
-            out.write(bytes);
+        exchange.sendResponseHeaders(status, bytes.length == 0 ? -1 : bytes.length);
+        if (bytes.length > 0) {
+            try (OutputStream out = exchange.getResponseBody()) {
+                out.write(bytes);
+            }
         }
     }
 
@@ -139,7 +149,9 @@ class SubmitMarketTest {
             fm.submitMarket(1L, 11L, OrderSide.BUY, 5L);
         }
 
-        assertThat(_submitted.get(0)).contains("\"type\":\"LIMIT\"");
+        assertThat(_submitted.get(0))
+                .startsWith("POST /api/v1/marketplaces/1/orders ")
+                .contains("\"type\":\"LIMIT\"");
     }
 
     /**
@@ -148,6 +160,9 @@ class SubmitMarketTest {
      * <p>Without the cancel, a market order that did not fill leaves a bid at
      * the market's maximum — the best price in the book, standing, for anyone
      * to take. That is the opposite of what the caller asked for.
+     *
+     * <p>The cancel is a DELETE of the order by the id the submit answered;
+     * the server builds the CANCEL row itself.
      */
     @Test
     void whateverDoesNotFillIsCancelled() throws Exception {
@@ -156,9 +171,7 @@ class SubmitMarketTest {
         }
 
         assertThat(_submitted).hasSize(2);
-        assertThat(_submitted.get(1))
-                .contains("\"type\":\"CANCEL\"")
-                .contains("\"original\":42");
+        assertThat(_submitted.get(1)).isEqualTo("DELETE /api/v1/marketplaces/1/orders/42 ");
     }
 
     /**
@@ -175,6 +188,7 @@ class SubmitMarketTest {
         }
 
         assertThat(_submitted).as("submit then cancel, always").hasSize(2);
+        assertThat(_submitted.get(1)).startsWith("DELETE /api/v1/marketplaces/1/orders/42");
     }
 
     @Test

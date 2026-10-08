@@ -45,11 +45,10 @@ PARSERS: dict[str, list[tuple[str, Callable[[dict[str, Any]], Any]]]] = {
     # a list -- which is what push_widgets and all_widgets do with the body.
     "Widgets": [("client", lambda body: SimpleNamespace(
         widgets=[rest._parse_widget(w) for w in body]))],
-    # Not a parser but a shape the SDK has to recognise, which is why it has
-    # broken twice. This is exactly what active_orders/recent_trades do with a
-    # response body.
+    # Not a parser but the shape check active_orders/recent_trades apply to a
+    # response body: a bare array, or ApiError.
     "OrdersSnapshot": [("client", lambda body: SimpleNamespace(
-        orders=[rest._parse_order(o) for o in rest._embedded_orders(body)]))],
+        orders=[rest._parse_order(o) for o in rest._orders_of(body)]))],
 }
 
 

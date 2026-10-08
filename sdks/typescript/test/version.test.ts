@@ -53,8 +53,6 @@ test("the wire carries it", async () => {
         person: { id: 7, accountId: 1, email: "dev@dev" },
         account: { id: 1, name: "dev" },
       }));
-    } else if (req.url === "/api") {
-      res.end(JSON.stringify({ _links: {} }));
     } else {
       res.end("[]");
     }
@@ -63,11 +61,13 @@ test("the wire carries it", async () => {
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`;
   try {
     const fm = await Flexemarkets.connect(TOKEN, `${base}/marketplaces/1`, "user-agent-test");
+    // Signing in is one request; a call is another, sent by a different helper.
+    await fm.marketplaces();
     await fm.close();
   } finally {
     server.close();
   }
 
-  assert.ok(agents.length > 0, "no request reached the server");
+  assert.equal(agents.length, 2, "the sign-in and the call");
   assert.deepEqual([...new Set(agents)], [`fm-sdk-typescript/${own.version}`]);
 });

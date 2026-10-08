@@ -76,26 +76,20 @@ class Handler(BaseHTTPRequestHandler):
                 "person": {"id": 7, "accountId": 1, "email": "dev@dev"},
                 "account": {"id": 1, "name": "dev"},
             })
-        elif self.path == "/api/v1/marketplaces/1/widgets/all":
+        elif self.path == "/api/v1/marketplaces/1/widgets?participant=all":
             self._send(WIDGETS)
-        elif self.path.startswith("/api/v1/marketplaces/1/allotments"):
+        elif self.path == "/api/v1/marketplaces/1/allocations/42/allotments":
             self._send(ALLOTMENTS)
-        elif self.path == "/api":
-            base = f"http://127.0.0.1:{self.server.server_address[1]}/api"
-            self._send({"_links": {
-                "marketplaces": {"href": f"{base}/marketplaces"},
-                "symbolTradesJson": {"href": f"{base}/symbolTradesJson"},
-                "usersJson": {"href": f"{base}/usersJson"},
-            }})
-        elif self.path.startswith("/api/marketplaces/1/holdings/downloads"):
+        elif (self.path.startswith("/api/v1/marketplaces/1/holdings")
+              and "text/csv" in (self.headers.get("Accept") or "")):
             self._send("owner,cash\nalice,10000\n", "text/csv")
-        elif self.path.startswith("/api/marketplaces/1/sessions"):
+        elif self.path.startswith("/api/v1/marketplaces/1/sessions"):
             self._send([{"id": 300, "state": "CLOSED"}])
-        elif self.path.startswith("/api/marketplaces/1/connections"):
+        elif self.path.startswith("/api/v1/marketplaces/1/connections"):
             self._send([{"id": 9, "ownerId": 8, "marketplaceId": 1, "sessionId": 300}])
-        elif self.path.startswith("/api/symbolTradesJson"):
-            # The symbol-keyed route answers with the trade id in "original"
-            # and no symbol on the order.
+        elif self.path.startswith("/api/v1/marketplaces/1/orders?state=TRADED"):
+            # The traded legs carry the trade id in "original" and no symbol
+            # on the order.
             self._send([{"id": 0, "original": 4242, "units": 5, "price": 950}])
         else:
             self._send([])
@@ -162,7 +156,7 @@ def test_allotments_are_read_from_the_v1_route(fm):
 
     assert len(allotments) == 1
     assert allotments[0].assets.securities[0].units == 50
-    assert ("GET", "/api/v1/marketplaces/1/allotments?allocation=42") in requests
+    assert ("GET", "/api/v1/marketplaces/1/allocations/42/allotments") in requests
 
 
 def test_allocate_sends_positions_as_grants(fm):
@@ -180,7 +174,7 @@ def test_allocate_sends_positions_as_grants(fm):
 
     fm.allocate(1, [holding])
 
-    body = bodies["POST /api/marketplaces/1/allocations"]
+    body = bodies["POST /api/v1/marketplaces/1/allocations"]
     assert '"grants"' in body, "the server reads opening positions from 'grants'"
     assert '"securities"' not in body
     assert '"cash": 10000' in body or '"cash":10000' in body
@@ -241,7 +235,7 @@ def test_allocate_sends_the_short_allowance(fm):
 
     fm.allocate(1, [holding])
 
-    body = bodies["POST /api/marketplaces/1/allocations"]
+    body = bodies["POST /api/v1/marketplaces/1/allocations"]
     assert '"shortUnits": 50' in body or '"shortUnits":50' in body
 
 
@@ -258,16 +252,15 @@ def test_sessions_and_connections_are_never_filtered_on_the_wire(fm):
     fm.connections(1)
 
     assert not any("sessionIds=" in r for _, r in requests)
-    # sessions moved to V1, which needs no format= to avoid HAL; connections
-    # has no V1 equivalent with these semantics and stays on V0 for now.
-    assert any("/api/v1/marketplaces/1/sessions" in r for _, r in requests)
-    assert any("/api/marketplaces/1/connections?format=" in r for _, r in requests)
+    # Both are V1, which needs no format= to avoid HAL: no query at all.
+    assert ("GET", "/api/v1/marketplaces/1/sessions") in requests
+    assert ("GET", "/api/v1/marketplaces/1/connections") in requests
 
 
 def test_the_holdings_download_filters_on_sessions(fm):
     fm.download_holdings(1, [300])
 
-    assert any("/holdings/downloads?sessions=300" in p for _, p in requests)
+    assert ("GET", "/api/v1/marketplaces/1/holdings?sessions=300") in requests
 
 
 def test_a_connection_carries_its_session(fm):
@@ -282,8 +275,8 @@ def test_a_connection_carries_its_session(fm):
 
 
 def test_trades_carry_their_id_and_symbol(fm):
-    """Tape come back with the trade id in ``original`` and no symbol, because
-    the query already fixed it. Both are filled in, so the result is a trade
+    """Traded legs come back with the trade id in ``original`` and no symbol,
+    because the query already fixed it. Both are filled in, so the result is a trade
     list rather than half-populated orders.
     """
     trades = fm.trades(1, "STK")
@@ -291,15 +284,15 @@ def test_trades_carry_their_id_and_symbol(fm):
     assert len(trades) == 1
     assert trades[0].id == 4242, "the trade id, taken from original"
     assert trades[0].symbol == "STK"
-    assert any("symbol=STK" in p for _, p in requests)
+    assert ("GET", "/api/v1/marketplaces/1/orders?state=TRADED&symbol=STK&limit=5000") in requests
 
 
 def test_an_empty_filter_falls_back_to_the_unfiltered_route(fm):
     """An empty filter means "now", and asks for no filter at all."""
-    fm.download_holdings(1, [])
+    assert fm.download_holdings(1, []) == "owner,cash\nalice,10000\n"
 
-    paths = [p for _, p in requests]
-    assert not any("?sessions=" in p for p in paths)
+    assert ("GET", "/api/v1/marketplaces/1/holdings") in requests
+    assert not any("?sessions=" in p for _, p in requests)
 
 
 def test_manager_otp_bundles_are_minted_for_the_users_asked(fm):
@@ -336,7 +329,8 @@ def test_push_widgets_posts_one_array(fm):
                    content={"kind": "kv", "items": [{"label": "value", "value": 120}]}),
     ])
 
-    assert [r for r in requests if r[0] == "POST"] == [("POST", "/api/v1/marketplaces/1/widgets")]
+    assert [r for r in requests if r[0] == "POST" and not r[1].startswith("/api/tokens")] == [
+        ("POST", "/api/v1/marketplaces/1/widgets")]
     body = json.loads(bodies["POST /api/v1/marketplaces/1/widgets"])
     assert isinstance(body, list) and len(body) == 2
     assert body[0]["target"] == {"scope": "MARKETPLACE"}
@@ -354,7 +348,7 @@ def test_push_widgets_posts_one_array(fm):
 def test_all_widgets_reads_the_manager_route(fm):
     widgets = fm.all_widgets(1)
 
-    assert ("GET", "/api/v1/marketplaces/1/widgets/all") in requests
+    assert ("GET", "/api/v1/marketplaces/1/widgets?participant=all") in requests
     assert [w.key for w in widgets] == ["score", "values"]
     assert widgets[1].content["kind"] == "kv"
 
@@ -369,7 +363,7 @@ def test_remove_widget_answers_whether_anything_was_there(fm):
 
     assert ("DELETE", "/api/v1/marketplaces/1/widgets/score") in requests
     assert ("DELETE", "/api/v1/marketplaces/1/widgets/absent") in requests
-    assert ("DELETE", "/api/v1/marketplaces/1/widgets/score?userId=8") in requests
+    assert ("DELETE", "/api/v1/marketplaces/1/participants/8/widgets/score") in requests
 
 
 def test_remove_widget_raises_a_404_that_says_something_else(fm):
@@ -379,3 +373,13 @@ def test_remove_widget_raises_a_404_that_says_something_else(fm):
     with pytest.raises(HttpError) as raised:
         fm.remove_widget(2, "score")
     assert raised.value.status_code == 404
+
+
+def test_approving_a_name_no_account_has_says_so_and_approves_nothing(fm):
+    """V1 approves by id, so the name is looked up first. A name in no account
+    is the caller's mistake, said as one -- not a POST to an id made up."""
+    with pytest.raises(InvalidArgumentError, match="No account named 'ghost'"):
+        fm.approve_account("ghost")
+
+    assert ("GET", "/api/v1/accounts") in requests
+    assert not any(path.endswith("/approvals") for _, path in requests)

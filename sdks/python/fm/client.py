@@ -47,7 +47,6 @@ from .exceptions import (
     PersonHasMarketplaceDataError,
 )
 from .enums import OrderType, OrderSide
-from ._hal import ApiRoot
 from .types import (
     Account,
     Allotment,
@@ -320,59 +319,25 @@ def _parse_connection(data: dict[str, Any]) -> ClientConnection:
     )
 
 
-def _parse_api_root(data: dict[str, Any]) -> ApiRoot:
-    links_raw = data.get("_links", {})
-    links: dict[str, str] = {}
-    for name, value in links_raw.items():
-        if isinstance(value, dict):
-            links[name] = value.get("href", "")
-        elif isinstance(value, str):
-            links[name] = value
-    return ApiRoot(links=links)
+def _orders_of(body: Any) -> list[dict[str, Any]]:
+    """The orders in a snapshot answer, which is a bare JSON array or a failure.
 
+    Only the array is read because the V1 route never sent anything else:
+    ``GET /api/v1/marketplaces/{id}/orders`` has always answered a bare array,
+    and 0.4 requires fm-server 4.6.2. The HAL envelopes earlier SDKs tolerated
+    belonged to the routes 0.4 no longer calls.
 
-def _http_origin(url: str | None) -> str | None:
-    """The ``scheme://host:port`` of an absolute http(s) URL, else ``None``.
+    Anything else raises rather than reading as empty. An empty snapshot is the
+    failure that hid twice before: ``Desk`` seeded an empty book, filled it from
+    live deltas, and looked plausible.
 
-    A relative href already resolves against the origin it was fetched from,
-    and a scheme that is not HTTP is not ours to rewrite.
+    :raises ApiError: when the answer is not a JSON array
     """
-    if not url:
-        return None
-    end = url.find("://")
-    if end < 0:
-        return None
-    if url[:end].lower() not in ("http", "https"):
-        return None
-    path_start = url.find("/", end + 3)
-    return url if path_start < 0 else url[:path_start]
-
-
-def _embedded_orders(body: Any) -> list[dict[str, Any]]:
-    """The orders in a snapshot response, whatever shape it arrives in.
-
-    Three shapes, because the envelope has moved twice and both older ones are
-    still deployed:
-
-    * a bare array -- what fm-server sends now, HAL-less
-    * ``_embedded.orders`` -- the Spring HATEOAS CollectionModel
-    * ``_embedded.orderDtoes`` -- HATEOAS pluralising ``OrderDto``
-
-    Each move broke every SDK at once, and neither was caught: the first
-    returned an empty list forever, so ``Desk``'s books seeded from live
-    deltas instead and looked plausible; the second raised ``AttributeError``
-    from ``.get`` on a list, which took ``desk()`` down with it.
-
-    Reading the shape rather than assuming one is the fix that generalises.
-    Accepting both *names* was the fix last time, and it did not survive the
-    envelope itself being dropped.
-    """
-    if isinstance(body, list):
-        return body
-    if not isinstance(body, dict):
-        return []
-    embedded = body.get("_embedded") or {}
-    return embedded.get("orders") or embedded.get("orderDtoes") or []
+    if not isinstance(body, list):
+        kind = {type(None): "null", dict: "object", str: "string", bool: "boolean",
+                int: "number", float: "number"}.get(type(body), type(body).__name__)
+        raise ApiError(f"The orders snapshot answer was not a list of orders: got {kind}")
+    return body
 
 
 def _marketable_limit(market: Market, side: str) -> int:
@@ -402,105 +367,34 @@ def _marketable_limit(market: Market, side: str) -> int:
     return market.price_minimum + (span // market.price_tick) * market.price_tick
 
 
-def _rebase_api_root(root: ApiRoot, endpoint: str) -> ApiRoot:
-    """Point the API root's links back at the host that was dialled.
-
-    The server builds these hrefs from the request it believes it received,
-    and behind a proxy that belief can be wrong: an origin reached over a
-    plaintext leg reports ``http://`` even though the caller arrived on
-    ``https://``. Every call that goes through a link -- which is most of them
-    -- then leaves on plain HTTP and meets the edge's redirect. A GET survives
-    it. A POST does not: a 301 is followed as a GET with the body dropped, so
-    placing an order or opening a session fails with nothing placed and
-    nothing pointing at the scheme.
-
-    Only the origin is replaced. The path, query and any URI template are the
-    server's to choose; where it is reachable is not, and the token in hand
-    was issued by the origin dialled, not by whatever the links name.
-    """
-    origin = _http_origin(endpoint)
-    if origin is None:
-        return root
-
-    rebased: dict[str, str] = {}
-    moved: list[str] = []
-    for name, href in root.links.items():
-        named = _http_origin(href)
-        if named is None or named == origin:
-            rebased[name] = href
-            continue
-        if named not in moved:
-            moved.append(named)
-        rebased[name] = origin + href[len(named):]
-
-    if moved:
-        # Said out loud, because the rewrite would otherwise hide a deployment
-        # that is genuinely misconfigured -- and a silent correction here is
-        # how it stays misconfigured. The SDK keeps working; the operator
-        # still gets told where to look.
-        log.warning(
-            "The API root names %s but this client dialled %s; rewriting %d link origin(s) "
-            "to match. The server is behind a proxy that is not forwarding the request "
-            "scheme, so its links are wrong. Fix it at the edge -- this rewrite only keeps "
-            "calls working.",
-            ", ".join(moved), origin, len(moved),
-        )
-
-    return ApiRoot(links=rebased)
-
-
 # ---------------------------------------------------------------------------
-# HATEOAS link resolution
+# Routes
 # ---------------------------------------------------------------------------
-
-def _process_template(href: str) -> str:
-    idx = href.find("{")
-    if idx >= 0:
-        return href[:idx]
-    return href
-
 
 def _v1(endpoint: str, path: str) -> str:
-    """A V1 route, addressed from the server rather than through a HAL link.
+    """A V1 route, addressed from the server.
 
-    V1 is flat and versioned: the path is knowable without fetching the API
-    root first, which is the point of it. Every call that moves here loses a
-    HAL dependency as well as a version.
+    0.4 reads no API root: every route is knowable from the server and the
+    resource ids, so nothing is fetched before the first real call and no
+    link the server stops advertising can break one.
     """
     return f"{_server(endpoint)}/v1{path}"
 
 
-def _uri(root: ApiRoot, link_name: str) -> str:
-    href = root.get_link(link_name)
-    if href is None:
-        raise ApiError(f"Link '{link_name}' not found in API root.")
-    return _process_template(href)
+def _marketplace(endpoint: str, marketplace_id: int) -> str:
+    """``/api/v1/marketplaces/{id}``, which most routes hang off."""
+    return _v1(endpoint, f"/marketplaces/{marketplace_id}")
 
 
-def _uri_id(root: ApiRoot, link_name: str, id_: int) -> str:
-    return f"{_uri(root, link_name)}/{id_}"
+def _segment(value: str) -> str:
+    """One path segment, escaped so a key cannot reach another route."""
+    return quote(value, safe="")
 
 
-def _uri_id_segment(root: ApiRoot, link_name: str, id_: int, segment: str) -> str:
-    return f"{_uri_id(root, link_name, id_)}/{segment}"
-
-
-def _uri_param(root: ApiRoot, link_name: str, param: str) -> str:
-    return f"{_uri(root, link_name)}?{param}"
-
-
-def _uri_id_segment_param(root: ApiRoot, link_name: str, id_: int, segment: str, param: str) -> str:
-    base = _uri_id_segment(root, link_name, id_, segment)
-    if param:
-        return f"{base}?{param}"
-    return base
-
-
-def _uri_param_marketplace_id_param(root: ApiRoot, link_name: str, id_: int, param: str | None) -> str:
-    uri = _uri_param(root, link_name, f"marketplaceId={id_}")
-    if param:
-        uri += f"&{param}"
-    return uri
+# The most traded legs fm-server answers in one read. The route trades() used
+# to read had no limit; asking for the ceiling keeps as much of that as the
+# server allows.
+_MAX_TRADED_LEGS = 5000
 
 
 # ---------------------------------------------------------------------------
@@ -562,12 +456,6 @@ def _resolve_endpoint(endpoint: str) -> dict[str, str]:
     if _is_file(endpoint):
         return _load_properties_file(Path(endpoint))
     return {"endpoint": endpoint}
-
-
-def _session_ids_param(session_ids: list[int] | None) -> str:
-    if not session_ids:
-        return ""
-    return "sessionIds=" + ",".join(str(s) for s in session_ids)
 
 
 def _ids_param(ids: list[int]) -> str:
@@ -767,9 +655,6 @@ class Flexemarkets:
         self._user = self._token_obj.person
         self._bearer_token = f"Bearer {self._token_obj.token}"
 
-        # Fetch API root for HATEOAS links
-        self._api_root = self._fetch_api_root()
-
         self._event_listener = None
 
         # Phase 2d shared-desk registry, keyed by marketplace_id.
@@ -850,7 +735,7 @@ class Flexemarkets:
             url,
             headers={
                 **self._auth_headers(),
-                "Accept": "application/json, application/hal+json",
+                "Accept": "application/json",
             },
         )
         _check_response(resp)
@@ -862,26 +747,48 @@ class Flexemarkets:
             json=json,
             headers={
                 **self._auth_headers(),
-                "Accept": "application/json, application/hal+json",
+                "Accept": "application/json",
             },
         )
         _check_response(resp)
         return resp
 
-    def _patch(self, url: str) -> httpx.Response:
+    def _patch(self, url: str, json: Any) -> httpx.Response:
         resp = self._http.patch(
             url,
+            json=json,
             headers={
                 **self._auth_headers(),
-                "Accept": "application/json, application/hal+json",
+                "Accept": "application/json",
             },
         )
         _check_response(resp)
         return resp
 
-    def _delete(self, url: str) -> None:
-        resp = self._http.delete(url, headers=self._auth_headers())
+    def _delete(self, url: str) -> httpx.Response:
+        resp = self._http.delete(
+            url, headers={**self._auth_headers(), "Accept": "application/json"})
         _check_response(resp)
+        return resp
+
+    def _send_csv(self, method: str, url: str, filename: str) -> httpx.Response:
+        """The file as the request body, declared text/csv.
+
+        V1 says what a body is by its Content-Type (API-V1 rule 7), where V0
+        took a multipart upload to a ``.../uploads`` path.
+        """
+        with open(filename, "rb") as f:
+            content = f.read()
+        resp = self._http.request(
+            method, url, content=content,
+            headers={
+                **self._auth_headers(),
+                "Content-Type": "text/csv",
+                "Accept": "application/json",
+            },
+        )
+        _check_response(resp)
+        return resp
 
     # -- authentication ----------------------------------------------------
 
@@ -899,7 +806,7 @@ class Flexemarkets:
             # rewrite dropped it, and the Java SDK restored it with a test. This
             # SDK and the TypeScript one never had it, so token auth returned
             # 400 in both from the day it was written.
-            resp = self._http.get(
+            resp = self._http.post(
                 _server(self._endpoint) + "/tokens/refresh",
                 headers={
                     "Authorization": f"Bearer {tok}",
@@ -929,11 +836,6 @@ class Flexemarkets:
         _check_response(resp)
         return _parse_token(_json(resp))
 
-    def _fetch_api_root(self) -> ApiRoot:
-        url = _server(self._endpoint)
-        resp = self._get(url)
-        return _rebase_api_root(_parse_api_root(_json(resp)), url)
-
     # ======================================================================
     # REST APIs
     # ======================================================================
@@ -941,7 +843,7 @@ class Flexemarkets:
     # -- accounts ----------------------------------------------------------
 
     def accounts(self) -> list[Account]:
-        url = _uri_param(self._api_root, "accounts", "format=application/json")
+        url = _v1(self._endpoint, "/accounts")
         data = _json(self._get(url))
         return [_parse_account(a) for a in data]
 
@@ -953,7 +855,7 @@ class Flexemarkets:
         first_name: str | None = None,
         last_name: str | None = None,
     ) -> Token:
-        url = _uri(self._api_root, "accounts")
+        url = _v1(self._endpoint, "/accounts")
         body: dict[str, Any] = {
             "accountName": account_name,
             "ownerEmail": email,
@@ -969,21 +871,28 @@ class Flexemarkets:
             json=body,
             headers={
                 **self._auth_headers(),
-                "Accept": "application/json, application/hal+json",
+                "Accept": "application/json",
             },
         )
         _check_conflict_account(resp, account_name)
         return _parse_token(_json(resp))
 
     def approve_account(self, account_name: str) -> Account:
-        url = _server(self._endpoint) + "/approvals"
-        resp = self._post(url, {"name": account_name, "approval": True})
-        approval_data = _json(resp)
+        """Approve the account of that name, returning it as approved.
+
+        V1 approves by id, so the name is looked up in the account list first.
+        A name no account has is the caller's mistake, said as one, rather
+        than a 404 from a route built around no id.
+        """
+        account = next((a for a in self.accounts() if a.name == account_name), None)
+        if account is None:
+            raise InvalidArgumentError(f"No account named '{account_name}'")
+        url = _v1(self._endpoint, f"/accounts/{account.id}/approvals")
+        approval_data = _json(self._post(url, {"approve": True}))
         return _parse_account(approval_data.get("account"))  # type: ignore[return-value]
 
     def delete_account(self, account_id: int) -> None:
-        url = _uri_id(self._api_root, "accounts", account_id)
-        self._delete(url)
+        self._delete(_v1(self._endpoint, f"/accounts/{account_id}"))
 
     def manager_otp_bundle(self, user_ids: list[int]) -> ManagerOtpBundle:
         """Mint one-time passcodes for the given users.
@@ -1006,13 +915,12 @@ class Flexemarkets:
         )
 
     def delete_my_account(self) -> None:
-        url = _server(self._endpoint) + "/accounts/me"
-        self._delete(url)
+        self._delete(_v1(self._endpoint, "/accounts/me"))
 
     # -- users -------------------------------------------------------------
 
     def users(self) -> list[Person]:
-        url = _uri(self._api_root, "usersJson")
+        url = _v1(self._endpoint, "/users")
         data = _json(self._get(url))
         return [_parse_person(u) for u in data]  # type: ignore[misc]
 
@@ -1035,19 +943,19 @@ class Flexemarkets:
         return _parse_person(_json(resp))  # type: ignore[return-value]
 
     def delete_user(self, user_id: int) -> None:
-        url = _uri_id(self._api_root, "users", user_id)
+        url = _v1(self._endpoint, f"/users/{user_id}")
         resp = self._http.delete(url, headers=self._auth_headers())
         _check_conflict_user(resp, user_id)
 
     # -- marketplaces ------------------------------------------------------
 
     def marketplaces(self) -> list[Marketplace]:
-        url = _uri_param(self._api_root, "marketplaces", "format=application/json")
+        url = _v1(self._endpoint, "/marketplaces")
         data = _json(self._get(url))
         return [_parse_marketplace(m) for m in data]
 
     def marketplace(self, marketplace_id: int) -> Marketplace:
-        url = _uri_id(self._api_root, "marketplaces", marketplace_id)
+        url = _marketplace(self._endpoint, marketplace_id)
         return _parse_marketplace(_json(self._get(url)))
 
     def create_marketplace_from_json(self, definition: str) -> Marketplace:
@@ -1068,26 +976,23 @@ class Flexemarkets:
             raise InvalidArgumentError(
                 f"Marketplace definition is not valid JSON: {e}") from e
 
-        url = f"{_server(self.endpoint_url)}/v1/marketplaces"
+        url = _v1(self._endpoint, "/marketplaces")
         return _parse_marketplace(_json(self._post(url, parsed)))
 
     def delete_marketplace(self, marketplace_id: int) -> None:
-        url = _uri_id(self._api_root, "marketplaces", marketplace_id)
-        self._delete(url)
+        self._delete(_marketplace(self._endpoint, marketplace_id))
 
     # -- markets -----------------------------------------------------------
 
     def markets(self, marketplace_id: int) -> list[Market]:
-        url = _uri_id_segment_param(
-            self._api_root, "marketplaces", marketplace_id, "markets",
-            "format=application/json",
-        )
+        url = _marketplace(self._endpoint, marketplace_id) + "/markets"
         data = _json(self._get(url))
         return [_parse_market(m) for m in data]
 
     def symbols(self, marketplace_id: int) -> list[str]:
-        url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "symbols")
-        return _json(self._get(url))
+        """The markets' own symbols: V1 has no ``/symbols``, which was this
+        projection server-side."""
+        return [m.symbol for m in self.markets(marketplace_id)]  # type: ignore[misc]
 
     def create_market(
         self,
@@ -1107,7 +1012,7 @@ class Flexemarkets:
         Omitting *units* keeps the old default.
         """
         units = units if units is not None else TickGrid.units()
-        url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "markets")
+        url = _marketplace(self._endpoint, marketplace_id) + "/markets"
         resp = self._post(url, {
             "symbol": symbol,
             "name": name,
@@ -1136,11 +1041,11 @@ class Flexemarkets:
         server, not assumed -- and needs no ``format=application/json`` to
         avoid HAL.
         """
-        url = _v1(self._endpoint, f"/marketplaces/{marketplace_id}/sessions")
+        url = _marketplace(self._endpoint, marketplace_id) + "/sessions"
         return [_parse_session(s) for s in _json(self._get(url))]
 
     def session(self, marketplace_id: int) -> Session:
-        url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "currentSession")
+        url = _marketplace(self._endpoint, marketplace_id) + "/sessions/current"
         return _parse_session(_json(self._get(url)))
 
     def account_by_id(self, account_id: int) -> Account:
@@ -1150,7 +1055,7 @@ class Flexemarkets:
         connection signed in to. Java overloads the two; a property cannot
         take an argument, so here they are separate names.
         """
-        return _parse_account(_json(self._get(_uri_id(self._api_root, "accounts", account_id))))
+        return _parse_account(_json(self._get(_v1(self._endpoint, f"/accounts/{account_id}"))))
 
     def user_by_id(self, user_id: int) -> Person:
         """One user by id; see :meth:`account_by_id` for the name."""
@@ -1158,20 +1063,25 @@ class Flexemarkets:
         return _parse_person(_json(self._get(url)))
 
     def identifiers(self, marketplace_id: int) -> list[str]:
-        url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "privateTraders")
-        return _json(self._get(url))
+        """The names of the participants a caller may target: ``GET
+        participants``, names only. A row is an object -- a name, and for a
+        manager the user id, not needed here."""
+        url = _marketplace(self._endpoint, marketplace_id) + "/participants"
+        return [p.get("name") for p in _json(self._get(url))]
 
     def open_session(self, marketplace_id: int) -> Session:
-        url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "open")
-        return _parse_session(_json(self._patch(url)))
+        return self._session_state(marketplace_id, "OPEN")
 
     def pause_session(self, marketplace_id: int) -> Session:
-        url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "pause")
-        return _parse_session(_json(self._patch(url)))
+        return self._session_state(marketplace_id, "PAUSED")
 
     def close_session(self, marketplace_id: int) -> Session:
-        url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "close")
-        return _parse_session(_json(self._patch(url)))
+        return self._session_state(marketplace_id, "CLOSED")
+
+    def _session_state(self, marketplace_id: int, state: str) -> Session:
+        """A lifecycle is a state, PATCHed onto the current session (API-V1 rule 3)."""
+        url = _marketplace(self._endpoint, marketplace_id) + "/sessions/current"
+        return _parse_session(_json(self._patch(url, {"state": state})))
 
     # -- orders ------------------------------------------------------------
 
@@ -1183,7 +1093,7 @@ class Flexemarkets:
         units: int,
         price: int,
     ) -> Order:
-        url = _uri(self._api_root, "orders")
+        url = _marketplace(self._endpoint, marketplace_id) + "/orders"
         resp = self._post(url, {
             "marketplaceId": marketplace_id,
             "marketId": market_id,
@@ -1241,17 +1151,15 @@ class Flexemarkets:
     def submit_cancel(
         self, marketplace_id: int, market_id: int, original_id: int,
     ) -> Order:
-        url = _uri(self._api_root, "orders")
-        resp = self._post(url, {
-            "marketplaceId": marketplace_id,
-            "marketId": market_id,
-            "type": OrderType.CANCEL,
-            "id": original_id,
-            "original": original_id,
-            "supplier": original_id,
-            "clientDescription": self._client_description,
-        })
-        return _parse_order(_json(resp))
+        """Cancel what remains of *original_id*, returning the CANCEL order the
+        exchange recorded.
+
+        DELETE cancels (API-V1 rule 2). *market_id* is not on the wire: the
+        order names its own market. It stays an argument so the three SDKs
+        keep one signature.
+        """
+        url = _marketplace(self._endpoint, marketplace_id) + f"/orders/{original_id}"
+        return _parse_order(_json(self._delete(url)))
 
     def active_orders(self, marketplace_id: int) -> "Snapshot[list[Order]]":
         """The active-orders snapshot: every resting limit order on the
@@ -1262,9 +1170,9 @@ class Flexemarkets:
         returned value and skip those whose seq is less than or
         equal.
         """
-        url = f"{_server(self._endpoint)}/v1/marketplaces/{marketplace_id}/orders/active"
+        url = _marketplace(self._endpoint, marketplace_id) + "/orders?state=ACTIVE"
         body, as_of_seq = self._get_snapshot(url)
-        orders_raw = _embedded_orders(body)
+        orders_raw = _orders_of(body)
         return Snapshot(body=[_parse_order(o) for o in orders_raw], as_of_seq=as_of_seq)
 
     def recent_trades(self, marketplace_id: int, size: int = 1000) -> "Snapshot[list[Order]]":
@@ -1281,9 +1189,9 @@ class Flexemarkets:
         :class:`~fm.desk.Desk` is unaffected; a caller reading
         this list directly should not assume one.
         """
-        url = f"{_server(self._endpoint)}/v1/marketplaces/{marketplace_id}/orders/recent-trades?size={size}"
+        url = _marketplace(self._endpoint, marketplace_id) + f"/orders?state=TRADED&limit={size}"
         body, as_of_seq = self._get_snapshot(url)
-        orders_raw = _embedded_orders(body)
+        orders_raw = _orders_of(body)
         return Snapshot(body=[_parse_order(o) for o in orders_raw], as_of_seq=as_of_seq)
 
     def _get_snapshot(self, url: str) -> tuple[dict[str, Any], int]:
@@ -1295,7 +1203,7 @@ class Flexemarkets:
             url,
             headers={
                 **self._auth_headers(),
-                "Accept": "application/json, application/hal+json",
+                "Accept": "application/json",
             },
         )
         _check_response(resp)
@@ -1313,50 +1221,52 @@ class Flexemarkets:
         symbol: str | None = None,
         session_ids: list[int] | None = None,
     ) -> list[Order]:
+        """Orders on the marketplace.
+
+        With no filter, what V0's marketplace orders answered: cancelled orders,
+        their CANCEL rows and self-crosses left out (``cancelled=false``). With
+        ``session_ids``, the whole lifecycle of those runs, cancels included.
+        With ``symbol``, that market's resting book.
+        """
+        base = _marketplace(self._endpoint, marketplace_id) + "/orders"
         if symbol is not None:
-            url = _uri_param_marketplace_id_param(
-                self._api_root, "symbolOrdersJson", marketplace_id, f"symbol={symbol}",
-            )
+            url = f"{base}?state=ACTIVE&symbol={quote(symbol, safe='')}"
             data = _json(self._get(url))
             orders = [_parse_order(o) for o in data]
             for o in orders:
                 o.symbol = symbol
             return orders
         if session_ids is not None:
-            url = _uri_param_marketplace_id_param(
-                self._api_root, "sessionOrdersJson", marketplace_id,
-                _session_ids_param(session_ids),
-            )
+            url = f"{base}?sessions={_ids_param(session_ids)}"
             data = _json(self._get(url))
             return [_parse_order(o) for o in data]
-        url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "orders")
-        data = _json(self._get(url))
+        data = _json(self._get(f"{base}?cancelled=false"))
         return [_parse_order(o) for o in data]
 
     def trades(self, marketplace_id: int, symbol: str) -> list[Order]:
         """Tape in one market, in ascending order id.
 
-        Answered by a symbol-keyed route, so the orders come back without the
-        symbol on them and with the trade id in ``original``; both are filled
-        in before returning, which is what makes the result a trade list
+        The market's traded legs, ``GET orders?state=TRADED&symbol=``, asking
+        for the most the server answers in one read (5000) since the route
+        this replaced had no limit. The trade id is taken from ``original``
+        and the symbol filled in, which is what makes the result a trade list
         rather than a set of half-populated orders.
 
-        This is the FM-3 surface (``/api/orders-json/symbol-trades``) and its
-        order is the server's, which sorts by order id and nothing else. It is
+        The order is the server's, which sorts by order id and nothing else. It is
         neither chronological by trade time nor most-recent-first -- the first
         element is the lowest id, not the latest trade. Sort by
         ``last_modified_date`` if you want time order.
         """
-        url = _uri_param_marketplace_id_param(
-            self._api_root, "symbolTradesJson", marketplace_id, f"symbol={symbol}",
+        url = (
+            _marketplace(self._endpoint, marketplace_id)
+            + f"/orders?state=TRADED&symbol={quote(symbol, safe='')}&limit={_MAX_TRADED_LEGS}"
         )
         data = _json(self._get(url))
         orders = [_parse_order(o) for o in data]
         for o in orders:
-            # The symbol-keyed route answers with the trade id in "original"
-            # and no symbol, because the query already fixed it. Filling both
-            # in is what makes the result a trade list rather than a set of
-            # half-populated orders.
+            # The trade id is the original order's, and the query already
+            # fixed the symbol. Filling both in is what makes the result a
+            # trade list rather than a set of half-populated orders.
             o.id = o.original
             o.symbol = symbol
         return orders
@@ -1368,26 +1278,22 @@ class Flexemarkets:
         marketplace_id: int,
         session_ids: list[int] | None = None,
     ) -> list[Holding]:
+        url = _marketplace(self._endpoint, marketplace_id) + "/holdings"
         if session_ids:
-            url = _uri_id_segment_param(
-                self._api_root, "marketplaces", marketplace_id, "holdings",
-                f"sessions={_ids_param(session_ids)}",
-            )
-        else:
-            url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "holdings")
+            url += f"?sessions={_ids_param(session_ids)}"
         data = _json(self._get(url))
         return [_parse_holding(h) for h in data]
 
     def holding(self, marketplace_id: int) -> Holding:
         """The caller's own holding in *marketplace_id*.
 
-        Took a ``user_id`` it never used: the route is ``currentHolding``, which
-        is the caller's by definition, and the argument was accepted and
+        Took a ``user_id`` it never used: the route is
+        ``participants/me/holding``, which is the caller's by definition, and the argument was accepted and
         discarded. So every call site had to invent a value, and one that passed
         somebody else's id got its own holding back and no indication of it.
         Java and TypeScript always took the marketplace alone.
         """
-        url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "currentHolding")
+        url = _marketplace(self._endpoint, marketplace_id) + "/participants/me/holding"
         return _parse_holding(_json(self._get(url)))
 
     def download_holdings(
@@ -1395,29 +1301,23 @@ class Flexemarkets:
     ) -> str:
         """The holdings CSV, verbatim, for the current session or for given ones.
 
-        The filter is spelled ``sessions=`` on this route and ``sessionIds=``
-        on sessions and connections. Using the wrong one is not an error --
-        it is an unfiltered answer.
+        The same route as :meth:`holdings`, asking for ``text/csv``: V1 picks
+        a format by header, not by path (API-V1 rule 7).
         """
+        url = _marketplace(self._endpoint, marketplace_id) + "/holdings"
         if session_ids:
-            url = _uri_id_segment_param(
-                self._api_root, "marketplaces", marketplace_id, "holdings/downloads",
-                f"sessions={_ids_param(session_ids)}",
-            )
-        else:
-            url = _uri_id_segment(
-                self._api_root, "marketplaces", marketplace_id, "holdings/downloads")
-        return self._get(url).text
+            url += f"?sessions={_ids_param(session_ids)}"
+        resp = self._http.get(
+            url, headers={**self._auth_headers(), "Accept": "text/csv, */*"})
+        _check_response(resp)
+        return resp.text
 
     def upload_holdings(self, marketplace_id: int, filename: str) -> list[Holding]:
-        url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "holdings/uploads")
-        with open(filename, "rb") as f:
-            resp = self._http.post(
-                url,
-                files={"file": (Path(filename).name, f)},
-                headers=self._auth_headers(),
-            )
-        _check_response(resp)
+        """Stage an allocation from a holdings CSV: ``POST allocations`` with
+        the file as a ``text/csv`` body, on the same terms as :meth:`allocate`.
+        """
+        url = _marketplace(self._endpoint, marketplace_id) + "/allocations"
+        resp = self._send_csv("POST", url, filename)
         allotments = [_parse_allotment(a) for a in _json(resp)]
         return _allotments_to_holdings(allotments)
 
@@ -1436,14 +1336,8 @@ class Flexemarkets:
         with the person the email resolves to. A study's existing values file
         needs no change.
         """
-        url = _v1(self._endpoint, f"/marketplaces/{marketplace_id}/state/uploads")
-        with open(filename, "rb") as f:
-            resp = self._http.post(
-                url,
-                files={"file": (Path(filename).name, f)},
-                headers=self._auth_headers(),
-            )
-        _check_response(resp)
+        url = _marketplace(self._endpoint, marketplace_id) + "/state"
+        resp = self._send_csv("PUT", url, filename)
         return [_parse_participant_state(s) for s in _json(resp)]
 
     def push_widgets(self, marketplace_id: int, widgets: list[WidgetPush]) -> list[Widget]:
@@ -1463,7 +1357,7 @@ class Flexemarkets:
         which arrives as :class:`~fm.exceptions.HttpError` with that status:
         back off and push again.
         """
-        url = _v1(self._endpoint, f"/marketplaces/{marketplace_id}/widgets")
+        url = _marketplace(self._endpoint, marketplace_id) + "/widgets"
         resp = self._post(url, [_widget_push_json(w) for w in widgets])
         return [_parse_widget(w) for w in _json(resp)]
 
@@ -1480,10 +1374,11 @@ class Flexemarkets:
         failure document -- no such marketplace -- still raises, so a robot
         pointed at the wrong marketplace does not read its clean-up as done.
         """
-        url = _v1(self._endpoint,
-                  f"/marketplaces/{marketplace_id}/widgets/{quote(key, safe='')}")
+        url = _marketplace(self._endpoint, marketplace_id)
         if user_id is not None:
-            url += f"?userId={user_id}"
+            # A participant's widget is theirs, under the participant.
+            url += f"/participants/{user_id}"
+        url += f"/widgets/{_segment(key)}"
         resp = self._http.delete(url, headers=self._auth_headers())
         if resp.status_code == 404 and not resp.text.strip():
             return False
@@ -1493,18 +1388,17 @@ class Flexemarkets:
     def all_widgets(self, marketplace_id: int) -> list[Widget]:
         """Every widget pushed to the marketplace and still standing, for every
         participant -- what a manager reads to check on a robot."""
-        url = _v1(self._endpoint, f"/marketplaces/{marketplace_id}/widgets/all")
+        url = _marketplace(self._endpoint, marketplace_id) + "/widgets?participant=all"
         return [_parse_widget(w) for w in _json(self._get(url))]
 
     def allotments(self, marketplace_id: int, allocation_id: int) -> list[Allotment]:
         """The opening positions of one allocation.
 
-        Not on the API root: allotments are a V1 route, addressed from the
-        server rather than through a HAL link.
+        An allocation's allotments are its own: ``allocations/{id}/allotments``.
         """
         url = (
-            f"{_server(self.endpoint_url)}/v1/marketplaces/{marketplace_id}"
-            f"/allotments?allocation={allocation_id}"
+            _marketplace(self._endpoint, marketplace_id)
+            + f"/allocations/{allocation_id}/allotments"
         )
         return [_parse_allotment(a) for a in _json(self._get(url))]
 
@@ -1520,7 +1414,7 @@ class Flexemarkets:
         and computes with; the allotment encoding the endpoint wants is applied
         here.
         """
-        url = _uri_id_segment(self._api_root, "marketplaces", marketplace_id, "allocations")
+        url = _marketplace(self._endpoint, marketplace_id) + "/allocations"
         body = [_holding_to_allotment(marketplace_id, h) for h in holdings]
         resp = self._post(url, body)
         return _allotments_to_holdings([_parse_allotment(a) for a in _json(resp)])
@@ -1534,10 +1428,7 @@ class Flexemarkets:
         connection carries the session it belonged to, so "who was present in
         that run" is a filter on the result.
         """
-        url = _uri_id_segment_param(
-            self._api_root, "marketplaces", marketplace_id, "connections",
-            "format=application/json",
-        )
+        url = _marketplace(self._endpoint, marketplace_id) + "/connections"
         return [_parse_connection(c) for c in _json(self._get(url))]
 
     # -- events / WebSocket ------------------------------------------------

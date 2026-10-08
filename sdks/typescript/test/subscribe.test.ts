@@ -45,10 +45,9 @@ before(async () => {
         person: { id: 7, accountId: 1, email: "dev@dev", roles: ["ROLE_MANAGER"] },
         account: { id: 1, name: "dev" },
       });
-    } else if (url === "/api") {
-      send({ _links: { marketplaces: { href: `${api()}/marketplaces` } } });
     } else {
-      send({});
+      res.writeHead(404);
+      res.end();
     }
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

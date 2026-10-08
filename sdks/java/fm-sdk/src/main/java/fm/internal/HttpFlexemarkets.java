@@ -55,6 +55,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.Function;
 import java.util.Map;
 import java.util.Objects;
@@ -170,7 +171,6 @@ public class HttpFlexemarkets implements Flexemarkets {
         .build();
 
     private static final TypeReference<Token>               TOKEN_TYPE        = new TypeReference<>() {};
-    private static final TypeReference<ApiRoot>              API_ROOT_TYPE     = new TypeReference<>() {};
     private static final TypeReference<List<Marketplace>>    MARKETPLACES_TYPE = new TypeReference<>() {};
     private static final TypeReference<Marketplace>          MARKETPLACE_TYPE  = new TypeReference<>() {};
     private static final TypeReference<List<Market>>         MARKETS_TYPE      = new TypeReference<>() {};
@@ -187,7 +187,6 @@ public class HttpFlexemarkets implements Flexemarkets {
     private static final TypeReference<Person>               PERSON_TYPE       = new TypeReference<>() {};
     private static final TypeReference<Approval>       APPROVAL_TYPE     = new TypeReference<>() {};
     private static final TypeReference<ManagerOtpBundle>     OTP_BUNDLE_TYPE   = new TypeReference<>() {};
-    private static final TypeReference<List<String>>         SYMBOLS_TYPE      = new TypeReference<>() {};
     private static final TypeReference<List<Person>>         PERSONS_TYPE      = new TypeReference<>() {};
     private static final TypeReference<List<Allotment>>      ALLOTMENTS_TYPE   = new TypeReference<>() {};
     private static final TypeReference<List<ParticipantState>> PARTICIPANT_STATES_TYPE = new TypeReference<>() {};
@@ -287,7 +286,6 @@ public class HttpFlexemarkets implements Flexemarkets {
     private final Token _token;
     private final Account _account;
     private final Person _user;
-    private final ApiRoot _apiRoot;
 
     private final String _impersonateAccount;
     private final boolean _capture;
@@ -319,8 +317,6 @@ public class HttpFlexemarkets implements Flexemarkets {
         this._account = _token.account();
         this._user = _token.person();
         this._bearerToken = "Bearer " + _token.token();
-
-        this._apiRoot = _fetchApiRoot();
     }
 
 
@@ -341,20 +337,21 @@ public class HttpFlexemarkets implements Flexemarkets {
     // --- REST APIs ---
 
     public List<Marketplace> marketplaces() {
-        return _get(uriParam(_apiRoot, "marketplaces", "format=application/json"), MARKETPLACES_TYPE);
+        return _get(_v1("/marketplaces"), MARKETPLACES_TYPE);
     }
 
     public Marketplace marketplace(long marketplaceId) {
-        return _get(uriId(_apiRoot, "marketplaces", marketplaceId), MARKETPLACE_TYPE);
+        return _get(_marketplace(marketplaceId), MARKETPLACE_TYPE);
     }
 
     public List<Market> markets(long marketplaceId) {
-        return _get(uriIdSegmentParam(_apiRoot, "marketplaces", marketplaceId, "markets", "format=application/json"), MARKETS_TYPE);
+        return _get(_marketplace(marketplaceId) + "/markets", MARKETS_TYPE);
     }
 
+    /** The markets' own symbols: V1 has no {@code /symbols}, which was this projection server-side. */
     @Override
     public List<String> symbols(long marketplaceId) {
-        return _get(uriIdSegment(_apiRoot, "marketplaces", marketplaceId, "symbols"), SYMBOLS_TYPE);
+        return markets(marketplaceId).stream().map(Market::symbol).toList();
     }
 
     @Override
@@ -367,15 +364,21 @@ public class HttpFlexemarkets implements Flexemarkets {
     // nothing here the default could not do.
 
     public List<Session> sessions(long marketplaceId) {
-        return _get(_v1("/marketplaces/" + marketplaceId + "/sessions"), SESSIONS_TYPE);
+        return _get(_marketplace(marketplaceId) + "/sessions", SESSIONS_TYPE);
     }
 
     public Session session(long marketplaceId) {
-        return _get(uriIdSegment(_apiRoot, "marketplaces", marketplaceId, "currentSession"), SESSION_TYPE);
+        return _get(_marketplace(marketplaceId) + "/sessions/current", SESSION_TYPE);
     }
 
+    /**
+     * The current session's orders less every cancelled one, the CANCEL that
+     * consumed it, and both legs of a self-cross -- what V0's marketplace
+     * orders answered, and what a study ranking participants needs. Without
+     * {@code cancelled=false} the V1 read is the raw lifecycle.
+     */
     public List<Order> orders(long marketplaceId) {
-        return _get(uriIdSegment(_apiRoot, "marketplaces", marketplaceId, "orders"), ORDERS_TYPE);
+        return _get(_marketplace(marketplaceId) + "/orders?cancelled=false", ORDERS_TYPE);
     }
 
     /**
@@ -387,8 +390,8 @@ public class HttpFlexemarkets implements Flexemarkets {
      * seq is less than or equal.
      */
     public Snapshot<List<Order>> activeOrders(long marketplaceId) {
-        var url = _v1("/marketplaces/" + marketplaceId + "/orders/active");
-        return _unwrapOrders(_getSnapshot(url, SNAPSHOT_TYPE));
+        var url = _marketplace(marketplaceId) + "/orders?state=ACTIVE";
+        return _ordersOf(_getSnapshot(url, SNAPSHOT_TYPE));
     }
 
     /**
@@ -397,47 +400,32 @@ public class HttpFlexemarkets implements Flexemarkets {
      * {@link #activeOrders(long)}.
      */
     public Snapshot<List<Order>> recentTrades(long marketplaceId, int size) {
-        var url = server(endpointUrl()) + "/v1/marketplaces/" + marketplaceId
-                + "/orders/recent-trades?size=" + size;
-        return _unwrapOrders(_getSnapshot(url, SNAPSHOT_TYPE));
+        var url = _marketplace(marketplaceId) + "/orders?state=TRADED&limit=" + size;
+        return _ordersOf(_getSnapshot(url, SNAPSHOT_TYPE));
     }
 
     /**
-     * The orders in a snapshot response, whatever shape it arrives in.
+     * The orders in a snapshot answer, which is a bare JSON array or a failure.
      *
-     * <p>Three shapes, because the envelope has moved twice and both older ones
-     * are still deployed: a bare array, which is what fm-server sends now;
-     * {@code _embedded.orders}, the Spring HATEOAS CollectionModel; and
-     * {@code _embedded.orderDtoes}, HATEOAS pluralising {@code OrderDto}.
+     * <p>Only the array is read because the V1 route never sent anything else:
+     * {@code GET /api/v1/marketplaces/{id}/orders} has always answered a bare
+     * array, and 0.4 requires fm-server 4.6.2. The HAL envelopes earlier SDKs
+     * tolerated belonged to the routes 0.4 no longer calls.
      *
-     * <p>Each move broke every SDK at once and neither was caught. The first
-     * returned an empty list forever, so {@link fm.Desk}'s books seeded
-     * from live deltas instead and looked plausible. The second threw
-     * {@code MismatchedInputException} binding an array to the envelope bean,
-     * which took {@code desk()} down with it.
+     * <p>Anything else throws rather than reading as empty. An empty snapshot
+     * is the failure that hid twice before: {@link fm.Desk} seeded an empty
+     * book, filled it from live deltas, and looked plausible.
      *
-     * <p>Reading the shape rather than assuming one is the fix that
-     * generalises. Accepting both <em>names</em> was the fix last time, and it
-     * did not survive the envelope itself being dropped.
+     * @throws ApiException when the answer is not a JSON array
      */
-    static Snapshot<List<Order>> _unwrapOrders(Snapshot<JsonNode> raw) {
+    static Snapshot<List<Order>> _ordersOf(Snapshot<JsonNode> raw) {
         JsonNode body = raw.body();
-        JsonNode array = null;
-
-        if (body != null) {
-            if (body.isArray()) {
-                array = body;
-            } else {
-                JsonNode embedded = body.path("_embedded");
-                array = embedded.has("orders") ? embedded.path("orders")
-                      : embedded.path("orderDtoes");
-            }
+        if (body == null || !body.isArray()) {
+            throw new ApiException("The orders snapshot answer was not a list of orders: got "
+                    + (body == null || body.isMissingNode() ? "null"
+                       : body.getNodeType().name().toLowerCase(Locale.ROOT)));
         }
-
-        List<Order> orders = (array == null || !array.isArray())
-            ? List.of()
-            : List.of(MAPPER.treeToValue(array, Order[].class));
-
+        List<Order> orders = List.of(MAPPER.treeToValue(body, Order[].class));
         return new Snapshot<>(orders, raw.asOfSeq());
     }
 
@@ -449,7 +437,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     public List<Holding> holdings(long marketplaceId) {
-        return _get(uriIdSegment(_apiRoot, "marketplaces", marketplaceId, "holdings"), HOLDINGS_TYPE);
+        return _get(_marketplace(marketplaceId) + "/holdings", HOLDINGS_TYPE);
     }
 
     /** Comma-separated ids, matching the server's {@code ?sessions=} filter. */
@@ -458,55 +446,41 @@ public class HttpFlexemarkets implements Flexemarkets {
         if (sessionIds == null || sessionIds.isEmpty()) {
             return holdings(marketplaceId);
         }
-        var ids = sessionIds.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(","));
-        return _get(uriIdSegmentParam(_apiRoot, "marketplaces", marketplaceId, "holdings", "sessions=" + ids),
-                   HOLDINGS_TYPE);
+        return _get(_marketplace(marketplaceId) + "/holdings?sessions=" + _ids(sessionIds), HOLDINGS_TYPE);
     }
 
     public Holding holding(long marketplaceId) {
-        return _get(uriIdSegment(_apiRoot, "marketplaces", marketplaceId, "currentHolding"), new TypeReference<>() {});
+        return _get(_marketplace(marketplaceId) + "/participants/me/holding", new TypeReference<>() {});
     }
 
     public List<ClientConnection> connections(long marketplaceId) {
-        // Canonical path is /marketplaces/{id}/connections ("/agents" is the
-        // retained pre-FM-4 alias); format=application/json yields a plain list
-        // (vs the HAL _embedded form).
-        return _get(uriIdSegmentParam(_apiRoot, "marketplaces", marketplaceId, "connections", "format=application/json"), CONNECTIONS_TYPE);
+        return _get(_marketplace(marketplaceId) + "/connections", CONNECTIONS_TYPE);
     }
 
-    /** {@code sessions=} here, unlike the two routes above. */
     @Override
     public String downloadHoldings(long marketplaceId, List<Long> sessionIds) {
         if (sessionIds == null || sessionIds.isEmpty()) {
             return downloadHoldings(marketplaceId);
         }
-        return _getText(uriIdSegmentParam(_apiRoot, "marketplaces", marketplaceId,
-                        "holdings/downloads", "sessions=" + _ids(sessionIds)));
+        return _getText(_marketplace(marketplaceId) + "/holdings?sessions=" + _ids(sessionIds));
     }
 
     /**
-     * {@code sessionOrdersJson}, not the marketplace's orders collection: that
-     * one is current-session only.
-     *
-     * <p>{@code sessionIds=}, not {@code sessions=}. The server spells the
-     * filter differently on this route than on the holdings download, and
-     * using the wrong one is not an error -- it is an unfiltered answer.
+     * Every LIMIT and CANCEL row of the named runs, as the exchange stored
+     * them: the lifecycle read, a manager's.
      */
     @Override
     public List<Order> orders(long marketplaceId, List<Long> sessionIds) {
         if (sessionIds == null || sessionIds.isEmpty()) {
             return orders(marketplaceId);
         }
-        var url = uriParam(_apiRoot, "sessionOrdersJson", "marketplaceId=" + marketplaceId)
-                + "&sessionIds=" + _ids(sessionIds);
-        return _get(url, ORDERS_TYPE);
+        return _get(_marketplace(marketplaceId) + "/orders?sessions=" + _ids(sessionIds), ORDERS_TYPE);
     }
 
     /** The symbol is filled in; the ids are left alone. See {@link #trades}. */
     @Override
     public List<Order> orders(long marketplaceId, String symbol) {
-        var url = uriParam(_apiRoot, "symbolOrdersJson", "marketplaceId=" + marketplaceId)
-                + "&symbol=" + symbol;
+        var url = _marketplace(marketplaceId) + "/orders?state=ACTIVE&symbol=" + _query(symbol);
         return _get(url, ORDERS_TYPE).stream()
                 .map(o -> new Order(o.createdDate(), o.lastModifiedDate(), o.id(),
                                     o.original(), o.supplier(), o.consumer(), o.type(), o.side(),
@@ -517,7 +491,8 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     /**
-     * The symbol-keyed trades route answers with the trade id in
+     * One market's traded legs, as many as the server gives
+     * ({@link #MAX_TRADED_LEGS}). The answer carries the trade id in
      * {@code original} and no symbol on the orders, because the query already
      * fixed the symbol. Both are filled in here so a caller gets trades rather
      * than half-populated orders -- fm-lib-net does the same, and a study that
@@ -525,8 +500,8 @@ public class HttpFlexemarkets implements Flexemarkets {
      */
     @Override
     public List<Order> trades(long marketplaceId, String symbol) {
-        var url = uriParam(_apiRoot, "symbolTradesJson", "marketplaceId=" + marketplaceId)
-                + "&symbol=" + symbol;
+        var url = _marketplace(marketplaceId) + "/orders?state=TRADED&symbol=" + _query(symbol)
+                + "&limit=" + MAX_TRADED_LEGS;
         return _get(url, ORDERS_TYPE).stream()
                 .map(o -> new Order(o.createdDate(), o.lastModifiedDate(), o.original(),
                                     o.original(), o.supplier(), o.consumer(), o.type(), o.side(),
@@ -534,6 +509,17 @@ public class HttpFlexemarkets implements Flexemarkets {
                                     o.sessionId(), symbol, o.marketId(), o.ownerTarget(),
                                     o.clientDescription()))
                 .toList();
+    }
+
+    /**
+     * The most traded legs fm-server answers in one read. The route this
+     * replaced had no limit; asking for the ceiling keeps as much of that as
+     * the server allows.
+     */
+    static final int MAX_TRADED_LEGS = 5000;
+
+    private static String _query(String value) {
+        return java.net.URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
     private static String _ids(List<Long> ids) {
@@ -552,7 +538,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     public Token signup(String accountName, String email, String password,
                         String firstName, String lastName) {
         try {
-            return _post(uri(_apiRoot, "accounts"),
+            return _post(_v1("/accounts"),
                         new SignUp(accountName, email, password, firstName, lastName),
                         TOKEN_TYPE);
         } catch (ConflictException e) {
@@ -565,16 +551,24 @@ public class HttpFlexemarkets implements Flexemarkets {
         }
     }
 
+    /**
+     * V1 approves an account by id; the name is looked up in the account list
+     * first, so callers keep naming the account they signed up.
+     */
     @Override
     public Account approveAccount(String accountName) {
-        var approval = _post(server(endpointUrl()) + "/approvals",
-                            new ApproveAccount(accountName, true), APPROVAL_TYPE);
+        var account = accounts().stream()
+                .filter(a -> accountName.equals(a.name()))
+                .findFirst()
+                .orElseThrow(() -> new InvalidArgumentException("No account named '" + accountName + "'"));
+        var approval = _post(_v1("/accounts/" + account.id() + "/approvals"),
+                            new ApproveAccount(true), APPROVAL_TYPE);
         return approval == null ? null : approval.account();
     }
 
     @Override
     public Account accountById(long accountId) {
-        return _get(uriId(_apiRoot, "accounts", accountId), ACCOUNT_TYPE);
+        return _get(_v1("/accounts/" + accountId), ACCOUNT_TYPE);
     }
 
     @Override
@@ -582,24 +576,27 @@ public class HttpFlexemarkets implements Flexemarkets {
         return _get(_v1("/users/" + userId), PERSON_TYPE);
     }
 
+    /** The names of the participants a caller may target: {@code GET participants}, names only. */
     @Override
     public List<String> identifiers(long marketplaceId) {
-        return _get(uriIdSegment(_apiRoot, "marketplaces", marketplaceId, "privateTraders"), SYMBOLS_TYPE);
+        return _get(_marketplace(marketplaceId) + "/participants", PARTICIPANTS_TYPE).stream()
+                .map(ParticipantName::name)
+                .toList();
     }
 
     @Override
     public void deleteMyAccount() {
-        _delete(server(endpointUrl()) + "/accounts/me");
+        _delete(_v1("/accounts/me"));
     }
 
     @Override
     public List<Account> accounts() {
-        return _get(uriParam(_apiRoot, "accounts", "format=application/json"), ACCOUNTS_TYPE);
+        return _get(_v1("/accounts"), ACCOUNTS_TYPE);
     }
 
     @Override
     public void deleteAccount(long accountId) {
-        _delete(uriId(_apiRoot, "accounts", accountId));
+        _delete(_v1("/accounts/" + accountId));
     }
 
     @Override
@@ -625,14 +622,14 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     @Override
     public void deleteMarketplace(long marketplaceId) {
-        _delete(uriId(_apiRoot, "marketplaces", marketplaceId));
+        _delete(_marketplace(marketplaceId));
     }
 
     /** Unit bounds are fixed at 1/100/1, as fm-lib-net sends them. */
     @Override
     public Market createMarket(long marketplaceId, String symbol, String name,
                                TickGrid price, TickGrid units, boolean privateMarket) {
-        return _post(uriIdSegment(_apiRoot, "marketplaces", marketplaceId, "markets"),
+        return _post(_marketplace(marketplaceId) + "/markets",
                     new CreateMarket(symbol, name,
                                      price.minimum(), price.maximum(), price.tick(),
                                      units.minimum(), units.maximum(), units.tick(),
@@ -654,7 +651,12 @@ public class HttpFlexemarkets implements Flexemarkets {
     private record SignUp(String accountName, String ownerEmail, String ownerPassword,
                           String firstName, String lastName) {}
 
-    private record ApproveAccount(String name, Boolean approval) {}
+    private record ApproveAccount(Boolean approve) {}
+
+    /** A row of {@code GET participants}: a name, and for a manager the user id, not needed here. */
+    private record ParticipantName(String name) {}
+
+    private static final TypeReference<List<ParticipantName>> PARTICIPANTS_TYPE = new TypeReference<>() {};
 
     private record CreateUser(String email, String password, String firstName,
                               String lastName, String[] roles) {}
@@ -689,20 +691,16 @@ public class HttpFlexemarkets implements Flexemarkets {
         if (null != ownerTargetId) {
             order.put("ownerTargetId", ownerTargetId);
         }
-        return _post(uri(_apiRoot, "orders"), order, ORDER_TYPE);
+        return _post(_marketplace(marketplaceId) + "/orders", order, ORDER_TYPE);
     }
 
+    /**
+     * DELETE the order: the server builds the CANCEL from the order's own
+     * lineage and market, and answers with it. {@code marketId} is no longer
+     * sent -- the order already says which market it is in.
+     */
     public Order submitCancel(long marketplaceId, long marketId, long originalId) {
-        var order = Map.of(
-            "marketplaceId",    marketplaceId,
-            "marketId",         marketId,
-            "type",             OrderType.CANCEL,
-            "id",               originalId,
-            "original",         originalId,
-            "supplier",         originalId,
-            "clientDescription", _clientDescription()
-        );
-        return _post(uri(_apiRoot, "orders"), order, ORDER_TYPE);
+        return _deleteFor(_marketplace(marketplaceId) + "/orders/" + originalId, ORDER_TYPE);
     }
 
     public Order submitMarket(long marketplaceId, long marketId, OrderSide side, long units) {
@@ -779,34 +777,40 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     @Override
     public Session openSession(long marketplaceId) {
-        return _patch(uriIdSegment(_apiRoot, "marketplaces", marketplaceId, "open"), SESSION_TYPE);
+        return _sessionState(marketplaceId, "OPEN");
     }
 
     @Override
     public Session pauseSession(long marketplaceId) {
-        return _patch(uriIdSegment(_apiRoot, "marketplaces", marketplaceId, "pause"), SESSION_TYPE);
+        return _sessionState(marketplaceId, "PAUSED");
     }
 
     @Override
     public Session closeSession(long marketplaceId) {
-        return _patch(uriIdSegment(_apiRoot, "marketplaces", marketplaceId, "close"), SESSION_TYPE);
+        return _sessionState(marketplaceId, "CLOSED");
     }
 
-    /** {@code usersJson} rather than {@code users}: the latter is the HAL form. */
+    /**
+     * A session's lifecycle is its state, PATCHed. Asking for the state it is
+     * already in changes nothing; one it cannot reach from where it is --
+     * pausing a closed session -- is refused, where V0 answered with the
+     * session unchanged.
+     */
+    private Session _sessionState(long marketplaceId, String state) {
+        return _patch(_marketplace(marketplaceId) + "/sessions/current", Map.of("state", state), SESSION_TYPE);
+    }
+
     @Override
     public List<Person> users() {
-        return _get(uri(_apiRoot, "usersJson"), PERSONS_TYPE);
+        return _get(_v1("/users"), PERSONS_TYPE);
     }
 
-    /** Not on the API root -- allotments are a V1 route, addressed from the server. */
     @Override
     public List<Allotment> allotments(long marketplaceId, long allocationId) {
-        var url = server(endpointUrl()) + "/v1/marketplaces/" + marketplaceId
-                + "/allotments?allocation=" + allocationId;
-        return List.copyOf(_get(url, ALLOTMENTS_TYPE));
+        return List.copyOf(_get(_marketplace(marketplaceId) + "/allocations/" + allocationId + "/allotments",
+                                ALLOTMENTS_TYPE));
     }
 
-    /** V1 route, addressed from the server rather than through a HAL link. */
     @Override
     public Marketplace createMarketplaceFromJson(String json) {
         Object definition;
@@ -821,47 +825,39 @@ public class HttpFlexemarkets implements Flexemarkets {
     @Override
     public List<Holding> allocate(long marketplaceId, List<Holding> holdings) {
         var allotments = holdings.stream().map(h -> _toAllotment(marketplaceId, h)).toList();
-        return _toHoldings(_post(
-                uriIdSegment(_apiRoot, "marketplaces", marketplaceId, "allocations"),
-                allotments, ALLOTMENTS_TYPE));
+        return _toHoldings(_post(_marketplace(marketplaceId) + "/allocations", allotments, ALLOTMENTS_TYPE));
     }
 
     @Override
     public String downloadHoldings(long marketplaceId) {
-        return _getText(uriIdSegment(_apiRoot, "marketplaces", marketplaceId, "holdings/downloads"));
+        return _getText(_marketplace(marketplaceId) + "/holdings");
     }
 
     @Override
     public List<Holding> uploadHoldings(long marketplaceId, Path csv) {
-        return _toHoldings(_postMultipart(
-                uriIdSegment(_apiRoot, "marketplaces", marketplaceId, "holdings/uploads"),
-                "file", csv, ALLOTMENTS_TYPE));
+        return _toHoldings(_sendCsv("POST", _marketplace(marketplaceId) + "/allocations", csv, ALLOTMENTS_TYPE));
     }
 
-    /** V1 route, addressed from the server rather than through a HAL link. */
     @Override
     public List<ParticipantState> uploadState(long marketplaceId, Path csv) {
-        return List.copyOf(_postMultipart(
-                _v1("/marketplaces/" + marketplaceId + "/state/uploads"),
-                "file", csv, PARTICIPANT_STATES_TYPE));
+        return List.copyOf(_sendCsv("PUT", _marketplace(marketplaceId) + "/state", csv, PARTICIPANT_STATES_TYPE));
     }
 
     /** Always an array on the wire, even for one widget, so the answer is always a list. */
     @Override
     public List<Widget> pushWidgets(long marketplaceId, List<WidgetPush> widgets) {
-        return List.copyOf(_post(_v1("/marketplaces/" + marketplaceId + "/widgets"),
+        return List.copyOf(_post(_marketplace(marketplaceId) + "/widgets",
                 widgets, WIDGETS_TYPE));
     }
 
     @Override
     public boolean removeWidget(long marketplaceId, String key) {
-        return _removeWidget(_v1("/marketplaces/" + marketplaceId + "/widgets/" + _segment(key)));
+        return _removeWidget(_marketplace(marketplaceId) + "/widgets/" + _segment(key));
     }
 
     @Override
     public boolean removeWidget(long marketplaceId, String key, long userId) {
-        return _removeWidget(_v1("/marketplaces/" + marketplaceId + "/widgets/" + _segment(key))
-                + "?userId=" + userId);
+        return _removeWidget(_marketplace(marketplaceId) + "/participants/" + userId + "/widgets/" + _segment(key));
     }
 
     /**
@@ -888,7 +884,7 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     @Override
     public List<Widget> allWidgets(long marketplaceId) {
-        return List.copyOf(_get(_v1("/marketplaces/" + marketplaceId + "/widgets/all"), WIDGETS_TYPE));
+        return List.copyOf(_get(_marketplace(marketplaceId) + "/widgets?participant=all", WIDGETS_TYPE));
     }
 
     /*
@@ -1277,14 +1273,17 @@ public class HttpFlexemarkets implements Flexemarkets {
         return _send(request, type);
     }
 
-    /**
-     * PATCH with no body -- the shape every session transition takes
-     * ({@code /open}, {@code /pause}, {@code /close}): the verb and the path
-     * carry the whole request.
-     */
-    private <T> T _patch(String url, TypeReference<T> type) {
+    /** PATCH the fields named in {@code body} -- a session's {@code state}, say. */
+    private <T> T _patch(String url, Object body, TypeReference<T> type) {
+        String json;
+        try {
+            json = MAPPER.writeValueAsString(body);
+        } catch (JacksonException e) {
+            throw new ApiException("Failed to serialize request body", e);
+        }
         var request = _request(url, "application/json")
-            .method("PATCH", HttpRequest.BodyPublishers.noBody())
+            .header("Content-Type", "application/json")
+            .method("PATCH", HttpRequest.BodyPublishers.ofString(json))
             .build();
         return _send(request, type);
     }
@@ -1295,6 +1294,14 @@ public class HttpFlexemarkets implements Flexemarkets {
             .DELETE()
             .build();
         _sendDiscardingBody(request);
+    }
+
+    /** DELETE whose answer is the resource as it ended -- an order's CANCEL. */
+    private <T> T _deleteFor(String url, TypeReference<T> type) {
+        var request = _request(url, "application/json")
+            .DELETE()
+            .build();
+        return _send(request, type);
     }
 
     /**
@@ -1324,36 +1331,23 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     /**
-     * POST one file as {@code multipart/form-data}.
-     *
-     * <p>Assembled by hand because {@code java.net.http} has no multipart body
-     * publisher and this is the only place the SDK needs one -- a dependency
-     * would cost more than the twenty lines. The parts are written as bytes,
-     * not through a string, so the file's own encoding survives.
+     * Send one CSV file as the body, {@code Content-Type: text/csv} -- format
+     * by header (fm-server API-V1 rule 7), where 0.3 posted it as a
+     * multipart upload to a {@code /uploads} segment. Bytes, not a string, so
+     * the file's own encoding survives.
      */
-    private <T> T _postMultipart(String url, String partName, Path file, TypeReference<T> type) {
-        var boundary = "fm-sdk-" + java.util.UUID.randomUUID();
+    private <T> T _sendCsv(String method, String url, Path file, TypeReference<T> type) {
+        byte[] content;
         try {
-            var head = ("--" + boundary + "\r\n"
-                    + "Content-Disposition: form-data; name=\"" + partName + "\"; filename=\""
-                    + file.getFileName() + "\"\r\n"
-                    + "Content-Type: text/csv\r\n\r\n").getBytes(StandardCharsets.UTF_8);
-            var tail = ("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8);
-            var content = Files.readAllBytes(file);
-
-            var body = new java.io.ByteArrayOutputStream();
-            body.write(head);
-            body.write(content);
-            body.write(tail);
-
-            var request = _request(url, "application/json")
-                .header("Content-Type", "multipart/form-data; boundary=" + boundary)
-                .POST(HttpRequest.BodyPublishers.ofByteArray(body.toByteArray()))
-                .build();
-            return _send(request, type);
+            content = Files.readAllBytes(file);
         } catch (IOException e) {
             throw new ApiException("Failed to read " + file, e);
         }
+        var request = _request(url, "application/json")
+            .header("Content-Type", "text/csv")
+            .method(method, HttpRequest.BodyPublishers.ofByteArray(content))
+            .build();
+        return _send(request, type);
     }
 
     private <T> T _send(HttpRequest request, TypeReference<T> type) {
@@ -1436,7 +1430,8 @@ public class HttpFlexemarkets implements Flexemarkets {
                 .header("Authorization", "Bearer " + tokenValue)
                 .header("Accept", "application/json")
                 .header("User-Agent", FM_SDK_CLIENT)
-                .GET()
+                // POST, since it mints a token (fm-server 4.6).
+                .POST(HttpRequest.BodyPublishers.noBody())
                 .build();
         } else {
             // The credentials go in the body only. A Basic header as well made
@@ -1475,91 +1470,6 @@ public class HttpFlexemarkets implements Flexemarkets {
         }
     }
 
-    private ApiRoot _fetchApiRoot() {
-        var url = server(endpointUrl());
-        var request = _request(url, "application/json")
-            .GET()
-            .build();
-        return rebase(_send(request, API_ROOT_TYPE), url);
-    }
-
-    /**
-     * Point the API root's links back at the host that was dialled.
-     *
-     * <p>The server builds these hrefs from the request it believes it
-     * received, and behind an edge that belief can be wrong: production on
-     * {@code api.adhocmarkets.com} answers {@code GET /api} with links spelled
-     * {@code http://}, while the same application on
-     * {@code api.flexemarkets.com} spells them {@code https://}. Every call
-     * that goes through a link — which is most of them — then leaves on plain
-     * HTTP and meets the edge's 301. A GET survives it. A POST does not: the
-     * JDK follows a 301 by re-sending as GET with the body dropped, so placing
-     * an order or opening a session fails as a 401 with no order placed and
-     * nothing pointing at the scheme.
-     *
-     * <p>Only the origin is replaced. The path, query and any URI template are
-     * the server's to choose; where it is reachable is not, and the token in
-     * hand was issued by the origin dialled, not by whatever the links name.
-     */
-    static ApiRoot rebase(ApiRoot apiRoot, String endpoint) {
-        if (null == apiRoot || null == apiRoot.links()) {
-            return apiRoot;
-        }
-
-        String origin = _httpOrigin(endpoint);
-        if (null == origin) {
-            return apiRoot;
-        }
-
-        var rebased = new LinkedHashMap<String, ApiRoot.LinkObject>();
-        var moved = new LinkedHashSet<String>();
-
-        apiRoot.links().forEach((name, link) -> {
-            if (null == link) {
-                rebased.put(name, null);
-                return;
-            }
-
-            String named = _httpOrigin(link.href());
-            if (null != named && !named.equals(origin)) {
-                moved.add(named);
-            }
-            rebased.put(name, new ApiRoot.LinkObject(rebase(link.href(), origin)));
-        });
-
-        if (!moved.isEmpty()) {
-            // Said out loud, because the rewrite would otherwise hide a
-            // deployment that is genuinely misconfigured -- and a silent
-            // correction here is how it stays misconfigured. The SDK keeps
-            // working; the operator still gets told where to look.
-            LOG.log(System.Logger.Level.WARNING,
-                "The API root names {0} but this client dialled {1}; rewriting {2} link origin(s)"
-                + " to match. The server is behind a proxy that is not forwarding the request"
-                + " scheme, so its links are wrong. Fix it at the edge -- this rewrite only keeps"
-                + " calls working.",
-                String.join(", ", moved), origin, moved.size());
-        }
-
-        return new ApiRoot(Collections.unmodifiableMap(rebased));
-    }
-
-    /**
-     * An absolute HTTP href moved to {@code origin}; anything else left alone.
-     *
-     * <p>A relative href already resolves against the origin it was fetched
-     * from, and a non-HTTP one is not ours to rewrite. Neither is the shape
-     * this exists to correct.
-     */
-    private static String rebase(String href, String origin) {
-        String named = _httpOrigin(href);
-        return null == named || named.equals(origin) ? href : origin + href.substring(named.length());
-    }
-
-    /**
-     * The {@code scheme://host:port} of an absolute {@code http}/{@code https}
-     * URL, or null for anything else — a relative href, or a scheme the SDK has
-     * no business rewriting.
-     */
     /** Applies a timeout unless it was configured away. */
     static void _applyTimeout(HttpRequest.Builder builder, Duration timeout) {
         if (null != timeout && !timeout.isZero() && !timeout.isNegative()) {
@@ -1586,25 +1496,6 @@ public class HttpFlexemarkets implements Flexemarkets {
         }
     }
 
-    private static String _httpOrigin(String url) {
-        if (null == url) {
-            return null;
-        }
-
-        int end = url.indexOf("://");
-        if (end < 0) {
-            return null;
-        }
-
-        String scheme = url.substring(0, end);
-        if (!scheme.equalsIgnoreCase("http") && !scheme.equalsIgnoreCase("https")) {
-            return null;
-        }
-
-        int pathStart = url.indexOf('/', end + 3);
-        return pathStart < 0 ? url : url.substring(0, pathStart);
-    }
-
     private String _clientDescription() {
         return _properties.getProperty("client-description", "Unspecified client");
     }
@@ -1613,53 +1504,21 @@ public class HttpFlexemarkets implements Flexemarkets {
         return server(endpointUrl()).replaceFirst("http", "ws") + "/events";
     }
 
-    // --- HATEOAS URI builders ---
+    // --- V1 routes ---
 
     /**
-     * A V1 route, addressed from the server rather than through a HAL link.
-     *
-     * <p>V1 is flat and versioned: the path is knowable without fetching the
-     * API root first, which is the point of it. Every call that moves here
-     * loses a HAL dependency as well as a version.
+     * A V1 route, addressed from the server. 0.4 reads no API root: every
+     * path is knowable without one, which is what a versioned API is for, and
+     * a client that found its routes through the root was one server refactor
+     * from failing whole (fm-server 4.5.6).
      */
     private String _v1(String path) {
         return server(endpointUrl()) + "/v1" + path;
     }
 
-    static String uri(ApiRoot apiRoot, String linkName) {
-        var href = apiRoot.getLink(linkName)
-            .orElseThrow(() -> new ApiException("Link '%s' not found in API root".formatted(linkName)));
-        return processTemplate(href);
-    }
-
-    static String uriId(ApiRoot apiRoot, String linkName, long id) {
-        return uri(apiRoot, linkName) + "/" + id;
-    }
-
-    static String uriIdSegment(ApiRoot apiRoot, String linkName, long id, String segment) {
-        return uriId(apiRoot, linkName, id) + "/" + segment;
-    }
-
-    static String uriParam(ApiRoot apiRoot, String linkName, String param) {
-        return uri(apiRoot, linkName) + "?" + param;
-    }
-
-    static String uriIdSegmentParam(ApiRoot apiRoot, String linkName, long id, String segment, String param) {
-        var href = uriIdSegment(apiRoot, linkName, id, segment);
-        if (param != null && !param.isBlank()) {
-            href = href + "?" + param;
-        }
-        return href;
-    }
-
-    static String processTemplate(String href) {
-        if (href != null) {
-            int index = href.indexOf('{');
-            if (index >= 0) {
-                return href.substring(0, index);
-            }
-        }
-        return href;
+    /** {@code /api/v1/marketplaces/{id}}, which most routes hang off. */
+    private String _marketplace(long marketplaceId) {
+        return _v1("/marketplaces/" + marketplaceId);
     }
 
     static String server(String endpoint) {

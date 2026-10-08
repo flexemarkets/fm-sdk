@@ -22,7 +22,15 @@ their status brought up to date. Items 2, 3 and 4 are new.
 
 ## Open
 
-### 1. HAL-less and V1-only
+### 1. HAL-less and V1-only — done in 0.4.0
+
+*Shipped: see [UPGRADING-0.4.md](UPGRADING-0.4.md) for the route each call
+moved to and the four calls that answer differently. Three decisions taken
+while building it, 2026-10-08: `deleteMarketplace` needed a V1 route and
+`orders(marketplaceId)` a server-side filter, both added in fm-server 4.6.2
+rather than worked around here; `approveAccount` keeps taking the name and
+looks the id up. `sdks/fixtures/routes/routes.json` holds all three SDKs to
+the same requests. What follows is the reasoning as it stood before the work.*
 
 *Carried from DESIGN-0.3 §1. Still the headline item, and no longer blocked:
 every route it needs has been served since fm-server 4.5.0. What is left is

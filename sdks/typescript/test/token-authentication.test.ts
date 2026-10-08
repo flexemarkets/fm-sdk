@@ -8,10 +8,11 @@
  * this SDK and the Python one, from the day each was written.
  *
  * A caller holding a token has no account, email or password to present. The
- * route that exists for them is `GET /tokens/refresh`, which validates the
+ * route that exists for them is `/tokens/refresh`, which validates the
  * token and returns the account and person behind it. The Java SDK has always
  * used it, and records that fm-lib-net carried the same branch and an earlier
- * rewrite dropped it — this is the third occurrence.
+ * rewrite dropped it — this is the third occurrence. fm-server 4.6 mints
+ * tokens on POST, so the refresh is a POST too, with no body.
  *
  * Asserted against a loopback server rather than a stubbed fetch, because a
  * stub is precisely what hid it: a mock answers whatever the test tells it to,
@@ -35,18 +36,13 @@ async function withServer(
   const server = http.createServer((req, res) => {
     requests.push(`${req.method} ${req.url}`);
 
-    if (req.method === "GET" && req.url === "/api/tokens/refresh") {
+    if (req.method === "POST" && req.url === "/api/tokens/refresh") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         token: TOKEN,
         person: { id: 7, accountId: 1, email: "dev@dev" },
         account: { id: 1, name: "dev" },
       }));
-      return;
-    }
-    if (req.method === "GET" && req.url === "/api") {
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ _links: {} }));
       return;
     }
     if (req.method === "POST") {
@@ -78,7 +74,8 @@ test("a token connects through the refresh route", async () => {
       await fm.close();
     }
 
-    assert.ok(requests.includes("GET /api/tokens/refresh"), requests.join(", "));
+    // The refresh is the whole of connecting: 0.4 reads no API root.
+    assert.deepEqual(requests, ["POST /api/tokens/refresh"]);
   });
 });
 
@@ -89,7 +86,7 @@ test("a token never posts to /tokens", async () => {
     await fm.close();
 
     assert.ok(
-      !requests.some((r) => r.startsWith("POST /api/tokens")),
+      !requests.includes("POST /api/tokens"),
       requests.join(", "),
     );
   });

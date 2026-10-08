@@ -7,8 +7,9 @@ POST with a real password returns 200. So every token connection failed, in
 both this SDK and the TypeScript one, from the day each was written.
 
 A caller holding a token has no account, email or password to present. The
-route that exists for them is ``GET /tokens/refresh``, which validates the token
-and returns the account and person behind it. The Java SDK has always used it,
+route that exists for them is ``/tokens/refresh``, which validates the token
+and returns the account and person behind it -- a ``POST`` since fm-server
+4.6.2, where it was a ``GET``. The Java SDK has always used it,
 and says in a comment that fm-lib-net carried the same branch and an earlier
 rewrite dropped it -- this is the third occurrence.
 
@@ -46,19 +47,18 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         requests.append(f"GET {self.path}")
+        # Refresh is a POST; a GET of it is the route as it was before 4.6.2.
+        self._send({"error": "METHOD_NOT_ALLOWED", "path": self.path}, status=405)
+
+    def do_POST(self):
+        requests.append(f"POST {self.path}")
         if self.path == "/api/tokens/refresh":
             self._send({
                 "token": TOKEN,
                 "person": {"id": 7, "accountId": 1, "email": "dev@dev"},
                 "account": {"id": 1, "name": "dev"},
             })
-        elif self.path == "/api":
-            self._send({"_links": {}})
-        else:
-            self._send([])
-
-    def do_POST(self):
-        requests.append(f"POST {self.path}")
+            return
         # What fm-server actually answers a token POST with blanks.
         self._send({"error": "MESSAGE_NOT_READABLE", "path": self.path}, status=400)
 
@@ -82,7 +82,7 @@ def test_a_token_connects_through_the_refresh_route(server):
     finally:
         client.close()
 
-    assert "GET /api/tokens/refresh" in requests
+    assert requests == ["POST /api/tokens/refresh"], "refresh, and nothing else -- no API root"
 
 
 def test_a_real_length_token_is_not_probed_as_a_filename(server):
@@ -106,10 +106,10 @@ def test_a_real_length_token_is_not_probed_as_a_filename(server):
 
 
 def test_a_token_never_posts_to_tokens(server):
-    """The POST is the defect. A server that refuses it must not be reached."""
+    """The sign-in POST is the defect. A server that refuses it must not be reached."""
     base = f"http://127.0.0.1:{server.server_address[1]}/api"
 
     client = Flexemarkets.connect(TOKEN, f"{base}/marketplaces/1", "token-test")
     client.close()
 
-    assert not any(r.startswith("POST /api/tokens") for r in requests), requests
+    assert "POST /api/tokens" not in requests, requests

@@ -6,7 +6,7 @@
 
 import { readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import { orderedSecurities, toOrderType, toSide, unitGrid } from "./types.js";
 import { toInstant } from "./timestamps.js";
 import type {
@@ -29,7 +29,6 @@ import type {
   WidgetPush,
 } from "./types.js";
 import { EventListener, NO_SEQ, type EventCallback } from "./stomp.js";
-import type { ApiRoot } from "./hal.js";
 import {
   DefaultDesk,
   DeskHandle,
@@ -41,6 +40,13 @@ import { readVersion } from "./version.js";
 
 const FM_NETWORK_CLIENT = `fm-sdk-typescript/${readVersion()}`;
 export const DEFAULT_ENDPOINT = "https://api.flexemarkets.com";
+
+/**
+ * The most traded legs fm-server answers in one read. The route `trades`
+ * replaced had no limit; asking for the ceiling keeps as much of that as the
+ * server allows.
+ */
+const MAX_TRADED_LEGS = 5000;
 
 const BCRYPT_RE = /^\$2[abxy]?\$\d{2}\$[./A-Za-z0-9]{53}$/;
 const JWT_RE = /^[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+$/;
@@ -78,7 +84,7 @@ export class HttpError extends FlexemarketsError {
  *
  * Distinct from {@link HttpError}, which means the server answered and the
  * answer was an error. This means there was no usable answer at all — a
- * malformed body, or a link the API root does not carry.
+ * malformed body.
  */
 export class ApiError extends FlexemarketsError {}
 
@@ -381,40 +387,25 @@ export function parseConnection(data: JsonObject): ClientConnection {
 }
 
 /**
- * The orders inside a HAL envelope.
+ * The orders in a snapshot answer, which is a bare JSON array or a failure.
  *
- * The server embeds them under `orders`. It was `orderDtoes` — Spring HATEOAS
- * pluralising `OrderDto` — and every SDK still read that name long after the
- * server stopped sending it, so `activeOrders` and `recentTrades` returned an
- * empty array always. `Desk` seeds from `activeOrders`, so its books were
- * never seeded; they filled from live deltas and looked plausible.
+ * Only the array is read because the V1 route never sent anything else:
+ * `GET /api/v1/marketplaces/{id}/orders` has always answered a bare array, and
+ * 0.4 requires fm-server 4.6.2. The HAL envelopes earlier SDKs tolerated
+ * belonged to the routes 0.4 no longer calls.
  *
- * Then the envelope itself went: fm-server now sends a bare array. Accepting
- * both *names* did not survive that, and this SDK failed the same silent way a
- * second time — `._embedded` on an array is `undefined`, so it returned an
- * empty book rather than throwing, while Java and Python at least raised.
+ * Anything else throws rather than reading as empty. An empty snapshot is the
+ * failure that hid twice before: `Desk` seeded an empty book, filled it from
+ * live deltas, and looked plausible.
  *
- * So read the shape rather than assume one. All three are accepted, because
- * all three are still deployed somewhere.
+ * @throws ApiError when the answer is not a JSON array
  */
-export function embeddedOrders(data: unknown): JsonObject[] {
-  if (Array.isArray(data)) return data as JsonObject[];
-  if (data === null || typeof data !== "object") return [];
-  const embedded = (data as { _embedded?: { orders?: JsonObject[]; orderDtoes?: JsonObject[] } })._embedded;
-  return embedded?.orders ?? embedded?.orderDtoes ?? [];
-}
-
-function parseApiRoot(data: JsonObject): ApiRoot {
-  const linksRaw = (data._links as Record<string, unknown>) ?? {};
-  const links: Record<string, string> = {};
-  for (const [name, value] of Object.entries(linksRaw)) {
-    if (typeof value === "object" && value !== null && "href" in value) {
-      links[name] = (value as { href: string }).href ?? "";
-    } else if (typeof value === "string") {
-      links[name] = value;
-    }
+export function ordersOf(data: unknown): JsonObject[] {
+  if (!Array.isArray(data)) {
+    const kind = data === null || data === undefined ? "null" : typeof data;
+    throw new ApiError(`The orders snapshot answer was not a list of orders: got ${kind}`);
   }
-  return { links };
+  return data as JsonObject[];
 }
 
 /**
@@ -444,131 +435,6 @@ export function marketableLimit(market: Market, side: string): number {
 
   const span = market.priceMaximum - market.priceMinimum;
   return market.priceMinimum + Math.floor(span / market.priceTick) * market.priceTick;
-}
-
-/**
- * The `scheme://host:port` of an absolute http(s) URL, else undefined.
- *
- * A relative href already resolves against the origin it was fetched from,
- * and a scheme that is not HTTP is not ours to rewrite.
- */
-function httpOrigin(url: string | undefined): string | undefined {
-  if (!url) return undefined;
-  const end = url.indexOf("://");
-  if (end < 0) return undefined;
-  const scheme = url.substring(0, end).toLowerCase();
-  if (scheme !== "http" && scheme !== "https") return undefined;
-  const pathStart = url.indexOf("/", end + 3);
-  return pathStart < 0 ? url : url.substring(0, pathStart);
-}
-
-/**
- * Point the API root's links back at the host that was dialled.
- *
- * The server builds these hrefs from the request it believes it received, and
- * behind a proxy that belief can be wrong: an origin reached over a plaintext
- * leg reports `http://` even though the caller arrived on `https://`. Every
- * call that goes through a link — which is most of them — then leaves on plain
- * HTTP and meets the edge's redirect. A GET survives it. A POST does not: a
- * 301 is followed as a GET with the body dropped, so placing an order or
- * opening a session fails with nothing placed and nothing pointing at the
- * scheme.
- *
- * Only the origin is replaced. The path, query and any URI template are the
- * server's to choose; where it is reachable is not, and the token in hand was
- * issued by the origin dialled, not by whatever the links name.
- */
-export function rebaseApiRoot(root: ApiRoot, endpoint: string): ApiRoot {
-  const origin = httpOrigin(endpoint);
-  if (!origin) return root;
-
-  const links: Record<string, string> = {};
-  const moved: string[] = [];
-
-  for (const [name, href] of Object.entries(root.links)) {
-    const named = httpOrigin(href);
-    if (!named || named === origin) {
-      links[name] = href;
-      continue;
-    }
-    if (!moved.includes(named)) moved.push(named);
-    links[name] = origin + href.substring(named.length);
-  }
-
-  if (moved.length > 0) {
-    // Said out loud, because the rewrite would otherwise hide a deployment
-    // that is genuinely misconfigured — and a silent correction here is how it
-    // stays misconfigured. The SDK keeps working; the operator still gets told
-    // where to look.
-    console.warn(
-      `[fm-sdk] The API root names ${moved.join(", ")} but this client dialled ${origin}; ` +
-        `rewriting ${moved.length} link origin(s) to match. The server is behind a proxy ` +
-        `that is not forwarding the request scheme, so its links are wrong. Fix it at the ` +
-        `edge — this rewrite only keeps calls working.`,
-    );
-  }
-
-  return { links };
-}
-
-// ---------------------------------------------------------------------------
-// HATEOAS link resolution
-// ---------------------------------------------------------------------------
-
-function processTemplate(href: string): string {
-  const idx = href.indexOf("{");
-  return idx >= 0 ? href.substring(0, idx) : href;
-}
-
-/**
- * A V1 route, addressed from the server rather than through a HAL link.
- *
- * V1 is flat and versioned: the path is knowable without fetching the API root
- * first, which is the point of it. Every call that moves here loses a HAL
- * dependency as well as a version.
- */
-function v1(endpoint: string, path: string): string {
-  return `${server(endpoint)}/v1${path}`;
-}
-
-function uri(root: ApiRoot, linkName: string): string {
-  const href = root.links[linkName];
-  if (href === undefined) throw new ApiError(`Link '${linkName}' not found in API root.`);
-  return processTemplate(href);
-}
-
-function uriId(root: ApiRoot, linkName: string, id: number): string {
-  return `${uri(root, linkName)}/${id}`;
-}
-
-function uriIdSegment(root: ApiRoot, linkName: string, id: number, segment: string): string {
-  return `${uriId(root, linkName, id)}/${segment}`;
-}
-
-function uriParam(root: ApiRoot, linkName: string, param: string): string {
-  return `${uri(root, linkName)}?${param}`;
-}
-
-function uriIdSegmentParam(
-  root: ApiRoot,
-  linkName: string,
-  id: number,
-  segment: string,
-  param: string,
-): string {
-  const base = uriIdSegment(root, linkName, id, segment);
-  return param ? `${base}?${param}` : base;
-}
-
-function uriParamMarketplaceIdParam(
-  root: ApiRoot,
-  linkName: string,
-  id: number,
-  param: string | null,
-): string {
-  let u = uriParam(root, linkName, `marketplaceId=${id}`);
-  if (param) u += `&${param}`;
-  return u;
 }
 
 // ---------------------------------------------------------------------------
@@ -633,11 +499,6 @@ export function resolveEndpoint(endpoint: string): Record<string, string> {
     return loadPropertiesFile(endpoint);
   }
   return { endpoint };
-}
-
-function sessionIdsParam(sessionIds: number[] | null): string {
-  if (!sessionIds || sessionIds.length === 0) return "";
-  return "sessionIds=" + sessionIds.join(",");
 }
 
 export function loadPropertiesFile(path: string): Record<string, string> {
@@ -742,7 +603,6 @@ export class Flexemarkets {
   private readonly _endpoint: string;
   private readonly _baseUrl: string;
   private readonly _bearerToken: string;
-  private _apiRoot!: ApiRoot;
   private _account!: Account;
   private _user!: Person;
   private _tokenObj!: Token;
@@ -797,9 +657,6 @@ export class Flexemarkets {
     fm._account = tokenObj.account!;
     fm._user = tokenObj.person!;
 
-    // Fetch API root for HATEOAS links
-    fm._apiRoot = await fm._fetchApiRoot();
-
     return fm;
   }
 
@@ -843,7 +700,7 @@ export class Flexemarkets {
     const resp = await fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
       headers: {
         ...this._authHeaders(),
-        Accept: "application/json, application/hal+json",
+        Accept: "application/json",
         "User-Agent": FM_NETWORK_CLIENT,
       },
     });
@@ -862,7 +719,7 @@ export class Flexemarkets {
     const resp = await fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
       headers: {
         ...this._authHeaders(),
-        Accept: "application/json, application/hal+json",
+        Accept: "application/json",
         "User-Agent": FM_NETWORK_CLIENT,
       },
     });
@@ -873,18 +730,17 @@ export class Flexemarkets {
     return { data: readBody(body), asOfSeq: Number.isFinite(asOfSeq) ? asOfSeq : NO_SEQ };
   }
 
-  /**
-   * PATCH with no body — the shape every session transition takes: the verb and
-   * the path carry the whole request.
-   */
-  private async _patch(url: string): Promise<JsonObject> {
+  /** PATCH with a JSON body -- the shape every session transition takes. */
+  private async _patch(url: string, json: unknown): Promise<JsonObject> {
     const resp = await fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
       method: "PATCH",
       headers: {
         ...this._authHeaders(),
-        Accept: "application/json, application/hal+json",
+        "Content-Type": "application/json",
+        Accept: "application/json",
         "User-Agent": FM_NETWORK_CLIENT,
       },
+      body: JSON.stringify(json),
     });
     const body = await resp.text();
     checkResponse(resp, body);
@@ -915,7 +771,7 @@ export class Flexemarkets {
       headers: {
         ...this._authHeaders(),
         "Content-Type": "application/json",
-        Accept: "application/json, application/hal+json",
+        Accept: "application/json",
         "User-Agent": FM_NETWORK_CLIENT,
       },
       body: JSON.stringify(json),
@@ -951,7 +807,7 @@ export class Flexemarkets {
     firstName?: string | null,
     lastName?: string | null,
   ): Promise<Token> {
-    const url = uri(this._apiRoot, "accounts");
+    const url = this._v1("/accounts");
     try {
       const data = await this._post(url, {
         accountName,
@@ -978,44 +834,54 @@ export class Flexemarkets {
     }
   }
 
-  /** Approve an account by name, returning it as it now stands. */
+  /**
+   * Approve an account by name, returning it as it now stands.
+   *
+   * V1 approves an account by id; the name is looked up in the account list
+   * first, so callers keep naming the account they signed up.
+   */
   async approveAccount(accountName: string): Promise<Account | null> {
-    const url = `${server(this._endpoint)}/approvals`;
-    const data = await this._post(url, { name: accountName, approval: true });
+    const account = (await this.accounts()).find((a) => a.name === accountName);
+    if (account === undefined) {
+      throw new InvalidArgumentError(`No account named '${accountName}'`);
+    }
+    const data = await this._post(this._v1(`/accounts/${account.id}/approvals`), { approve: true });
     return parseAccount(data.account as JsonObject);
   }
 
   /** One account by id. */
   async accountById(accountId: number): Promise<Account | null> {
-    return parseAccount(await this._get(uriId(this._apiRoot, "accounts", accountId)));
+    return parseAccount(await this._get(this._v1(`/accounts/${accountId}`)));
   }
 
   /** One user by id. */
   async userById(userId: number): Promise<Person> {
-    return parsePerson(await this._get(v1(this._endpoint, `/users/${userId}`))) as Person;
+    return parsePerson(await this._get(this._v1(`/users/${userId}`))) as Person;
   }
 
-  /** The marketplace's private-trader identifiers. */
+  /**
+   * The names of the participants a caller may target: `GET participants`,
+   * names only. A row carries the user id too, for a manager; not needed here.
+   */
   async identifiers(marketplaceId: number): Promise<string[]> {
-    const url = uriIdSegment(this._apiRoot, "marketplaces", marketplaceId, "privateTraders");
-    return (await this._get(url)) as unknown as string[];
+    const rows = (await this._get(`${this._marketplace(marketplaceId)}/participants`)) as unknown as JsonObject[];
+    return rows.map((r) => r.name as string);
   }
 
   /** Delete the caller's own account. Its own route, not accounts/{yourId}. */
   async deleteMyAccount(): Promise<void> {
-    await this._delete(`${server(this._endpoint)}/accounts/me`);
+    await this._delete(this._v1("/accounts/me"));
   }
 
   /** Every account on the server. Admin-only. */
   async accounts(): Promise<Account[]> {
-    const url = uriParam(this._apiRoot, "accounts", "format=application/json");
-    const data = await this._get(url);
+    const data = await this._get(this._v1("/accounts"));
     return (data as unknown as JsonObject[]).map(parseAccount) as Account[];
   }
 
   /** Delete an account. Destructive, and takes its users with it. */
   async deleteAccount(accountId: number): Promise<void> {
-    await this._delete(uriId(this._apiRoot, "accounts", accountId));
+    await this._delete(this._v1(`/accounts/${accountId}`));
   }
 
   /** Create a user in the caller's account. */
@@ -1026,15 +892,14 @@ export class Flexemarkets {
     lastName: string,
     roles: string[] = [],
   ): Promise<Person> {
-    const url = v1(this._endpoint, "/users");
-    const data = await this._post(url, { email, password, firstName, lastName, roles });
+    const data = await this._post(this._v1("/users"), { email, password, firstName, lastName, roles });
     return parsePerson(data) as Person;
   }
 
   /** Delete a user. Destructive. */
   async deleteUser(userId: number): Promise<void> {
     try {
-      await this._delete(uriId(this._apiRoot, "users", userId));
+      await this._delete(this._v1(`/users/${userId}`));
     } catch (e) {
       // The user still owns orders or allotments. Deleting them would orphan
       // it, so the server refuses and the caller has to decide what happens to
@@ -1052,7 +917,7 @@ export class Flexemarkets {
   /** Create an empty marketplace. See also {@link createMarketplaceFromJson}. */
   /** Delete a marketplace, and with it its sessions and their history. */
   async deleteMarketplace(marketplaceId: number): Promise<void> {
-    await this._delete(uriId(this._apiRoot, "marketplaces", marketplaceId));
+    await this._delete(this._marketplace(marketplaceId));
   }
 
   /**
@@ -1072,8 +937,7 @@ export class Flexemarkets {
     units: TickGrid = unitGrid(),
     privateMarket = false,
   ): Promise<Market> {
-    const url = uriIdSegment(this._apiRoot, "marketplaces", marketplaceId, "markets");
-    return parseMarket(await this._post(url, {
+    return parseMarket(await this._post(`${this._marketplace(marketplaceId)}/markets`, {
       symbol,
       name,
       priceMinimum: price.minimum,
@@ -1093,7 +957,8 @@ export class Flexemarkets {
    * delivered to the person they belong to.
    */
   async managerOtpBundle(userIds: number[]): Promise<ManagerOtpBundle> {
-    const url = `${server(this._endpoint)}/otp/manager`;
+    // Unversioned: fm-server has no V1 route for passcodes.
+    const url = `${this._baseUrl}/otp/manager`;
     const data = await this._post(url, { userIds });
     return {
       expiresAt: toInstant(data.expiresAt as string),
@@ -1115,9 +980,52 @@ export class Flexemarkets {
     checkResponse(resp, body);
   }
 
-  private async _fetchApiRoot(): Promise<ApiRoot> {
-    const data = await this._get(this._baseUrl);
-    return rebaseApiRoot(parseApiRoot(data), this._baseUrl);
+  /**
+   * DELETE whose answer is the resource as it ended -- an order's CANCEL.
+   */
+  private async _deleteFor(url: string): Promise<JsonObject> {
+    const resp = await fetch(url, {
+      method: "DELETE",
+      headers: { ...this._authHeaders(), Accept: "application/json", "User-Agent": FM_NETWORK_CLIENT },
+    });
+    const body = await resp.text();
+    checkResponse(resp, body);
+    return readBody(body);
+  }
+
+  /**
+   * Send one CSV file as the body, `Content-Type: text/csv` -- format by
+   * header, where 0.3 posted it as a multipart upload to an `/uploads`
+   * segment. Bytes, not a string, so the file's own encoding survives.
+   */
+  private async _sendCsv(method: string, url: string, filename: string): Promise<unknown> {
+    const resp = await fetch(url, {
+      method,
+      headers: {
+        ...this._authHeaders(),
+        "Content-Type": "text/csv",
+        Accept: "application/json",
+        "User-Agent": FM_NETWORK_CLIENT,
+      },
+      body: readFileSync(filename),
+    });
+    const body = await resp.text();
+    checkResponse(resp, body);
+    return readBody(body);
+  }
+
+  /**
+   * A V1 route. 0.4 addresses every route from the server rather than through
+   * the HAL root's links: the path is knowable without fetching anything
+   * first, and a root that drops a link can no longer take a call with it.
+   */
+  private _v1(path: string): string {
+    return `${this._baseUrl}/v1${path}`;
+  }
+
+  /** The V1 route of one marketplace, under which nearly everything lives. */
+  private _marketplace(marketplaceId: number): string {
+    return this._v1(`/marketplaces/${marketplaceId}`);
   }
 
   // ======================================================================
@@ -1127,27 +1035,18 @@ export class Flexemarkets {
   // -- marketplaces ----------------------------------------------------------
 
   async marketplaces(): Promise<Marketplace[]> {
-    const url = uriParam(this._apiRoot, "marketplaces", "format=application/json");
-    const data = await this._get(url);
+    const data = await this._get(this._v1("/marketplaces"));
     return (data as unknown as JsonObject[]).map(parseMarketplace);
   }
 
   async marketplace(marketplaceId: number): Promise<Marketplace> {
-    const url = uriId(this._apiRoot, "marketplaces", marketplaceId);
-    return parseMarketplace(await this._get(url));
+    return parseMarketplace(await this._get(this._marketplace(marketplaceId)));
   }
 
   // -- markets ---------------------------------------------------------------
 
   async markets(marketplaceId: number): Promise<Market[]> {
-    const url = uriIdSegmentParam(
-      this._apiRoot,
-      "marketplaces",
-      marketplaceId,
-      "markets",
-      "format=application/json",
-    );
-    const data = await this._get(url);
+    const data = await this._get(`${this._marketplace(marketplaceId)}/markets`);
     return (data as unknown as JsonObject[]).map(parseMarket);
   }
 
@@ -1179,9 +1078,9 @@ export class Flexemarkets {
     return (this._user?.roles ?? []).includes(role);
   }
 
+  /** The symbols of the marketplace's markets, read from the markets themselves. */
   async symbols(marketplaceId: number): Promise<string[]> {
-    const url = uriIdSegment(this._apiRoot, "marketplaces", marketplaceId, "symbols");
-    return (await this._get(url)) as unknown as string[];
+    return (await this.markets(marketplaceId)).map((m) => m.symbol as string);
   }
 
   // -- sessions --------------------------------------------------------------
@@ -1193,24 +1092,14 @@ export class Flexemarkets {
    * the `sessionIds` this used to accept was silently ignored: it returned the
    * whole history and looked like it had filtered. Filter the result; fm-ui
    * already does.
-   *
-   * On `GET /api/v1/marketplaces/{id}/sessions`, which answers with the same
-   * fields as the V0 route it replaces — verified against a running server,
-   * not assumed — and needs no `format=application/json` to avoid HAL.
    */
   async sessions(marketplaceId: number): Promise<Session[]> {
-    const url = v1(this._endpoint, `/marketplaces/${marketplaceId}/sessions`);
+    const url = `${this._marketplace(marketplaceId)}/sessions`;
     return ((await this._get(url)) as unknown as JsonObject[]).map(parseSession);
   }
 
   async session(marketplaceId: number): Promise<Session> {
-    const url = uriIdSegment(
-      this._apiRoot,
-      "marketplaces",
-      marketplaceId,
-      "currentSession",
-    );
-    return parseSession(await this._get(url));
+    return parseSession(await this._get(`${this._marketplace(marketplaceId)}/sessions/current`));
   }
 
   // -- orders ----------------------------------------------------------------
@@ -1222,8 +1111,7 @@ export class Flexemarkets {
     units: number,
     price: number,
   ): Promise<Order> {
-    const url = uri(this._apiRoot, "orders");
-    const data = await this._post(url, {
+    const data = await this._post(`${this._marketplace(marketplaceId)}/orders`, {
       marketplaceId,
       marketId,
       type: "LIMIT",
@@ -1287,22 +1175,17 @@ export class Flexemarkets {
     );
   }
 
+  /**
+   * DELETE the order: the server builds the CANCEL from the order's own
+   * lineage and market, and answers with it. `marketId` is no longer sent --
+   * the order already says which market it is in.
+   */
   async submitCancel(
     marketplaceId: number,
     marketId: number,
     originalId: number,
   ): Promise<Order> {
-    const url = uri(this._apiRoot, "orders");
-    const data = await this._post(url, {
-      marketplaceId,
-      marketId,
-      type: "CANCEL",
-      id: originalId,
-      original: originalId,
-      supplier: originalId,
-      clientDescription: this._clientDescription,
-    });
-    return parseOrder(data);
+    return parseOrder(await this._deleteFor(`${this._marketplace(marketplaceId)}/orders/${originalId}`));
   }
 
   /**
@@ -1313,10 +1196,9 @@ export class Flexemarkets {
    * value and skip those whose seq is less than or equal.
    */
   async activeOrders(marketplaceId: number): Promise<Snapshot<Order[]>> {
-    const baseRest = this._baseUrl;
-    const url = `${baseRest}/v1/marketplaces/${marketplaceId}/orders/active`;
+    const url = `${this._marketplace(marketplaceId)}/orders?state=ACTIVE`;
     const { data, asOfSeq } = await this._getSnapshot(url);
-    const orders = embeddedOrders(data).map(parseOrder);
+    const orders = ordersOf(data).map(parseOrder);
     return { body: orders, asOfSeq };
   }
 
@@ -1333,70 +1215,56 @@ export class Flexemarkets {
    * should not assume one.
    */
   async recentTrades(marketplaceId: number, size = 1000): Promise<Snapshot<Order[]>> {
-    const url = `${this._baseUrl}/v1/marketplaces/${marketplaceId}/orders/recent-trades?size=${size}`;
+    const url = `${this._marketplace(marketplaceId)}/orders?state=TRADED&limit=${size}`;
     const { data, asOfSeq } = await this._getSnapshot(url);
-    const orders = embeddedOrders(data).map(parseOrder);
+    const orders = ordersOf(data).map(parseOrder);
     return { body: orders, asOfSeq };
   }
 
+  /**
+   * The marketplace's orders.
+   *
+   * With no option, the current session's orders less every cancelled one, the
+   * CANCEL that consumed it, and both legs of a self-cross -- what a study
+   * ranking participants needs. Without `cancelled=false` the V1 read is the
+   * raw lifecycle, which is what `sessionIds` asks for: every LIMIT and CANCEL
+   * row of the named runs, as the exchange stored them. `symbol` reads one
+   * market's active orders, with the symbol filled in.
+   */
   async orders(
     marketplaceId: number,
     options?: { symbol?: string; sessionIds?: number[] },
   ): Promise<Order[]> {
+    const base = `${this._marketplace(marketplaceId)}/orders`;
     if (options?.symbol != null) {
-      const url = uriParamMarketplaceIdParam(
-        this._apiRoot,
-        "symbolOrdersJson",
-        marketplaceId,
-        `symbol=${options.symbol}`,
-      );
-      const data = await this._get(url);
+      const symbol = options.symbol;
+      const data = await this._get(`${base}?state=ACTIVE&symbol=${encodeURIComponent(symbol)}`);
       const orders = (data as unknown as JsonObject[]).map(parseOrder);
-      for (const o of orders) o.symbol = options.symbol;
+      for (const o of orders) o.symbol = symbol;
       return orders;
     }
-    if (options?.sessionIds != null) {
-      const url = uriParamMarketplaceIdParam(
-        this._apiRoot,
-        "sessionOrdersJson",
-        marketplaceId,
-        sessionIdsParam(options.sessionIds),
-      );
-      const data = await this._get(url);
-      return (data as unknown as JsonObject[]).map(parseOrder);
-    }
-    const url = uriIdSegment(this._apiRoot, "marketplaces", marketplaceId, "orders");
-    const data = await this._get(url);
-    return (data as unknown as JsonObject[]).map(parseOrder);
+    const url = options?.sessionIds != null && options.sessionIds.length > 0
+      ? `${base}?sessions=${options.sessionIds.join(",")}`
+      : `${base}?cancelled=false`;
+    return ((await this._get(url)) as unknown as JsonObject[]).map(parseOrder);
   }
 
   /**
-   * Tape in one market, in ascending order id.
+   * One market's traded legs, as many as the server gives in one read
+   * ({@link MAX_TRADED_LEGS}), in the server's order.
    *
-   * Answered by a symbol-keyed route, so the orders come back without the
-   * symbol on them and with the trade id in `original`; both are filled in
-   * before returning, which is what makes the result a trade list rather than
-   * a set of half-populated orders.
-   *
-   * This is the FM-3 surface (`/api/orders-json/symbol-trades`) and its order
-   * is the server's, which sorts by order id and nothing else. It is neither
-   * chronological by trade time nor most-recent-first — the first element is
-   * the lowest id, not the latest trade. Sort by `lastModifiedDate` if you
-   * want time order.
+   * The answer carries the trade id in `original` and no symbol on the orders,
+   * because the query already fixed the symbol. Both are filled in before
+   * returning, which is what makes the result a trade list rather than a set of
+   * half-populated orders. Sort by `lastModifiedDate` if you want time order.
    */
   async trades(marketplaceId: number, symbol: string): Promise<Order[]> {
-    const url = uriParamMarketplaceIdParam(
-      this._apiRoot,
-      "symbolTradesJson",
-      marketplaceId,
-      `symbol=${symbol}`,
-    );
+    const url =
+      `${this._marketplace(marketplaceId)}/orders?state=TRADED` +
+      `&symbol=${encodeURIComponent(symbol)}&limit=${MAX_TRADED_LEGS}`;
     const data = await this._get(url);
     const orders = (data as unknown as JsonObject[]).map(parseOrder);
     for (const o of orders) {
-      // The symbol-keyed route answers with the trade id in `original` and no
-      // symbol, because the query already fixed it. Filling both in is what
-      // makes the result a trade list rather than half-populated orders.
       o.id = o.original;
       o.symbol = symbol;
     }
@@ -1405,34 +1273,19 @@ export class Flexemarkets {
 
   // -- holdings --------------------------------------------------------------
 
+  /** Comma-separated ids, matching the server's `?sessions=` filter. */
   async holdings(
     marketplaceId: number,
     sessionIds?: number[] | null,
   ): Promise<Holding[]> {
-    let url: string;
-    if (sessionIds && sessionIds.length > 0) {
-      url = uriIdSegmentParam(
-        this._apiRoot,
-        "marketplaces",
-        marketplaceId,
-        "holdings",
-        `sessions=${sessionIds.join(",")}`,
-      );
-    } else {
-      url = uriIdSegment(this._apiRoot, "marketplaces", marketplaceId, "holdings");
-    }
+    let url = `${this._marketplace(marketplaceId)}/holdings`;
+    if (sessionIds && sessionIds.length > 0) url += `?sessions=${sessionIds.join(",")}`;
     const data = await this._get(url);
     return (data as unknown as JsonObject[]).map(parseHolding);
   }
 
   async holding(marketplaceId: number): Promise<Holding> {
-    const url = uriIdSegment(
-      this._apiRoot,
-      "marketplaces",
-      marketplaceId,
-      "currentHolding",
-    );
-    return parseHolding(await this._get(url));
+    return parseHolding(await this._get(`${this._marketplace(marketplaceId)}/participants/me/holding`));
   }
 
   // -- connections -----------------------------------------------------------
@@ -1445,10 +1298,7 @@ export class Flexemarkets {
    * filter on the result.
    */
   async connections(marketplaceId: number): Promise<ClientConnection[]> {
-    const url = uriIdSegmentParam(
-      this._apiRoot, "marketplaces", marketplaceId, "connections",
-      "format=application/json",
-    );
+    const url = `${this._marketplace(marketplaceId)}/connections`;
     return ((await this._get(url)) as unknown as JsonObject[]).map(parseConnection);
   }
 
@@ -1480,40 +1330,42 @@ export class Flexemarkets {
         `Marketplace definition is not valid JSON: ${(e as Error).message}`,
       );
     }
-    const url = `${server(this._endpoint)}/v1/marketplaces`;
-    return parseMarketplace(await this._post(url, parsed));
+    return parseMarketplace(await this._post(this._v1("/marketplaces"), parsed));
   }
 
   /** Opens the marketplace's session, returning it in its new state. */
   async openSession(marketplaceId: number): Promise<Session> {
-    return parseSession(
-      await this._patch(uriIdSegment(this._apiRoot, "marketplaces", marketplaceId, "open")),
-    );
+    return this._sessionState(marketplaceId, "OPEN");
   }
 
   async pauseSession(marketplaceId: number): Promise<Session> {
-    return parseSession(
-      await this._patch(uriIdSegment(this._apiRoot, "marketplaces", marketplaceId, "pause")),
-    );
+    return this._sessionState(marketplaceId, "PAUSED");
   }
 
   async closeSession(marketplaceId: number): Promise<Session> {
+    return this._sessionState(marketplaceId, "CLOSED");
+  }
+
+  /**
+   * A session's lifecycle is its state, PATCHed. Asking for the state it is
+   * already in changes nothing; one it cannot reach from where it is --
+   * pausing a closed session -- is refused.
+   */
+  private async _sessionState(marketplaceId: number, state: string): Promise<Session> {
     return parseSession(
-      await this._patch(uriIdSegment(this._apiRoot, "marketplaces", marketplaceId, "close")),
+      await this._patch(`${this._marketplace(marketplaceId)}/sessions/current`, { state }),
     );
   }
 
-  /** Everyone in the caller's account. `usersJson`, not the HAL `users` form. */
+  /** Everyone in the caller's account. */
   async users(): Promise<Person[]> {
-    const data = await this._get(uri(this._apiRoot, "usersJson"));
+    const data = await this._get(this._v1("/users"));
     return (data as unknown as JsonObject[]).map((u) => parsePerson(u) as Person);
   }
 
-  /** The opening positions of one allocation. A V1 route, not on the API root. */
+  /** The opening positions of one allocation. */
   async allotments(marketplaceId: number, allocationId: number): Promise<Allotment[]> {
-    const url =
-      `${server(this._endpoint)}/v1/marketplaces/${marketplaceId}` +
-      `/allotments?allocation=${allocationId}`;
+    const url = `${this._marketplace(marketplaceId)}/allocations/${allocationId}/allotments`;
     const data = await this._get(url);
     return (data as unknown as JsonObject[]).map(parseAllotment);
   }
@@ -1529,7 +1381,7 @@ export class Flexemarkets {
    * computes with; the allotment encoding is applied here.
    */
   async allocate(marketplaceId: number, holdings: Holding[]): Promise<Holding[]> {
-    const url = uriIdSegment(this._apiRoot, "marketplaces", marketplaceId, "allocations");
+    const url = `${this._marketplace(marketplaceId)}/allocations`;
     const body = holdings.map((h) => holdingToAllotment(marketplaceId, h));
     const data = await this._post(url, body);
     return allotmentsToHoldings((data as unknown as JsonObject[]).map(parseAllotment));
@@ -1538,25 +1390,13 @@ export class Flexemarkets {
   /**
    * The holdings CSV, verbatim, for the current session or for given ones.
    *
-   * The filter is spelled `sessions=` on this route and `sessionIds=` on
-   * sessions and connections. Using the wrong one is not an error — it is an
-   * unfiltered answer.
+   * The same route as {@link holdings}, asked for `text/csv`: the format is
+   * chosen by the Accept header, not by a `/downloads` segment.
    */
   async downloadHoldings(marketplaceId: number, sessionIds?: number[] | null): Promise<string> {
-    if (sessionIds && sessionIds.length > 0) {
-      return this._getText(
-        uriIdSegmentParam(
-          this._apiRoot,
-          "marketplaces",
-          marketplaceId,
-          "holdings/downloads",
-          `sessions=${sessionIds.join(",")}`,
-        ),
-      );
-    }
-    return this._getText(
-      uriIdSegment(this._apiRoot, "marketplaces", marketplaceId, "holdings/downloads"),
-    );
+    let url = `${this._marketplace(marketplaceId)}/holdings`;
+    if (sessionIds && sessionIds.length > 0) url += `?sessions=${sessionIds.join(",")}`;
+    return this._getText(url);
   }
 
   /**
@@ -1564,17 +1404,9 @@ export class Flexemarkets {
    * the same terms as {@link allocate}.
    */
   async uploadHoldings(marketplaceId: number, filename: string): Promise<Holding[]> {
-    const url = uriIdSegment(this._apiRoot, "marketplaces", marketplaceId, "holdings/uploads");
-    const form = new FormData();
-    form.append("file", new Blob([readFileSync(filename)]), basename(filename));
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: { ...this._authHeaders(), "User-Agent": FM_NETWORK_CLIENT },
-      body: form,
-    });
-    const body = await resp.text();
-    checkResponse(resp, body);
-    return allotmentsToHoldings((readBody(body) as JsonObject[]).map(parseAllotment));
+    const url = `${this._marketplace(marketplaceId)}/allocations`;
+    const data = (await this._sendCsv("POST", url, filename)) as JsonObject[];
+    return allotmentsToHoldings(data.map(parseAllotment));
   }
 
   /**
@@ -1592,17 +1424,9 @@ export class Flexemarkets {
    * resolves to. A study's existing values file needs no change.
    */
   async uploadState(marketplaceId: number, filename: string): Promise<ParticipantState[]> {
-    const url = v1(this._endpoint, `/marketplaces/${marketplaceId}/state/uploads`);
-    const form = new FormData();
-    form.append("file", new Blob([readFileSync(filename)]), basename(filename));
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: { ...this._authHeaders(), "User-Agent": FM_NETWORK_CLIENT },
-      body: form,
-    });
-    const body = await resp.text();
-    checkResponse(resp, body);
-    return (readBody(body) as JsonObject[]).map(parseParticipantState);
+    const url = `${this._marketplace(marketplaceId)}/state`;
+    const data = (await this._sendCsv("PUT", url, filename)) as JsonObject[];
+    return data.map(parseParticipantState);
   }
 
   /**
@@ -1622,7 +1446,7 @@ export class Flexemarkets {
    * that status: back off and push again.
    */
   async pushWidgets(marketplaceId: number, widgets: WidgetPush[]): Promise<Widget[]> {
-    const url = v1(this._endpoint, `/marketplaces/${marketplaceId}/widgets`);
+    const url = `${this._marketplace(marketplaceId)}/widgets`;
     const data = await this._post(url, widgets.map(widgetPushJson));
     return (data as unknown as JsonObject[]).map(parseWidget);
   }
@@ -1631,16 +1455,16 @@ export class Flexemarkets {
    * Take down a widget: the marketplace's for `key`, or one participant's.
    *
    * True if one was removed, false if there was none to remove. With `userId`,
-   * only that participant's widget goes; their marketplace widget for the same
-   * key, if any, shows again.
+   * only that participant's widget goes -- `participants/{userId}/widgets/{key}`
+   * -- and their marketplace widget for the same key, if any, shows again.
    *
    * An empty 404 is the server saying nothing was there. A 404 carrying a
    * failure document -- no such marketplace -- still throws, so a robot pointed
    * at the wrong marketplace does not read its clean-up as done.
    */
   async removeWidget(marketplaceId: number, key: string, userId?: number): Promise<boolean> {
-    let url = v1(this._endpoint, `/marketplaces/${marketplaceId}/widgets/${encodeURIComponent(key)}`);
-    if (userId !== undefined && userId !== null) url += `?userId=${userId}`;
+    const owner = userId !== undefined && userId !== null ? `/participants/${userId}` : "";
+    const url = `${this._marketplace(marketplaceId)}${owner}/widgets/${encodeURIComponent(key)}`;
     const resp = await fetch(url, {
       method: "DELETE",
       headers: { ...this._authHeaders(), Accept: "application/json", "User-Agent": FM_NETWORK_CLIENT },
@@ -1656,7 +1480,7 @@ export class Flexemarkets {
    * participant -- what a manager reads to check on a robot.
    */
   async allWidgets(marketplaceId: number): Promise<Widget[]> {
-    const data = await this._get(v1(this._endpoint, `/marketplaces/${marketplaceId}/widgets/all`));
+    const data = await this._get(`${this._marketplace(marketplaceId)}/widgets?participant=all`);
     return (data as unknown as JsonObject[]).map(parseWidget);
   }
 
@@ -1816,8 +1640,9 @@ async function signIn(
     // dropped it, and the Java SDK restored it with a test. This SDK and the
     // Python one never had it, so token auth returned 400 in both from the day
     // it was written.
+    // POST, as minting a token is (fm-server 4.6).
     const resp = await fetch(`${baseUrl}/tokens/refresh`, {
-      method: "GET",
+      method: "POST",
       headers: {
         Authorization: `Bearer ${tok}`,
         Accept: "application/json",

@@ -70,9 +70,9 @@ class WireFixturesTest {
             Map.entry("ParticipantState", fm.model.ParticipantState.class));
 
     /**
-     * The snapshot envelope is not a record the mapper binds -- it is a shape
-     * the SDK has to recognise, which is exactly why it has broken twice. The
-     * fixtures for it run through the real unwrap.
+     * The snapshot is not a record the mapper binds -- it is a shape the SDK
+     * checks, a bare array or an ApiException. The fixtures for it run through
+     * the real check.
      */
     record OrdersSnapshot(java.util.List<fm.model.Order> orders) { }
 
@@ -115,7 +115,7 @@ class WireFixturesTest {
     void fixture(Fixture fixture) {
         Object parsed;
         if ("OrdersSnapshot".equals(fixture.type())) {
-            parsed = new OrdersSnapshot(HttpFlexemarkets._unwrapOrders(
+            parsed = new OrdersSnapshot(HttpFlexemarkets._ordersOf(
                     new fm.Snapshot<>(fixture.payload(), fm.Snapshot.NO_SEQ)).body());
         } else if ("Widgets".equals(fixture.type())) {
             parsed = new Widgets(HttpFlexemarkets.MAPPER.convertValue(fixture.payload(), WIDGETS));

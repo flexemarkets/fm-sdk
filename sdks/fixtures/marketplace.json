@@ -3,7 +3,7 @@
   "why": "Nested markets, which is where a list parser is easiest to get wrong: an absent list must be empty, not null.",
   "source": {
     "captured": {
-      "link": "marketplacesJson",
+      "path": "/v1/marketplaces",
       "server": "4.3.1",
       "on": "2026-08-28"
     }

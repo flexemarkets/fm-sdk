@@ -1,0 +1,1513 @@
+{
+  "why": "0.4.0 is HAL-less and V1-only on fm-server 4.6's model routes. Each case is one client call and the requests it must send, in order. All three SDKs run every case against a loopback server; a request the case does not list -- the API root above all -- fails it.",
+  "server": "4.6.2",
+  "cases": [
+    {
+      "call": "marketplaces",
+      "args": {},
+      "why": "The marketplace list was the HAL root's `marketplaces` link with ?format=application/json; V1 is a plain list.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces",
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "id": 1,
+                "name": "mp",
+                "accountId": 1,
+                "markets": [
+                  {
+                    "id": 11,
+                    "marketplaceId": 1,
+                    "symbol": "STK",
+                    "name": "Stock",
+                    "priceMinimum": 110,
+                    "priceMaximum": 199,
+                    "priceTick": 25,
+                    "unitMinimum": 1,
+                    "unitMaximum": 100,
+                    "unitTick": 1,
+                    "privateMarket": false
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "call": "marketplace",
+      "args": {
+        "marketplaceId": 1
+      },
+      "why": "One marketplace, read through the root's link until 0.4.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1",
+          "response": {
+            "status": 200,
+            "body": {
+              "id": 1,
+              "name": "mp",
+              "accountId": 1,
+              "markets": [
+                {
+                  "id": 11,
+                  "marketplaceId": 1,
+                  "symbol": "STK",
+                  "name": "Stock",
+                  "priceMinimum": 110,
+                  "priceMaximum": 199,
+                  "priceTick": 25,
+                  "unitMinimum": 1,
+                  "unitMaximum": 100,
+                  "unitTick": 1,
+                  "privateMarket": false
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "call": "markets",
+      "args": {
+        "marketplaceId": 1
+      },
+      "why": "Markets were a HAL segment with ?format=; V1 answers a list.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/markets",
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "id": 11,
+                "marketplaceId": 1,
+                "symbol": "STK",
+                "name": "Stock",
+                "priceMinimum": 110,
+                "priceMaximum": 199,
+                "priceTick": 25,
+                "unitMinimum": 1,
+                "unitMaximum": 100,
+                "unitTick": 1,
+                "privateMarket": false
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "call": "symbols",
+      "args": {
+        "marketplaceId": 1
+      },
+      "why": "V1 has no /symbols: the symbols are the markets' own, read off GET markets.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/markets",
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "id": 11,
+                "marketplaceId": 1,
+                "symbol": "STK",
+                "name": "Stock",
+                "priceMinimum": 110,
+                "priceMaximum": 199,
+                "priceTick": 25,
+                "unitMinimum": 1,
+                "unitMaximum": 100,
+                "unitTick": 1,
+                "privateMarket": false
+              }
+            ]
+          }
+        }
+      ],
+      "returns": [
+        "STK"
+      ]
+    },
+    {
+      "call": "sessions",
+      "args": {
+        "marketplaceId": 1
+      },
+      "why": "Already V1 before 0.4; here so the HAL-less client is held to it.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/sessions",
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "marketplaceId": 1,
+                "allocationId": 12,
+                "id": 41,
+                "original": 41,
+                "state": "OPEN",
+                "name": "Round 3",
+                "openDate": "2026-08-21T09:00:00",
+                "closeDate": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "call": "session",
+      "args": {
+        "marketplaceId": 1
+      },
+      "why": "`current` wherever a session id goes (API-V1 rule 4), where V0 spelled it currentSession.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/sessions/current",
+          "response": {
+            "status": 200,
+            "body": {
+              "marketplaceId": 1,
+              "allocationId": 12,
+              "id": 41,
+              "original": 41,
+              "state": "OPEN",
+              "name": "Round 3",
+              "openDate": "2026-08-21T09:00:00",
+              "closeDate": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "call": "orders",
+      "args": {
+        "marketplaceId": 1
+      },
+      "why": "V0's marketplace orders dropped cancelled orders, their CANCEL rows and self-crosses, and studies rank participants on that. Without ?cancelled=false the V1 read is the raw lifecycle and every cancel would count.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/orders",
+          "query": {
+            "cancelled": "false"
+          },
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "id": 42,
+                "original": 42,
+                "supplier": null,
+                "consumer": null,
+                "type": "LIMIT",
+                "side": "BUY",
+                "units": 5,
+                "price": 135,
+                "marketplaceId": 1,
+                "marketId": 11,
+                "sessionId": 41,
+                "ownerId": 7
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "call": "orders",
+      "args": {
+        "marketplaceId": 1,
+        "sessionIds": [
+          41,
+          44
+        ]
+      },
+      "why": "The lifecycle of named runs, cancels included, as `sessionOrdersJson` read it -- `sessions=`, the spelling every V1 route uses.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/orders",
+          "query": {
+            "sessions": "41,44"
+          },
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "id": 42,
+                "original": 42,
+                "supplier": null,
+                "consumer": null,
+                "type": "LIMIT",
+                "side": "BUY",
+                "units": 5,
+                "price": 135,
+                "marketplaceId": 1,
+                "marketId": 11,
+                "sessionId": 41,
+                "ownerId": 7
+              },
+              {
+                "id": 43,
+                "original": 42,
+                "supplier": null,
+                "consumer": 42,
+                "type": "CANCEL",
+                "side": "BUY",
+                "units": 5,
+                "price": 135,
+                "marketplaceId": 1,
+                "marketId": 11,
+                "sessionId": 41,
+                "ownerId": 7
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "call": "orders",
+      "args": {
+        "marketplaceId": 1,
+        "symbol": "STK"
+      },
+      "why": "One market's resting book: `symbolOrdersJson` is `GET orders?state=ACTIVE&symbol=`.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/orders",
+          "query": {
+            "state": "ACTIVE",
+            "symbol": "STK"
+          },
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "id": 42,
+                "original": 42,
+                "supplier": null,
+                "consumer": null,
+                "type": "LIMIT",
+                "side": "BUY",
+                "units": 5,
+                "price": 135,
+                "marketplaceId": 1,
+                "marketId": 11,
+                "sessionId": 41,
+                "ownerId": 7
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "call": "orders",
+      "args": {
+        "marketplaceId": 1,
+        "symbol": "S&P"
+      },
+      "why": "A symbol is a query value and is encoded as one. Sent raw, the & ends the parameter: the server reads ?symbol=S and a stray P=, and answers for the wrong market or refuses.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/orders",
+          "query": {
+            "state": "ACTIVE",
+            "symbol": "S&P"
+          },
+          "response": {
+            "status": 200,
+            "body": []
+          }
+        }
+      ]
+    },
+    {
+      "call": "trades",
+      "args": {
+        "marketplaceId": 1,
+        "symbol": "STK"
+      },
+      "why": "One market's traded legs: `symbolTradesJson` had no limit, so this asks for the most the server gives.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/orders",
+          "query": {
+            "state": "TRADED",
+            "symbol": "STK",
+            "limit": "5000"
+          },
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "id": 42,
+                "original": 42,
+                "supplier": null,
+                "consumer": null,
+                "type": "LIMIT",
+                "side": "BUY",
+                "units": 5,
+                "price": 135,
+                "marketplaceId": 1,
+                "marketId": 11,
+                "sessionId": 41,
+                "ownerId": 7
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "call": "activeOrders",
+      "args": {
+        "marketplaceId": 1
+      },
+      "why": "The Desk's seed. The superseded /orders/active still answers, with Deprecation.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/orders",
+          "query": {
+            "state": "ACTIVE"
+          },
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "id": 42,
+                "original": 42,
+                "supplier": null,
+                "consumer": null,
+                "type": "LIMIT",
+                "side": "BUY",
+                "units": 5,
+                "price": 135,
+                "marketplaceId": 1,
+                "marketId": 11,
+                "sessionId": 41,
+                "ownerId": 7
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "call": "recentTrades",
+      "args": {
+        "marketplaceId": 1,
+        "size": 250
+      },
+      "why": "`limit` is what every V1 read calls a count.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/orders",
+          "query": {
+            "state": "TRADED",
+            "limit": "250"
+          },
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "id": 42,
+                "original": 42,
+                "supplier": null,
+                "consumer": null,
+                "type": "LIMIT",
+                "side": "BUY",
+                "units": 5,
+                "price": 135,
+                "marketplaceId": 1,
+                "marketId": 11,
+                "sessionId": 41,
+                "ownerId": 7
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "call": "recentTrades",
+      "args": {
+        "marketplaceId": 1
+      },
+      "why": "Without a size the SDK asks for the server's default, 1000 legs, by name: an omitted limit would get the same today, and stop matching the day either default moves.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/orders",
+          "query": {
+            "state": "TRADED",
+            "limit": "1000"
+          },
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "id": 42,
+                "original": 42,
+                "type": "LIMIT",
+                "side": "BUY",
+                "units": 5,
+                "price": 135,
+                "marketplaceId": 1,
+                "marketId": 11,
+                "sessionId": 41,
+                "ownerId": 7
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "call": "holdings",
+      "args": {
+        "marketplaceId": 1
+      },
+      "why": "Was the HAL segment; same path at V1.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/holdings",
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "marketplaceId": 1,
+                "sessionId": 41,
+                "allocationId": 12,
+                "ownerId": 7,
+                "name": "B01",
+                "cash": 1000,
+                "availableCash": 1000,
+                "assets": [
+                  {
+                    "marketId": 11,
+                    "units": 5,
+                    "availableUnits": 5,
+                    "initialShortUnits": 0,
+                    "canBuy": true,
+                    "canSell": true
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "call": "holdings",
+      "args": {
+        "marketplaceId": 1,
+        "sessionIds": [
+          41,
+          44
+        ]
+      },
+      "why": "Filtered by run.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/holdings",
+          "query": {
+            "sessions": "41,44"
+          },
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "marketplaceId": 1,
+                "sessionId": 41,
+                "allocationId": 12,
+                "ownerId": 7,
+                "name": "B01",
+                "cash": 1000,
+                "availableCash": 1000,
+                "assets": [
+                  {
+                    "marketId": 11,
+                    "units": 5,
+                    "availableUnits": 5,
+                    "initialShortUnits": 0,
+                    "canBuy": true,
+                    "canSell": true
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "call": "holding",
+      "args": {
+        "marketplaceId": 1
+      },
+      "why": "The caller's own holding belongs to the participant: participants/me/holding, where V0 said currentHolding.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/participants/me/holding",
+          "response": {
+            "status": 200,
+            "body": {
+              "marketplaceId": 1,
+              "sessionId": 41,
+              "allocationId": 12,
+              "ownerId": 7,
+              "name": "B01",
+              "cash": 1000,
+              "availableCash": 1000,
+              "assets": [
+                {
+                  "marketId": 11,
+                  "units": 5,
+                  "availableUnits": 5,
+                  "initialShortUnits": 0,
+                  "canBuy": true,
+                  "canSell": true
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "call": "connections",
+      "args": {
+        "marketplaceId": 1
+      },
+      "why": "Every row for the marketplace, as V0 answered; V1 needs no ?format=.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/connections",
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "id": 3,
+                "marketplaceId": 1,
+                "ownerId": 7,
+                "sessionId": 41
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "call": "identifiers",
+      "args": {
+        "marketplaceId": 1
+      },
+      "why": "The private names a caller may target are the participants' names; V0 answered bare strings, V1 objects.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/participants",
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "name": "B01"
+              },
+              {
+                "name": "S02"
+              }
+            ]
+          }
+        }
+      ],
+      "returns": [
+        "B01",
+        "S02"
+      ]
+    },
+    {
+      "call": "users",
+      "args": {},
+      "why": "`usersJson` is GET /v1/users, owner flag and all.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/users",
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "id": 7,
+                "accountId": 1,
+                "firstName": "Dev",
+                "lastName": "Eloper",
+                "email": "dev@dev",
+                "roles": [
+                  "ROLE_USER"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "call": "userById",
+      "args": {
+        "userId": 7
+      },
+      "why": "Already V1.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/users/7",
+          "response": {
+            "status": 200,
+            "body": {
+              "id": 7,
+              "accountId": 1,
+              "firstName": "Dev",
+              "lastName": "Eloper",
+              "email": "dev@dev",
+              "roles": [
+                "ROLE_USER"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "call": "accountById",
+      "args": {
+        "accountId": 1
+      },
+      "why": "Was the root's `accounts` link.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/accounts/1",
+          "response": {
+            "status": 200,
+            "body": {
+              "id": 1,
+              "name": "dev",
+              "approval": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "call": "accounts",
+      "args": {},
+      "why": "Was the root's link with ?format=.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/accounts",
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "id": 1,
+                "name": "dev",
+                "approval": true
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "call": "allotments",
+      "args": {
+        "marketplaceId": 1,
+        "allocationId": 12
+      },
+      "why": "An allocation's allotments are its own: allocations/{id}/allotments, not a filter on a flat list.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/allocations/12/allotments",
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "id": 5,
+                "allocationId": 12,
+                "marketplaceId": 1,
+                "ownerId": 7,
+                "name": "B01",
+                "assets": {
+                  "cash": 1000,
+                  "grants": [
+                    {
+                      "marketId": 11,
+                      "units": 5
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "call": "downloadHoldings",
+      "args": {
+        "marketplaceId": 1
+      },
+      "why": "Format by header, not by path (API-V1 rule 7): the FM-3 export is GET holdings asking for text/csv.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/holdings",
+          "accept": "text/csv",
+          "response": {
+            "status": 200,
+            "body": "name,cash\nB01,1000\n",
+            "contentType": "text/csv"
+          }
+        }
+      ],
+      "returns": "name,cash\nB01,1000\n"
+    },
+    {
+      "call": "downloadHoldings",
+      "args": {
+        "marketplaceId": 1,
+        "sessionIds": [
+          41
+        ]
+      },
+      "why": "Filtered by run.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/holdings",
+          "query": {
+            "sessions": "41"
+          },
+          "accept": "text/csv",
+          "response": {
+            "status": 200,
+            "body": "name,cash\n",
+            "contentType": "text/csv"
+          }
+        }
+      ],
+      "returns": "name,cash\n"
+    },
+    {
+      "call": "submitLimit",
+      "args": {
+        "marketplaceId": 1,
+        "marketId": 11,
+        "side": "BUY",
+        "units": 5,
+        "price": 135
+      },
+      "why": "The marketplace moves into the path; the body may still carry it and must agree. Only the named fields are compared, so clientDescription is free.",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/api/v1/marketplaces/1/orders",
+          "body": {
+            "marketplaceId": 1,
+            "marketId": 11,
+            "type": "LIMIT",
+            "side": "BUY",
+            "units": 5,
+            "price": 135
+          },
+          "contentType": "application/json",
+          "response": {
+            "status": 200,
+            "body": {
+              "id": 42,
+              "original": 42,
+              "supplier": null,
+              "consumer": null,
+              "type": "LIMIT",
+              "side": "BUY",
+              "units": 5,
+              "price": 135,
+              "marketplaceId": 1,
+              "marketId": 11,
+              "sessionId": 41,
+              "ownerId": 7
+            }
+          }
+        }
+      ]
+    },
+    {
+      "call": "submitCancel",
+      "args": {
+        "marketplaceId": 1,
+        "marketId": 11,
+        "originalId": 42
+      },
+      "why": "DELETE cancels (API-V1 rule 2): 200 with the CANCEL order the exchange recorded.",
+      "requests": [
+        {
+          "method": "DELETE",
+          "path": "/api/v1/marketplaces/1/orders/42",
+          "response": {
+            "status": 200,
+            "body": {
+              "id": 43,
+              "original": 42,
+              "supplier": null,
+              "consumer": 42,
+              "type": "CANCEL",
+              "side": "BUY",
+              "units": 5,
+              "price": 135,
+              "marketplaceId": 1,
+              "marketId": 11,
+              "sessionId": 41,
+              "ownerId": 7
+            }
+          }
+        }
+      ]
+    },
+    {
+      "call": "openSession",
+      "args": {
+        "marketplaceId": 1
+      },
+      "why": "A lifecycle is a state, PATCHed (API-V1 rule 3).",
+      "requests": [
+        {
+          "method": "PATCH",
+          "path": "/api/v1/marketplaces/1/sessions/current",
+          "body": {
+            "state": "OPEN"
+          },
+          "contentType": "application/json",
+          "response": {
+            "status": 200,
+            "body": {
+              "marketplaceId": 1,
+              "allocationId": 12,
+              "id": 41,
+              "original": 41,
+              "state": "OPEN",
+              "name": "Round 3",
+              "openDate": "2026-08-21T09:00:00",
+              "closeDate": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "call": "pauseSession",
+      "args": {
+        "marketplaceId": 1
+      },
+      "why": "A lifecycle is a state, PATCHed (API-V1 rule 3).",
+      "requests": [
+        {
+          "method": "PATCH",
+          "path": "/api/v1/marketplaces/1/sessions/current",
+          "body": {
+            "state": "PAUSED"
+          },
+          "contentType": "application/json",
+          "response": {
+            "status": 200,
+            "body": {
+              "marketplaceId": 1,
+              "allocationId": 12,
+              "id": 41,
+              "original": 41,
+              "state": "PAUSED",
+              "name": "Round 3",
+              "openDate": "2026-08-21T09:00:00",
+              "closeDate": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "call": "closeSession",
+      "args": {
+        "marketplaceId": 1
+      },
+      "why": "A lifecycle is a state, PATCHed (API-V1 rule 3).",
+      "requests": [
+        {
+          "method": "PATCH",
+          "path": "/api/v1/marketplaces/1/sessions/current",
+          "body": {
+            "state": "CLOSED"
+          },
+          "contentType": "application/json",
+          "response": {
+            "status": 200,
+            "body": {
+              "marketplaceId": 1,
+              "allocationId": 12,
+              "id": 41,
+              "original": 41,
+              "state": "CLOSED",
+              "name": "Round 3",
+              "openDate": "2026-08-21T09:00:00",
+              "closeDate": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "call": "createMarketplaceFromJson",
+      "args": {
+        "json": "{\"name\": \"mp\"}"
+      },
+      "why": "Already V1.",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/api/v1/marketplaces",
+          "body": {
+            "name": "mp"
+          },
+          "contentType": "application/json",
+          "response": {
+            "status": 200,
+            "body": {
+              "id": 1,
+              "name": "mp",
+              "accountId": 1,
+              "markets": [
+                {
+                  "id": 11,
+                  "marketplaceId": 1,
+                  "symbol": "STK",
+                  "name": "Stock",
+                  "priceMinimum": 110,
+                  "priceMaximum": 199,
+                  "priceTick": 25,
+                  "unitMinimum": 1,
+                  "unitMaximum": 100,
+                  "unitTick": 1,
+                  "privateMarket": false
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "call": "deleteMarketplace",
+      "args": {
+        "marketplaceId": 1
+      },
+      "why": "Added to V1 in fm-server 4.6.2 for this release: before it only V0 could delete one.",
+      "requests": [
+        {
+          "method": "DELETE",
+          "path": "/api/v1/marketplaces/1",
+          "response": {
+            "status": 204
+          }
+        }
+      ]
+    },
+    {
+      "call": "createMarket",
+      "args": {
+        "marketplaceId": 1,
+        "symbol": "STK",
+        "name": "Stock",
+        "price": {
+          "minimum": 110,
+          "maximum": 199,
+          "tick": 25
+        },
+        "units": {
+          "minimum": 1,
+          "maximum": 100,
+          "tick": 1
+        },
+        "privateMarket": false
+      },
+      "why": "Was a HAL segment; same path and body at V1.",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/api/v1/marketplaces/1/markets",
+          "body": {
+            "symbol": "STK",
+            "name": "Stock",
+            "priceMinimum": 110,
+            "priceMaximum": 199,
+            "priceTick": 25,
+            "unitMinimum": 1,
+            "unitMaximum": 100,
+            "unitTick": 1,
+            "privateMarket": false
+          },
+          "contentType": "application/json",
+          "response": {
+            "status": 200,
+            "body": {
+              "id": 11,
+              "marketplaceId": 1,
+              "symbol": "STK",
+              "name": "Stock",
+              "priceMinimum": 110,
+              "priceMaximum": 199,
+              "priceTick": 25,
+              "unitMinimum": 1,
+              "unitMaximum": 100,
+              "unitTick": 1,
+              "privateMarket": false
+            }
+          }
+        }
+      ]
+    },
+    {
+      "call": "allocate",
+      "args": {
+        "marketplaceId": 1,
+        "holdings": [
+          {
+            "ownerId": 7,
+            "name": "B01",
+            "cash": 1000,
+            "securities": [
+              {
+                "marketId": 11,
+                "units": 5
+              }
+            ]
+          }
+        ]
+      },
+      "why": "Unchanged route; here so the HAL-less client is held to it.",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/api/v1/marketplaces/1/allocations",
+          "contentType": "application/json",
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "id": 5,
+                "allocationId": 12,
+                "marketplaceId": 1,
+                "ownerId": 7,
+                "name": "B01",
+                "assets": {
+                  "cash": 1000,
+                  "grants": [
+                    {
+                      "marketId": 11,
+                      "units": 5
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "call": "uploadHoldings",
+      "args": {
+        "marketplaceId": 1,
+        "csv": "name,cash\nB01,1000\n"
+      },
+      "why": "Format by header: the holdings CSV stages an allocation as POST allocations with Content-Type text/csv, the file as the body, where it was a multipart upload to holdings/uploads.",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/api/v1/marketplaces/1/allocations",
+          "body": "name,cash\nB01,1000\n",
+          "contentType": "text/csv",
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "id": 5,
+                "allocationId": 12,
+                "marketplaceId": 1,
+                "ownerId": 7,
+                "name": "B01",
+                "assets": {
+                  "cash": 1000,
+                  "grants": [
+                    {
+                      "marketId": 11,
+                      "units": 5
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "call": "uploadState",
+      "args": {
+        "marketplaceId": 1,
+        "csv": "name,cash\nB01,1000\n"
+      },
+      "why": "The state CSV replaces the staged state: PUT state, text/csv, where it was a multipart POST to state/uploads.",
+      "requests": [
+        {
+          "method": "PUT",
+          "path": "/api/v1/marketplaces/1/state",
+          "body": "name,cash\nB01,1000\n",
+          "contentType": "text/csv",
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "ownerId": 7,
+                "name": "B01",
+                "values": {
+                  "group": "A"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "call": "removeWidget",
+      "args": {
+        "marketplaceId": 1,
+        "key": "score"
+      },
+      "why": "A marketplace widget.",
+      "requests": [
+        {
+          "method": "DELETE",
+          "path": "/api/v1/marketplaces/1/widgets/score",
+          "response": {
+            "status": 204
+          }
+        }
+      ],
+      "returns": true
+    },
+    {
+      "call": "removeWidget",
+      "args": {
+        "marketplaceId": 1,
+        "key": "score",
+        "userId": 8
+      },
+      "why": "A participant's widget is theirs: participants/{userId}/widgets/{key}, where it was ?userId= on the marketplace's.",
+      "requests": [
+        {
+          "method": "DELETE",
+          "path": "/api/v1/marketplaces/1/participants/8/widgets/score",
+          "response": {
+            "status": 204
+          }
+        }
+      ],
+      "returns": true
+    },
+    {
+      "call": "removeWidget",
+      "args": {
+        "marketplaceId": 1,
+        "key": "gone",
+        "userId": 8
+      },
+      "why": "404 with no body is 'nothing under that key', not a failure.",
+      "requests": [
+        {
+          "method": "DELETE",
+          "path": "/api/v1/marketplaces/1/participants/8/widgets/gone",
+          "response": {
+            "status": 404
+          }
+        }
+      ],
+      "returns": false
+    },
+    {
+      "call": "allWidgets",
+      "args": {
+        "marketplaceId": 1
+      },
+      "why": "A segment is never a filter (rule 5): widgets/all is GET widgets?participant=all.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/widgets",
+          "query": {
+            "participant": "all"
+          },
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "id": 31,
+                "marketplaceId": 1,
+                "scope": "MARKETPLACE",
+                "key": "score",
+                "title": "Score",
+                "content": {
+                  "kind": "text",
+                  "lines": [
+                    "round 1"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "call": "signup",
+      "args": {
+        "accountName": "acme",
+        "email": "a@acme",
+        "password": "pw"
+      },
+      "why": "Sign-up is anonymous POST /v1/accounts; was the root's link.",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/api/v1/accounts",
+          "body": {
+            "accountName": "acme",
+            "ownerEmail": "a@acme",
+            "ownerPassword": "pw"
+          },
+          "contentType": "application/json",
+          "response": {
+            "status": 200,
+            "body": {
+              "token": "t",
+              "person": {
+                "id": 7,
+                "accountId": 1,
+                "firstName": "Dev",
+                "lastName": "Eloper",
+                "email": "dev@dev",
+                "roles": [
+                  "ROLE_USER"
+                ]
+              },
+              "account": {
+                "id": 2,
+                "name": "acme",
+                "approval": null
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "call": "approveAccount",
+      "args": {
+        "accountName": "acme"
+      },
+      "why": "V1 approves by account id; the SDK keeps taking the name and finds the id in the account list first.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/accounts",
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "id": 1,
+                "name": "dev",
+                "approval": true
+              },
+              {
+                "id": 2,
+                "name": "acme",
+                "approval": null
+              }
+            ]
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/accounts/2/approvals",
+          "body": {
+            "approve": true
+          },
+          "contentType": "application/json",
+          "response": {
+            "status": 201,
+            "body": {
+              "approve": true,
+              "account": {
+                "id": 2,
+                "name": "acme",
+                "approval": true
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "call": "deleteMyAccount",
+      "args": {},
+      "why": "Was V0.",
+      "requests": [
+        {
+          "method": "DELETE",
+          "path": "/api/v1/accounts/me",
+          "response": {
+            "status": 204
+          }
+        }
+      ]
+    },
+    {
+      "call": "deleteAccount",
+      "args": {
+        "accountId": 2
+      },
+      "why": "Was the root's link.",
+      "requests": [
+        {
+          "method": "DELETE",
+          "path": "/api/v1/accounts/2",
+          "response": {
+            "status": 204
+          }
+        }
+      ]
+    },
+    {
+      "call": "createUser",
+      "args": {
+        "email": "b@dev",
+        "password": "pw",
+        "firstName": "B",
+        "lastName": "Dev",
+        "roles": [
+          "ROLE_USER"
+        ]
+      },
+      "why": "Already V1.",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/api/v1/users",
+          "body": {
+            "email": "b@dev",
+            "password": "pw",
+            "firstName": "B",
+            "lastName": "Dev",
+            "roles": [
+              "ROLE_USER"
+            ]
+          },
+          "contentType": "application/json",
+          "response": {
+            "status": 200,
+            "body": {
+              "id": 7,
+              "accountId": 1,
+              "firstName": "Dev",
+              "lastName": "Eloper",
+              "email": "dev@dev",
+              "roles": [
+                "ROLE_USER"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "call": "deleteUser",
+      "args": {
+        "userId": 9
+      },
+      "why": "Python reached this through the root's `users` link; all three now say the same.",
+      "requests": [
+        {
+          "method": "DELETE",
+          "path": "/api/v1/users/9",
+          "response": {
+            "status": 204
+          }
+        }
+      ]
+    },
+    {
+      "call": "managerOtpBundle",
+      "args": {
+        "userIds": [
+          7
+        ]
+      },
+      "why": "A bootstrap route, deliberately unversioned on the server (API-V1 section 2): it stays at /api.",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/api/otp/manager",
+          "body": {
+            "userIds": [
+              7
+            ]
+          },
+          "contentType": "application/json",
+          "response": {
+            "status": 200,
+            "body": {
+              "otps": []
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

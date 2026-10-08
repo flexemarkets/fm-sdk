@@ -35,9 +35,12 @@ TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl"
 SIGNED_IN = {"token": TOKEN, "person": {"id": 7, "accountId": 1, "email": "dev@dev"},
              "account": {"id": 1, "name": "dev"}}
 
-# path -> (status, body, x-fm-as-of-seq or None); anything else answers ANSWER.
+# path -> (status, body, x-fm-as-of-seq or None); anything else answers ANSWER,
+# which until a test sets it is a 404: a request on a path no test named
+# fails rather than reading as an empty success.
 answers: dict[str, tuple[int, Any, str | None]] = {}
-ANSWER: list[tuple[int, Any]] = [(200, {"_links": {}})]
+UNANSWERED = (404, {"error": "NOT_FOUND", "message": "no route", "status": 404})
+ANSWER: list[tuple[int, Any]] = [UNANSWERED]
 
 
 def _refusal(error: str, message: str, status: int) -> dict[str, Any]:
@@ -71,7 +74,7 @@ def base() -> str:
     answers.clear()
     answers["/api/tokens"] = (200, SIGNED_IN, None)
     answers["/api/tokens/refresh"] = (200, SIGNED_IN, None)
-    ANSWER[0] = (200, {"_links": {}})
+    ANSWER[0] = UNANSWERED
     httpd = HTTPServer(("127.0.0.1", 0), Handler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{httpd.server_address[1]}/api"
@@ -149,7 +152,7 @@ def test_a_refused_token_fails_at_connect_saying_why(base: str) -> None:
 
 
 def test_a_snapshot_carries_the_sequence_it_was_taken_at(base: str) -> None:
-    answers["/api/v1/marketplaces/1/orders/active"] = (200, [], "41")
+    answers["/api/v1/marketplaces/1/orders"] = (200, [], "41")
     fm = _connect(base)
     try:
         snapshot = fm.active_orders(1)
@@ -161,7 +164,7 @@ def test_a_snapshot_carries_the_sequence_it_was_taken_at(base: str) -> None:
 
 def test_a_snapshot_without_a_sequence_says_so(base: str) -> None:
     """No header -- an older server -- is "no sequence", which a desk must not mistake for 0."""
-    answers["/api/v1/marketplaces/1/orders/active"] = (200, [], None)
+    answers["/api/v1/marketplaces/1/orders"] = (200, [], None)
     fm = _connect(base)
     try:
         assert fm.active_orders(1).as_of_seq == NO_SEQ
@@ -170,7 +173,7 @@ def test_a_snapshot_without_a_sequence_says_so(base: str) -> None:
 
 
 def test_a_refused_snapshot_is_the_servers_refusal(base: str) -> None:
-    answers["/api/v1/marketplaces/1/orders/active"] = (403, _refusal("NOT_PERMITTED", "Not your marketplace.", 403), None)
+    answers["/api/v1/marketplaces/1/orders"] = (403, _refusal("NOT_PERMITTED", "Not your marketplace.", 403), None)
     fm = _connect(base)
     try:
         with pytest.raises(AuthorizationError) as e:
@@ -185,8 +188,7 @@ def test_a_refused_snapshot_is_the_servers_refusal(base: str) -> None:
 def test_an_order_answer_that_cannot_be_read_says_so(base: str) -> None:
     """As Java's anOrderAnswerThatCannotBeReadSaysSo: a 200 that is not JSON is
     an ApiError, not a json.JSONDecodeError escaping past FlexemarketsError."""
-    answers["/api"] = (200, {"_links": {"orders": {"href": f"{base}/orders"}}}, None)
-    answers["/api/orders"] = (200, "<html>edge error page</html>", None)
+    answers["/api/v1/marketplaces/1/orders"] = (200, "<html>edge error page</html>", None)
     fm = _connect(base)
     try:
         with pytest.raises(ApiError) as e:
@@ -198,7 +200,7 @@ def test_an_order_answer_that_cannot_be_read_says_so(base: str) -> None:
 
 
 def test_a_snapshot_that_cannot_be_read_says_so(base: str) -> None:
-    answers["/api/v1/marketplaces/1/orders/active"] = (200, "<html>edge error page</html>", "41")
+    answers["/api/v1/marketplaces/1/orders"] = (200, "<html>edge error page</html>", "41")
     fm = _connect(base)
     try:
         with pytest.raises(ApiError) as e:

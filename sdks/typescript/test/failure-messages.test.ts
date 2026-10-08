@@ -36,7 +36,7 @@ const SIGNED_IN = {
 
 /** path -> [status, body, x-fm-as-of-seq]; anything else answers `fallback`. */
 const answers = new Map<string, [number, unknown, string | null]>();
-let fallback: [number, unknown] = [200, { _links: {} }];
+let fallback: [number, unknown] = [404, ""];
 
 let server: Server;
 let base: string;
@@ -66,7 +66,7 @@ beforeEach(() => {
   answers.clear();
   answers.set("/api/tokens", [200, SIGNED_IN, null]);
   answers.set("/api/tokens/refresh", [200, SIGNED_IN, null]);
-  fallback = [200, { _links: {} }];
+  fallback = [404, ""];
 });
 
 const refusal = (error: string, message: string, status: number) =>
@@ -140,7 +140,7 @@ test("a refused token fails at connect saying why", async () => {
 });
 
 test("a snapshot carries the sequence it was taken at", async () => {
-  answers.set("/api/v1/marketplaces/1/orders/active", [200, [], "41"]);
+  answers.set("/api/v1/marketplaces/1/orders", [200, [], "41"]);
   const fm = await connect();
   try {
     const snapshot = await fm.activeOrders(1);
@@ -150,7 +150,7 @@ test("a snapshot carries the sequence it was taken at", async () => {
 });
 
 test("a snapshot without a sequence says so", async () => {
-  answers.set("/api/v1/marketplaces/1/orders/active", [200, [], null]);
+  answers.set("/api/v1/marketplaces/1/orders", [200, [], null]);
   const fm = await connect();
   try {
     assert.equal((await fm.activeOrders(1)).asOfSeq, NO_SEQ);
@@ -158,7 +158,7 @@ test("a snapshot without a sequence says so", async () => {
 });
 
 test("a refused snapshot is the server's refusal", async () => {
-  answers.set("/api/v1/marketplaces/1/orders/active", [403, refusal("NOT_PERMITTED", "Not your marketplace.", 403), null]);
+  answers.set("/api/v1/marketplaces/1/orders", [403, refusal("NOT_PERMITTED", "Not your marketplace.", 403), null]);
   const fm = await connect();
   try {
     await assert.rejects(fm.activeOrders(1),
@@ -169,8 +169,7 @@ test("a refused snapshot is the server's refusal", async () => {
 // --- an answer that arrives but does not parse --------------------------------
 
 test("an order answer that cannot be read says so", async () => {
-  answers.set("/api", [200, { _links: { orders: { href: `${base}/orders` } } }, null]);
-  answers.set("/api/orders", [200, "<html>edge error page</html>", null]);
+  answers.set("/api/v1/marketplaces/1/orders", [200, "<html>edge error page</html>", null]);
   const fm = await connect();
   try {
     await assert.rejects(fm.submitLimit(1, 11, "BUY", 1, 100),
@@ -180,7 +179,7 @@ test("an order answer that cannot be read says so", async () => {
 });
 
 test("a snapshot that cannot be read says so", async () => {
-  answers.set("/api/v1/marketplaces/1/orders/active", [200, "<html>edge error page</html>", "41"]);
+  answers.set("/api/v1/marketplaces/1/orders", [200, "<html>edge error page</html>", "41"]);
   const fm = await connect();
   try {
     await assert.rejects(fm.activeOrders(1),

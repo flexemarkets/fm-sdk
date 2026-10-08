@@ -51,8 +51,10 @@ class TokenAuthenticationTest {
             _requests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath()
                          + " auth=" + exchange.getRequestHeaders().getFirst("Authorization"));
             // A sign-in attempt with no credentials is refused, exactly as the
-            // real server refuses it. Only the refresh path should succeed.
-            if (!exchange.getRequestURI().getPath().endsWith("/refresh")) {
+            // real server refuses it. Only the refresh, POSTed as minting a
+            // token is since fm-server 4.6, should succeed.
+            if (!exchange.getRequestURI().getPath().endsWith("/refresh")
+                    || !"POST".equals(exchange.getRequestMethod())) {
                 _respond(exchange, 401, "{\"message\":\"unauthorized\"}");
                 return;
             }
@@ -63,14 +65,12 @@ class TokenAuthenticationTest {
                 """.formatted(TOKEN));
         });
 
-        _server.createContext("/api/marketplaces/1", exchange -> {
+        // No API root and nothing else: connecting is the refresh and only
+        // the refresh. 0.4 reads no root, so a GET /api here is a regression,
+        // recorded and refused rather than answered.
+        _server.createContext("/", exchange -> {
             _requests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
-            _respond(exchange, 200, "{\"id\":1,\"name\":\"Test\",\"markets\":[]}");
-        });
-
-        _server.createContext("/api", exchange -> {
-            _requests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
-            _respond(exchange, 200, "{\"_links\":{}}");
+            _respond(exchange, 404, "{\"message\":\"not found\"}");
         });
 
         _server.start();
@@ -105,8 +105,7 @@ class TokenAuthenticationTest {
 
         assertThat(_requests)
                 .as("a held token is refreshed, never exchanged for another")
-                .anySatisfy(r -> assertThat(r).contains("GET /api/tokens/refresh"))
-                .noneSatisfy(r -> assertThat(r).isEqualTo("POST /api/tokens auth=null"));
+                .containsExactly("POST /api/tokens/refresh auth=Bearer " + TOKEN);
     }
 
     @Test

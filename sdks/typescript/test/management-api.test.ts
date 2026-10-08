@@ -16,7 +16,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { Flexemarkets, HttpError } from "../src/client.ts";
+import { Flexemarkets, HttpError, InvalidArgumentError } from "../src/client.ts";
 import type { Holding } from "../src/types.ts";
 
 const TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl";
@@ -51,6 +51,7 @@ let server: Server;
 let port: number;
 let requests: string[] = [];
 let bodies = new Map<string, string>();
+let contentTypes = new Map<string, string>();
 
 function api(): string {
   return `http://127.0.0.1:${port}/api`;
@@ -64,6 +65,7 @@ before(async () => {
       const key = `${req.method} ${req.url}`;
       requests.push(key);
       bodies.set(key, Buffer.concat(chunks).toString("utf-8"));
+      contentTypes.set(key, req.headers["content-type"] ?? "");
 
       const send = (payload: unknown, type = "application/json") => {
         const body = typeof payload === "string" ? payload : JSON.stringify(payload);
@@ -72,72 +74,67 @@ before(async () => {
       };
 
       const url = req.url ?? "";
+      const mp = "/api/v1/marketplaces/1";
       if (url.startsWith("/api/tokens")) {
         send({
           token: TOKEN,
           person: { id: 7, accountId: 1, email: "dev@dev", roles: ["ROLE_MANAGER"] },
           account: { id: 1, name: "dev" },
         });
-      } else if (url === "/api") {
-        send({
-          _links: {
-            marketplaces: { href: `${api()}/marketplaces` },
-            accounts: { href: `${api()}/accounts` },
-            users: { href: `${api()}/users` },
-            symbolTradesJson: { href: `${api()}/symbolTradesJson` },
-            usersJson: { href: `${api()}/usersJson` },
-          },
-        });
-      } else if (url.startsWith("/api/v1/marketplaces/2/widgets")) {
+      } else if (url.startsWith("/api/v1/marketplaces/2/")) {
         // A marketplace that is not there: the 404 carries a failure document.
         res.writeHead(404, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "MARKETPLACE_NOT_FOUND", message: "no marketplace 2" }));
-      } else if (url.startsWith("/api/v1/marketplaces/1/widgets/") && req.method === "DELETE") {
+      } else if (req.method === "DELETE" && url.includes("/widgets/")) {
         // 204 for the key that exists, an empty 404 for one that does not.
-        res.writeHead(url.split("?")[0].endsWith("/score") ? 204 : 404);
+        res.writeHead(url.endsWith("/score") ? 204 : 404);
         res.end();
-      } else if (url === "/api/v1/marketplaces/1/widgets/all"
-                 || (url === "/api/v1/marketplaces/1/widgets" && req.method === "POST")) {
+      } else if (url === `${mp}/widgets?participant=all`
+                 || (url === `${mp}/widgets` && req.method === "POST")) {
         send(WIDGETS);
       } else if (url === "/api/v1/marketplaces" && req.method === "POST") {
         send({ id: 77, name: "simple-dividend", markets: [] });
-      } else if (url.startsWith("/api/v1/marketplaces/1/sessions")
-                 || url.startsWith("/api/marketplaces/1/sessions")) {
+      } else if (url === `${mp}/sessions/current` && req.method === "PATCH") {
+        const state = (JSON.parse(bodies.get(key) || "{}") as { state?: string }).state;
+        send({ id: 99, marketplaceId: 1, state });
+      } else if (url.startsWith(`${mp}/sessions`)) {
         send([{ id: 300, state: "CLOSED" }]);
-      } else if (url.startsWith("/api/marketplaces/1/connections")) {
+      } else if (url.startsWith(`${mp}/connections`)) {
         send([{ id: 9, ownerId: 8, marketplaceId: 1, sessionId: 300 }]);
-      } else if (url.startsWith("/api/symbolTradesJson")) {
-        // The symbol-keyed route answers with the trade id in "original" and
+      } else if (url.startsWith(`${mp}/orders?state=TRADED`)) {
+        // The symbol-keyed read answers with the trade id in "original" and
         // no symbol on the order.
         send([{ id: 0, original: 4242, units: 5, price: 950 }]);
-      } else if (url === "/api/approvals" && req.method === "POST") {
-        send({ account: { id: 2, name: "acme", approval: true }, approve: true });
+      } else if (url === "/api/v1/accounts/2/approvals" && req.method === "POST") {
+        res.writeHead(201, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ account: { id: 2, name: "acme", approval: true }, approve: true }));
       } else if (url === "/api/otp/manager" && req.method === "POST") {
         send({
           expiresAt: "2026-08-15T18:00:00Z",
           otps: [{ userId: 1, email: "alice@lab.edu", otp: "123456" }],
         });
-      } else if (url === "/api/accounts" && req.method === "POST") {
+      } else if (url === "/api/v1/accounts" && req.method === "POST") {
         send({ token: TOKEN, person: { id: 8 }, account: { id: 2, name: "acme" } });
-      } else if (url.startsWith("/api/accounts")) {
+      } else if (url === "/api/v1/accounts") {
         send([{ id: 1, name: "dev" }, { id: 2, name: "acme" }]);
-      } else if (url.startsWith("/api/users/") && req.method === "DELETE") {
+      } else if (url.startsWith("/api/v1/users/") && req.method === "DELETE") {
         res.writeHead(204);
         res.end();
-      } else if ((url === "/api/v1/users" || url === "/api/users") && req.method === "POST") {
+      } else if (url === "/api/v1/users" && req.method === "POST") {
         send({ id: 42, accountId: 1, email: "alice@lab.edu" });
-      } else if (url === "/api/usersJson") {
+      } else if (url === "/api/v1/users") {
         send([{ id: 7, email: "dev@dev" }, { id: 8, email: "t1@dev" }]);
-      } else if (url.startsWith("/api/marketplaces/1/holdings/downloads")) {
+      } else if (url.startsWith(`${mp}/holdings`) && req.headers.accept?.includes("text/csv")) {
         send("owner,cash\nalice,10000\n", "text/csv");
-      } else if (url.endsWith("/open")) {
-        send({ id: 99, marketplaceId: 1, state: "OPEN" });
-      } else if (url.endsWith("/pause")) {
-        send({ id: 99, marketplaceId: 1, state: "PAUSED" });
-      } else if (url.endsWith("/close")) {
-        send({ id: 99, marketplaceId: 1, state: "CLOSED" });
-      } else {
+      } else if (url.startsWith(`${mp}/holdings`)) {
+        send([{ ownerId: 8, name: "alice", cash: 10000 }]);
+      } else if (url === `${mp}/markets` && req.method === "POST") {
+        send({ id: 10, marketplaceId: 1, symbol: "STK" });
+      } else if (url === `${mp}/allocations` || url === `${mp}/allocations/42/allotments`) {
         send(ALLOTMENTS);
+      } else {
+        res.writeHead(404);
+        res.end();
       }
     });
   });
@@ -151,13 +148,14 @@ after(() => server.close());
 beforeEach(() => {
   requests = [];
   bodies = new Map();
+  contentTypes = new Map();
 });
 
 async function connect() {
   return Flexemarkets.connect(TOKEN, `${api()}/marketplaces/1`, "management-test");
 }
 
-test("session transitions are PATCHes to their own routes", async () => {
+test("session transitions PATCH the current session's state", async () => {
   const fm = await connect();
   try {
     assert.equal((await fm.openSession(1)).state, "OPEN");
@@ -167,12 +165,13 @@ test("session transitions are PATCHes to their own routes", async () => {
     fm.close();
   }
 
-  assert.ok(requests.includes("PATCH /api/marketplaces/1/open"));
-  assert.ok(requests.includes("PATCH /api/marketplaces/1/pause"));
-  assert.ok(requests.includes("PATCH /api/marketplaces/1/close"));
+  assert.deepEqual(requests.filter((r) => r.startsWith("PATCH")),
+    Array(3).fill("PATCH /api/v1/marketplaces/1/sessions/current"));
+  // The stub answers with the state the body asked for, so the states read back
+  // above are the bodies that went out.
 });
 
-test("users reads the JSON route rather than the HAL one", async () => {
+test("users reads the V1 route", async () => {
   const fm = await connect();
   try {
     const users = await fm.users();
@@ -182,7 +181,7 @@ test("users reads the JSON route rather than the HAL one", async () => {
     fm.close();
   }
 
-  assert.ok(requests.includes("GET /api/usersJson"));
+  assert.deepEqual(requests.filter((r) => !r.includes("/tokens")), ["GET /api/v1/users"]);
 });
 
 test("allotments are read from the V1 route for one allocation", async () => {
@@ -195,7 +194,7 @@ test("allotments are read from the V1 route for one allocation", async () => {
     fm.close();
   }
 
-  assert.ok(requests.includes("GET /api/v1/marketplaces/1/allotments?allocation=42"));
+  assert.ok(requests.includes("GET /api/v1/marketplaces/1/allocations/42/allotments"));
 });
 
 /**
@@ -218,7 +217,7 @@ test("allocate sends positions as grants", async () => {
     fm.close();
   }
 
-  const body = bodies.get("POST /api/marketplaces/1/allocations") ?? "";
+  const body = bodies.get("POST /api/v1/marketplaces/1/allocations") ?? "";
   assert.ok(body.includes('"grants"'), "the server reads opening positions from 'grants'");
   assert.ok(!body.includes('"securities"'));
   assert.ok(body.includes('"cash":10000'));
@@ -257,7 +256,7 @@ test("downloadHoldings returns the CSV verbatim", async () => {
   }
 });
 
-test("uploadHoldings posts the file as multipart", async () => {
+test("uploadHoldings posts the file itself as text/csv", async () => {
   const dir = mkdtempSync(join(tmpdir(), "fm-sdk-test-"));
   const csv = join(dir, "holdings.csv");
   writeFileSync(csv, "owner,cash\nalice,10000\n");
@@ -270,10 +269,10 @@ test("uploadHoldings posts the file as multipart", async () => {
     fm.close();
   }
 
-  const body = bodies.get("POST /api/marketplaces/1/holdings/uploads") ?? "";
-  assert.ok(body.includes('name="file"'), "the part must be named 'file'");
-  assert.ok(body.includes('filename="holdings.csv"'), "and carry the file's own name");
-  assert.ok(body.includes("owner,cash"));
+  // Format by header, not a multipart part: the body is the file, whole.
+  const key = "POST /api/v1/marketplaces/1/allocations";
+  assert.equal(bodies.get(key), "owner,cash\nalice,10000\n");
+  assert.equal(contentTypes.get(key), "text/csv");
 });
 
 test("a marketplace is created from its JSON definition", async () => {
@@ -335,7 +334,7 @@ test("a short allowance is read under either name and sent as shortUnits", async
   }
 
   assert.ok(
-    (bodies.get("POST /api/marketplaces/1/allocations") ?? "").includes('"shortUnits":50'),
+    (bodies.get("POST /api/v1/marketplaces/1/allocations") ?? "").includes('"shortUnits":50'),
     "requests carry shortUnits",
   );
   // The stub answers with "grants" carrying neither spelling, so absent must
@@ -366,11 +365,10 @@ test("sessions and connections are never filtered on the wire", async () => {
     fm.close();
   }
 
-  assert.ok(!requests.some((r) => r.includes("sessionIds=")));
-  // sessions moved to V1, which needs no format= to avoid HAL; connections has
-  // no V1 equivalent with these semantics and stays on V0 for now.
-  assert.ok(requests.some((r) => r.includes("/api/v1/marketplaces/1/sessions")));
-  assert.ok(requests.some((r) => r.includes("/api/marketplaces/1/connections?format=")));
+  assert.deepEqual(requests.filter((r) => !r.includes("/tokens")), [
+    "GET /api/v1/marketplaces/1/sessions",
+    "GET /api/v1/marketplaces/1/connections",
+  ]);
 });
 
 test("the holdings download filters on sessions", async () => {
@@ -381,7 +379,7 @@ test("the holdings download filters on sessions", async () => {
     fm.close();
   }
 
-  assert.ok(requests.some((r) => r.includes("/holdings/downloads?sessions=300")));
+  assert.ok(requests.includes("GET /api/v1/marketplaces/1/holdings?sessions=300"));
 });
 
 /**
@@ -416,20 +414,21 @@ test("trades carry their id and symbol", async () => {
     fm.close();
   }
 
-  assert.ok(requests.some((r) => r.includes("symbol=STK")));
+  assert.ok(requests.includes("GET /api/v1/marketplaces/1/orders?state=TRADED&symbol=STK&limit=5000"));
 });
 
 /** An empty filter means "now", and asks for no filter at all. */
 test("empty filters fall back to the unfiltered routes", async () => {
   const fm = await connect();
   try {
-        await fm.downloadHoldings(1, []);
+    await fm.downloadHoldings(1, []);
+    await fm.holdings(1, []);
   } finally {
     fm.close();
   }
 
-  assert.ok(!requests.some((r) => r.includes("sessionIds=")));
-  assert.ok(!requests.some((r) => r.includes("?sessions=")));
+  assert.deepEqual(requests.filter((r) => !r.includes("/tokens")),
+    Array(2).fill("GET /api/v1/marketplaces/1/holdings"));
 });
 
 /**
@@ -446,7 +445,7 @@ test("signup names the owner's credentials the way the server reads them", async
     fm.close();
   }
 
-  const body = bodies.get("POST /api/accounts")!;
+  const body = bodies.get("POST /api/v1/accounts")!;
   assert.ok(body.includes('"ownerEmail":"owner@new"'));
   assert.ok(body.includes('"ownerPassword":"s3cret"'));
   assert.ok(!body.includes('"email":"owner@new"'));
@@ -462,7 +461,28 @@ test("accounts are listed and approved", async () => {
     fm.close();
   }
 
-  assert.ok(bodies.get("POST /api/approvals")!.includes('"approval":true'));
+  // V1 approves by id, so the name is looked up first.
+  assert.deepEqual(requests.filter((r) => !r.includes("/tokens")), [
+    "GET /api/v1/accounts",
+    "GET /api/v1/accounts",
+    "POST /api/v1/accounts/2/approvals",
+  ]);
+  assert.deepEqual(JSON.parse(bodies.get("POST /api/v1/accounts/2/approvals")!), { approve: true });
+});
+
+/**
+ * V1 approves by id. A name that matches no account must not fall through to
+ * approving some other one -- or to a POST at all.
+ */
+test("approving an account no one holds is an invalid argument", async () => {
+  const fm = await connect();
+  try {
+    await assert.rejects(fm.approveAccount("nobody"),
+      (e: unknown) => e instanceof InvalidArgumentError && /nobody/.test((e as Error).message));
+  } finally {
+    fm.close();
+  }
+  assert.ok(!requests.some((r) => r.startsWith("POST /api/v1/accounts/")));
 });
 
 test("a user is created with the roles given", async () => {
@@ -490,7 +510,7 @@ test("deletes use the DELETE verb", async () => {
     fm.close();
   }
 
-  assert.ok(requests.some((r) => r === "DELETE /api/users/42"), requests.join(", "));
+  assert.ok(requests.some((r) => r === "DELETE /api/v1/users/42"), requests.join(", "));
 });
 
 /** Omitting the unit grid keeps the old fixed default; a market without unit
@@ -503,7 +523,7 @@ test("createMarket defaults the unit grid when it is not given", async () => {
     fm.close();
   }
 
-  const body = bodies.get("POST /api/marketplaces/1/markets")!;
+  const body = bodies.get("POST /api/v1/marketplaces/1/markets")!;
   assert.ok(body.includes('"unitMinimum":1'));
   assert.ok(body.includes('"unitMaximum":100'));
   assert.ok(body.includes('"unitTick":1'));
@@ -525,7 +545,7 @@ test("unit bounds are the caller's too", async () => {
     fm.close();
   }
 
-  const body = bodies.get("POST /api/marketplaces/1/markets")!;
+  const body = bodies.get("POST /api/v1/marketplaces/1/markets")!;
   assert.ok(body.includes('"unitMinimum":10'), body);
   assert.ok(body.includes('"unitMaximum":500'));
   assert.ok(body.includes('"unitTick":10'));
@@ -573,7 +593,8 @@ test("pushWidgets posts one array", async () => {
     fm.close();
   }
 
-  assert.deepEqual(requests.filter((r) => r.startsWith("POST")), ["POST /api/v1/marketplaces/1/widgets"]);
+  assert.deepEqual(requests.filter((r) => r.startsWith("POST") && !r.includes("/tokens")),
+    ["POST /api/v1/marketplaces/1/widgets"]);
   const body = JSON.parse(bodies.get("POST /api/v1/marketplaces/1/widgets") ?? "null");
   assert.ok(Array.isArray(body) && body.length === 2);
   assert.deepEqual(body[0].target, { scope: "MARKETPLACE" });
@@ -596,7 +617,7 @@ test("allWidgets reads the manager route", async () => {
   } finally {
     fm.close();
   }
-  assert.ok(requests.includes("GET /api/v1/marketplaces/1/widgets/all"));
+  assert.ok(requests.includes("GET /api/v1/marketplaces/1/widgets?participant=all"));
 });
 
 test("removeWidget answers whether anything was there", async () => {
@@ -613,7 +634,7 @@ test("removeWidget answers whether anything was there", async () => {
   }
   assert.ok(requests.includes("DELETE /api/v1/marketplaces/1/widgets/score"));
   assert.ok(requests.includes("DELETE /api/v1/marketplaces/1/widgets/absent"));
-  assert.ok(requests.includes("DELETE /api/v1/marketplaces/1/widgets/score?userId=8"));
+  assert.ok(requests.includes("DELETE /api/v1/marketplaces/1/participants/8/widgets/score"));
 });
 
 test("removeWidget throws a 404 that says something else", async () => {

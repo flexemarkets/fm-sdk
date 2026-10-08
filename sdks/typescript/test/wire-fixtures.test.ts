@@ -23,7 +23,7 @@ import {
   parseAccount, parseConnection, parseHolding, parseMarket, parseMarketplace,
   parseOrder, parseParticipantState, parsePerson, parseSecurity, parseSession, parseToken,
   parseWidget,
-  embeddedOrders,
+  ordersOf,
 } from "../src/client.ts";
 import { parseSession as parseSessionOverWs } from "../src/stomp.ts";
 
@@ -34,10 +34,9 @@ const FIXTURE_DIR = join(fileURLToPath(new URL(".", import.meta.url)), "..", "..
 /** type -> the parsers that must all agree about it, named so a failure says which. */
 const PARSERS: Record<string, [string, (data: Json) => unknown][]> = {
   Order: [["client", (d) => parseOrder(d)]],
-  // Not a parser but a shape the SDK has to recognise, which is why it has
-  // broken twice -- and silently here both times, since `._embedded` on an
-  // array is undefined rather than an error.
-  OrdersSnapshot: [["client", (d) => ({ orders: embeddedOrders(d).map((o) => parseOrder(o)) })]],
+  // Not a parser but the shape check activeOrders/recentTrades apply to a
+  // response body: a bare array, or ApiError.
+  OrdersSnapshot: [["client", (d) => ({ orders: ordersOf(d).map((o) => parseOrder(o)) })]],
   Session: [["client", (d) => parseSession(d)], ["stomp", (d) => parseSessionOverWs(d)]],
   Holding: [["client", (d) => parseHolding(d)]],
   Account: [["client", (d) => parseAccount(d)]],

@@ -1,7 +1,7 @@
 """Live-server smoke test for the Python SDK.
 
 Mirrors the Java FlexemarketsLiveServerTest. Catches catastrophic
-protocol regressions (V0/V1 endpoint path drift, HATEOAS envelope
+protocol regressions (V0/V1 endpoint path drift, snapshot response
 shape, WS subscribe destination, etc.) without needing a heavy
 test-server harness.
 

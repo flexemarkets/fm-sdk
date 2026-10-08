@@ -3,7 +3,7 @@
   "why": "Roles is a list of strings and must never be null -- callers ask whether it contains a role.",
   "source": {
     "captured": {
-      "link": "usersJson",
+      "path": "/v1/users",
       "server": "4.3.1",
       "on": "2026-08-28"
     }

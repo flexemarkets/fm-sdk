@@ -28,54 +28,46 @@ const MARKETS = [{
   unitMinimum: 1, unitMaximum: 100, unitTick: 1,
 }];
 
+/** What the client sent after signing in: the verb and path, and any JSON body. */
+interface Sent {
+  request: string;
+  body: Record<string, unknown> | null;
+}
+
 async function withClient(
-  run: (fm: Flexemarkets, submitted: Record<string, unknown>[]) => Promise<void>,
+  run: (fm: Flexemarkets, sent: Sent[]) => Promise<void>,
 ): Promise<void> {
-  const submitted: Record<string, unknown>[] = [];
+  const sent: Sent[] = [];
 
   const server = http.createServer((req, res) => {
-    const send = (payload: unknown) => {
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify(payload));
-    };
-
-    if (req.method === "POST") {
-      let raw = "";
-      req.on("data", (c) => (raw += c));
-      req.on("end", () => {
-        if (req.url?.endsWith("/tokens")) {
-          send({
-            token: TOKEN,
-            person: { id: 7, accountId: 1, email: "dev@dev" },
-            account: { id: 1, name: "dev" },
-          });
-          return;
-        }
-        submitted.push(JSON.parse(raw || "{}"));
-        send({ id: 42, marketplaceId: 1, marketId: 11 });
-      });
-      return;
-    }
-
-    const port = (req.socket.localPort ?? 0);
-    if (req.url === "/api/tokens/refresh") {
-      send({
+    let raw = "";
+    req.on("data", (c) => (raw += c));
+    req.on("end", () => {
+      const send = (payload: unknown) => {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(payload));
+      };
+      const url = req.url ?? "";
+      if (url.startsWith("/api/tokens")) {
+        send({
           token: TOKEN,
           person: { id: 7, accountId: 1, email: "dev@dev" },
           account: { id: 1, name: "dev" },
         });
-      return;
-    }
-    if (req.url === "/api") {
-      send({ _links: {
-        marketplaces: { href: `http://127.0.0.1:${port}/api/marketplaces` },
-        orders: { href: `http://127.0.0.1:${port}/api/orders` },
-      } });
-    } else if (req.url?.startsWith("/api/marketplaces/1/markets")) {
-      send(MARKETS);
-    } else {
-      send([]);
-    }
+        return;
+      }
+      sent.push({ request: `${req.method} ${url}`, body: raw ? JSON.parse(raw) : null });
+      if (req.method === "GET" && url === "/api/v1/marketplaces/1/markets") {
+        send(MARKETS);
+      } else if (req.method === "POST" && url === "/api/v1/marketplaces/1/orders") {
+        send({ id: 42, original: 42, type: "LIMIT", marketplaceId: 1, marketId: 11 });
+      } else if (req.method === "DELETE" && url === "/api/v1/marketplaces/1/orders/42") {
+        send({ id: 43, original: 42, consumer: 42, type: "CANCEL", marketplaceId: 1, marketId: 11 });
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    });
   });
 
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
@@ -84,7 +76,7 @@ async function withClient(
   try {
     const fm = await Flexemarkets.connect(TOKEN, `${base}/marketplaces/1`, "submit-market-test");
     try {
-      await run(fm, submitted);
+      await run(fm, sent);
     } finally {
       await fm.close();
     }
@@ -93,37 +85,44 @@ async function withClient(
   }
 }
 
+/** The orders submitted: the POSTs' bodies. */
+const posted = (sent: Sent[]) => sent.filter((s) => s.request.startsWith("POST")).map((s) => s.body!);
+
 test("a buy bids the highest legal price", async () => {
-  await withClient(async (fm, submitted) => {
+  await withClient(async (fm, sent) => {
     await fm.submitMarket(1, 11, "BUY", 5);
-    assert.equal(submitted[0].price, 185);
-    assert.equal(submitted[0].type, "LIMIT");
+    assert.equal(posted(sent)[0].price, 185);
+    assert.equal(posted(sent)[0].type, "LIMIT");
   });
 });
 
 test("a sell offers the lowest legal price", async () => {
-  await withClient(async (fm, submitted) => {
+  await withClient(async (fm, sent) => {
     await fm.submitMarket(1, 11, "SELL", 5);
-    assert.equal(submitted[0].price, 110);
+    assert.equal(posted(sent)[0].price, 110);
   });
 });
 
 test("whatever does not fill is cancelled", async () => {
-  await withClient(async (fm, submitted) => {
+  await withClient(async (fm, sent) => {
     await fm.submitMarket(1, 11, "BUY", 5);
-    assert.equal(submitted.length, 2, "submit then cancel");
-    assert.equal(submitted[1].type, "CANCEL");
-    assert.equal(submitted[1].original, 42);
+    // A cancel is a DELETE of the order just placed, after it was placed.
+    assert.deepEqual(sent.map((s) => s.request), [
+      "GET /api/v1/marketplaces/1/markets",
+      "POST /api/v1/marketplaces/1/orders",
+      "DELETE /api/v1/marketplaces/1/orders/42",
+    ]);
   });
 });
 
 test("an unknown market says so rather than guessing a price", async () => {
-  await withClient(async (fm, submitted) => {
+  await withClient(async (fm, sent) => {
     await assert.rejects(
       () => fm.submitMarket(1, 99, "BUY", 5),
       (e: unknown) => e instanceof InvalidArgumentError,
     );
-    assert.deepEqual(submitted, [], "nothing was sent");
+    assert.deepEqual(sent.map((s) => s.request), ["GET /api/v1/marketplaces/1/markets"],
+      "nothing was sent but the market lookup");
   });
 });
 

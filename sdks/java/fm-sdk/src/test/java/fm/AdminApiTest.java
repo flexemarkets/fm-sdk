@@ -53,11 +53,12 @@ class AdminApiTest {
     private HttpServer _server;
     private final List<String> _requests = new ArrayList<>();
     private final List<String> _bodies = new ArrayList<>();
+    private final List<String> _stray = new ArrayList<>();
 
     /** Roles the sign-in token reports; a test may change this before connecting. */
     private String _roles = "[\"ROLE_MANAGER\"]";
 
-    /** When set, POST /api/accounts and DELETE /api/v1/users/* answer 409. */
+    /** When set, POST /api/v1/accounts and DELETE /api/v1/users/* answer 409. */
     private boolean _conflict = false;
 
     @BeforeEach
@@ -71,9 +72,11 @@ class AdminApiTest {
                      "account":{"id":1,"name":"dev"}}
                     """.formatted(TOKEN, _roles)));
 
-        _server.createContext("/api/accounts", exchange -> {
+        _server.createContext("/api/v1/accounts", exchange -> {
             _record(exchange);
-            if ("POST".equals(exchange.getRequestMethod())) {
+            String method = exchange.getRequestMethod();
+            String path = exchange.getRequestURI().getPath();
+            if ("POST".equals(method) && "/api/v1/accounts".equals(path)) {
                 if (_conflict) {
                     _respond(exchange, 409,
                             "{\"status\":\"CONFLICT\",\"message\":\"taken\",\"suggestedName\":\"acme-2\"}");
@@ -84,20 +87,19 @@ class AdminApiTest {
                      "person":{"id":8,"accountId":2,"email":"owner@new"},
                      "account":{"id":2,"name":"acme"}}
                     """.formatted(TOKEN));
-            } else if ("DELETE".equals(exchange.getRequestMethod())) {
+            } else if ("POST".equals(method) && path.matches("/api/v1/accounts/\\d+/approvals")) {
+                _respond(exchange, 201,
+                        "{\"approve\":true,\"account\":{\"id\":2,\"name\":\"acme\",\"approval\":true}}");
+            } else if ("DELETE".equals(method)) {
                 _respond(exchange, 204, "");
-            } else if (exchange.getRequestURI().getPath().matches(".*/accounts/\\d+")) {
+            } else if ("GET".equals(method) && path.matches("/api/v1/accounts/\\d+")) {
                 _respond(exchange, 200, "{\"id\":2,\"name\":\"acme\",\"approval\":true}");
-            } else {
+            } else if ("GET".equals(method) && "/api/v1/accounts".equals(path)) {
                 _respond(exchange, 200,
-                        "[{\"id\":1,\"name\":\"dev\"},{\"id\":2,\"name\":\"acme\"}]");
+                        "[{\"id\":1,\"name\":\"dev\",\"approval\":true},{\"id\":2,\"name\":\"acme\",\"approval\":null}]");
+            } else {
+                _stray(exchange);
             }
-        });
-
-        _server.createContext("/api/approvals", exchange -> {
-            _record(exchange);
-            _respond(exchange, 200,
-                    "{\"account\":{\"id\":2,\"name\":\"acme\",\"approval\":true},\"approve\":true}");
         });
 
         _server.createContext("/api/v1/users", exchange -> {
@@ -114,31 +116,26 @@ class AdminApiTest {
             }
         });
 
-        _server.createContext("/api/marketplaces", exchange -> {
+        _server.createContext("/api/v1/marketplaces", exchange -> {
             _record(exchange);
-            if ("DELETE".equals(exchange.getRequestMethod())) {
+            String method = exchange.getRequestMethod();
+            String path = exchange.getRequestURI().getPath();
+            if ("DELETE".equals(method)) {
                 _respond(exchange, 204, "");
-            } else if (exchange.getRequestURI().getPath().endsWith("/markets")) {
+            } else if ("POST".equals(method) && path.endsWith("/markets")) {
                 _respond(exchange, 200,
                         "{\"id\":10,\"marketplaceId\":5,\"symbol\":\"STK\",\"unitTick\":1}");
-            } else {
+            } else if ("GET".equals(method) && path.endsWith("/markets")) {
+                _respond(exchange, 200, """
+                    [{"id":10,"marketplaceId":1,"symbol":"STK","name":"Stock"},
+                     {"id":11,"marketplaceId":1,"symbol":"BND","name":"Bond"}]""");
+            } else if ("GET".equals(method) && path.endsWith("/participants")) {
+                _respond(exchange, 200, "[{\"name\":\"t1\"},{\"name\":\"t2\",\"userId\":9}]");
+            } else if ("GET".equals(method) && path.matches("/api/v1/marketplaces/\\d+")) {
                 _respond(exchange, 200, "{\"id\":5,\"name\":\"course\",\"markets\":[]}");
+            } else {
+                _stray(exchange);
             }
-        });
-
-        _server.createContext("/api/marketplaces/1/privateTraders", exchange -> {
-            _record(exchange);
-            _respond(exchange, 200, "[\"t1\",\"t2\"]");
-        });
-
-        _server.createContext("/api/accounts/me", exchange -> {
-            _record(exchange);
-            _respond(exchange, 204, "");
-        });
-
-        _server.createContext("/api/marketplaces/1/symbols", exchange -> {
-            _record(exchange);
-            _respond(exchange, 200, "[\"STK\",\"BND\"]");
         });
 
         _server.createContext("/api/otp/manager", exchange -> {
@@ -149,14 +146,11 @@ class AdminApiTest {
                 """);
         });
 
-        _server.createContext("/api", exchange -> {
+        // No API root and no V0 route: 0.4 reads neither, so anything that
+        // reaches here -- GET /api above all -- is recorded and refused.
+        _server.createContext("/", exchange -> {
             _record(exchange);
-            _respond(exchange, 200, """
-                {"_links":{"marketplaces":{"href":"%1$s/marketplaces"},
-                           "accounts":{"href":"%1$s/accounts"},
-                           "users":{"href":"%1$s/users"},
-                           "usersJson":{"href":"%1$s/usersJson"}}}
-                """.formatted(_api()));
+            _stray(exchange);
         });
 
         _server.start();
@@ -165,6 +159,16 @@ class AdminApiTest {
     @AfterEach
     void stopServer() {
         if (_server != null) _server.stop(0);
+    }
+
+    @AfterEach
+    void nothingStrayed() {
+        assertThat(_stray).as("requests to routes 0.4 does not use").isEmpty();
+    }
+
+    private void _stray(HttpExchange exchange) throws IOException {
+        _stray.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+        _respond(exchange, 404, "");
     }
 
     private String _api() {
@@ -197,13 +201,14 @@ class AdminApiTest {
         }
     }
 
-    private String _bodyOf(String requestPrefix) {
+    /** The body of the first request whose method and URI are exactly {@code request}. */
+    private String _bodyOf(String request) {
         for (int i = 0; i < _requests.size(); i++) {
-            if (_requests.get(i).startsWith(requestPrefix)) {
+            if (_requests.get(i).equals(request)) {
                 return _bodies.get(i);
             }
         }
-        throw new AssertionError("no request matching " + requestPrefix + " in " + _requests);
+        throw new AssertionError("no request " + request + " in " + _requests);
     }
 
     // --- accounts -----------------------------------------------------------
@@ -222,7 +227,7 @@ class AdminApiTest {
 
         assertThat(created.account().name()).isEqualTo("acme");
 
-        var body = _bodyOf("POST /api/accounts");
+        var body = _bodyOf("POST /api/v1/accounts");
         assertThat(body).contains("\"ownerEmail\":\"owner@new\"");
         assertThat(body).contains("\"ownerPassword\":\"s3cret\"");
         assertThat(body).contains("\"accountName\":\"acme\"");
@@ -236,13 +241,18 @@ class AdminApiTest {
             fm.signup("acme", "owner@new", "s3cret");
         }
 
-        var body = _bodyOf("POST /api/accounts");
+        var body = _bodyOf("POST /api/v1/accounts");
         assertThat(body).contains("\"accountName\":\"acme\"");
         assertThat(body).contains("\"firstName\":null");
     }
 
+    /**
+     * V1 approves by id, so the name is looked up in the account list first
+     * and the approval goes to that account's own route. acme is the second
+     * account, so approving the wrong row would name another id.
+     */
     @Test
-    void accountsAreListedAndApproved() throws Exception {
+    void accountsAreListedAndApprovedById() throws Exception {
         List<Account> all;
         Account approved;
         try (Flexemarkets fm = _connect()) {
@@ -253,7 +263,11 @@ class AdminApiTest {
         assertThat(all).hasSize(2);
         assertThat(approved.name()).isEqualTo("acme");
         assertThat(approved.approval()).isTrue();
-        assertThat(_bodyOf("POST /api/approvals")).contains("\"name\":\"acme\"").contains("\"approval\":true");
+        assertThat(_requests).containsExactly(
+                "GET /api/v1/accounts",
+                "GET /api/v1/accounts",
+                "POST /api/v1/accounts/2/approvals");
+        assertThat(_bodyOf("POST /api/v1/accounts/2/approvals")).isEqualTo("{\"approve\":true}");
     }
 
     // --- users --------------------------------------------------------------
@@ -297,8 +311,8 @@ class AdminApiTest {
         }
 
         assertThat(_requests).contains("DELETE /api/v1/users/42");
-        assertThat(_requests).contains("DELETE /api/accounts/2");
-        assertThat(_requests).contains("DELETE /api/marketplaces/5");
+        assertThat(_requests).contains("DELETE /api/v1/accounts/2");
+        assertThat(_requests).contains("DELETE /api/v1/marketplaces/5");
     }
 
     /** 204 with no body is success, not something to parse. */
@@ -335,7 +349,7 @@ class AdminApiTest {
 
         assertThat(market.symbol()).isEqualTo("STK");
 
-        var marketBody = _bodyOf("POST /api/marketplaces/5/markets");
+        var marketBody = _bodyOf("POST /api/v1/marketplaces/5/markets");
         assertThat(marketBody).contains("\"priceMinimum\":0");
         assertThat(marketBody).contains("\"priceMaximum\":10000");
         assertThat(marketBody).contains("\"unitMinimum\":1");
@@ -357,7 +371,7 @@ class AdminApiTest {
                     new TickGrid(100, 200, 25), new TickGrid(10, 500, 10), false);
         }
 
-        var body = _bodyOf("POST /api/marketplaces/5/markets");
+        var body = _bodyOf("POST /api/v1/marketplaces/5/markets");
         assertThat(body).contains("\"unitMinimum\":10");
         assertThat(body).contains("\"unitMaximum\":500");
         assertThat(body).contains("\"unitTick\":10");
@@ -373,14 +387,16 @@ class AdminApiTest {
         assertThat(TickGrid.units().round(1_000)).isEqualTo(100L);
     }
 
+    /** V1 has no {@code /symbols}: they are the marketplace's markets' own. */
     @Test
-    void symbolsAreReadFromTheMarketplace() throws Exception {
+    void symbolsAreReadFromTheMarketplacesMarkets() throws Exception {
         List<String> symbols;
         try (Flexemarkets fm = _connect()) {
             symbols = fm.symbols(1);
         }
 
         assertThat(symbols).containsExactly("STK", "BND");
+        assertThat(_requests).containsExactly("GET /api/v1/marketplaces/1/markets");
     }
 
     @Test
@@ -391,8 +407,10 @@ class AdminApiTest {
             assertThat(fm.identifiers(1)).containsExactly("t1", "t2");
         }
 
-        assertThat(_requests).contains("GET /api/accounts/2");
-        assertThat(_requests).contains("GET /api/v1/users/42");
+        assertThat(_requests).containsExactly(
+                "GET /api/v1/accounts/2",
+                "GET /api/v1/users/42",
+                "GET /api/v1/marketplaces/1/participants");
     }
 
     /** Deleting your own account is its own route, not accounts/{yourId}. */
@@ -402,7 +420,7 @@ class AdminApiTest {
             fm.deleteMyAccount();
         }
 
-        assertThat(_requests).contains("DELETE /api/accounts/me");
+        assertThat(_requests).contains("DELETE /api/v1/accounts/me");
     }
 
     /**

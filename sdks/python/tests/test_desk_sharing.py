@@ -54,9 +54,6 @@ class Scripted(Flexemarkets):
         return SimpleNamespace(account=SimpleNamespace(id=1, name="dev"),
                                person=SimpleNamespace(id=7), token="t")
 
-    def _fetch_api_root(self) -> Any:
-        return {}
-
     def markets(self, marketplace_id: int) -> list[Market]:  # type: ignore[override]
         return [_market(marketplace_id)]
 

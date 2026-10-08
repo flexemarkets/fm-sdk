@@ -47,8 +47,8 @@ TYPESCRIPT_SRC = ROOT / "sdks/typescript/src"
 # the shape of the miss. A type only Java declares falls out of the
 # intersection and is not compared at all, so `parity ok` said 18 shared types
 # both before Trade existed and after it existed in one language.
-PYTHON = [PYTHON_PKG / "types.py", PYTHON_PKG / "_hal.py", PYTHON_PKG / "trades.py"]
-TYPESCRIPT = [TYPESCRIPT_SRC / "types.ts", TYPESCRIPT_SRC / "hal.ts",
+PYTHON = [PYTHON_PKG / "types.py", PYTHON_PKG / "trades.py"]
+TYPESCRIPT = [TYPESCRIPT_SRC / "types.ts",
               TYPESCRIPT_SRC / "trades.ts"]
 
 # What a full run compares. A list of modules cannot notice a type that moves
@@ -59,8 +59,10 @@ TYPESCRIPT = [TYPESCRIPT_SRC / "types.ts", TYPESCRIPT_SRC / "hal.ts",
 # rules out here. So the count is the guard, and lowering it is an edit someone
 # has to make on purpose. It went 18 -> 19 when Trade was added to all three,
 # and 20 -> 23 with Widget, WidgetPush and WidgetTarget (the floor had stayed at
-# 19 when ParticipantState made it 20).
-EXPECTED_SHARED = 23
+# 19 when ParticipantState made it 20). 23 -> 22 in 0.4.0, on purpose: ApiRoot
+# went from all three when the SDKs stopped reading the HAL root, and the
+# _hal and hal modules that held it went with it.
+EXPECTED_SHARED = 22
 
 # Divergences that are intended. Each needs a reason, so that adding one is a
 # decision someone wrote down rather than a way to silence the check.
@@ -652,7 +654,7 @@ def check_surface(verbose: bool) -> list[str]:
 # newly documented in one SDK and not the others pushes it up and fails, and
 # closing one pushes it down and fails until the number is lowered to match.
 # Both directions are a one-line edit someone makes on purpose.
-DOC_DEBT = 36
+DOC_DEBT = 30
 
 _PY_DOCSTRING_OPENERS = ('"""', "'''", 'r"""')
 
@@ -864,7 +866,7 @@ EXPORT_EXEMPTIONS: dict[str, str] = {
     # Java-only by language, not by choice.
     "FlexemarketsProvider": "the SPI; Java service loading has no counterpart in the other two",
     "Providers":            "SPI lookup, same reason",
-    "Endpoints":            "endpoint resolution for the -E flag; Python keeps it private in _hal, TypeScript has no CLI",
+    "Endpoints":            "endpoint resolution for the -E flag; Python keeps it private in client, TypeScript has no CLI",
     "Orders":               "a holder class for statics; Python and TypeScript use plain functions in a module",
     "StudyViews":           "the study views the SDK ships, read by the study CLIs and the server -- both JVM; a browser gets the document from the server, so there is nothing for Python or TypeScript to hold",
     "StudyView":            "the record StudyViews hands back, same reason",

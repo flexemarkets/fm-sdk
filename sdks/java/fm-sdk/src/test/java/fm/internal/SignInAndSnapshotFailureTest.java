@@ -41,7 +41,12 @@ class SignInAndSnapshotFailureTest {
 
     private HttpServer _server;
 
-    /** path -> status, body, and an optional x-fm-as-of-seq. */
+    /**
+     * path, with its query when it has one -> status, body, and an optional
+     * x-fm-as-of-seq. Anything not here is answered 404: there is no API root
+     * to fall back on, so a client asking for one, or for a route that moved,
+     * fails rather than reading a plausible answer.
+     */
     private final Map<String, Object[]> _answers = new ConcurrentHashMap<>();
 
     @BeforeEach
@@ -52,12 +57,11 @@ class SignInAndSnapshotFailureTest {
             """.formatted(TOKEN), null});
         _answers.put("/api/tokens/refresh", _answers.get("/api/tokens"));
         _server.createContext("/", exchange -> {
-            Object[] answer = _answers.get(exchange.getRequestURI().getPath());
+            var uri = exchange.getRequestURI();
+            Object[] answer = _answers.get(uri.getRawQuery() == null
+                                           ? uri.getPath() : uri.getPath() + "?" + uri.getRawQuery());
             if (answer == null) {
-                String base = "http://127.0.0.1:" + _server.getAddress().getPort() + "/api";
-                answer = new Object[] {200, """
-                    {"_links":{"marketplaces":{"href":"%s/marketplaces"},"orders":{"href":"%s/orders"}}}
-                    """.formatted(base, base), null};
+                answer = new Object[] {404, _refusal("NOT_FOUND", "No route " + uri + ".", 404), null};
             }
             _respond(exchange, (Integer) answer[0], (String) answer[1], (String) answer[2]);
         });
@@ -114,7 +118,7 @@ class SignInAndSnapshotFailureTest {
 
     @Test
     void aSnapshotCarriesTheSequenceItWasTakenAt() throws Exception {
-        _answers.put("/api/v1/marketplaces/1/orders/active", new Object[] {200, "[]", "41"});
+        _answers.put("/api/v1/marketplaces/1/orders?state=ACTIVE", new Object[] {200, "[]", "41"});
 
         try (var fm = _connect()) {
             Snapshot<?> snapshot = fm.activeOrders(1L);
@@ -126,7 +130,7 @@ class SignInAndSnapshotFailureTest {
     /** No header -- an older server -- is "no sequence", which a desk must not mistake for 0. */
     @Test
     void aSnapshotWithoutASequenceSaysSo() throws Exception {
-        _answers.put("/api/v1/marketplaces/1/orders/active", new Object[] {200, "[]", null});
+        _answers.put("/api/v1/marketplaces/1/orders?state=ACTIVE", new Object[] {200, "[]", null});
 
         try (var fm = _connect()) {
             assertThat(fm.activeOrders(1L).asOfSeq()).isEqualTo(Snapshot.NO_SEQ);
@@ -135,7 +139,7 @@ class SignInAndSnapshotFailureTest {
 
     @Test
     void aRefusedSnapshotIsTheServersRefusal() throws Exception {
-        _answers.put("/api/v1/marketplaces/1/orders/active",
+        _answers.put("/api/v1/marketplaces/1/orders?state=ACTIVE",
                 new Object[] {403, _refusal("NOT_PERMITTED", "Not your marketplace.", 403), null});
 
         try (var fm = _connect()) {
@@ -147,7 +151,7 @@ class SignInAndSnapshotFailureTest {
     /** An answer that arrived but does not parse is named as that, not as the request failing. */
     @Test
     void anOrderAnswerThatCannotBeReadSaysSo() throws Exception {
-        _answers.put("/api/orders", new Object[] {200, "<html>edge error page</html>", null});
+        _answers.put("/api/v1/marketplaces/1/orders", new Object[] {200, "<html>edge error page</html>", null});
 
         try (var fm = _connect()) {
             assertThatExceptionOfType(ApiException.class)

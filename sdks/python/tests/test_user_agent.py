@@ -56,8 +56,6 @@ class Handler(BaseHTTPRequestHandler):
                 "person": {"id": 7, "accountId": 1, "email": "dev@dev"},
                 "account": {"id": 1, "name": "dev"},
             }
-        elif self.path == "/api":
-            payload = {"_links": {}}
         else:
             payload = []
         body = json.dumps(payload).encode()
@@ -66,6 +64,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    do_POST = do_GET
 
 
 @pytest.fixture
