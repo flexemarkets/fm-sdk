@@ -114,6 +114,34 @@ signature, which 0.4 does not change.
 
 ---
 
+## What is new
+
+**One market's recent trades.** `recentTrades` takes a market:
+
+| Language | Call |
+|---|---|
+| Java | `Snapshot<List<Order>> recentTrades(long marketplaceId, long marketId, int size)` |
+| Python | `recent_trades(marketplace_id, size=1000, market_id=None)` |
+| TypeScript | `recentTrades(marketplaceId, size = 1000, marketId?)` |
+
+It reads `orders?state=TRADED&market=`. In Java it is a `default` method on
+`Reading`, which narrows the marketplace-wide read to the market, so an
+implementation written against 0.3 keeps compiling. The HTTP client
+overrides it to ask the server for the market's own legs.
+
+**A desk seeds each tape from its own market.** It used to read the newest
+1000 legs of every market together. A busy market filled them, and a quiet
+market's tape came up empty though it had traded (fm-server#1029). It now
+reads each market's newest legs, two for each trade the tape keeps.
+
+**A tape keeps a trade once.** The trades are read after the orders snapshot
+whose sequence the desk follows. So a trade made in between arrived twice:
+in the seed, and again as a delta past the watermark. The tape kept both,
+and `onTrade` announced the trade twice. A tape now ignores a trade it
+already holds, matched on its resting and aggressor order ids.
+
+---
+
 ## What is not in 0.4.0
 
 The other items in [DESIGN-0.4.md](DESIGN-0.4.md) — a TypeScript logger,

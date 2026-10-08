@@ -96,7 +96,7 @@ const RUNNERS: Record<string, (fm: Flexemarkets, a: Args) => Promise<unknown>> =
       : fm.orders(a.marketplaceId),
   trades: (fm, a) => fm.trades(a.marketplaceId, a.symbol),
   activeOrders: (fm, a) => fm.activeOrders(a.marketplaceId),
-  recentTrades: (fm, a) => fm.recentTrades(a.marketplaceId, a.size),
+  recentTrades: (fm, a) => fm.recentTrades(a.marketplaceId, a.size, a.marketId),
   holdings: (fm, a) => fm.holdings(a.marketplaceId, a.sessionIds),
   holding: (fm, a) => fm.holding(a.marketplaceId),
   connections: (fm, a) => fm.connections(a.marketplaceId),

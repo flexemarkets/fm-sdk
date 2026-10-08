@@ -1213,9 +1213,15 @@ export class Flexemarkets {
    * order differs. `Tape` sorts what it is given, so a caller seeding a tape
    * through `Desk` is unaffected; a caller reading this list directly
    * should not assume one.
+   *
+   * With `marketId`, only that market's legs (`&market=`), `size` of them,
+   * two to a trade. What `Desk` seeds each tape from: read for every market
+   * at once, a busy market's legs fill the limit and a quiet market's tape
+   * comes up empty, though it has traded.
    */
-  async recentTrades(marketplaceId: number, size = 1000): Promise<Snapshot<Order[]>> {
-    const url = `${this._marketplace(marketplaceId)}/orders?state=TRADED&limit=${size}`;
+  async recentTrades(marketplaceId: number, size = 1000, marketId?: number): Promise<Snapshot<Order[]>> {
+    const market = marketId === undefined ? "" : `&market=${marketId}`;
+    const url = `${this._marketplace(marketplaceId)}/orders?state=TRADED${market}&limit=${size}`;
     const { data, asOfSeq } = await this._getSnapshot(url);
     const orders = ordersOf(data).map(parseOrder);
     return { body: orders, asOfSeq };

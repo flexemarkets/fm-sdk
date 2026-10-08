@@ -158,6 +158,9 @@ export interface Desk {
   close(): void;
 }
 
+/** Trades each tape keeps; the seed asks each market for two legs a trade. */
+const TAPE_CAPACITY = 100;
+
 export class DefaultDesk implements Desk {
   readonly marketplaceId: number;
   readonly markets: Market[];
@@ -214,7 +217,7 @@ export class DefaultDesk implements Desk {
     this.marketplaceId = marketplaceId;
     this.markets = markets;
     this._books = new BookIndex(markets);
-    this._trades = new TapeIndex(markets, 100);
+    this._trades = new TapeIndex(markets, TAPE_CAPACITY);
   }
 
   /**
@@ -232,7 +235,14 @@ export class DefaultDesk implements Desk {
    */
   private async _seedFromSnapshot(): Promise<void> {
     const orders = await this._flexemarkets.activeOrders(this.marketplaceId);
-    const trades = await this._flexemarkets.recentTrades(this.marketplaceId);
+    // Market by market, enough legs to fill each tape: read together, a busy
+    // market's legs filled the shared 1000 and a quiet market's tape came up
+    // empty though it had traded (fm-server#1029).
+    const legs: Order[] = [];
+    for (const market of this.markets) {
+      const read = await this._flexemarkets.recentTrades(this.marketplaceId, 2 * TAPE_CAPACITY, market.id);
+      legs.push(...read.body);
+    }
 
     // Clear before reseeding so a resync (Phase 2b) doesn't double-add
     // against existing price levels. Initial seed hits empty books so
@@ -241,8 +251,12 @@ export class DefaultDesk implements Desk {
     this._trades.clear();
 
     if (orders.body.length > 0) this._books.update(orders.body);
-    if (trades.body.length > 0) this._trades.update(trades.body);
+    if (legs.length > 0) this._trades.update(legs);
 
+    // Orders and trades flow through the same delta stream, so they share a
+    // single seq: the orders snapshot's is the watermark. The trades
+    // snapshots are read after it, so a trade made in between is in one of
+    // them and again in a delta past the watermark; Tape keeps it once.
     this._lastAppliedSeq = orders.asOfSeq;
 
     // Flip state and drain in a single synchronous block — no

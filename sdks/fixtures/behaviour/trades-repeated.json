@@ -1,0 +1,115 @@
+{
+  "type": "Tape",
+  "why": "The Desk seeds each tape from a trades snapshot read after the orders snapshot whose sequence it follows, so a trade made in between arrives twice: in the snapshot, and again as a delta newer than the watermark. Seeding market by market widens that window. A tape that kept both showed one trade as two -- double the volume at that price, and an onTrade handler told twice. The second delivery of the same pair must add nothing.",
+  "market": {
+    "id": 7,
+    "symbol": "A"
+  },
+  "deliveredIds": [
+    102,
+    101,
+    102,
+    101
+  ],
+  "steps": [
+    {
+      "note": "the trade, from the snapshot",
+      "orders": [
+        {
+          "id": 102,
+          "original": 102,
+          "supplier": 102,
+          "consumer": 101,
+          "type": "LIMIT",
+          "side": "BUY",
+          "symbol": "A",
+          "units": 10,
+          "price": 1050,
+          "ownerId": 901,
+          "marketplaceId": 1,
+          "marketId": 7,
+          "sessionId": 1,
+          "createdDate": "2026-08-28T10:00:00.000000",
+          "lastModifiedDate": "2026-08-28T10:00:00.100000"
+        },
+        {
+          "id": 101,
+          "original": 101,
+          "supplier": 101,
+          "consumer": 102,
+          "type": "LIMIT",
+          "side": "SELL",
+          "symbol": "A",
+          "units": 10,
+          "price": 1050,
+          "ownerId": 900,
+          "marketplaceId": 1,
+          "marketId": 7,
+          "sessionId": 1,
+          "createdDate": "2026-08-28T09:58:00.000000",
+          "lastModifiedDate": "2026-08-28T10:00:00.500000"
+        }
+      ],
+      "adds": 1
+    },
+    {
+      "note": "the same trade again, as a delta past the watermark",
+      "orders": [
+        {
+          "id": 102,
+          "original": 102,
+          "supplier": 102,
+          "consumer": 101,
+          "type": "LIMIT",
+          "side": "BUY",
+          "symbol": "A",
+          "units": 10,
+          "price": 1050,
+          "ownerId": 901,
+          "marketplaceId": 1,
+          "marketId": 7,
+          "sessionId": 1,
+          "createdDate": "2026-08-28T10:00:00.000000",
+          "lastModifiedDate": "2026-08-28T10:00:00.100000"
+        },
+        {
+          "id": 101,
+          "original": 101,
+          "supplier": 101,
+          "consumer": 102,
+          "type": "LIMIT",
+          "side": "SELL",
+          "symbol": "A",
+          "units": 10,
+          "price": 1050,
+          "ownerId": 900,
+          "marketplaceId": 1,
+          "marketId": 7,
+          "sessionId": 1,
+          "createdDate": "2026-08-28T09:58:00.000000",
+          "lastModifiedDate": "2026-08-28T10:00:00.500000"
+        }
+      ],
+      "adds": 0
+    }
+  ],
+  "expect": {
+    "size": 1,
+    "trades": [
+      {
+        "price": 1050,
+        "units": 10,
+        "restingId": 101,
+        "aggressorId": 102,
+        "restingOwnerId": 900,
+        "aggressorOwnerId": 901,
+        "at": {
+          "epochMilli": 1787911200100
+        }
+      }
+    ],
+    "last": {
+      "aggressorId": 102
+    }
+  }
+}

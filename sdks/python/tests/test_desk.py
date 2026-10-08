@@ -19,6 +19,7 @@ from __future__ import annotations
 import queue
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 import pytest
@@ -55,6 +56,10 @@ class FakeClient:
         self._queue: queue.Queue[object] | None = None
         self.active_reads = 0
         self.active_failure: Exception | None = None
+        # The trade reads made market by market, each as "market_id/size",
+        # and those made for every market at once.
+        self.market_trade_reads: list[str] = []
+        self.marketplace_trade_reads = 0
 
     def next_active_orders(self, snapshot: Snapshot) -> None:
         """What the next seed reads, so a reseed can differ from the first."""
@@ -71,8 +76,15 @@ class FakeClient:
             raise self.active_failure
         return self._active
 
-    def recent_trades(self, marketplace_id: int) -> Snapshot:
-        return self._recent
+    def recent_trades(self, marketplace_id: int, size: int = 1000,
+                      market_id: int | None = None) -> Snapshot:
+        if market_id is None:
+            self.marketplace_trade_reads += 1
+            return self._recent
+        # One market's legs out of the recent snapshot, as the server answers ?market=.
+        self.market_trade_reads.append(f"{market_id}/{size}")
+        return Snapshot(body=[o for o in self._recent.body if o.market_id == market_id],
+                        as_of_seq=self._recent.as_of_seq)
 
     def _connect_events(self, marketplace_id: int, q: "queue.Queue[object]") -> Any:
         self._queue = q
@@ -140,6 +152,64 @@ def test_a_delta_already_in_the_seed_is_not_applied_twice():
         _await("the marker delta to land", lambda: desk.book(alpha.id).best_sell_price() == 2000)
 
         assert desk.book(alpha.id).best_buy_units() == 5, "re-delivered seed order counted twice"
+    finally:
+        desk.close()
+
+
+def _trade(market: Market, resting_id: int, aggressor_id: int, price: int) -> list[Order]:
+    """Both legs of one trade: *resting_id* rested, *aggressor_id* took it."""
+    rested = datetime(2026, 10, 8, 10, 0, tzinfo=timezone.utc) + timedelta(seconds=resting_id)
+    taken = rested + timedelta(seconds=1000)
+    return [
+        Order(id=resting_id, original=resting_id, supplier=resting_id, consumer=aggressor_id,
+              type="LIMIT", side="SELL", units=1, price=price, owner_id=900,
+              marketplace_id=MP, session_id=1, symbol=market.symbol, market_id=market.id,
+              created_date=rested, last_modified_date=taken),
+        Order(id=aggressor_id, original=aggressor_id, supplier=aggressor_id, consumer=resting_id,
+              type="LIMIT", side="BUY", units=1, price=price, owner_id=901,
+              marketplace_id=MP, session_id=1, symbol=market.symbol, market_id=market.id,
+              created_date=taken, last_modified_date=taken),
+    ]
+
+
+def test_each_tape_is_seeded_from_its_own_markets_read():
+    """Read for every market at once, a busy market's legs filled the shared
+    limit and a quiet market's tape came up empty though it had traded
+    (fm-server#1029)."""
+    busy, quiet = _market(1, "BUSY"), _market(2, "QUIET")
+    legs = _trade(busy, 101, 102, 500) + _trade(quiet, 11, 12, 700)
+    fake = FakeClient([busy, quiet], Snapshot(body=[], as_of_seq=4), Snapshot(body=legs, as_of_seq=4))
+    desk = _desk(fake, [busy, quiet])
+    try:
+        assert fake.market_trade_reads == [
+            f"{busy.id}/{2 * desk.tape(busy.id).capacity}",
+            f"{quiet.id}/{2 * desk.tape(quiet.id).capacity}",
+        ]
+        assert fake.marketplace_trade_reads == 0, "no read for every market at once"
+        assert desk.tape(quiet.id).most_recent_prices() == [700]
+    finally:
+        desk.close()
+
+
+def test_a_trade_in_the_seed_and_again_in_a_delta_is_kept_once():
+    """The trades snapshot is read after the orders snapshot whose sequence
+    the desk follows, so a trade made in between is in the seed and again in
+    a delta past the watermark. The tape keeps it once, and on_trade does not
+    announce it a second time."""
+    alpha = _market(1, "ALPHA")
+    trade = _trade(alpha, 101, 102, 500)
+    fake = FakeClient([alpha], Snapshot(body=[], as_of_seq=4), Snapshot(body=trade, as_of_seq=4))
+    desk = _desk(fake, [alpha])
+    try:
+        announced: list[Any] = []
+        desk.on_trade(alpha.id, announced.append)
+
+        fake.post(OrdersUpdate(orders=trade, seq=5))
+        fake.post(OrdersUpdate(orders=[_limit(alpha, 200, "SELL", 2, 2000)], seq=6))
+        _await("the marker delta to land", lambda: desk.book(alpha.id).best_sell_price() == 2000)
+
+        assert desk.tape(alpha.id).size() == 1
+        assert announced == []
     finally:
         desk.close()
 

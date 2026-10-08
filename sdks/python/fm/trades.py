@@ -132,8 +132,19 @@ class Tape:
         # something with one -- the tuple's first element separates them, so
         # the placeholder below is only ever compared with itself.
         found.sort(key=lambda t: (t.at is None, t.at or _NO_TIME))
-        self._container.extend(found)
-        return found
+        return [t for t in found if self._save(t)]
+
+    def _save(self, trade: Trade) -> bool:
+        """Keep a trade the tape does not already hold -- the same two orders,
+        delivered again. :class:`~fm.desk.Desk` seeds from a snapshot read
+        after the sequence it follows, so a trade made in between arrives
+        twice, and a tape that kept both reported one trade as two.
+        """
+        for held in self._container:
+            if held.resting.id == trade.resting.id and held.aggressor.id == trade.aggressor.id:
+                return False
+        self._container.append(trade)
+        return True
 
     # -- query -------------------------------------------------------------
 

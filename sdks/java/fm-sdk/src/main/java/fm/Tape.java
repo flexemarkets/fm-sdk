@@ -138,7 +138,7 @@ public class Tape {
 
         found.sort(Comparator.comparing(Trade::at,
             Comparator.nullsLast(Comparator.naturalOrder())));
-        found.forEach(this::_save);
+        found.removeIf(trade -> !_save(trade));
 
         return found.toArray(new Trade[0]);
     }
@@ -195,10 +195,22 @@ public class Tape {
         _container.clear();
     }
 
-    private void _save(Trade trade) {
+    /**
+     * Keep a trade the tape does not already hold -- the same two orders,
+     * delivered again. {@code Desk} seeds from a snapshot read after the
+     * sequence it follows, so a trade made in between arrives twice, and a
+     * tape that kept both reported one trade as two.
+     */
+    private boolean _save(Trade trade) {
+        for (var held : _container) {
+            if (held.resting().id() == trade.resting().id() && held.aggressor().id() == trade.aggressor().id()) {
+                return false;
+            }
+        }
         if (_container.size() == _capacity) {
             _container.removeFirst();
         }
         _container.addLast(trade);
+        return true;
     }
 }

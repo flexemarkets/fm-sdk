@@ -75,8 +75,33 @@ class FakeFlexemarkets implements Flexemarkets {
         return _active.get();
     }
 
-    @Override public Snapshot<List<Order>> recentTrades(long marketplaceId) { return _recent.get(); }
-    @Override public Snapshot<List<Order>> recentTrades(long marketplaceId, int size) { return _recent.get(); }
+    @Override public Snapshot<List<Order>> recentTrades(long marketplaceId) {
+        _marketplaceTradeReads++;
+        return _recent.get();
+    }
+    @Override public Snapshot<List<Order>> recentTrades(long marketplaceId, int size) {
+        _marketplaceTradeReads++;
+        return _recent.get();
+    }
+    /** One market's legs out of the recent snapshot, as the server answers {@code ?market=}. */
+    @Override public Snapshot<List<Order>> recentTrades(long marketplaceId, long marketId, int size) {
+        _marketTradeReads.add(marketId + "/" + size);
+        var all = _recent.get();
+        return new Snapshot<>(all.body().stream().filter(o -> o.marketId() == marketId).toList(), all.asOfSeq());
+    }
+
+    private volatile int _marketplaceTradeReads = 0;
+    private final List<String> _marketTradeReads = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /** The trade reads made market by market, each as {@code marketId/size}. */
+    List<String> marketTradeReads() {
+        return List.copyOf(_marketTradeReads);
+    }
+
+    /** The trade reads made for every market at once. */
+    int marketplaceTradeReads() {
+        return _marketplaceTradeReads;
+    }
 
     @Override public Subscription subscribe(long marketplaceId, BlockingQueue<Object> queue) {
         _queue.set(queue);

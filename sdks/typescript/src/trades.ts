@@ -108,16 +108,26 @@ export class Tape {
     // Stable since ES2019, so trades the server did not stamp keep the order
     // it delivered them in rather than being shuffled among themselves.
     found.sort((a, b) => time(a) - time(b));
-    for (const trade of found) this._append(trade);
-
-    return found;
+    return found.filter((trade) => this._save(trade));
   }
 
-  private _append(trade: Trade): void {
+  /**
+   * Keep a trade the tape does not already hold — the same two orders,
+   * delivered again. `Desk` seeds from a snapshot read after the sequence it
+   * follows, so a trade made in between arrives twice, and a tape that kept
+   * both reported one trade as two.
+   */
+  private _save(trade: Trade): boolean {
+    for (const held of this._container) {
+      if (held.resting.id === trade.resting.id && held.aggressor.id === trade.aggressor.id) {
+        return false;
+      }
+    }
     this._container.push(trade);
     while (this._container.length > this.capacity) {
       this._container.shift();
     }
+    return true;
   }
 
   // -- query -----------------------------------------------------------------

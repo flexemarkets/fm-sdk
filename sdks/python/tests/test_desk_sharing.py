@@ -61,7 +61,7 @@ class Scripted(Flexemarkets):
         self.active_reads += 1
         return Snapshot(body=[_limit(marketplace_id, 101, "BUY", 5, 1000)], as_of_seq=4)
 
-    def recent_trades(self, marketplace_id: int, *args: Any) -> Snapshot:  # type: ignore[override]
+    def recent_trades(self, marketplace_id: int, *args: Any, **kwargs: Any) -> Snapshot:  # type: ignore[override]
         return Snapshot(body=[], as_of_seq=4)
 
     def _connect_events(self, marketplace_id: int, q: "queue.Queue[object]") -> Any:  # type: ignore[override]

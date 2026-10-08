@@ -2,6 +2,8 @@ package fm;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -117,6 +119,69 @@ class DeskTest {
             assertThat(desk.book(alpha.id()).bestBuyUnits())
                 .as("re-delivered seed order counted twice")
                 .isEqualTo(5L);
+        }
+    }
+
+    /** Both legs of one trade: {@code restingId} rested, {@code aggressorId} took it. */
+    private static Order[] _trade(Market market, long restingId, long aggressorId, long price) {
+        Instant rested = Instant.parse("2026-10-08T10:00:00Z").plusSeconds(restingId);
+        Instant taken = rested.plusSeconds(1000);
+        return new Order[] {
+            new Order(rested, taken, restingId, restingId, restingId, aggressorId, OrderType.LIMIT, OrderSide.SELL,
+                      1, price, null, 900L, MP, 1L, market.symbol(), market.id(), null, null),
+            new Order(taken, taken, aggressorId, aggressorId, aggressorId, restingId, OrderType.LIMIT, OrderSide.BUY,
+                      1, price, null, 901L, MP, 1L, market.symbol(), market.id(), null, null)
+        };
+    }
+
+    /**
+     * Each tape is seeded from its own market's read. Read for every market at
+     * once, a busy market's legs filled the shared limit and a quiet market's
+     * tape came up empty though it had traded (fm-server#1029).
+     */
+    @Test
+    @Timeout(20)
+    void eachTapeIsSeededFromItsOwnMarketsRead() throws Exception {
+        Market busy = _market(1L, "BUSY");
+        Market quiet = _market(2L, "QUIET");
+        var legs = new ArrayList<Order>(List.of(_trade(busy, 101L, 102L, 500)));
+        legs.addAll(List.of(_trade(quiet, 11L, 12L, 700)));
+        var fake = new FakeFlexemarkets(
+            List.of(busy, quiet), new Snapshot<>(List.of(), 4L), new Snapshot<>(legs, 4L));
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(busy, quiet))) {
+            assertThat(fake.marketTradeReads()).containsExactly(
+                busy.id() + "/" + 2 * desk.tape(busy.id()).capacity(),
+                quiet.id() + "/" + 2 * desk.tape(quiet.id()).capacity());
+            assertThat(fake.marketplaceTradeReads()).as("no read for every market at once").isZero();
+            assertThat(desk.tape(quiet.id()).mostRecentPrices()).containsExactly(700L);
+        }
+    }
+
+    /**
+     * The trades snapshot is read after the orders snapshot whose sequence the
+     * desk follows, so a trade made in between is in the seed and again in a
+     * delta past the watermark. The tape keeps it once, and onTrade does not
+     * announce it a second time.
+     */
+    @Test
+    @Timeout(20)
+    void aTradeInTheSeedAndAgainInADeltaIsKeptOnce() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        Order[] trade = _trade(alpha, 101L, 102L, 500);
+        var fake = new FakeFlexemarkets(
+            List.of(alpha), new Snapshot<>(List.of(), 4L), new Snapshot<>(List.of(trade), 4L));
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            var announced = new java.util.concurrent.atomic.AtomicInteger();
+            desk.onTrade(alpha.id(), t -> announced.incrementAndGet());
+
+            fake.post(new OrdersUpdate(trade, 5L));
+            fake.post(new OrdersUpdate(new Order[] { _limit(alpha, 200L, OrderSide.SELL, 2, 2000) }, 6L));
+            _await("the marker delta to land", () -> desk.book(alpha.id()).bestSellPrice() == 2000L);
+
+            assertThat(desk.tape(alpha.id()).size()).isEqualTo(1);
+            assertThat(announced.get()).isZero();
         }
     }
 

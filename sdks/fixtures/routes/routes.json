@@ -485,6 +485,43 @@
       ]
     },
     {
+      "call": "recentTrades",
+      "args": {
+        "marketplaceId": 1,
+        "marketId": 11,
+        "size": 200
+      },
+      "why": "One market's newest legs, as the Desk seeds each tape: read together, a busy market's legs filled the shared limit and a quiet market's tape came up empty (fm-server#1029).",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/orders",
+          "query": {
+            "state": "TRADED",
+            "market": "11",
+            "limit": "200"
+          },
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "id": 42,
+                "original": 42,
+                "type": "LIMIT",
+                "side": "BUY",
+                "units": 5,
+                "price": 135,
+                "marketplaceId": 1,
+                "marketId": 11,
+                "sessionId": 41,
+                "ownerId": 7
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
       "call": "holdings",
       "args": {
         "marketplaceId": 1

@@ -436,6 +436,12 @@ public class HttpFlexemarkets implements Flexemarkets {
         return recentTrades(marketplaceId, 1000);
     }
 
+    @Override
+    public Snapshot<List<Order>> recentTrades(long marketplaceId, long marketId, int size) {
+        var url = _marketplace(marketplaceId) + "/orders?state=TRADED&market=" + marketId + "&limit=" + size;
+        return _ordersOf(_getSnapshot(url, SNAPSHOT_TYPE));
+    }
+
     public List<Holding> holdings(long marketplaceId) {
         return _get(_marketplace(marketplaceId) + "/holdings", HOLDINGS_TYPE);
     }

@@ -85,6 +85,10 @@ class DeskSharingTest {
             return new Snapshot<>(List.of(), 4L);
         }
 
+        @Override public Snapshot<List<Order>> recentTrades(long marketplaceId, long marketId, int size) {
+            return new Snapshot<>(List.of(), 4L);
+        }
+
         @Override public Subscription subscribe(long marketplaceId, BlockingQueue<Object> queue) {
             subscribed.add(marketplaceId);
             streams.put(marketplaceId, queue);

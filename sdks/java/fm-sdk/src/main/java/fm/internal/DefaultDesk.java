@@ -20,6 +20,7 @@ import fm.Snapshot;
 import fm.Subscription;
 import fm.Tape;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -125,6 +126,9 @@ public class DefaultDesk implements Desk {
      * @param marketplaceId the marketplace to follow
      * @param markets       its markets, which fix the books and tapes kept
      */
+    /** Trades each tape keeps; the seed asks each market for two legs a trade. */
+    static final int TAPE_CAPACITY = 100;
+
     public DefaultDesk(Flexemarkets flexemarkets, long marketplaceId, List<Market> markets) {
         this._flexemarkets = flexemarkets;
         this._marketplaceId = marketplaceId;
@@ -133,7 +137,7 @@ public class DefaultDesk implements Desk {
         // 100 matches the default per-market Tape capacity — see
         // Tape(Market) ctor. Plumb through to desk() later if a
         // caller needs deeper trade scrollback.
-        this._trades = new TapeIndex(this._markets, 100);
+        this._trades = new TapeIndex(this._markets, TAPE_CAPACITY);
 
         // Subscribe WS first so deltas start landing in the queue,
         // then fetch the REST snapshot, apply it, and only THEN start
@@ -167,7 +171,13 @@ public class DefaultDesk implements Desk {
      */
     private void _seedFromSnapshot() {
         Snapshot<List<Order>> orders = _flexemarkets.activeOrders(_marketplaceId);
-        Snapshot<List<Order>> trades = _flexemarkets.recentTrades(_marketplaceId);
+        // Market by market, enough legs to fill each tape: read together, a
+        // busy market's legs filled the shared 1000 and a quiet market's tape
+        // came up empty though it had traded (fm-server#1029).
+        var legs = new ArrayList<Order>();
+        for (var market : _markets) {
+            legs.addAll(_flexemarkets.recentTrades(_marketplaceId, market.id(), 2 * TAPE_CAPACITY).body());
+        }
 
         // Clear before reseeding so a resync (Phase 2b) doesn't
         // double-add against existing price levels. Initial seed
@@ -182,13 +192,15 @@ public class DefaultDesk implements Desk {
         if (!orders.body().isEmpty()) {
             this._books.update(orders.body().toArray(new Order[0]));
         }
-        if (!trades.body().isEmpty()) {
-            this._trades.update(trades.body().toArray(new Order[0]));
+        if (!legs.isEmpty()) {
+            this._trades.update(legs.toArray(new Order[0]));
         }
 
         // Use the orders snapshot's seq as the watermark — orders and
         // trades flow through the same delta stream, so they share a
-        // single seq. The trades snapshot's seq is informational.
+        // single seq. The trades snapshots are read after it, so a trade
+        // made in between is in one of them and again in a delta past the
+        // watermark; Tape keeps it once.
         this._lastAppliedSeq = orders.asOfSeq();
     }
 

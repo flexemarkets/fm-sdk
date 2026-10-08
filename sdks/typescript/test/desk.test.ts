@@ -66,7 +66,20 @@ class FakeClient {
     return this._active;
   }
 
-  async recentTrades(): Promise<Snapshot<Order[]>> { return this._recent; }
+  /** The trade reads made market by market, each as `marketId/size`. */
+  readonly marketTradeReads: string[] = [];
+  /** The trade reads made for every market at once. */
+  marketplaceTradeReads = 0;
+
+  async recentTrades(_mp: number, size = 1000, marketId?: number): Promise<Snapshot<Order[]>> {
+    if (marketId === undefined) {
+      this.marketplaceTradeReads++;
+      return this._recent;
+    }
+    // One market's legs out of the recent snapshot, as the server answers ?market=.
+    this.marketTradeReads.push(`${marketId}/${size}`);
+    return { body: this._recent.body.filter((o) => o.marketId === marketId), asOfSeq: this._recent.asOfSeq };
+  }
 
   async _connectEvents(_mp: number, dispatch: (e: FmEvent) => void): Promise<unknown> {
     this._dispatch = dispatch;
@@ -117,6 +130,65 @@ test("a delta already in the seed is not applied twice", async () => {
     assert.equal(desk.book(alpha.id)!.bestSellPrice(), 2000);
     assert.equal(desk.book(alpha.id)!.bestBuyUnits(), 5,
                  "re-delivered seed order counted twice");
+  } finally { desk.close(); }
+});
+
+/** Both legs of one trade: `restingId` rested, `aggressorId` took it. */
+function trade(m: Market, restingId: number, aggressorId: number, price: number): Order[] {
+  const rested = new Date(Date.parse("2026-10-08T10:00:00Z") + restingId * 1000);
+  const taken = new Date(rested.getTime() + 1_000_000);
+  return [
+    {
+      id: restingId, original: restingId, supplier: restingId, consumer: aggressorId,
+      type: "LIMIT", side: "SELL", units: 1, price, ownerId: 900, marketplaceId: MP, sessionId: 1,
+      symbol: m.symbol, marketId: m.id, createdDate: rested, lastModifiedDate: taken,
+    } as Order,
+    {
+      id: aggressorId, original: aggressorId, supplier: aggressorId, consumer: restingId,
+      type: "LIMIT", side: "BUY", units: 1, price, ownerId: 901, marketplaceId: MP, sessionId: 1,
+      symbol: m.symbol, marketId: m.id, createdDate: taken, lastModifiedDate: taken,
+    } as Order,
+  ];
+}
+
+test("each tape is seeded from its own market's read", async () => {
+  // Read for every market at once, a busy market's legs filled the shared
+  // limit and a quiet market's tape came up empty though it had traded
+  // (fm-server#1029).
+  const busy = market(1, "BUSY");
+  const quiet = market(2, "QUIET");
+  const legs = [...trade(busy, 101, 102, 500), ...trade(quiet, 11, 12, 700)];
+  const fake = new FakeClient([busy, quiet], snapshot([], 4), snapshot(legs, 4));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  try {
+    assert.deepEqual(fake.marketTradeReads, [
+      `${busy.id}/${2 * desk.tape(busy.id)!.capacity}`,
+      `${quiet.id}/${2 * desk.tape(quiet.id)!.capacity}`,
+    ]);
+    assert.equal(fake.marketplaceTradeReads, 0, "no read for every market at once");
+    assert.deepEqual(desk.tape(quiet.id)!.mostRecentPrices(), [700]);
+  } finally { desk.close(); }
+});
+
+test("a trade in the seed and again in a delta is kept once", async () => {
+  // The trades snapshot is read after the orders snapshot whose sequence the
+  // desk follows, so a trade made in between is in the seed and again in a
+  // delta past the watermark. The tape keeps it once, and onTrade does not
+  // announce it a second time.
+  const alpha = market(1, "ALPHA");
+  const legs = trade(alpha, 101, 102, 500);
+  const fake = new FakeClient([alpha], snapshot([], 4), snapshot(legs, 4));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  try {
+    let announced = 0;
+    desk.onTrade(alpha.id, () => { announced++; });
+
+    fake.post(update(legs, 5));
+    fake.post(update([limit(alpha, 200, "SELL", 2, 2000)], 6));   // marker
+    assert.equal(desk.book(alpha.id)!.bestSellPrice(), 2000);
+
+    assert.equal(desk.tape(alpha.id)!.size(), 1);
+    assert.equal(announced, 0);
   } finally { desk.close(); }
 });
 

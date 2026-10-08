@@ -264,4 +264,27 @@ public interface Reading {
      * @return the trades, in the server's order, and their sequence
      */
     Snapshot<List<Order>> recentTrades(long marketplaceId);
+
+    /**
+     * One market's most recent trade legs, oldest first, with the sequence
+     * they were correct as of: {@code orders?state=TRADED&market=}.
+     *
+     * <p>What {@link Desk} seeds each tape from. Read for every market at
+     * once, a busy market's legs fill the limit and a quiet market's tape
+     * comes up empty, though it has traded.
+     *
+     * @param marketplaceId the marketplace to read
+     * @param marketId      the market
+     * @param size          how many legs to ask for, two to a trade
+     * <p>The default narrows the marketplace-wide read to the market, which
+     * answers right for an implementation that holds every trade -- an
+     * in-process one -- and lets those that predate this method keep
+     * compiling. The HTTP client asks the server for the market's own.
+     *
+     * @return the legs and their sequence
+     */
+    default Snapshot<List<Order>> recentTrades(long marketplaceId, long marketId, int size) {
+        var all = recentTrades(marketplaceId, size);
+        return new Snapshot<>(all.body().stream().filter(o -> o.marketId() == marketId).toList(), all.asOfSeq());
+    }
 }

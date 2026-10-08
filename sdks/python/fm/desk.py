@@ -62,6 +62,10 @@ class DeskRecovery:
     reason: Optional[str]
 
 
+#: Trades each tape keeps; the seed asks each market for two legs a trade.
+TAPE_CAPACITY = 100
+
+
 class Desk:
     """Always-current state for a single marketplace.
 
@@ -90,7 +94,7 @@ class Desk:
         # 100 matches the default per-market Tape capacity. Plumb
         # through to desk() later if a caller needs deeper trade
         # scrollback.
-        self._trades = TapeIndex(self.markets, 100)
+        self._trades = TapeIndex(self.markets, TAPE_CAPACITY)
 
         self._session: Optional[Session] = None
         self._holding: Optional[Holding] = None
@@ -137,7 +141,13 @@ class Desk:
         clear() is a no-op there.
         """
         orders = self._flexemarkets.active_orders(self.marketplace_id)
-        trades = self._flexemarkets.recent_trades(self.marketplace_id)
+        # Market by market, enough legs to fill each tape: read together, a
+        # busy market's legs filled the shared 1000 and a quiet market's tape
+        # came up empty though it had traded (fm-server#1029).
+        legs: list[Order] = []
+        for market in self.markets:
+            legs.extend(self._flexemarkets.recent_trades(
+                self.marketplace_id, 2 * TAPE_CAPACITY, market_id=market.id).body)
 
         # Clear before reseeding so a resync doesn't double-add
         # against existing price levels.
@@ -146,12 +156,14 @@ class Desk:
 
         if orders.body:
             self._books.update(orders.body)
-        if trades.body:
-            self._trades.update(trades.body)
+        if legs:
+            self._trades.update(legs)
 
         # Orders and trades flow through the same delta stream so
         # they share a single seq. Use the orders snapshot's value
-        # as the watermark.
+        # as the watermark. The trades snapshots are read after it, so a
+        # trade made in between is in one of them and again in a delta past
+        # the watermark; Tape keeps it once.
         self._last_applied_seq = orders.as_of_seq
 
     # -- read-side accessors ----------------------------------------------

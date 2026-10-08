@@ -214,7 +214,9 @@ class RouteFixturesTest {
                            : fm.orders(mp);
             case "trades" -> fm.trades(mp, a.get("symbol").asString());
             case "activeOrders" -> fm.activeOrders(mp).body();
-            case "recentTrades" -> a.has("size") ? fm.recentTrades(mp, a.get("size").asInt()).body()
+            case "recentTrades" -> a.has("marketId")
+                    ? fm.recentTrades(mp, a.get("marketId").asLong(), a.get("size").asInt()).body()
+                    : a.has("size") ? fm.recentTrades(mp, a.get("size").asInt()).body()
                                                  : fm.recentTrades(mp).body();
             case "holdings" -> a.has("sessionIds") ? fm.holdings(mp, _longs(a.get("sessionIds"))) : fm.holdings(mp);
             case "holding" -> fm.holding(mp);

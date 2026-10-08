@@ -1175,7 +1175,9 @@ class Flexemarkets:
         orders_raw = _orders_of(body)
         return Snapshot(body=[_parse_order(o) for o in orders_raw], as_of_seq=as_of_seq)
 
-    def recent_trades(self, marketplace_id: int, size: int = 1000) -> "Snapshot[list[Order]]":
+    def recent_trades(
+        self, marketplace_id: int, size: int = 1000, market_id: "int | None" = None,
+    ) -> "Snapshot[list[Order]]":
         """The recent-trades snapshot, for seeding the trade-history
         tape. Same ``x-fm-as-of-seq`` contract as
         :meth:`active_orders`. Server caps at 5000; default is
@@ -1188,8 +1190,16 @@ class Flexemarkets:
         what it is given, so a caller seeding a tape through
         :class:`~fm.desk.Desk` is unaffected; a caller reading
         this list directly should not assume one.
+
+        With *market_id*, only that market's legs (``&market=``), *size* of
+        them, two to a trade. What :class:`~fm.desk.Desk` seeds each tape
+        from: read for every market at once, a busy market's legs fill the
+        limit and a quiet market's tape comes up empty, though it has traded.
         """
-        url = _marketplace(self._endpoint, marketplace_id) + f"/orders?state=TRADED&limit={size}"
+        url = _marketplace(self._endpoint, marketplace_id) + "/orders?state=TRADED"
+        if market_id is not None:
+            url += f"&market={market_id}"
+        url += f"&limit={size}"
         body, as_of_seq = self._get_snapshot(url)
         orders_raw = _orders_of(body)
         return Snapshot(body=[_parse_order(o) for o in orders_raw], as_of_seq=as_of_seq)
