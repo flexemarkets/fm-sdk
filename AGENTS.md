@@ -29,7 +29,9 @@ Each test run also fails if line coverage of the SDK's critical code drops
 below a floor: `critical-coverage` in `sdks/java/fm-sdk/pom.xml`,
 `fail_under` in `sdks/python/pyproject.toml`, `--test-coverage-lines` in
 `sdks/typescript/package.json`. A floor is the coverage when it was last set;
-raise it when tests land, never lower it to get a change through.
+raise it when tests land, never lower it to get a change through. Node reads
+`--test-coverage-lines` as a whole number -- 93.9 is enforced as 93 -- so the
+TypeScript floor is written as one.
 
 Java additionally holds **zero javadoc warnings**. Check on a clean build; a
 dirty build and `mvn -q` both report a false zero.
