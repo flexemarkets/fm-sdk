@@ -246,11 +246,19 @@ can change; `original` names the run.
 | `POST orders` | user | submit a LIMIT (or a CANCEL, the older way to cancel) |
 | `DELETE orders/{orderId}` | user | cancel what is left of an order; 200 with the CANCEL order, 404 `ORDER_NOT_IN_MARKETPLACE` |
 | `GET orders?state=ACTIVE[&market=\|&symbol=]` | user | the resting book of the current session, with `x-fm-as-of-seq` |
-| `GET orders?state=TRADED[&market=\|&symbol=][&limit=]` | user | the newest `limit` trade legs (default 1000, at most 5000), oldest first, with `x-fm-as-of-seq` |
+| `GET orders?state=TRADED[&market=\|&symbol=][&limit=][&before=]` | user | the newest `limit` trade legs (default 1000, at most 5000), oldest first, with `x-fm-as-of-seq`; `before` pages back |
 | `GET orders[?sessions=]` | manager | every LIMIT and CANCEL row of the runs, unfiltered: the audit and replay view |
 | `GET orders?cancelled=false[&sessions=]` | manager | the same less cancelled orders, their CANCELs, and self-crosses |
 | `DELETE orders?market=\|symbol=&state=ACTIVE` | manager | withdraw every standing order in one market of a **PAUSED** session; answers the count |
-| `GET trades[?market=\|&symbol=][&limit=]` | user | the newest `limit` trades (default 500, at most 2500), each with both orders, oldest first |
+| `GET trades[?market=\|&symbol=][&limit=][&before=]` | user | the newest `limit` trades (default 500, at most 2500), each with both orders, oldest first; `before` pages back |
+
+**The whole tape, a page at a time.** Both trade reads take
+`?before={key}`: the newest `limit` trades before that key. A trade's key is
+the larger id of its two legs. A full page answers
+`Link: <...?before={key}>; rel="next"`, naming the page before it; a short
+page is the session's first trades. Seed with the newest trades, then follow
+`next` at your own pace. The answer is never cut short by the server's cache
+(fm-server 4.6.2, #1029).
 
 Submit a limit order:
 
