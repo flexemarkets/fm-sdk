@@ -285,3 +285,92 @@ test("a closed handle's handlers of every kind stop", async () => {
   b.close();
   fm.close();
 });
+
+// -- refusing locally what the server would refuse ---------------------------
+
+const settle = () => new Promise((r) => setTimeout(r, 20));
+
+function granting(canBuy: boolean, canSell: boolean) {
+  return parseHolding({ marketplaceId: MP, sessionId: 30, ownerId: 7, cash: 10_000, availableCash: 10_000,
+    securities: [{ marketId: ALPHA, units: 5, availableUnits: 5, canBuy, canSell }] });
+}
+
+test("an order into a session that is not open is refused and not sent", async () => {
+  const { OrderRefusedLocallyError, InvalidArgumentError } = await import("../src/client.ts");
+  const fm = scripted();
+  const desk = await fm.desk(MP);
+  fm.post(MP, parseSession({ id: 30, marketplaceId: MP, state: "CLOSED" }));
+  await settle();
+
+  await assert.rejects(desk.submitLimit(ALPHA, "BUY", 1, 1000), (e: unknown) => {
+    assert.ok(e instanceof OrderRefusedLocallyError);
+    assert.ok(e instanceof InvalidArgumentError, "caught where the server's 400 is");
+    assert.equal(e.reason, "SESSION_CLOSED");
+    assert.match(e.message, /session 30 is CLOSED/);
+    return true;
+  });
+  assert.deepEqual(fm.submitted, []);
+  desk.close();
+  fm.close();
+});
+
+test("a side the holding does not grant is refused and the other is sent", async () => {
+  const { OrderRefusedLocallyError } = await import("../src/client.ts");
+  const fm = scripted();
+  const desk = await fm.desk(MP);
+  fm.post(MP, parseSession({ id: 30, marketplaceId: MP, state: "OPEN" }));
+  fm.post(MP, granting(true, false));
+  await settle();
+
+  await assert.rejects(desk.submitLimit(ALPHA, "sell", 1, 1000), (e: unknown) => {
+    assert.ok(e instanceof OrderRefusedLocallyError);
+    assert.equal(e.reason, "ORDER_NOT_ALLOWED");
+    assert.match(e.message, /does not grant SELL/);
+    return true;
+  });
+  await desk.submitLimit(ALPHA, "BUY", 1, 1000);
+  assert.deepEqual(fm.submitted, [`${MP}/${ALPHA} BUY 1@1000`]);
+  desk.close();
+  fm.close();
+});
+
+test("what the desk does not know goes to the server", async () => {
+  const fm = scripted();
+  const desk = await fm.desk(MP);
+  await desk.submitLimit(ALPHA, "SELL", 1, 1000);
+  fm.post(MP, parseSession({ id: 30, marketplaceId: MP, state: "OPEN" }));
+  fm.post(MP, parseHolding({ marketplaceId: MP, cash: 0, securities: [] }));
+  await settle();
+  await desk.submitLimit(ALPHA, "SELL", 1, 1000);
+  await desk.submitLimit(ALPHA, "SIDEWAYS", 1, 1000);
+  assert.equal(fm.submitted.length, 3);
+  desk.close();
+  fm.close();
+});
+
+test("refuseLocally: false sends every order", async () => {
+  const fm = scripted();
+  const desk = await fm.desk(MP, { refuseLocally: false });
+  const second = await fm.desk(MP, { refuseLocally: false });
+  fm.post(MP, parseSession({ id: 30, marketplaceId: MP, state: "CLOSED" }));
+  fm.post(MP, granting(false, false));
+  await settle();
+
+  await desk.submitLimit(ALPHA, "BUY", 1, 1000);
+  await second.submitLimit(ALPHA, "SELL", 1, 1000);
+  assert.deepEqual(fm.submitted, [`${MP}/${ALPHA} BUY 1@1000`, `${MP}/${ALPHA} SELL 1@1000`]);
+  second.close();
+  desk.close();
+  fm.close();
+});
+
+test("a cancel is never refused locally: a manager may cancel in any state", async () => {
+  const fm = scripted();
+  const desk = await fm.desk(MP);
+  fm.post(MP, parseSession({ id: 30, marketplaceId: MP, state: "CLOSED" }));
+  await settle();
+  await desk.submitCancel(ALPHA, 900);
+  assert.deepEqual(fm.submitted, [`${MP}/${ALPHA} cancel 900`]);
+  desk.close();
+  fm.close();
+});

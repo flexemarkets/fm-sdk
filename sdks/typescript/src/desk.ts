@@ -10,11 +10,11 @@
  * snapshot seed, no sharing, no reconnect — those land in Phase 2.
  */
 
-import type { Flexemarkets } from "./client.js";
+import { OrderRefusedLocallyError, type Flexemarkets } from "./client.js";
 import { Book, BookIndex } from "./orderbook.js";
 import { TapeIndex, type Trade, type Tape } from "./trades.js";
 import { NO_SEQ, type EventListener, type FmEvent, type OrdersUpdate, type FrameUnreadable, type StreamReconnected, type StreamDropped } from "./stomp.js";
-import type { Holding, Market, Order, Session } from "./types.js";
+import { getSecurity, type Holding, type Market, type Order, type Session } from "./types.js";
 
 /**
  * Handle returned by `Desk.on*` listener registrations. Call
@@ -356,9 +356,36 @@ export class DefaultDesk implements Desk {
     };
   }
 
-  submitLimit(marketId: number, side: string, units: number, price: number): Promise<Order> {
+  /**
+   * Submit a limit order, unless the desk already knows fm-server would refuse
+   * it: a session the desk holds that is not OPEN, or a position in the market
+   * whose grant does not allow the side. Those reject with
+   * {@link OrderRefusedLocallyError} and are never sent. What the desk does not
+   * know -- no session or holding yet, no position in the market -- goes to the
+   * server, which has the last word.
+   */
+  submitLimit(marketId: number, side: string, units: number, price: number, refuseLocally = true): Promise<Order> {
     this._ensureOpen();
+    const refusal = refuseLocally ? this._refusal(marketId, side) : null;
+    if (refusal !== null) return Promise.reject(refusal);
     return this._flexemarkets.submitLimit(this.marketplaceId, marketId, side, units, price);
+  }
+
+  private _refusal(marketId: number, side: string): OrderRefusedLocallyError | null {
+    const session = this._session;
+    if (session !== null && session.state != null && session.state.toUpperCase() !== "OPEN") {
+      return new OrderRefusedLocallyError("SESSION_CLOSED",
+        `Not sent: session ${session.id} is ${session.state}, not OPEN.`);
+    }
+    const security = this._holding !== null ? getSecurity(this._holding, marketId) : null;
+    if (security === null) return null;
+    const upper = String(side).toUpperCase();
+    const granted = upper === "BUY" ? security.canBuy : upper === "SELL" ? security.canSell : true;
+    if (!granted) {
+      return new OrderRefusedLocallyError("ORDER_NOT_ALLOWED",
+        `Not sent: your holding does not grant ${upper} in market ${marketId}.`);
+    }
+    return null;
   }
 
   submitCancel(marketId: number, originalId: number): Promise<Order> {
@@ -598,9 +625,12 @@ export class DeskHandle implements Desk {
   private readonly _mySubscriptions: Subscription[] = [];
   private _closed = false;
 
-  constructor(shared: DefaultDesk, onClose: () => void) {
+  private readonly _refuseLocally: boolean;
+
+  constructor(shared: DefaultDesk, onClose: () => void, refuseLocally = true) {
     this._shared = shared;
     this._onClose = onClose;
+    this._refuseLocally = refuseLocally;
   }
 
   get marketplaceId(): number {
@@ -686,7 +716,7 @@ export class DeskHandle implements Desk {
 
   submitLimit(marketId: number, side: string, units: number, price: number): Promise<Order> {
     this._check();
-    return this._shared.submitLimit(marketId, side, units, price);
+    return this._shared.submitLimit(marketId, side, units, price, this._refuseLocally);
   }
 
   submitCancel(marketId: number, originalId: number): Promise<Order> {
