@@ -10,11 +10,11 @@
  * These assert the book's *contents*, not a log line.
  */
 
-import { test } from "node:test";
+import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 
 import { DefaultDesk } from "../src/desk.ts";
-import type { Flexemarkets } from "../src/client.ts";
+import { parseHolding, type Flexemarkets } from "../src/client.ts";
 import type { Market, Order } from "../src/types.ts";
 import { parseSession } from "../src/stomp.ts";
 import type { FmEvent, OrdersUpdate } from "../src/stomp.ts";
@@ -62,9 +62,26 @@ class FakeClient {
 
   async markets(): Promise<Market[]> { return this._markets; }
 
+  /** When set, the next seed's read fails with it, as a server that is down does. */
+  refuseActive: Error | null = null;
+
   async activeOrders(): Promise<Snapshot<Order[]>> {
     this.activeReads++;
+    if (this.refuseActive) throw this.refuseActive;
     return this._active;
+  }
+
+  /** The orders submitted through the desk, as `marketplace/market` and terms. */
+  readonly submitted: string[] = [];
+
+  async submitLimit(mp: number, marketId: number, side: string, units: number, price: number): Promise<Order> {
+    this.submitted.push(`${mp}/${marketId} ${side} ${units}@${price}`);
+    return { id: 900 } as Order;
+  }
+
+  async submitCancel(mp: number, marketId: number, originalId: number): Promise<Order> {
+    this.submitted.push(`${mp}/${marketId} cancel ${originalId}`);
+    return { id: 901 } as Order;
   }
 
   /** The trade reads made market by market, each as `marketId/size`. */
@@ -279,5 +296,184 @@ test("a session update is the desk's session", async () => {
 
     assert.equal(desk.session()?.state, "OPEN");
     assert.deepEqual(seen, ["OPEN"]);
+  } finally { desk.close(); }
+});
+
+test("a holding update is the desk's holding", async () => {
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([], 1), snapshot([], 1));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  try {
+    assert.equal(desk.holding(), null, "nothing has arrived yet");
+    const seen: number[] = [];
+    desk.onHoldingChange((h) => seen.push(h.cash));
+
+    fake.post(parseHolding({ marketplaceId: MP, cash: 2500, securities: [{ marketId: alpha.id, units: 4 }] }));
+
+    assert.equal(desk.holding()?.cash, 2500);
+    assert.equal(desk.holding()?.securities[0]?.units, 4);
+    assert.deepEqual(seen, [2500]);
+  } finally { desk.close(); }
+});
+
+test("a handler that has unsubscribed hears nothing more", async () => {
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([], 1), snapshot([], 1));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  try {
+    const heard: string[] = [];
+    const subscriptions = [
+      desk.onSessionChange(() => heard.push("session")),
+      desk.onHoldingChange(() => heard.push("holding")),
+      desk.onBookChange(alpha.id, () => heard.push("book")),
+      desk.onTrade(alpha.id, () => heard.push("trade")),
+      desk.onGap(() => heard.push("gap")),
+    ];
+    for (const unsubscribe of subscriptions) {
+      unsubscribe();
+      unsubscribe();   // idempotent
+    }
+
+    fake.post(parseSession({ id: 3, marketplaceId: MP, state: "OPEN" }));
+    fake.post(parseHolding({ marketplaceId: MP, cash: 1, securities: [] }));
+    fake.post(update(trade(alpha, 101, 102, 500), 2));
+    assert.equal(desk.tape(alpha.id)!.size(), 1, "the trade did arrive");
+    fake.nextActiveOrders(snapshot([], 9));
+    fake.post(update([], 9));   // a gap
+    await new Promise((r) => setTimeout(r, 50));
+
+    assert.equal(fake.activeReads, 2, "the gap did reseed");
+    assert.deepEqual(heard, []);
+  } finally { desk.close(); }
+});
+
+test("a reconnect reseeds the desk and says so", async () => {
+  // A reconnect is the largest gap there is: whatever happened while the
+  // stream was down is only in the snapshot.
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([limit(alpha, 101, "BUY", 5, 1000)], 4),
+                              snapshot([], 4));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  try {
+    const recoveries: unknown[] = [];
+    desk.onRecovery((e) => recoveries.push(e));
+
+    fake.nextActiveOrders(snapshot([limit(alpha, 201, "BUY", 9, 1500)], 40));
+    fake.post({ kind: "reconnected", marketplaceId: MP });
+    await new Promise((r) => setTimeout(r, 50));
+
+    assert.equal(desk.book(alpha.id)!.bestBuyPrice(), 1500);
+    assert.equal(fake.activeReads, 2);
+    assert.deepEqual(recoveries, [{ marketplaceId: MP, success: true, reason: null }]);
+  } finally { desk.close(); }
+});
+
+test("a reconnect that cannot reseed leaves the desk stale and says why", async () => {
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([limit(alpha, 101, "BUY", 5, 1000)], 4),
+                              snapshot([], 4));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  const error = mock.method(console, "error", () => {});
+  try {
+    const recoveries: unknown[] = [];
+    desk.onRecovery((e) => recoveries.push(e));
+
+    fake.refuseActive = new Error("server unavailable");
+    fake.post({ kind: "reconnected", marketplaceId: MP });
+    await new Promise((r) => setTimeout(r, 50));
+
+    assert.deepEqual(recoveries, [{ marketplaceId: MP, success: false, reason: "server unavailable" }]);
+    assert.match(String(error.mock.calls[0]?.arguments[0]), /desk is stale: server unavailable/);
+
+    // Stale, not corrupt: a delta is held back rather than applied to a book
+    // that missed whatever came before it.
+    fake.post(update([limit(alpha, 102, "BUY", 3, 1100)], 5));
+    assert.equal(desk.book(alpha.id)!.bestBuyPrice(), 1000);
+  } finally {
+    error.mock.restore();
+    desk.close();
+  }
+});
+
+test("a reconnect while one is reseeding is the same recovery", async () => {
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([], 4), snapshot([], 4));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  try {
+    let recoveries = 0;
+    desk.onRecovery(() => recoveries++);
+
+    fake.post({ kind: "reconnected", marketplaceId: MP });
+    fake.post({ kind: "reconnected", marketplaceId: MP });
+    await new Promise((r) => setTimeout(r, 50));
+
+    assert.equal(fake.activeReads, 2, "one seed at open, one for the reconnect");
+    assert.equal(recoveries, 1);
+  } finally { desk.close(); }
+});
+
+test("a dropped stream and an unreadable frame leave the desk as it is", async () => {
+  // The listener restores a dropped stream itself, and reconnecting cannot
+  // mend a malformed frame: the desk says so and waits.
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([limit(alpha, 101, "BUY", 5, 1000)], 4),
+                              snapshot([], 4));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  const warn = mock.method(console, "warn", () => {});
+  try {
+    fake.post({ kind: "stream-dropped", exception: new Error("connection reset") });
+    fake.post({ kind: "frame-unreadable", command: "ERROR", headers: {}, body: "bad frame",
+                exception: new Error("bad frame") });
+    await new Promise((r) => setTimeout(r, 50));
+
+    const said = warn.mock.calls.map((c) => String(c.arguments[0]));
+    assert.equal(said.length, 2);
+    assert.match(said[0]!, /marketplace 7: connection reset/);
+    assert.match(said[1]!, /marketplace 7: ERROR bad frame/);
+    assert.equal(fake.activeReads, 1, "no reseed");
+    assert.equal(desk.book(alpha.id)!.bestBuyPrice(), 1000);
+  } finally {
+    warn.mock.restore();
+    desk.close();
+  }
+});
+
+test("a closed desk hears nothing from the stream", async () => {
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([], 1), snapshot([], 1));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  let heard = 0;
+  desk.onBookChange(alpha.id, () => heard++);
+  desk.close();
+
+  fake.post(update([limit(alpha, 101, "BUY", 5, 1000)], 2));
+
+  assert.equal(heard, 0);
+});
+
+test("an update for a market the desk does not keep reaches no book handler", async () => {
+  const alpha = market(1, "ALPHA");
+  const stranger = market(99, "STRANGER");
+  const fake = new FakeClient([alpha], snapshot([], 1), snapshot([], 1));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  try {
+    const heard: unknown[] = [];
+    desk.onBookChange(stranger.id, (b) => heard.push(b));
+
+    fake.post(update([limit(stranger, 101, "BUY", 5, 1000)], 2));
+
+    assert.equal(desk.book(stranger.id), null);
+    assert.deepEqual(heard, []);
+  } finally { desk.close(); }
+});
+
+test("orders go through the desk to its own marketplace", async () => {
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([], 1), snapshot([], 1));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  try {
+    assert.equal((await desk.submitLimit(alpha.id, "BUY", 2, 950)).id, 900);
+    assert.equal((await desk.submitCancel(alpha.id, 900)).id, 901);
+    assert.deepEqual(fake.submitted, [`${MP}/${alpha.id} BUY 2@950`, `${MP}/${alpha.id} cancel 900`]);
   } finally { desk.close(); }
 });
