@@ -95,10 +95,6 @@ def _first_child(orders: list[Order], order: Order) -> Order | None:
     return None
 
 
-def _is_created_earlier(order: Order, consumer: Order) -> bool:
-    return order.id < consumer.id
-
-
 def _is_older(orders: list[Order], o1: Order | None, o2: Order | None) -> bool:
     if o1 is None:
         return True
@@ -113,12 +109,11 @@ def _is_older(orders: list[Order], o1: Order | None, o2: Order | None) -> bool:
     if o1_in and not o2_in:
         return False
 
-    o1_original = o1 if o1.id == o1.original else find_order(orders, o1.original)
-    o2_original = o2 if o2.id == o2.original else find_order(orders, o2.original)
-
-    if o1_original is None or o2_original is None:
-        return o1_original is None
-    return _is_created_earlier(o1_original, o2_original)
+    # Age by the originals' ids, which every fragment carries: the exchange
+    # hands out ids as it matches, one order at a time per marketplace, so
+    # the earlier id was on the book first. The originals themselves need
+    # not be in the batch.
+    return o1.original < o2.original
 
 
 def _is_supplier_older(orders: list[Order], order: Order | None) -> bool:

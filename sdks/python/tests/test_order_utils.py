@@ -218,12 +218,12 @@ class TestIsResting:
 
     def test_two_lineages_neither_of_whose_originals_is_in_the_batch(self):
         """No server sends this -- a taker's original arrives with it -- but the
-        function takes any list. With nothing to compare, each side's lineage
-        reads as the older and the answer is True for both, not a failure;
-        Java's Orders.isResting throws NullPointerException here."""
+        function takes any list. The originals' ids are still on the fragments,
+        and the exchange hands ids out as it matches: 201 was on the book before
+        210, so the left side rests and the match is one trade, not two."""
         left_marker, left = row(203, 201, 201, 0), row(206, 201, 203, 208)
         right_marker, right = row(209, 210, 210, 0), row(208, 210, 209, 206)
         orders = [left_marker, left, right_marker, right]
 
         assert is_resting(orders, left) is True
-        assert is_resting(orders, right) is True
+        assert is_resting(orders, right) is False
