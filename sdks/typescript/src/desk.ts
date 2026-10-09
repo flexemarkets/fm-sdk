@@ -560,7 +560,9 @@ function _isOrdersUpdate(event: FmEvent): event is OrdersUpdate {
 }
 
 function _isSession(event: FmEvent): event is Session {
-  return typeof event === "object" && event !== null && "status" in event && "marketplaceId" in event;
+  // "state", as parseSession spells it. This read "status", which no session
+  // carries, so every SESSION-UPDATE fell through unrecognised.
+  return typeof event === "object" && event !== null && "state" in event && "marketplaceId" in event;
 }
 
 function _isHolding(event: FmEvent): event is Holding {

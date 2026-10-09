@@ -16,6 +16,7 @@ import assert from "node:assert/strict";
 import { DefaultDesk } from "../src/desk.ts";
 import type { Flexemarkets } from "../src/client.ts";
 import type { Market, Order } from "../src/types.ts";
+import { parseSession } from "../src/stomp.ts";
 import type { FmEvent, OrdersUpdate } from "../src/stomp.ts";
 import type { Snapshot } from "../src/snapshot.ts";
 
@@ -260,5 +261,23 @@ test("a handler that throws does not stop the desk", async () => {
 
     assert.equal(desk.book(alpha.id)!.bestBuyPrice(), 1100);
     assert.equal(fake.activeReads, 1, "the second frame was not mistaken for a gap");
+  } finally { desk.close(); }
+});
+
+test("a session update is the desk's session", async () => {
+  // The desk recognised a session by a "status" field, and a session read off
+  // the stream has "state": every SESSION-UPDATE fell through unrecognised, so
+  // session() stayed null and onSessionChange never fired.
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([], 1), snapshot([], 1));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  try {
+    const seen: (string | null)[] = [];
+    desk.onSessionChange((s) => seen.push(s.state));
+
+    fake.post(parseSession({ id: 3, marketplaceId: MP, state: "OPEN" }));
+
+    assert.equal(desk.session()?.state, "OPEN");
+    assert.deepEqual(seen, ["OPEN"]);
   } finally { desk.close(); }
 });
