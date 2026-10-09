@@ -156,3 +156,21 @@ test("one drop starts one reconnect", async () => {
   assert.equal(reconnected.length, 1, `expected one StreamReconnected, got ${reconnected.length}`);
   listener.close();
 });
+
+test("a reconnect that fails for any reason but the token waits, then tries again", async () => {
+  // A server restart or a network drop is a blip; recovering from it is what
+  // the loop is for. Waiting between attempts is what keeps it from being a
+  // hammer.
+  const { push } = collector();
+  const listener = new StubListener(push);
+  await listener.start();
+  listener.failConnects = listener.connects + 1;
+  const before = listener.connects;
+  const started = Date.now();
+
+  await listener.reconnect();
+
+  assert.equal(listener.connects - before, 2, "one refused, one that succeeded");
+  assert.ok(Date.now() - started >= 1900, "retried without waiting");
+  listener.close();
+});
