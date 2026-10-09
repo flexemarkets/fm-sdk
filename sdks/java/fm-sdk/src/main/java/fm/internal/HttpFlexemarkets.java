@@ -1445,19 +1445,15 @@ public class HttpFlexemarkets implements Flexemarkets {
             // so every sign-in hashed it twice -- two of the few concurrent
             // hashes fm-server allows during a class's sign-in burst.
             var username = account + "|" + email;
-            var body = Map.of("username", username, "password", password);
-            try {
-                var json = MAPPER.writeValueAsString(body);
-                request = HttpRequest.newBuilder()
-                    .uri(URI.create(endpoint))
-                    .header("Content-Type", "application/json")
-                    .header("Accept", "application/json")
-                    .header("User-Agent", FM_SDK_CLIENT)
-                    .POST(HttpRequest.BodyPublishers.ofString(json))
-                    .build();
-            } catch (JacksonException e) {
-                throw new ApiException("Failed to serialize sign-in body", e);
-            }
+            // Two strings in a map: there is nothing here Jackson cannot write.
+            var json = MAPPER.writeValueAsString(Map.of("username", username, "password", password));
+            request = HttpRequest.newBuilder()
+                .uri(URI.create(endpoint))
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+                .header("User-Agent", FM_SDK_CLIENT)
+                .POST(HttpRequest.BodyPublishers.ofString(json))
+                .build();
         }
 
         try {
