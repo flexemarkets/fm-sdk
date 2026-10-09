@@ -2,7 +2,7 @@
   {
     "id": "smith62",
     "label": "Smith 62 — demand and supply",
-    "description": "A group and a role badge in the header, the profit under the order form, and the private state they read: a participant's group, side and induced-value schedule.",
+    "description": "A group and a role badge in the header, the participant's own values (a buyer's) or costs (a seller's) and their profit under the order form, and the private state they read: a participant's group, side and induced-value schedule.",
     "resource": "smith62.json"
   }
 ]
