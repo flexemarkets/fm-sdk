@@ -252,6 +252,25 @@ class EventsSocketTest {
     }
 
     /**
+     * Once. The JDK's WebSocket answers a ping by itself, and the listener
+     * answered it again, so every server ping drew two pongs.
+     */
+    @Test
+    @Timeout(20)
+    void aPingIsAnsweredWithItsOwnPayload() throws Exception {
+        connected();
+        _Connection socket = server.connection(0);
+
+        socket.ping("are-you-there");
+        socket.send(message("ORDERS-UPDATE", "seq:3", "[]"));
+        next();
+
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (socket.pongs.isEmpty() && System.nanoTime() < deadline) Thread.sleep(10);
+        assertThat(socket.pongs).containsExactly("are-you-there");
+    }
+
+    /**
      * The heartbeat this client advertises is actually written. It once
      * advertised one and never sent it; the interval is shortened here so
      * that is visible in a test rather than in twenty-five seconds.
@@ -459,6 +478,7 @@ class EventsSocketTest {
         final Map<String, String> headers;
         private final Socket socket;
         private final List<String> received = new CopyOnWriteArrayList<>();
+        final List<String> pongs = new CopyOnWriteArrayList<>();
         final java.util.concurrent.atomic.AtomicInteger heartbeats = new java.util.concurrent.atomic.AtomicInteger();
         private final boolean answerConnect;
 
@@ -496,6 +516,7 @@ class EventsSocketTest {
                 byte[] payload = in.readNBytes((int) length);
                 for (int i = 0; i < payload.length; i++) payload[i] ^= mask[i % 4];
                 if (opcode == 0x8) { close(); return; }
+                if (opcode == 0xA) { pongs.add(new String(payload, StandardCharsets.UTF_8)); continue; }
                 if (opcode != 0x1 && opcode != 0x0) continue;
                 message.write(payload);
                 if (!fin) continue;
@@ -514,6 +535,10 @@ class EventsSocketTest {
         synchronized void sendFragmented(String first, String rest) throws IOException {
             _frame(0x1, first.getBytes(StandardCharsets.UTF_8));
             _frame(0x80, rest.getBytes(StandardCharsets.UTF_8));
+        }
+
+        synchronized void ping(String payload) throws IOException {
+            _frame(0x80 | 0x9, payload.getBytes(StandardCharsets.UTF_8));
         }
 
         /** Cut the connection without a close frame, as a dead network does. */

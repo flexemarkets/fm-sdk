@@ -21,7 +21,6 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.net.http.WebSocketHandshakeException;
-import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -490,13 +489,6 @@ public class Events implements Subscription {
                 // to the queue, so there is nothing here worth a thread.
                 _dispatchStompMessage(frame);
             }
-            webSocket.request(1);
-            return CompletableFuture.completedFuture(null);
-        }
-
-        @Override
-        public CompletionStage<?> onPing(WebSocket webSocket, ByteBuffer message) {
-            webSocket.sendPong(message);
             webSocket.request(1);
             return CompletableFuture.completedFuture(null);
         }
