@@ -92,10 +92,6 @@ function firstChild(orders: Order[], order: Order): Order | null {
   return null;
 }
 
-function isCreatedEarlier(order: Order, consumer: Order): boolean {
-  return order.id < consumer.id;
-}
-
 function isOlder(orders: Order[], o1: Order | null, o2: Order | null): boolean {
   if (o1 === null) return true;
   if (o2 === null) return false;
@@ -106,13 +102,11 @@ function isOlder(orders: Order[], o1: Order | null, o2: Order | null): boolean {
   if (!o1In && o2In) return true;
   if (o1In && !o2In) return false;
 
-  const o1Original = o1.id === o1.original ? o1 : findOrder(orders, o1.original);
-  const o2Original = o2.id === o2.original ? o2 : findOrder(orders, o2.original);
-
-  if (o1Original === null || o2Original === null) {
-    return o1Original === null;
-  }
-  return isCreatedEarlier(o1Original, o2Original);
+  // Age by the originals' ids, which every fragment carries: the exchange
+  // hands out ids as it matches, one order at a time per marketplace, so
+  // the earlier id was on the book first. The originals themselves need
+  // not be in the batch.
+  return o1.original < o2.original;
 }
 
 function isSupplierOlder(orders: Order[], order: Order | null): boolean {

@@ -119,3 +119,14 @@ test("a split order with no remainder in the batch does not rest", () => {
   const other = [row(30, 30, 30, 40), row(40, 40, 40, 30)];
   assert.equal(isResting([...other, split], split), false);
 });
+
+test("with neither original in the batch, only the side with the earlier original rests", () => {
+  // A child of 201 consumed by a child of 299, delivered without either root.
+  // The originals' ids are on the fragments, and the exchange hands ids out as
+  // it matches: 201 was on the book first, so one match is one trade.
+  const matched = row(205, 201, 203, 301);
+  const taker = row(301, 299, 302, 205);
+  const batch = [row(203, 201, 201, 0), matched, row(302, 299, 299, 0), taker];
+  assert.equal(isResting(batch, matched), true);
+  assert.equal(isResting(batch, taker), false);
+});
