@@ -350,11 +350,72 @@ class EventsSocketTest {
 
         server.connection(0).close();
         assertThat(next()).isInstanceOf(StreamDropped.class);
+        // The first, then one failed attempt (two handshakes: the JDK retries
+        // a dropped GET once). Events is now in its two-second wait.
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (server.handshakes() < 3 && System.nanoTime() < deadline) Thread.sleep(5);
         events.close();
         int attempts = server.handshakes();
 
         assertThat(queue.poll(4, TimeUnit.SECONDS)).as("nothing after the close").isNull();
         assertThat(server.handshakes()).as("no retry after the close").isEqualTo(attempts);
+    }
+
+    // --- through the client: the stream a caller opens with listen() or subscribe() ---
+
+    private HttpFlexemarkets client() throws IOException {
+        return new HttpFlexemarkets(HttpFlexemarkets.loadProperties(
+            "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl",
+            server.url().replace("ws://", "http://").replace("/api/events", "/api/marketplaces/7"),
+            "listen-test"));
+    }
+
+    private static boolean awaitClosedByClient(_Connection connection) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (!connection.closedByClient && System.nanoTime() < deadline) Thread.sleep(10);
+        return connection.closedByClient;
+    }
+
+    /**
+     * listen() opens the stream on the server's own events path, as this
+     * client, for the marketplace asked for; closing the client closes it.
+     */
+    @Test
+    @Timeout(30)
+    void listenStreamsTheMarketplaceAndTheClientsCloseEndsIt() throws Exception {
+        try (var fm = client()) {
+            fm.listen(MP, queue);
+            _Connection first = server.connection(0);
+            assertThat(first.headers.get(":request")).startsWith("GET /api/events ");
+            assertThat(first.received(0)).contains("marketplace-id:7").contains("agent-description:listen-test");
+
+            first.send(message("ORDERS-UPDATE", "seq:3", "[]"));
+            assertThat(((OrdersUpdate) next()).seq()).isEqualTo(3);
+
+            fm.close();
+            assertThat(awaitClosedByClient(first)).as("closing the client closes the stream").isTrue();
+        }
+    }
+
+    /** subscribe() is a stream of its own, closed by closing what it returns; reconnect() leaves it alone. */
+    @Test
+    @Timeout(30)
+    void aSubscriptionIsItsOwnStreamUntilItIsClosed() throws Exception {
+        try (var fm = client()) {
+            fm.Subscription subscription = fm.subscribe(MP, queue);
+            _Connection socket = server.connection(0);
+            assertThat(socket.received(0)).contains("marketplace-id:7");
+
+            socket.send(message("ORDERS-UPDATE", "seq:4", "[]"));
+            assertThat(((OrdersUpdate) next()).seq()).isEqualTo(4);
+
+            fm.reconnect();
+            Thread.sleep(200);
+            assertThat(server.connectionCount()).as("nothing was listening, so nothing reconnected").isEqualTo(1);
+
+            subscription.close();
+            assertThat(awaitClosedByClient(socket)).isTrue();
+        }
     }
 
     /**
@@ -444,6 +505,10 @@ class EventsSocketTest {
                 InputStream in = client.getInputStream();
                 OutputStream out = client.getOutputStream();
                 Map<String, String> headers = _readHeaders(in);
+                if (!headers.containsKey("sec-websocket-key")) {
+                    _signIn(client, in, out, headers);
+                    return;
+                }
                 handshakes++;
                 if (dropHandshakes.getAndUpdate(n -> Math.max(0, n - 1)) > 0) {
                     client.close();
@@ -469,6 +534,21 @@ class EventsSocketTest {
             }
         }
 
+        /** Anything that is not a WebSocket upgrade is the client signing in; answer with a token. */
+        private static void _signIn(Socket client, InputStream in, OutputStream out, Map<String, String> headers)
+                throws IOException {
+            in.readNBytes(Integer.parseInt(headers.getOrDefault("content-length", "0")));
+            byte[] token = """
+                {"token":"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl",
+                 "person":{"id":7,"accountId":1,"email":"dev@dev"},
+                 "account":{"id":1,"name":"dev"}}""".getBytes(StandardCharsets.UTF_8);
+            out.write(("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + token.length
+                    + "\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
+            out.write(token);
+            out.flush();
+            client.close();
+        }
+
         private static Map<String, String> _readHeaders(InputStream in) throws IOException {
             ByteArrayOutputStream head = new ByteArrayOutputStream();
             int matched = 0;
@@ -479,7 +559,9 @@ class EventsSocketTest {
                 matched = (b == "\r\n\r\n".charAt(matched)) ? matched + 1 : (b == '\r' ? 1 : 0);
             }
             Map<String, String> headers = new HashMap<>();
-            for (String line : head.toString(StandardCharsets.US_ASCII).split("\r\n")) {
+            String[] lines = head.toString(StandardCharsets.US_ASCII).split("\r\n");
+            headers.put(":request", lines[0]);
+            for (String line : lines) {
                 int colon = line.indexOf(':');
                 if (colon > 0) headers.put(line.substring(0, colon).trim().toLowerCase(Locale.ROOT), line.substring(colon + 1).trim());
             }
@@ -499,6 +581,8 @@ class EventsSocketTest {
         private final List<String> received = new CopyOnWriteArrayList<>();
         final List<String> pongs = new CopyOnWriteArrayList<>();
         final java.util.concurrent.atomic.AtomicInteger heartbeats = new java.util.concurrent.atomic.AtomicInteger();
+        /** Whether the client sent a close frame, which is how it says it is done. */
+        volatile boolean closedByClient;
         private final boolean answerConnect;
 
         _Connection(Socket socket, Map<String, String> headers, boolean answerConnect) {
@@ -534,7 +618,7 @@ class EventsSocketTest {
                 byte[] mask = (second & 0x80) != 0 ? in.readNBytes(4) : new byte[4];
                 byte[] payload = in.readNBytes((int) length);
                 for (int i = 0; i < payload.length; i++) payload[i] ^= mask[i % 4];
-                if (opcode == 0x8) { close(); return; }
+                if (opcode == 0x8) { closedByClient = true; close(); return; }
                 if (opcode == 0xA) { pongs.add(new String(payload, StandardCharsets.UTF_8)); continue; }
                 if (opcode != 0x1 && opcode != 0x0) continue;
                 message.write(payload);
