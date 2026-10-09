@@ -162,4 +162,33 @@ class OrdersTest {
         return new Order(null, null, id, id, supplier, null, OrderType.LIMIT, OrderSide.BUY,
                          1L, 1L, null, null, 1L, 1L, "ALPHA", 1L, null, null);
     }
+
+    // ---- isResting ---------------------------------------------------------
+
+    /** A row with every lineage field spelled out; side and size do not matter here. */
+    private static Order _row(long id, long original, long supplier, Long consumer, OrderType type) {
+        return new Order(null, null, id, original, supplier, consumer, type, OrderSide.BUY,
+                         1L, 100L, null, 8L, 1L, 300L, "STK", 11L, null, null);
+    }
+
+    /**
+     * Two fragments whose originals are not in the batch: a matched child of
+     * 201, consumed by a child of 299. Neither original can be found to
+     * compare by age, which Python and TypeScript answer as "the first is
+     * older" and Java answered with a NullPointerException out of a public
+     * method.
+     */
+    @Test
+    void fragmentsWhoseOriginalsAreNotInTheBatchDoNotThrow() {
+        Order matched = _row(205, 201, 203, 301L, OrderType.LIMIT);
+        Order[] batch = {
+            _row(203, 201, 201, 0L, OrderType.LIMIT),
+            matched,
+            _row(302, 299, 299, 0L, OrderType.LIMIT),
+            _row(301, 299, 302, 205L, OrderType.LIMIT),
+        };
+
+        assertThat(Orders.isResting(batch, matched)).isTrue();
+    }
+
 }
