@@ -101,3 +101,18 @@ test("a credential that is neither a file nor a token is refused before anything
     assert.deepEqual(requests, []);
   });
 });
+
+test("a connection knows whom it signed in as, and where", async () => {
+  await withServer(async (base) => {
+    const fm = await Flexemarkets.connect(TOKEN, `${base}/marketplaces/12/`, "token-test");
+    try {
+      assert.equal(fm.accountId, 1);
+      assert.equal(fm.accountName, "dev");
+      assert.equal(fm.userId, 7);
+      assert.equal(fm.endpointUrl, `${base}/marketplaces/12/`);
+      assert.equal(fm.endpointMarketplaceId, 12, "the trailing slash is not the id");
+    } finally {
+      await fm.close();
+    }
+  });
+});
