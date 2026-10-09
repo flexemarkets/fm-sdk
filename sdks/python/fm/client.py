@@ -1553,10 +1553,7 @@ class Flexemarkets:
             desks = [entry.desk for entry in self._shared_views.values()]
             self._shared_views.clear()
         for v in desks:
-            try:
-                v.close()
-            except Exception:
-                pass
+            v.close()
         self._http.close()
 
     def __enter__(self) -> Flexemarkets:
