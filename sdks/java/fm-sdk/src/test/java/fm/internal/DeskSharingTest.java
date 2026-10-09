@@ -103,6 +103,11 @@ class DeskSharingTest {
             return _limit(marketplaceId, 900L, side, units, price);
         }
 
+        @Override public Order submitCancel(long marketplaceId, long marketId, long originalId) {
+            submitted.add(marketplaceId + "/" + marketId + " CANCEL " + originalId);
+            return _limit(marketplaceId, 901L, OrderSide.BUY, 0, 0);
+        }
+
         void post(long marketplaceId, Object event) throws InterruptedException {
             streams.get(marketplaceId).put(event);
         }
@@ -296,4 +301,98 @@ class DeskSharingTest {
 
         assertThat(fm.unsubscribes).hasValue(2);
     }
+
+    private static final fm.model.Session OPEN =
+            new fm.model.Session(MP, 3L, 30L, 30L, fm.model.Session.STATE_OPEN, "s", null, null, null);
+    private static final fm.model.Holding HELD =
+            new fm.model.Holding(MP, 30L, 3L, 7L, "h", 5_000, 4_000, List.of());
+
+    /** Both legs of one trade on ALPHA: {@code restingId} rested, {@code aggressorId} took it. */
+    private static Order[] _trade(long restingId, long aggressorId, long price) {
+        java.time.Instant at = java.time.Instant.parse("2026-10-08T10:00:00Z");
+        return new Order[] {
+            new Order(at, at.plusSeconds(1), restingId, restingId, restingId, aggressorId, OrderType.LIMIT,
+                      OrderSide.SELL, 1, price, null, 900L, MP, 1L, ALPHA.symbol(), ALPHA.id(), null, null),
+            new Order(at.plusSeconds(1), at.plusSeconds(1), aggressorId, aggressorId, aggressorId, restingId,
+                      OrderType.LIMIT, OrderSide.BUY, 1, price, null, 901L, MP, 1L, ALPHA.symbol(), ALPHA.id(), null, null)
+        };
+    }
+
+    /** Every event a desk announces, as heard by one set of handlers. */
+    private static final class Heard {
+        final List<Object> events = new CopyOnWriteArrayList<>();
+
+        void on(Desk desk) {
+            desk.onSessionChange(events::add);
+            desk.onHoldingChange(events::add);
+            desk.onTrade(ALPHA.id(), events::add);
+            desk.onGap(events::add);
+            desk.onRecovery(events::add);
+        }
+
+        boolean has(Class<?> type) {
+            return events.stream().anyMatch(type::isInstance);
+        }
+    }
+
+    /** Post one of everything a desk announces: a session, a holding, a trade, a gap, a reconnect. */
+    private static void _postOneOfEach(Scripted fm) throws InterruptedException {
+        fm.post(MP, OPEN);
+        fm.post(MP, HELD);
+        fm.post(MP, new OrdersUpdate(_trade(101L, 102L, 500), 5L));
+        fm.post(MP, new OrdersUpdate(new Order[0], 41L));
+        fm.post(MP, new fm.event.StreamReconnected(MP));
+    }
+
+    /** What a handle reads and every handler it registers reach the shared desk. */
+    @Test
+    @Timeout(20)
+    void aHandlesReadsAndHandlersReachTheSharedDesk() throws Exception {
+        try (var fm = _connect(); Desk desk = fm.desk(MP)) {
+            var heard = new Heard();
+            heard.on(desk);
+
+            _postOneOfEach(fm);
+            _await("the recovery", () -> heard.has(fm.event.DeskRecovery.class));
+
+            assertThat(desk.session()).isEqualTo(OPEN);
+            assertThat(desk.holding()).isEqualTo(HELD);
+            assertThat(heard.events).hasSize(5).contains(OPEN, HELD,
+                new fm.event.GapEvent(MP, 6L, 41L), new fm.event.DeskRecovery(MP, true, null));
+            assertThat(heard.events).filteredOn(fm.model.Trade.class::isInstance)
+                .extracting(e -> ((fm.model.Trade) e).price()).containsExactly(500L);
+
+            desk.submitCancel(ALPHA.id(), 900L);
+            assertThat(fm.submitted).containsExactly(MP + "/" + ALPHA.id() + " CANCEL 900");
+        }
+    }
+
+    /**
+     * Closing a handle silences every kind of handler it registered, not just
+     * book handlers: each is tracked by the handle so it does not keep firing
+     * into a desk its owner has finished with.
+     */
+    @Test
+    @Timeout(20)
+    void closingAHandleSilencesEveryKindOfHandlerItRegistered() throws Exception {
+        try (var fm = _connect()) {
+            Desk a = fm.desk(MP);
+            Desk b = fm.desk(MP);
+            var heardByA = new Heard();
+            var heardByB = new Heard();
+            heardByA.on(a);
+            heardByB.on(b);
+
+            a.close();
+            _postOneOfEach(fm);
+
+            _await("b's recovery", () -> heardByB.has(fm.event.DeskRecovery.class));
+            assertThat(heardByB.events).hasSize(5);
+            assertThat(heardByA.events).isEmpty();
+            assertThatIllegalStateException().isThrownBy(a::session);
+            assertThatIllegalStateException().isThrownBy(a::holding);
+            b.close();
+        }
+    }
+
 }
