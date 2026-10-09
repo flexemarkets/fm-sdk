@@ -932,6 +932,9 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     public void listen(long marketplaceId, BlockingQueue<Object> queue) {
+        // One per connection: the stream this replaces is closed, not dropped
+        // with its socket, heartbeats and reconnects still running.
+        if (_events != null) _events.close();
         _events = new Events(_wsUrl(), _bearerToken, marketplaceId, _clientDescription(), MAPPER, queue);
         _events.connect();
     }

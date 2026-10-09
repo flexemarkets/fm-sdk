@@ -398,6 +398,28 @@ class EventsSocketTest {
     }
 
     /**
+     * listen() is one per connection: a second call replaces the first, and
+     * the first is closed. Dropped instead, it kept its socket, its heartbeat
+     * thread and its reconnects -- and kept delivering onto the old queue.
+     */
+    @Test
+    @Timeout(30)
+    void aSecondListenClosesTheFirstStream() throws Exception {
+        try (var fm = client()) {
+            fm.listen(MP, queue);
+            _Connection first = server.connection(0);
+            assertThat(first.awaitReceived(4)).isTrue();
+
+            fm.listen(MP, new LinkedBlockingQueue<>());
+
+            assertThat(awaitClosedByClient(first)).as("the first stream closed").isTrue();
+            _Connection second = server.connection(1);
+            assertThat(second.awaitReceived(4)).as("the second stream subscribes").isTrue();
+            assertThat(second.closedByClient).as("the second stream stays open").isFalse();
+        }
+    }
+
+    /**
      * A reconnect the caller asks for replaces the socket once, quietly. The
      * old socket's close is the client's own doing, not a drop: reporting it
      * as one queued a StreamDropped and set off a second reconnect that tore
