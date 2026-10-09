@@ -243,6 +243,3 @@ class BookIndex:
         """Clear every contained book — see :meth:`Book.clear`."""
         for book in self._books.values():
             book.clear()
-
-    def __getitem__(self, market_id: int) -> Book:
-        return self._books[market_id]
