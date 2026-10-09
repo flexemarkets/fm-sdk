@@ -5,12 +5,10 @@ import fm.model.Market;
 import fm.model.Order;
 import fm.model.Trade;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Stream;
 
 
 /**
@@ -68,23 +66,6 @@ public class TapeIndex {
      */
     public Tape get(long marketId) {
         return _trades.get(marketId);
-    }
-
-    /**
-     * Recent trade prices for every market, in market-id order.
-     *
-     * <p>The ordering is the contract: an MVO robot feeds this straight into an
-     * optimiser beside a payoff matrix whose rows are in the same order, and a
-     * different ordering would value the wrong market.
-     *
-     * @return one row of prices per market, ordered by market id
-     */
-    public long[][] mostRecentPrices() {
-        return _trades.values().stream()
-            .sorted(Comparator.comparingLong(Tape::marketId))
-            .map(Tape::mostRecentTrades)
-            .map(trades -> Stream.of(trades).mapToLong(Trade::price).toArray())
-            .toArray(long[][]::new);
     }
 
     /**

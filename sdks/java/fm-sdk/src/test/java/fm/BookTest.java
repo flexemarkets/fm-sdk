@@ -287,13 +287,11 @@ class BookTest {
         BookIndex books = new BookIndex(java.util.List.of(market));
         books.update(_toArray(_limitOf(market, 1L, OrderSide.BUY, 10, 100)));
 
-        assertThat(books.bestPrice(1L, OrderSide.BUY)).isEqualTo(100);
-        assertThat(books.hasValue(1L, OrderSide.BUY)).isTrue();
+        assertThat(books.get(1L).bestPrice(OrderSide.BUY)).isEqualTo(100);
+        assertThat(books.get(1L).hasValue(OrderSide.BUY)).isTrue();
 
-        // An absent market has nothing resting either way, so it is answered
-        // rather than raised -- the other two SDKs raise here.
-        assertThat(books.hasValue(99L, OrderSide.BUY)).isFalse();
-        assertThat(books.bestPrice(99L, OrderSide.BUY)).isEqualTo(-1);
+        // An absent market has no book, so it is answered rather than raised.
+        assertThat(books.get(99L)).isNull();
     }
 
     /**
@@ -315,8 +313,8 @@ class BookTest {
             _limitOf(alpha, 1L, OrderSide.BUY, 10, 100),
             _limitOf(beta,  2L, OrderSide.BUY, 10, 500)));
 
-        assertThat(books.bestPrice(alpha.id(), OrderSide.BUY)).isEqualTo(100L);
-        assertThat(books.bestPrice(beta.id(),  OrderSide.BUY)).isEqualTo(500L);
+        assertThat(books.get(alpha.id()).bestPrice(OrderSide.BUY)).isEqualTo(100L);
+        assertThat(books.get(beta.id()).bestPrice(OrderSide.BUY)).isEqualTo(500L);
     }
 
     // ---- a side-less order is refused, not guessed at ----------------------
