@@ -18,9 +18,11 @@ from typing import Any, Callable
 import pytest
 
 from fm.client import Flexemarkets
-from fm.events import OrdersUpdate
+from fm.desk import DeskRecovery, GapEvent
+from fm.events import OrdersUpdate, StreamReconnected
 from fm.snapshot import Snapshot
-from fm.types import Market, Order
+from fm.trades import Trade
+from fm.types import Holding, Market, Order, Session
 
 MP = 1
 ALPHA = 11
@@ -79,6 +81,11 @@ class Scripted(Flexemarkets):
                      units: int, price: int) -> Order:
         self.submitted.append(f"{marketplace_id}/{market_id} {side} {units}@{price}")
         return _limit(marketplace_id, 900, side, units, price)
+
+    def submit_cancel(self, marketplace_id: int, market_id: int,  # type: ignore[override]
+                      original_id: int) -> Order:
+        self.submitted.append(f"{marketplace_id}/{market_id} CANCEL {original_id}")
+        return Order(id=original_id + 1, original=original_id, type="CANCEL")
 
     def post(self, marketplace_id: int, event: object) -> None:
         self._streams[marketplace_id].put(event)
@@ -169,6 +176,12 @@ def test_a_closed_handle_refuses_use_while_the_others_carry_on(fm: Scripted) -> 
         a.on_book_change(ALPHA, lambda book: None)
     with pytest.raises(RuntimeError):
         a.submit_limit(ALPHA, "BUY", 1, 1000)
+    for use in (a.books, a.tapes, a.session, a.holding, lambda: a.tape(ALPHA),
+                lambda: a.on_session_change(print), lambda: a.on_holding_change(print),
+                lambda: a.on_trade(ALPHA, print), lambda: a.on_gap(print),
+                lambda: a.on_recovery(print), lambda: a.submit_cancel(ALPHA, 101)):
+        with pytest.raises(RuntimeError, match="Desk handle for marketplace 1 is closed"):
+            use()
     assert [m.id for m in b.markets] == [ALPHA]
     b.close()
 
@@ -198,7 +211,8 @@ def test_a_handle_reads_and_trades_through_the_shared_desk(fm: Scripted) -> None
         assert desk.tape(ALPHA) is not None
 
         desk.submit_limit(ALPHA, "SELL", 2, 1500)
-        assert fm.submitted == [f"{MP}/{ALPHA} SELL 2@1500"]
+        desk.submit_cancel(ALPHA, 900)
+        assert fm.submitted == [f"{MP}/{ALPHA} SELL 2@1500", f"{MP}/{ALPHA} CANCEL 900"]
 
 
 def test_closing_the_client_closes_the_desks_its_callers_left_open() -> None:
@@ -209,3 +223,58 @@ def test_closing_the_client_closes_the_desks_its_callers_left_open() -> None:
     client.close()
 
     assert client.unsubscribes == 2
+
+
+def _match(resting_id: int, aggressor_id: int) -> list[Order]:
+    resting = _limit(MP, resting_id, "SELL", 1, 1200)
+    aggressor = _limit(MP, aggressor_id, "BUY", 1, 1200)
+    resting.consumer, aggressor.consumer = aggressor_id, resting_id
+    return [resting, aggressor]
+
+
+def test_a_handle_reads_the_session_and_holding_the_desk_last_heard(fm: Scripted) -> None:
+    with fm.desk(MP) as desk:
+        assert desk.session() is None
+        assert desk.holding() is None
+
+        fm.post(MP, Session(marketplace_id=MP, id=30, original=30, state="PAUSED"))
+        fm.post(MP, Holding(marketplace_id=MP, session_id=30, cash=1500))
+        _await("both updates", lambda: desk.session() is not None and desk.holding() is not None)
+
+        assert desk.session().state == "PAUSED"
+        assert desk.holding().cash == 1500
+
+
+@pytest.mark.parametrize("register, kind", [
+    (lambda d, h: d.on_session_change(h), Session),
+    (lambda d, h: d.on_holding_change(h), Holding),
+    (lambda d, h: d.on_trade(ALPHA, h), Trade),
+    (lambda d, h: d.on_gap(h), GapEvent),
+    (lambda d, h: d.on_recovery(h), DeskRecovery),
+], ids=["session", "holding", "trade", "gap", "recovery"])
+def test_every_kind_of_handler_fires_through_a_handle_and_stops_when_it_closes(
+        fm: Scripted, register: Callable[[Any, Callable[[Any], None]], Any], kind: type) -> None:
+    """The book handler has its own test above; these are the other five."""
+    keeper = fm.desk(MP)
+    a = fm.desk(MP)
+    heard: list[Any] = []
+    register(a, heard.append)
+
+    def provoke(seq: int) -> None:
+        fm.post(MP, Session(marketplace_id=MP, id=30, original=30, state="OPEN"))
+        fm.post(MP, Holding(marketplace_id=MP, session_id=30, cash=1500))
+        fm.post(MP, OrdersUpdate(orders=_match(seq, seq + 1), seq=seq))  # a gap every time
+        fm.post(MP, StreamReconnected(marketplace_id=MP))
+
+    provoke(50)
+    _await("the handler", lambda: heard)
+    assert isinstance(heard[0], kind)
+
+    a.close()
+    count = len(heard)
+    provoke(100)
+    fm.post(MP, OrdersUpdate(orders=[_limit(MP, 300, "SELL", 1, 9000)], seq=101))
+    _await("the marker delta", lambda: keeper.book(ALPHA).best_sell_price() == 9000)
+
+    assert len(heard) == count, "a handler fired after its handle closed"
+    keeper.close()
