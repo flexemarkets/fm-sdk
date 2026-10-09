@@ -1503,9 +1503,15 @@ class Flexemarkets:
         if self._event_listener is not None:
             self._event_listener.reconnect()
 
-    def desk(self, marketplace_id: int) -> "Desk":
+    def desk(self, marketplace_id: int, *, refuse_locally: bool = True) -> "Desk":
         """Open a stateful :class:`~fm.desk.Desk` on this
         marketplace.
+
+        ``submit_limit`` on the returned handle refuses, without sending, an
+        order the desk knows fm-server would refuse -- a session that is not
+        open, a side the holding does not grant -- with
+        :class:`~fm.exceptions.OrderRefusedLocallyError`. ``refuse_locally=False``
+        sends every order and leaves the answer to the server.
 
         Multiple calls for the same ``marketplace_id`` share a single
         underlying desk + WS subscription + materialized state within
@@ -1529,7 +1535,7 @@ class Flexemarkets:
             entry.ref_count += 1
             shared = entry.desk
         return DeskHandle(
-            shared, lambda: self._release_shared_view(marketplace_id)
+            shared, lambda: self._release_shared_view(marketplace_id), refuse_locally
         )
 
     def _release_shared_view(self, marketplace_id: int) -> None:

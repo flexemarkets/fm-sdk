@@ -23,6 +23,7 @@ log = logging.getLogger(__name__)
 from .events import NO_SEQ, OrdersUpdate, FrameUnreadable, StreamReconnected, StreamDropped
 from .orderbook import Book, BookIndex
 from .trades import TapeIndex, Trade, Tape
+from .exceptions import OrderRefusedLocallyError
 from .types import Holding, Market, Order, Session
 
 if TYPE_CHECKING:
@@ -325,11 +326,44 @@ class Desk:
 
     # -- write-side pass-throughs -----------------------------------------
 
-    def submit_limit(self, market_id: int, side: str, units: int, price: int) -> Order:
+    def submit_limit(
+        self, market_id: int, side: str, units: int, price: int, *, refuse_locally: bool = True
+    ) -> Order:
+        """Submit a limit order, unless the desk already knows fm-server would refuse it.
+
+        A session the desk holds that is not OPEN, or a position in the market
+        whose grant does not allow the side, is refused here with
+        :class:`~fm.exceptions.OrderRefusedLocallyError` and never sent: robots
+        that kept trading after the close sent tens of thousands of orders a
+        day for the server to refuse one by one. What the desk does not know --
+        no session or holding yet, no position in the market -- goes to the
+        server, which has the last word. ``refuse_locally=False`` sends it
+        regardless.
+        """
         self._ensure_open()
+        if refuse_locally:
+            self._refuse_locally(market_id, side)
         return self._flexemarkets.submit_limit(
             self.marketplace_id, market_id, side, units, price
         )
+
+    def _refuse_locally(self, market_id: int, side: str) -> None:
+        session = self._session
+        if session is not None and session.state is not None \
+                and session.state.upper() != Session.STATE_OPEN:
+            raise OrderRefusedLocallyError(
+                "SESSION_CLOSED",
+                f"Not sent: session {session.id} is {session.state}, not OPEN.",
+            )
+        security = self._holding.security(market_id) if self._holding is not None else None
+        if security is None:
+            return
+        granted = {"BUY": security.can_buy, "SELL": security.can_sell}.get(str(side).upper())
+        if granted is False:
+            raise OrderRefusedLocallyError(
+                "ORDER_NOT_ALLOWED",
+                f"Not sent: your holding does not grant {str(side).upper()} in market {market_id}.",
+            )
 
     def submit_cancel(self, market_id: int, original_id: int) -> Order:
         self._ensure_open()
@@ -555,9 +589,10 @@ class DeskHandle:
     doesn't keep firing into stale state after the handle is gone.
     """
 
-    def __init__(self, shared: Desk, on_close: Callable[[], None]):
+    def __init__(self, shared: Desk, on_close: Callable[[], None], refuse_locally: bool = True):
         self._shared = shared
         self._on_close = on_close
+        self._refuse_locally = refuse_locally
         self._my_subscriptions: list[Subscription] = []
         self._closed = False
 
@@ -634,7 +669,9 @@ class DeskHandle:
 
     def submit_limit(self, market_id: int, side: str, units: int, price: int) -> Order:
         self._check()
-        return self._shared.submit_limit(market_id, side, units, price)
+        return self._shared.submit_limit(
+            market_id, side, units, price, refuse_locally=self._refuse_locally
+        )
 
     def submit_cancel(self, market_id: int, original_id: int) -> Order:
         self._check()

@@ -290,3 +290,74 @@ def test_a_handle_closed_after_its_client_releases_nothing_twice() -> None:
     handle.close()
 
     assert client.unsubscribes == 1
+
+
+# -- refusing locally what the server would refuse ---------------------------
+
+def _session(state: str) -> Session:
+    return Session(marketplace_id=MP, id=30, original=30, state=state)
+
+
+def _holding(can_buy: bool, can_sell: bool) -> Holding:
+    from fm.types import Security
+    return Holding(marketplace_id=MP, session_id=30, owner_id=7, cash=10_000, available_cash=10_000,
+                   securities=[Security(market_id=ALPHA, units=5, available_units=5,
+                                        can_buy=can_buy, can_sell=can_sell)])
+
+
+def test_an_order_into_a_session_that_is_not_open_is_refused_and_not_sent(fm: Scripted) -> None:
+    from fm.exceptions import InvalidArgumentError, OrderRefusedLocallyError
+    with fm.desk(MP) as desk:
+        fm.post(MP, _session("CLOSED"))
+        _await("the session to land", lambda: desk.session() is not None)
+
+        with pytest.raises(OrderRefusedLocallyError, match="session 30 is CLOSED") as refused:
+            desk.submit_limit(ALPHA, "BUY", 1, 1000)
+        assert refused.value.reason == "SESSION_CLOSED"
+        assert isinstance(refused.value, InvalidArgumentError), "caught where the server's 400 is"
+        assert fm.submitted == []
+
+
+def test_a_side_the_holding_does_not_grant_is_refused_and_the_other_is_sent(fm: Scripted) -> None:
+    from fm.exceptions import OrderRefusedLocallyError
+    with fm.desk(MP) as desk:
+        fm.post(MP, _session("OPEN"))
+        fm.post(MP, _holding(can_buy=True, can_sell=False))
+        _await("the holding to land", lambda: desk.holding() is not None)
+
+        with pytest.raises(OrderRefusedLocallyError, match="does not grant SELL") as refused:
+            desk.submit_limit(ALPHA, "sell", 1, 1000)
+        assert refused.value.reason == "ORDER_NOT_ALLOWED"
+
+        desk.submit_limit(ALPHA, "BUY", 1, 1000)
+        assert fm.submitted == [f"{MP}/{ALPHA} BUY 1@1000"]
+
+
+def test_what_the_desk_does_not_know_goes_to_the_server(fm: Scripted) -> None:
+    """No session or holding yet, or no position in the market: the server decides."""
+    with fm.desk(MP) as desk:
+        desk.submit_limit(ALPHA, "SELL", 1, 1000)
+        fm.post(MP, _session("OPEN"))
+        fm.post(MP, Holding(marketplace_id=MP, session_id=30, owner_id=7))
+        _await("the holding to land", lambda: desk.holding() is not None)
+        desk.submit_limit(ALPHA, "SELL", 1, 1000)
+        assert len(fm.submitted) == 2
+
+
+def test_refuse_locally_false_sends_every_order(fm: Scripted) -> None:
+    with fm.desk(MP, refuse_locally=False) as desk:
+        fm.post(MP, _session("CLOSED"))
+        fm.post(MP, _holding(can_buy=False, can_sell=False))
+        _await("the holding to land", lambda: desk.holding() is not None)
+
+        desk.submit_limit(ALPHA, "BUY", 1, 1000)
+        assert fm.submitted == [f"{MP}/{ALPHA} BUY 1@1000"]
+
+
+def test_a_cancel_is_never_refused_locally(fm: Scripted) -> None:
+    """A manager may cancel in any state, and the desk cannot tell a manager."""
+    with fm.desk(MP) as desk:
+        fm.post(MP, _session("CLOSED"))
+        _await("the session to land", lambda: desk.session() is not None)
+        desk.submit_cancel(ALPHA, 900)
+        assert fm.submitted == [f"{MP}/{ALPHA} CANCEL 900"]
