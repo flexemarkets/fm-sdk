@@ -23,9 +23,10 @@ import fm.role.*;
  * <p>Everything a desk does not touch throws, so a test that wanders into an
  * unmodelled call is told rather than quietly handed a null. What a desk does
  * touch -- {@code markets}, {@code activeOrders}, {@code recentTrades} and
- * {@code subscribe} -- is scriptable, and {@link #post} hands the test the
- * queue the desk is draining, which is the only way to drive it: the desk
- * dispatches on its own virtual thread.
+ * {@code subscribe} -- is scriptable, the two submits it passes on are
+ * recorded, and {@link #post} hands the test the queue the desk is draining,
+ * which is the only way to drive it: the desk dispatches on its own virtual
+ * thread.
  */
 class FakeFlexemarkets implements Flexemarkets {
 
@@ -108,6 +109,25 @@ class FakeFlexemarkets implements Flexemarkets {
         return () -> _queue.set(null);
     }
 
+    private final List<String> _submitted = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /** What the desk sent on, each as {@code marketplace/market what}. */
+    List<String> submitted() {
+        return List.copyOf(_submitted);
+    }
+
+    @Override public Order submitLimit(long mp, long marketId, OrderSide side, long units, long price) {
+        _submitted.add(mp + "/" + marketId + " " + side + " " + units + "@" + price);
+        return new Order(null, null, 900L, 900L, 900L, null, OrderType.LIMIT, side, units, price,
+                         null, null, mp, 1L, null, marketId, null, null);
+    }
+
+    @Override public Order submitCancel(long mp, long marketId, long originalId) {
+        _submitted.add(mp + "/" + marketId + " CANCEL " + originalId);
+        return new Order(null, null, 901L, 901L, originalId, null, OrderType.CANCEL, OrderSide.BUY, 0, 0,
+                         null, null, mp, 1L, null, marketId, null, null);
+    }
+
     @Override public void close() { }
 
     // --- everything else: a test that reaches here is told ------------------
@@ -143,9 +163,7 @@ class FakeFlexemarkets implements Flexemarkets {
     @Override public List<Person> users() { throw _no("users"); }
     @Override public List<ClientConnection> connections(long id) { throw _no("connections"); }
 
-    @Override public Order submitLimit(long mp, long marketId, OrderSide side, long units, long price) { throw _no("submitLimit"); }
     @Override public Order submitLimit(long mp, long marketId, OrderSide side, long units, long price, Long ownerTargetId) { throw _no("submitLimit"); }
-    @Override public Order submitCancel(long mp, long marketId, long originalId) { throw _no("submitCancel"); }
     @Override public Order submitMarket(long mp, long marketId, OrderSide side, long units) { throw _no("submitMarket"); }
 
     @Override public Session openSession(long id) { throw _no("openSession"); }

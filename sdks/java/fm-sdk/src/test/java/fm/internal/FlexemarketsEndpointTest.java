@@ -141,4 +141,13 @@ public class FlexemarketsEndpointTest {
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("marketplace id, file, or URL");
     }
+
+    /** A client that does not say what it is is still named, as unspecified rather than as "null". */
+    @Test
+    public void aClientWithoutADescriptionIsUnspecified() throws Exception {
+        var properties = HttpFlexemarkets.loadProperties(null, "2540", null);
+
+        assertThat(properties.getProperty("client-description")).isEqualTo("Unspecified client");
+    }
+
 }

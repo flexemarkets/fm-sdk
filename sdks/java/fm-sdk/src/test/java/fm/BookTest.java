@@ -287,13 +287,11 @@ class BookTest {
         BookIndex books = new BookIndex(java.util.List.of(market));
         books.update(_toArray(_limitOf(market, 1L, OrderSide.BUY, 10, 100)));
 
-        assertThat(books.bestPrice(1L, OrderSide.BUY)).isEqualTo(100);
-        assertThat(books.hasValue(1L, OrderSide.BUY)).isTrue();
+        assertThat(books.get(1L).bestPrice(OrderSide.BUY)).isEqualTo(100);
+        assertThat(books.get(1L).hasValue(OrderSide.BUY)).isTrue();
 
-        // An absent market has nothing resting either way, so it is answered
-        // rather than raised -- the other two SDKs raise here.
-        assertThat(books.hasValue(99L, OrderSide.BUY)).isFalse();
-        assertThat(books.bestPrice(99L, OrderSide.BUY)).isEqualTo(-1);
+        // An absent market has no book, so it is answered rather than raised.
+        assertThat(books.get(99L)).isNull();
     }
 
     /**
@@ -315,8 +313,8 @@ class BookTest {
             _limitOf(alpha, 1L, OrderSide.BUY, 10, 100),
             _limitOf(beta,  2L, OrderSide.BUY, 10, 500)));
 
-        assertThat(books.bestPrice(alpha.id(), OrderSide.BUY)).isEqualTo(100L);
-        assertThat(books.bestPrice(beta.id(),  OrderSide.BUY)).isEqualTo(500L);
+        assertThat(books.get(alpha.id()).bestPrice(OrderSide.BUY)).isEqualTo(100L);
+        assertThat(books.get(beta.id()).bestPrice(OrderSide.BUY)).isEqualTo(500L);
     }
 
     // ---- a side-less order is refused, not guessed at ----------------------
@@ -356,6 +354,35 @@ class BookTest {
         assertThatExceptionOfType(IllegalArgumentException.class).isThrownBy(() -> book.hasValue(null));
         assertThatExceptionOfType(IllegalArgumentException.class).isThrownBy(() -> book.bestPrice(null));
         assertThatExceptionOfType(IllegalArgumentException.class).isThrownBy(() -> book.bestUnits(null));
+    }
+
+
+    /**
+     * A CANCEL that arrives without the limit it consumed still takes that
+     * limit's units off. The pair is what fm-server broadcasts, and the book
+     * removes only once for it; alone, the cancel is the only row that says
+     * the units went. Two orders share the level so that removing nothing and
+     * removing the whole level both read wrong.
+     */
+    @Test
+    void aCancelArrivingWithoutItsLimitStillTakesItsUnitsOff() {
+        var market = _market(1, "N5");
+        var book = new Book(market);
+        var cancelled = _limitOf(market, 1, OrderSide.BUY, 5, 900);
+        book.update(_toArray(cancelled, _limitOf(market, 2, OrderSide.BUY, 3, 900)));
+        assertThat(book.bestBuyUnits()).isEqualTo(8L);
+
+        Order[] pair = _cancelSet(cancelled);
+        book.update(_toArray(pair[1]));
+
+        assertThat(book.bestBuyPrice()).isEqualTo(900L);
+        assertThat(book.bestBuyUnits()).as("the other order's three").isEqualTo(3L);
+    }
+
+    @Test
+    void aBookIsForTheMarketItWasMadeFor() {
+        var market = _market(4, "N5");
+        assertThat(new Book(market).market()).isSameAs(market);
     }
 
 }

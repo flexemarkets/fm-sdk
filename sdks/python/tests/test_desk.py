@@ -16,6 +16,7 @@ instead of failing.
 
 from __future__ import annotations
 
+import logging
 import queue
 import threading
 import time
@@ -27,7 +28,7 @@ import pytest
 from fm.desk import Desk, DeskRecovery
 from fm.orderbook import Book
 from fm.snapshot import Snapshot
-from fm.events import OrdersUpdate, StreamReconnected
+from fm.events import FrameUnreadable, OrdersUpdate, StreamDropped, StreamReconnected
 from fm.types import Holding, Market, Order, Session
 
 MP = 7
@@ -60,6 +61,8 @@ class FakeClient:
         # and those made for every market at once.
         self.market_trade_reads: list[str] = []
         self.marketplace_trade_reads = 0
+        self.cancels: list[str] = []
+        self.stream_closes = 0
 
     def next_active_orders(self, snapshot: Snapshot) -> None:
         """What the next seed reads, so a reseed can differ from the first."""
@@ -86,12 +89,17 @@ class FakeClient:
         return Snapshot(body=[o for o in self._recent.body if o.market_id == market_id],
                         as_of_seq=self._recent.as_of_seq)
 
+    def submit_cancel(self, marketplace_id: int, market_id: int, original_id: int) -> Order:
+        self.cancels.append(f"{marketplace_id}/{market_id} {original_id}")
+        return Order(id=original_id + 1, original=original_id, type="CANCEL")
+
     def _connect_events(self, marketplace_id: int, q: "queue.Queue[object]") -> Any:
         self._queue = q
+        fake = self
 
         class _Events:
             def close(self) -> None:
-                pass
+                fake.stream_closes += 1
 
         return _Events()
 
@@ -362,5 +370,183 @@ def test_a_handler_that_raises_does_not_stop_the_desk():
 
         _await("the update after the raising handlers", lambda: desk.book(alpha.id).best_buy_price() == 1100)
         assert desk.holding().cash == 1500
+    finally:
+        desk.close()
+
+
+def test_a_closed_desk_refuses_every_read_books_included():
+    """close() promises that accessors raise afterwards. books() alone did
+    not: it answered with the books as the last frame left them, frozen and
+    looking current -- which is what a handle reads once Flexemarkets.close()
+    has closed the desk under it."""
+    alpha = _market(1, "ALPHA")
+    fake = FakeClient([alpha], Snapshot(body=[_limit(alpha, 101, "BUY", 5, 1000)], as_of_seq=1),
+                      Snapshot(body=[], as_of_seq=1))
+    desk = _desk(fake, [alpha])
+    desk.close()
+
+    for read in (desk.books, desk.tapes, desk.session, desk.holding,
+                 lambda: desk.book(alpha.id), lambda: desk.tape(alpha.id)):
+        with pytest.raises(RuntimeError, match="Desk for marketplace 7 is closed"):
+            read()
+
+
+def _empty_desk(*markets: Market) -> tuple[FakeClient, Desk]:
+    fake = FakeClient(list(markets), Snapshot(body=[], as_of_seq=1), Snapshot(body=[], as_of_seq=1))
+    return fake, _desk(fake, list(markets))
+
+
+def test_a_trade_reaches_its_markets_trade_handlers_before_its_book_handlers():
+    """on_trade had never fired in a test: the one test that registered it
+    checked that it stayed silent."""
+    alpha, beta = _market(1, "ALPHA"), _market(2, "BETA")
+    fake, desk = _empty_desk(alpha, beta)
+    try:
+        heard: list[tuple[str, Any]] = []
+        desk.on_trade(alpha.id, lambda trade: heard.append(("trade", trade)))
+        desk.on_trade(beta.id, lambda trade: heard.append(("beta trade", trade)))
+        desk.on_book_change(alpha.id, lambda book: heard.append(("book", book.market_id)))
+
+        fake.post(OrdersUpdate(orders=_trade(alpha, 101, 102, 500), seq=2))
+        _await("both handlers", lambda: len(heard) >= 2)
+
+        assert [kind for kind, _ in heard] == ["trade", "book"]
+        trade = heard[0][1]
+        assert (trade.resting.id, trade.aggressor.id, trade.price) == (101, 102, 500)
+    finally:
+        desk.close()
+
+
+def test_a_handler_for_a_market_the_desk_does_not_keep_never_fires():
+    alpha, stranger = _market(1, "ALPHA"), _market(99, "ALPHA")
+    fake, desk = _empty_desk(alpha)
+    try:
+        heard: list[Any] = []
+        desk.on_book_change(stranger.id, heard.append)
+
+        fake.post(OrdersUpdate(orders=[_limit(stranger, 201, "BUY", 1, 900)], seq=2))
+        fake.post(OrdersUpdate(orders=[_limit(alpha, 102, "BUY", 1, 950)], seq=3))
+        _await("the marker delta", lambda: desk.book(alpha.id).best_buy_price() == 950)
+
+        assert heard == []
+    finally:
+        desk.close()
+
+
+@pytest.mark.parametrize("register, event", [
+    (lambda d, h: d.on_session_change(h), Session(marketplace_id=MP, id=30, original=30, state="OPEN")),
+    (lambda d, h: d.on_holding_change(h), Holding(marketplace_id=MP, session_id=30, cash=1500)),
+    (lambda d, h: d.on_book_change(1, h), OrdersUpdate(orders=[], seq=2)),
+    (lambda d, h: d.on_trade(1, h), None),
+    (lambda d, h: d.on_gap(h), OrdersUpdate(orders=[], seq=50)),
+    (lambda d, h: d.on_recovery(h), StreamReconnected(marketplace_id=MP)),
+], ids=["session", "holding", "book", "trade", "gap", "recovery"])
+def test_a_cancelled_handler_hears_nothing_and_cancelling_twice_is_harmless(register, event):
+    alpha = _market(1, "ALPHA")
+    fake, desk = _empty_desk(alpha)
+    try:
+        heard: list[Any] = []
+        cancel = register(desk, heard.append)
+        cancel()
+        cancel()
+
+        if event is None:
+            event = OrdersUpdate(orders=_trade(alpha, 101, 102, 500), seq=2)
+        fake.post(event)
+        fake.post(OrdersUpdate(orders=[_limit(alpha, 300, "SELL", 1, 9000)], seq=60))
+        _await("the marker delta", lambda: desk.book(alpha.id).best_sell_price() == 9000)
+
+        assert heard == []
+    finally:
+        desk.close()
+
+
+def test_a_gap_or_recovery_handler_that_raises_does_not_stop_the_next_one():
+    alpha = _market(1, "ALPHA")
+    fake, desk = _empty_desk(alpha)
+    try:
+        def explode(_event: object) -> None:
+            raise ValueError("a bug in the caller's handler")
+
+        gaps: list[Any] = []
+        recoveries: list[DeskRecovery] = []
+        desk.on_gap(explode)
+        desk.on_gap(gaps.append)
+        desk.on_recovery(explode)
+        desk.on_recovery(recoveries.append)
+
+        fake.post(OrdersUpdate(orders=[], seq=9))
+        fake.post(StreamReconnected(marketplace_id=MP))
+        _await("the second recovery handler", lambda: recoveries)
+
+        assert len(gaps) == 1
+        assert recoveries[0].success is True
+    finally:
+        desk.close()
+
+
+def test_a_dropped_stream_and_an_unreadable_frame_are_logged_and_the_desk_carries_on(caplog):
+    alpha = _market(1, "ALPHA")
+    fake, desk = _empty_desk(alpha)
+    try:
+        with caplog.at_level(logging.WARNING, logger="fm.desk"):
+            fake.post(StreamDropped(exception=OSError("connection reset")))
+            fake.post(FrameUnreadable(command="ERROR", headers={}, body="no such marketplace",
+                                      exception=RuntimeError("STOMP ERROR")))
+            fake.post(OrdersUpdate(orders=[_limit(alpha, 102, "BUY", 1, 950)], seq=2))
+            _await("a delta after both", lambda: desk.book(alpha.id).best_buy_price() == 950)
+
+        assert "WS transport error on marketplace 7: connection reset" in caplog.text
+        assert "WS error on marketplace 7: ERROR no such marketplace" in caplog.text
+        assert fake.active_reads == 1, "a drop the listener restores is not this layer's to reseed"
+    finally:
+        desk.close()
+
+
+def test_a_desk_cancels_through_its_client_on_its_own_marketplace():
+    alpha = _market(1, "ALPHA")
+    fake, desk = _empty_desk(alpha)
+    try:
+        cancel = desk.submit_cancel(alpha.id, 101)
+
+        assert fake.cancels == ["7/1 101"]
+        assert cancel.original == 101
+    finally:
+        desk.close()
+
+
+def test_closing_a_desk_twice_closes_its_stream_once():
+    alpha = _market(1, "ALPHA")
+    fake, desk = _empty_desk(alpha)
+
+    desk.close()
+    desk.close()
+
+    assert fake.stream_closes == 1
+
+
+def test_a_desk_used_as_a_context_manager_closes_on_leaving_it():
+    alpha = _market(1, "ALPHA")
+    fake, opened = _empty_desk(alpha)
+
+    with opened as desk:
+        assert desk is opened
+        assert fake.stream_closes == 0
+
+    assert fake.stream_closes == 1
+    with pytest.raises(RuntimeError, match="closed"):
+        desk.book(alpha.id)
+
+
+def test_a_desk_that_has_heard_nothing_for_a_while_still_applies_the_next_delta():
+    """The dispatcher wakes every second to see whether the desk has closed.
+    Waking to an empty queue is not the end of the stream."""
+    alpha = _market(1, "ALPHA")
+    fake, desk = _empty_desk(alpha)
+    try:
+        time.sleep(1.2)
+        fake.post(OrdersUpdate(orders=[_limit(alpha, 102, "BUY", 1, 950)], seq=2))
+
+        _await("the delta after a quiet spell", lambda: desk.book(alpha.id).best_buy_price() == 950)
     finally:
         desk.close()

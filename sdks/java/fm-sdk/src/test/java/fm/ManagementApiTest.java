@@ -113,6 +113,8 @@ class ManagementApiTest {
                 // An order keeps its own id; only the symbol is absent.
                 case "GET /api/v1/marketplaces/1/orders?state=ACTIVE&symbol=STK" -> _respond(exchange, 200,
                         "[{\"id\":11,\"original\":7,\"units\":5,\"price\":950}]");
+                case "GET /api/v1/marketplaces/1/orders?cancelled=false" -> _respond(exchange, 200,
+                        "[{\"id\":13,\"original\":13,\"sessionId\":301}]");
                 case "GET /api/v1/marketplaces/1/orders?sessions=300" -> _respond(exchange, 200,
                         "[{\"id\":12,\"original\":12,\"sessionId\":300}]");
                 // The traded legs answer with the trade id in "original" and
@@ -673,4 +675,52 @@ class ManagementApiTest {
                 .isNotInstanceOf(Management.class)
                 .isNotInstanceOf(Flexemarkets.class);
     }
+
+    /** As with holdings: no sessions named means the current session, asked for with no filter. */
+    @Test
+    void anEmptyOrdersFilterFallsBackToTheUnfilteredRoute() throws Exception {
+        List<Order> orders;
+        try (Flexemarkets fm = _connect()) {
+            orders = fm.orders(1, List.of());
+        }
+
+        assertThat(orders).extracting(Order::id).containsExactly(13L);
+        assertThat(_requests).containsExactly("GET /api/v1/marketplaces/1/orders?cancelled=false");
+    }
+
+    /** A file that cannot be read is named, and nothing is sent. */
+    @Test
+    void aCsvThatCannotBeReadIsNamedAndNothingIsSent(@TempDir Path dir) throws Exception {
+        var missing = dir.resolve("absent.csv");
+
+        try (Flexemarkets fm = _connect()) {
+            org.assertj.core.api.Assertions.assertThatExceptionOfType(ApiException.class)
+                .isThrownBy(() -> fm.uploadHoldings(1, missing))
+                .withMessage("Failed to read " + missing);
+        }
+        assertThat(_requests).isEmpty();
+    }
+
+    /**
+     * A widget's content is the caller's map, so it can hold something JSON
+     * cannot carry -- here a map that contains itself. That is reported as
+     * the request it is, before anything is sent, and not as a failure of the
+     * response.
+     */
+    @Test
+    void aWidgetThatCannotBeWrittenAsJsonIsRefusedBeforeSending() throws Exception {
+        var content = new java.util.HashMap<String, Object>();
+        content.put("kind", "text");
+        content.put("self", content);
+        var unwritable = List.of(new WidgetPush(new WidgetTarget("MARKETPLACE", null), "score", "Score", null, null,
+                content));
+
+        try (Flexemarkets fm = _connect()) {
+            org.assertj.core.api.Assertions.assertThatExceptionOfType(ApiException.class)
+                .isThrownBy(() -> fm.pushWidgets(1, unwritable))
+                .withMessage("Failed to serialize request body");
+        }
+        assertThat(_requests).isEmpty();
+    }
+
 }

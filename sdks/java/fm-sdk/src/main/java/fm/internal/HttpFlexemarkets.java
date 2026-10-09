@@ -1445,19 +1445,15 @@ public class HttpFlexemarkets implements Flexemarkets {
             // so every sign-in hashed it twice -- two of the few concurrent
             // hashes fm-server allows during a class's sign-in burst.
             var username = account + "|" + email;
-            var body = Map.of("username", username, "password", password);
-            try {
-                var json = MAPPER.writeValueAsString(body);
-                request = HttpRequest.newBuilder()
-                    .uri(URI.create(endpoint))
-                    .header("Content-Type", "application/json")
-                    .header("Accept", "application/json")
-                    .header("User-Agent", FM_SDK_CLIENT)
-                    .POST(HttpRequest.BodyPublishers.ofString(json))
-                    .build();
-            } catch (JacksonException e) {
-                throw new ApiException("Failed to serialize sign-in body", e);
-            }
+            // Two strings in a map: there is nothing here Jackson cannot write.
+            var json = MAPPER.writeValueAsString(Map.of("username", username, "password", password));
+            request = HttpRequest.newBuilder()
+                .uri(URI.create(endpoint))
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+                .header("User-Agent", FM_SDK_CLIENT)
+                .POST(HttpRequest.BodyPublishers.ofString(json))
+                .build();
         }
 
         try {
@@ -1555,7 +1551,6 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     static long resourceId(String endpoint) {
-        if (endpoint == null) throw new NullPointerException("Endpoint is null.");
         var segments = endpoint.split("/");
         return Long.parseLong(segments[segments.length - 1]);
     }
@@ -1652,11 +1647,13 @@ public class HttpFlexemarkets implements Flexemarkets {
         return message;
     }
 
-    /** Scheme and authority: where the request went, without the path. */
+    /**
+     * Scheme and authority: where the request went, without the path. An
+     * HttpRequest always has both -- its builder refuses a URI without an
+     * http(s) scheme and a host.
+     */
     private static String origin(URI uri) {
-        return null == uri.getScheme() || null == uri.getRawAuthority()
-                ? uri.toString()
-                : uri.getScheme() + "://" + uri.getRawAuthority();
+        return uri.getScheme() + "://" + uri.getRawAuthority();
     }
 
     /**

@@ -101,6 +101,16 @@ class EndpointsTest {
         assertThat(Endpoints.resolve("  loopback:1744  ")).isEqualTo("loopback:1744");
     }
 
+    /**
+     * A form that cannot even be a path -- a NUL byte makes Path.of throw --
+     * is passed through like any other unrecognised form, not raised as an
+     * InvalidPathException from inside endpoint resolution.
+     */
+    @Test
+    void aFormThatCannotBeAPathIsPassedThroughToo() throws IOException {
+        assertThat(Endpoints.resolve("loopback:\u00001744")).isEqualTo("loopback:\u00001744");
+    }
+
     @Test
     void nothingResolvesToNothing() throws IOException {
         assertThat(Endpoints.resolve(null)).isNull();

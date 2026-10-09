@@ -47,6 +47,8 @@ class SubmitMarketTest {
     /** Each order request as {@code METHOD uri body}. */
     private final List<String> _submitted = new ArrayList<>();
     private final List<String> _stray = new ArrayList<>();
+    /** What the cancel's DELETE answers with. */
+    private volatile int _cancelStatus = 200;
 
     /** priceMinimum 110, tick 25 — so the legal prices are 110, 135, 160, 185. */
     private String _marketsJson = """
@@ -77,7 +79,7 @@ class SubmitMarketTest {
                 _respond(exchange, 200, "{\"id\":42,\"marketplaceId\":1,\"marketId\":11}");
             } else if ("DELETE".equals(method) && uri.startsWith("/api/v1/marketplaces/1/orders/")) {
                 _submitted.add(method + " " + uri + " " + _body(exchange));
-                _respond(exchange, 200, """
+                _respond(exchange, _cancelStatus, _cancelStatus != 200 ? "{\"message\":\"exchange closed\"}" : """
                     {"id":43,"original":42,"consumer":42,"type":"CANCEL","marketplaceId":1,"marketId":11}""");
             } else {
                 _stray.add(method + " " + uri);
@@ -189,6 +191,25 @@ class SubmitMarketTest {
 
         assertThat(_submitted).as("submit then cancel, always").hasSize(2);
         assertThat(_submitted.get(1)).startsWith("DELETE /api/v1/marketplaces/1/orders/42");
+    }
+
+    /**
+     * A cancel that fails after the order was placed says the order is placed.
+     * Reported as a plain failure, it would read as "nothing happened", and a
+     * caller retrying the whole market order would trade twice.
+     */
+    @Test
+    void aCancelThatFailsSaysTheOrderWasPlacedAndNotToResubmit() throws Exception {
+        _cancelStatus = 503;
+
+        try (Flexemarkets fm = _connect()) {
+            assertThatExceptionOfType(ApiException.class)
+                .isThrownBy(() -> fm.submitMarket(1L, 11L, OrderSide.BUY, 5L))
+                .withMessageContaining("Order 42 was placed")
+                .withMessageContaining("Do not resubmit")
+                .havingCause().isInstanceOf(fm.error.ConnectionFailedException.class);
+        }
+        assertThat(_submitted).hasSize(2);
     }
 
     @Test

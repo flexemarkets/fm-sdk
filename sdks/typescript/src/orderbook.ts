@@ -200,14 +200,6 @@ export class BookIndex {
     }
   }
 
-  hasValue(marketId: number, side: string): boolean {
-    return this._books.get(marketId)!.hasValue(side);
-  }
-
-  bestPrice(marketId: number, side: string): number {
-    return this._books.get(marketId)!.bestPrice(side);
-  }
-
   collection(): Book[] {
     return [...this._books.values()];
   }

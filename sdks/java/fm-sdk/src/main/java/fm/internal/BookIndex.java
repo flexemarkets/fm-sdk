@@ -4,7 +4,6 @@ import fm.Book;
 import fm.Desk;
 import fm.model.Market;
 import fm.model.Order;
-import fm.model.OrderSide;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -55,34 +54,6 @@ public class BookIndex {
      */
     public Book get(long marketId) {
         return _books.get(marketId);
-    }
-
-    /**
-     * Whether one market's book has resting units on the given side.
-     *
-     * @param marketId the market to read
-     * @param side     the side to test
-     * @return true if that side has any resting units; false when the market
-     *         is not in this marketplace, which is the answer rather than a
-     *         failure -- the other SDKs raise there, and an absent market has
-     *         nothing resting either way
-     */
-    public boolean hasValue(long marketId, OrderSide side) {
-        Book book = get(marketId);
-        return book != null && book.hasValue(side);
-    }
-
-    /**
-     * The best price on one market's given side.
-     *
-     * @param marketId the market to read
-     * @param side     the side to read
-     * @return the best resting price, or -1 when that side is empty or the
-     *         market is not in this marketplace
-     */
-    public long bestPrice(long marketId, OrderSide side) {
-        Book book = get(marketId);
-        return book == null ? -1 : book.bestPrice(side);
     }
 
     /**

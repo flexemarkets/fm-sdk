@@ -196,6 +196,19 @@ class ClientTimingTest {
         assertThat(_reported().get(0)).doesNotContain("net=");
     }
 
+    /** A share too large for a long matches the pattern and still is not a number. */
+    @Test
+    void aServerShareTooLargeToReadIsIgnored() throws Exception {
+        _serverTiming = "st=99999999999999999999";
+
+        try (var fm = Flexemarkets.connect(TOKEN, _api() + "/marketplaces/1", "test")) {
+            fm.marketplace(1);
+            fm.marketplace(1);
+        }
+
+        assertThat(_reported().get(0)).doesNotContain("net=");
+    }
+
     /**
      * Reported once, not until replaced.
      *

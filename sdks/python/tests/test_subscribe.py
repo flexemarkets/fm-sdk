@@ -101,3 +101,53 @@ def test_listen_remains_one_per_connection(client, monkeypatch):
     client.listen(1, queue.Queue())
 
     assert client._event_listener is opened[-1], "the second listen replaces the first"
+
+
+class _Started:
+    """EventListener.start, recorded instead of opening a socket."""
+
+    def __init__(self, monkeypatch):
+        from fm import events
+
+        self.listeners = []
+        self.reconnects = 0
+        monkeypatch.setattr(events.EventListener, "start", lambda listener: self.listeners.append(listener))
+        monkeypatch.setattr(events.EventListener, "reconnect", lambda listener: self._reconnect())
+
+    def _reconnect(self):
+        self.reconnects += 1
+
+
+def test_a_stream_opens_on_the_servers_events_route_as_the_caller(client, monkeypatch):
+    started = _Started(monkeypatch)
+    q = queue.Queue()
+
+    client.subscribe(4, q)
+
+    (listener,) = started.listeners
+    port = client.endpoint_url.split(":")[2].split("/")[0]
+    assert listener._ws_url == f"ws://127.0.0.1:{port}/api/events"
+    assert listener._bearer_token == f"Bearer {TOKEN}"
+    assert listener._marketplace_id == 4
+    assert listener._queue is q
+    assert listener._client_description == "subscribe-test"
+
+
+def test_a_server_reached_over_tls_streams_over_tls(client, monkeypatch):
+    started = _Started(monkeypatch)
+    client._endpoint = "https://fm.example/api/marketplaces/1"
+
+    client.subscribe(1, queue.Queue())
+
+    assert started.listeners[0]._ws_url == "wss://fm.example/api/events"
+
+
+def test_reconnect_restores_the_stream_listen_opened(client, monkeypatch):
+    started = _Started(monkeypatch)
+
+    client.reconnect()
+    assert started.reconnects == 0, "nothing to restore before listen"
+
+    client.listen(1, queue.Queue())
+    client.reconnect()
+    assert started.reconnects == 1

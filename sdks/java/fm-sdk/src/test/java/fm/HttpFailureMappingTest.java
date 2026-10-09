@@ -150,4 +150,38 @@ class HttpFailureMappingTest {
             .satisfies(e -> assertThat(e.statusCode()).isEqualTo(404))
             .isInstanceOf(FlexemarketsException.class);
     }
+
+    // ---- what the message says, when the body is not the usual envelope ----
+
+    @Test
+    void aFailureWithNoBodySaysSoRatherThanEndingInNothing() {
+        assertThatExceptionOfType(InvalidArgumentException.class)
+            .isThrownBy(() -> _call(400, ""))
+            .withMessage("Invalid request: (no response body)");
+    }
+
+    /** An envelope with no message has nothing better to offer than itself. */
+    @Test
+    void aFailureWithoutAMessageCarriesTheWholeBody() {
+        assertThatExceptionOfType(InvalidArgumentException.class)
+            .isThrownBy(() -> _call(400, "{\"error\":\"Bad Request\"}"))
+            .withMessage("Invalid request: {\"error\":\"Bad Request\"}");
+    }
+
+    /** A body that does not parse is exactly when the caller needs to see it. */
+    @Test
+    void aFailureThatIsNotJsonCarriesItVerbatim() {
+        assertThatExceptionOfType(AuthenticationException.class)
+            .isThrownBy(() -> _call(401, "<html>Unauthorized</html>"))
+            .withMessage("Authentication failed: <html>Unauthorized</html>");
+    }
+
+    @Test
+    void aConflictThatIsNotJsonIsStillAConflictWithNoDetail() {
+        assertThatExceptionOfType(ConflictException.class)
+            .isThrownBy(() -> _call(409, "<html>Conflict</html>"))
+            .satisfies(e -> assertThat(e.failure()).isNull())
+            .withMessage("Conflict: <html>Conflict</html>");
+    }
+
 }

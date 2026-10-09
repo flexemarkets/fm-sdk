@@ -206,17 +206,8 @@ class TapeIndex:
                 added[market_id] = fresh
         return added
 
-    def most_recent_prices(self) -> list[list[int]]:
-        return [
-            t.most_recent_prices()
-            for t in sorted(self._trades.values(), key=lambda t: t.market_id)
-        ]
-
     def collection(self) -> list[Tape]:
         return list(self._trades.values())
-
-    def __getitem__(self, market_id: int) -> Tape:
-        return self._trades[market_id]
 
     def get(self, market_id: int) -> "Tape | None":
         """That market's tape, or ``None`` when the market is not in this

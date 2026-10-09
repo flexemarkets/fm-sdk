@@ -569,6 +569,7 @@ test("isAdmin reads the roles on the token", async () => {
   const fm = await connect();
   try {
     assert.equal(fm.isAdmin(), false, "ROLE_MANAGER is not ROLE_ADMIN");
+    assert.equal(fm.isManager(), true);
     assert.equal(fm.token().token, TOKEN);
   } finally {
     fm.close();

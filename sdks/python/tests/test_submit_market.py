@@ -19,13 +19,15 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import pytest
 
 from fm.client import Flexemarkets, _marketable_limit
-from fm.exceptions import InvalidArgumentError
+from fm.exceptions import ConnectionFailedError, FlexemarketsError, InvalidArgumentError
 from fm.types import Market
 
 TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl"
 
 submitted: list[dict] = []
 cancelled: list[str] = []
+# Set to a status to refuse the cancel with it.
+cancel_refused_with: list[int] = []
 
 # price_minimum 110, tick 25 -> the legal prices are 110, 135, 160, 185.
 MARKETS = [{
@@ -55,6 +57,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_DELETE(self):
         cancelled.append(self.path)
+        if cancel_refused_with:
+            self.send_response(cancel_refused_with[0])
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         self._send({"id": 43, "original": 42, "consumer": 42, "type": "CANCEL",
                     "marketplaceId": 1, "marketId": 11})
 
@@ -77,6 +84,7 @@ class Handler(BaseHTTPRequestHandler):
 def client():
     submitted.clear()
     cancelled.clear()
+    cancel_refused_with.clear()
     httpd = HTTPServer(("127.0.0.1", 0), Handler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     base = f"http://127.0.0.1:{httpd.server_address[1]}/api"
@@ -104,6 +112,19 @@ def test_whatever_does_not_fill_is_cancelled(client):
 
     assert len(submitted) == 1, "one limit order"
     assert cancelled == ["/api/v1/marketplaces/1/orders/42"], "then a DELETE of its remainder"
+
+
+def test_a_remainder_that_cannot_be_cancelled_says_the_order_is_placed(client):
+    """Reporting only "cancel failed" would invite a retry of the whole order,
+    and a second trade."""
+    cancel_refused_with.append(503)
+
+    with pytest.raises(FlexemarketsError, match="Order 42 was placed but its remainder could not be "
+                                                "cancelled; it may still be resting. Do not resubmit") as e:
+        client.submit_market(1, 11, "BUY", 5)
+
+    assert isinstance(e.value.__cause__, ConnectionFailedError)
+    assert len(submitted) == 1
 
 
 def test_an_unknown_market_says_so_rather_than_guessing_a_price(client):

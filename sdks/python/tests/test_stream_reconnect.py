@@ -199,3 +199,65 @@ def _reconnected_so_far(q: "queue.Queue[object]") -> int:
             count += 1
         q.put(event)
     return count
+
+
+def test_a_failure_that_is_not_a_refusal_is_retried_after_a_pause(monkeypatch) -> None:
+    """A server restart or a dropped network is a blip, and riding one out is
+    what reconnect() is for -- unlike a refused token, which ends the stream."""
+    from fm import events as fm_events
+
+    pauses: list[float] = []
+    monkeypatch.setattr(fm_events.time, "sleep", pauses.append)
+    q: queue.Queue[object] = queue.Queue()
+    listener = _Listener(q)
+    listener.start()
+    listener.fail_connects = 2  # start() spent the first; the next one fails
+
+    listener.reconnect()
+
+    assert listener.connects == 3, "one failed attempt, then one that succeeded"
+    assert pauses == [2]
+    assert q.empty(), "a blip is not reported as a refusal"
+    listener.close()
+
+
+def test_a_heartbeat_that_cannot_be_written_stops_the_beating(monkeypatch) -> None:
+    """A dead socket is the receive loop's to notice; the heartbeat thread
+    just stops rather than writing into it every interval."""
+    from fm import events as fm_events
+
+    class _DeadSocket:
+        writes = 0
+
+        def send(self, _text: str) -> None:
+            _DeadSocket.writes += 1
+            raise OSError("broken pipe")
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(fm_events, "_HEARTBEAT_INTERVAL_SECONDS", 0.01)
+    listener = _Listener(queue.Queue())
+    listener._ws = _DeadSocket()
+
+    listener._start_heartbeats()
+    beating = listener._heartbeat_thread
+    beating.join(timeout=2.0)
+
+    assert not beating.is_alive()
+    assert _DeadSocket.writes == 1
+    listener.close()
+
+
+def test_heartbeats_stop_once_there_is_no_socket_to_write_to(monkeypatch) -> None:
+    from fm import events as fm_events
+
+    monkeypatch.setattr(fm_events, "_HEARTBEAT_INTERVAL_SECONDS", 0.01)
+    listener = _Listener(queue.Queue())
+    listener._ws = None
+
+    listener._start_heartbeats()
+    beating = listener._heartbeat_thread
+    beating.join(timeout=2.0)
+
+    assert not beating.is_alive()

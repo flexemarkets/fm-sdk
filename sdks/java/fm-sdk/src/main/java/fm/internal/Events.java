@@ -21,7 +21,6 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.net.http.WebSocketHandshakeException;
-import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -110,6 +109,18 @@ public class Events implements Subscription {
      */
     static final long HEROKU_IDLE_TIMEOUT_MS = 55_000;
 
+    /** How long connect() waits for the server's CONNECTED frame. */
+    static final long CONNECTED_TIMEOUT_MS = 10_000;
+
+    /**
+     * The two waits above, as this instance uses them. Package-private so a
+     * test can shorten them: whether a missing CONNECTED is reported, and
+     * whether a heartbeat is actually written, cannot otherwise be seen in
+     * less than ten and twenty-five seconds.
+     */
+    long connectedTimeoutMillis = CONNECTED_TIMEOUT_MS;
+    long heartbeatIntervalMillis = TimeUnit.SECONDS.toMillis(HEARTBEAT_INTERVAL_SECONDS);
+
     private volatile WebSocket _webSocket;
     private volatile boolean _closed;
 
@@ -166,7 +177,7 @@ public class Events implements Subscription {
 
             _sendStompConnect();
 
-            if (!connectedLatch.await(10, TimeUnit.SECONDS)) {
+            if (!connectedLatch.await(connectedTimeoutMillis, TimeUnit.MILLISECONDS)) {
                 throw new ApiException("STOMP CONNECTED frame not received within timeout");
             }
 
@@ -292,11 +303,21 @@ public class Events implements Subscription {
         _heartbeats.shutdownNow();
     }
 
+    /**
+     * Close the current socket, detaching it first.
+     *
+     * <p>Detached so that its own onClose -- which arrives when the server
+     * answers this close -- is recognised as ours and not as a drop. Reported
+     * as a drop, a reconnect the caller asked for queued a StreamDropped and
+     * started a second reconnect that tore down the socket just opened.
+     */
     private void _closeWebSocket() {
         _stopHeartbeats();
-        if (_webSocket != null) {
+        var socket = _webSocket;
+        _webSocket = null;
+        if (socket != null) {
             try {
-                _webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "").join();
+                socket.sendClose(WebSocket.NORMAL_CLOSURE, "").join();
             } catch (Exception ignored) {}
         }
     }
@@ -322,7 +343,7 @@ public class Events implements Subscription {
             try {
                 socket.sendText("\n", true);
             } catch (Exception ignored) {}
-        }, HEARTBEAT_INTERVAL_SECONDS, HEARTBEAT_INTERVAL_SECONDS, TimeUnit.SECONDS);
+        }, heartbeatIntervalMillis, heartbeatIntervalMillis, TimeUnit.MILLISECONDS);
     }
 
     private void _stopHeartbeats() {
@@ -342,29 +363,25 @@ public class Events implements Subscription {
                 "heart-beat:" + ADVERTISED_HEARTBEAT_MS + "," + ADVERTISED_HEARTBEAT_MS,
                 "agent-description:" + _clientDescription,
                 "marketplace-id:" + _marketplaceId
-            ),
-            null);
+            ));
         _webSocket.sendText(frame, true);
     }
 
     private void _subscribe(String destination) {
         var id = "sub-" + _subscriptionId.getAndIncrement();
         var frame = _stompFrame("SUBSCRIBE",
-            List.of("id:" + id, "destination:" + destination),
-            null);
+            List.of("id:" + id, "destination:" + destination));
         _webSocket.sendText(frame, true);
     }
 
-    private static String _stompFrame(String command, List<String> headers, String body) {
+    /** A frame with no body: the client sends only CONNECT and SUBSCRIBE. */
+    private static String _stompFrame(String command, List<String> headers) {
         var sb = new StringBuilder();
         sb.append(command).append('\n');
         for (var header : headers) {
             sb.append(header).append('\n');
         }
         sb.append('\n');
-        if (body != null) {
-            sb.append(body);
-        }
         sb.append('\0');
         return sb.toString();
     }
@@ -487,15 +504,8 @@ public class Events implements Subscription {
         }
 
         @Override
-        public CompletionStage<?> onPing(WebSocket webSocket, ByteBuffer message) {
-            webSocket.sendPong(message);
-            webSocket.request(1);
-            return CompletableFuture.completedFuture(null);
-        }
-
-        @Override
         public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
-            if (!_closed) {
+            if (!_closed && webSocket == _webSocket) {
                 _queue.offer(new StreamDropped(
                     new Exception("WebSocket closed: %d %s".formatted(statusCode, reason))));
                 reconnectInBackground();
@@ -505,6 +515,7 @@ public class Events implements Subscription {
 
         @Override
         public void onError(WebSocket webSocket, Throwable error) {
+            if (webSocket != _webSocket) return; // one this client closed
             _queue.offer(new StreamDropped(error));
             reconnectInBackground();
         }

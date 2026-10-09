@@ -192,12 +192,6 @@ export class TapeIndex {
     return added;
   }
 
-  mostRecentPrices(): number[][] {
-    return [...this._trades.values()]
-      .sort((a, b) => a.marketId - b.marketId)
-      .map((t) => t.mostRecentPrices());
-  }
-
   collection(): Tape[] {
     return [...this._trades.values()];
   }
