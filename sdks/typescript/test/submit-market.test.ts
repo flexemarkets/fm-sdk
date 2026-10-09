@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 
-import { Flexemarkets, InvalidArgumentError, marketableLimit } from "../src/client.ts";
+import { Flexemarkets, FlexemarketsError, InvalidArgumentError, marketableLimit } from "../src/client.ts";
 import type { Market } from "../src/types.ts";
 
 const TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl";
@@ -36,6 +36,7 @@ interface Sent {
 
 async function withClient(
   run: (fm: Flexemarkets, sent: Sent[]) => Promise<void>,
+  cancelStatus = 200,
 ): Promise<void> {
   const sent: Sent[] = [];
 
@@ -61,6 +62,9 @@ async function withClient(
         send(MARKETS);
       } else if (req.method === "POST" && url === "/api/v1/marketplaces/1/orders") {
         send({ id: 42, original: 42, type: "LIMIT", marketplaceId: 1, marketId: 11 });
+      } else if (req.method === "DELETE" && url === "/api/v1/marketplaces/1/orders/42" && cancelStatus !== 200) {
+        res.writeHead(cancelStatus);
+        res.end();
       } else if (req.method === "DELETE" && url === "/api/v1/marketplaces/1/orders/42") {
         send({ id: 43, original: 42, consumer: 42, type: "CANCEL", marketplaceId: 1, marketId: 11 });
       } else {
@@ -124,6 +128,20 @@ test("an unknown market says so rather than guessing a price", async () => {
     assert.deepEqual(sent.map((s) => s.request), ["GET /api/v1/marketplaces/1/markets"],
       "nothing was sent but the market lookup");
   });
+});
+
+test("a cancel that fails says the order was placed", async () => {
+  // The limit is on the book by then. "Cancel failed" alone invites a retry of
+  // the whole market order, which trades twice.
+  await withClient(async (fm, sent) => {
+    await assert.rejects(
+      () => fm.submitMarket(1, 11, "BUY", 5),
+      (e: unknown) => e instanceof FlexemarketsError
+        && /Order 42 was placed/.test((e as Error).message)
+        && /Do not resubmit/.test((e as Error).message),
+    );
+    assert.equal(posted(sent).length, 1, "submitted once");
+  }, 503);
 });
 
 // --- the price rule itself, without a server --------------------------------
