@@ -86,8 +86,14 @@
             </plugin>
             <!-- Critical code: the client, the desk and the event stream: what
                  places and cancels orders, signs in, and keeps a desk's books
-                 current. The floor is today's coverage, so it can only go up;
-                 raise it as tests land, toward 0.90. -->
+                 current. The floor is today's coverage, so it can only go up.
+                 Eleven lines are uncovered and none can be reached honestly:
+                 TapeIndex.mostRecentPrices (no caller in any SDK, kept for
+                 parity with Python and TypeScript), two catch blocks the
+                 compiler requires (Events' background reconnect thread being
+                 interrupted, HttpFlexemarkets.sdkVersion failing to read a
+                 bundled resource) and _patch's serialisation guard, whose
+                 only caller sends a map of strings. -->
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
@@ -123,7 +129,7 @@
                                         <limit>
                                             <counter>LINE</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.84</minimum>
+                                            <minimum>0.9916</minimum>
                                         </limit>
                                     </limits>
                                 </rule>

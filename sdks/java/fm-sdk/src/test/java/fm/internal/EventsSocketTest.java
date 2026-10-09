@@ -217,6 +217,258 @@ class EventsSocketTest {
         assertThat(server.handshakes()).as("one refused attempt, not a retry loop").isEqualTo(2);
     }
 
+    @Test
+    @Timeout(20)
+    void versionAndSessionMessagesArriveAsTheirOwnTypes() throws Exception {
+        connected();
+        _Connection socket = server.connection(0);
+
+        socket.send(message("VERSION", null, "{\"version\":4}"));
+        socket.send(message("SESSION-LIST", null, "[{\"id\":30,\"state\":\"OPEN\"},{\"id\":31,\"state\":\"INIT\"}]"));
+        socket.send(message("SESSION-UPDATE", null, "{\"id\":30,\"state\":\"PAUSED\"}"));
+
+        assertThat(next()).isEqualTo(new fm.event.Version(4));
+        assertThat((fm.model.Session[]) next()).extracting(fm.model.Session::id).containsExactly(30L, 31L);
+        assertThat(((fm.model.Session) next()).state()).isEqualTo(fm.model.Session.STATE_PAUSED);
+    }
+
+    /**
+     * What this client does not read is skipped, not queued: a frame that is
+     * not a MESSAGE, even one carrying a message-type, and a MESSAGE of a type
+     * it does not know. The update after them is the next thing on the queue.
+     */
+    @Test
+    @Timeout(20)
+    void framesThisClientDoesNotReadAreSkipped() throws Exception {
+        connected();
+        _Connection socket = server.connection(0);
+
+        socket.send("RECEIPT\nreceipt-id:1\nmessage-type:ORDERS-UPDATE\nseq:1\n\n[]\0");
+        socket.send(message("MARKET-NEWS", null, "{}"));
+        socket.send(message("ORDERS-UPDATE", "seq:3", "[]"));
+
+        assertThat(((OrdersUpdate) next()).seq()).isEqualTo(3);
+        assertThat(queue).isEmpty();
+    }
+
+    /**
+     * Once. The JDK's WebSocket answers a ping by itself, and the listener
+     * answered it again, so every server ping drew two pongs.
+     */
+    @Test
+    @Timeout(20)
+    void aPingIsAnsweredWithItsOwnPayload() throws Exception {
+        connected();
+        _Connection socket = server.connection(0);
+
+        socket.ping("are-you-there");
+        socket.send(message("ORDERS-UPDATE", "seq:3", "[]"));
+        next();
+
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (socket.pongs.isEmpty() && System.nanoTime() < deadline) Thread.sleep(10);
+        assertThat(socket.pongs).containsExactly("are-you-there");
+    }
+
+    /**
+     * The heartbeat this client advertises is actually written. It once
+     * advertised one and never sent it; the interval is shortened here so
+     * that is visible in a test rather than in twenty-five seconds.
+     */
+    @Test
+    @Timeout(20)
+    void heartbeatsAreWrittenWhileConnected() throws Exception {
+        events = new Events(server.url(), "Bearer the-token", MP, "fm-sdk-test", HttpFlexemarkets.MAPPER, queue);
+        events.heartbeatIntervalMillis = 50;
+        events.connect();
+        _Connection socket = server.connection(0);
+
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (socket.heartbeats.get() < 2 && System.nanoTime() < deadline) Thread.sleep(10);
+        assertThat(socket.heartbeats.get()).isGreaterThanOrEqualTo(2);
+    }
+
+    /** A server that accepts the socket and never says CONNECTED fails connect(), saying which frame it was waiting for. */
+    @Test
+    @Timeout(20)
+    void aServerThatNeverSaysConnectedFailsTheConnect() {
+        server.silent = true;
+        events = new Events(server.url(), "Bearer the-token", MP, "fm-sdk-test", HttpFlexemarkets.MAPPER, queue);
+        events.connectedTimeoutMillis = 200;
+
+        org.assertj.core.api.Assertions.assertThatExceptionOfType(fm.error.ApiException.class)
+            .isThrownBy(events::connect)
+            .withMessage("STOMP CONNECTED frame not received within timeout");
+    }
+
+    /** A connection cut without a close frame is a drop too, recovered and announced. */
+    @Test
+    @Timeout(30)
+    void aConnectionCutWithoutACloseIsADropThatReconnects() throws Exception {
+        connected();
+
+        server.connection(0).abort();
+
+        assertThat(next()).isInstanceOf(StreamDropped.class);
+        assertThat(next()).isEqualTo(new StreamReconnected(MP));
+        assertThat(server.connection(1).awaitReceived(4)).as("the new socket subscribes again").isTrue();
+    }
+
+    /**
+     * A reconnect that cannot reach the server is a blip, not a verdict: it
+     * waits and tries again, where a refused token ends the stream. The wait
+     * is what keeps a client from hammering a server that is restarting.
+     *
+     * <p>Two handshakes are dropped because the JDK's HTTP client quietly
+     * retries a GET whose connection closed before any response, once; only
+     * the second drop reaches Events.
+     */
+    @Test
+    @Timeout(30)
+    void aReconnectThatCannotReachTheServerWaitsAndTriesAgain() throws Exception {
+        connected();
+        server.dropHandshakes(2);
+
+        long dropped = System.nanoTime();
+        server.connection(0).close();
+
+        assertThat(next()).isInstanceOf(StreamDropped.class);
+        assertThat(next()).isEqualTo(new StreamReconnected(MP));
+        assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - dropped)).as("waited before retrying")
+            .isGreaterThanOrEqualTo(1_500L);
+    }
+
+    /**
+     * Closing the stream while it is retrying ends the retries: no further
+     * handshakes, and no StreamReconnected for a stream the caller closed.
+     */
+    @Test
+    @Timeout(30)
+    void closingWhileReconnectingStopsTheRetries() throws Exception {
+        connected();
+        server.dropHandshakes(Integer.MAX_VALUE);
+
+        server.connection(0).close();
+        assertThat(next()).isInstanceOf(StreamDropped.class);
+        // The first, then one failed attempt (two handshakes: the JDK retries
+        // a dropped GET once). Events is now in its two-second wait.
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (server.handshakes() < 3 && System.nanoTime() < deadline) Thread.sleep(5);
+        events.close();
+        int attempts = server.handshakes();
+
+        assertThat(queue.poll(4, TimeUnit.SECONDS)).as("nothing after the close").isNull();
+        assertThat(server.handshakes()).as("no retry after the close").isEqualTo(attempts);
+    }
+
+    // --- through the client: the stream a caller opens with listen() or subscribe() ---
+
+    private HttpFlexemarkets client() throws IOException {
+        return new HttpFlexemarkets(HttpFlexemarkets.loadProperties(
+            "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl",
+            server.url().replace("ws://", "http://").replace("/api/events", "/api/marketplaces/7"),
+            "listen-test"));
+    }
+
+    private static boolean awaitClosedByClient(_Connection connection) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (!connection.closedByClient && System.nanoTime() < deadline) Thread.sleep(10);
+        return connection.closedByClient;
+    }
+
+    /**
+     * listen() opens the stream on the server's own events path, as this
+     * client, for the marketplace asked for; closing the client closes it.
+     */
+    @Test
+    @Timeout(30)
+    void listenStreamsTheMarketplaceAndTheClientsCloseEndsIt() throws Exception {
+        try (var fm = client()) {
+            fm.listen(MP, queue);
+            _Connection first = server.connection(0);
+            assertThat(first.headers.get(":request")).startsWith("GET /api/events ");
+            assertThat(first.received(0)).contains("marketplace-id:7").contains("agent-description:listen-test");
+
+            first.send(message("ORDERS-UPDATE", "seq:3", "[]"));
+            assertThat(((OrdersUpdate) next()).seq()).isEqualTo(3);
+
+            fm.close();
+            assertThat(awaitClosedByClient(first)).as("closing the client closes the stream").isTrue();
+        }
+    }
+
+    /**
+     * A reconnect the caller asks for replaces the socket once, quietly. The
+     * old socket's close is the client's own doing, not a drop: reporting it
+     * as one queued a StreamDropped and set off a second reconnect that tore
+     * down the socket just opened.
+     */
+    @Test
+    @Timeout(30)
+    void aReconnectTheCallerAsksForReplacesTheSocketOnce() throws Exception {
+        try (var fm = client()) {
+            fm.listen(MP, queue);
+            _Connection first = server.connection(0);
+            assertThat(first.awaitReceived(4)).isTrue();
+
+            fm.reconnect();
+
+            assertThat(awaitClosedByClient(first)).as("the old socket closed").isTrue();
+            assertThat(server.connection(1).awaitReceived(4)).as("the new socket subscribes").isTrue();
+            assertThat(queue.poll(1, TimeUnit.SECONDS)).as("nothing reported").isNull();
+            assertThat(server.connectionCount()).as("one replacement").isEqualTo(2);
+        }
+    }
+
+    /** subscribe() is a stream of its own, closed by closing what it returns; reconnect() leaves it alone. */
+    @Test
+    @Timeout(30)
+    void aSubscriptionIsItsOwnStreamUntilItIsClosed() throws Exception {
+        try (var fm = client()) {
+            fm.Subscription subscription = fm.subscribe(MP, queue);
+            _Connection socket = server.connection(0);
+            assertThat(socket.received(0)).contains("marketplace-id:7");
+
+            socket.send(message("ORDERS-UPDATE", "seq:4", "[]"));
+            assertThat(((OrdersUpdate) next()).seq()).isEqualTo(4);
+
+            fm.reconnect();
+            Thread.sleep(200);
+            assertThat(server.connectionCount()).as("nothing was listening, so nothing reconnected").isEqualTo(1);
+
+            subscription.close();
+            assertThat(awaitClosedByClient(socket)).isTrue();
+        }
+    }
+
+    /**
+     * An fm.net.ws.api-version other than v0 or v1 is refused when Events
+     * loads, naming what it got, rather than quietly subscribing to a
+     * destination the server does not have. The prefix is read once per
+     * class loader, so the class is loaded afresh with the property set.
+     */
+    @Test
+    void anUnknownApiVersionIsRefusedByName() throws Exception {
+        java.net.URL[] path = java.util.stream.Stream.of(
+                Events.class, tools.jackson.databind.ObjectMapper.class,
+                tools.jackson.core.type.TypeReference.class, com.fasterxml.jackson.annotation.JsonAlias.class)
+            .map(type -> type.getProtectionDomain().getCodeSource().getLocation())
+            .toArray(java.net.URL[]::new);
+        String previous = System.getProperty("fm.net.ws.api-version");
+        System.setProperty("fm.net.ws.api-version", "v2");
+
+        try (var loader = new java.net.URLClassLoader(path, ClassLoader.getPlatformClassLoader())) {
+            org.assertj.core.api.Assertions.assertThatExceptionOfType(ExceptionInInitializerError.class)
+                .isThrownBy(() -> Class.forName(Events.class.getName(), true, loader))
+                .havingCause()
+                .isInstanceOf(IllegalArgumentException.class)
+                .withMessage("fm.net.ws.api-version must be 'v0' or 'v1', got: v2");
+        } finally {
+            if (previous == null) System.clearProperty("fm.net.ws.api-version");
+            else System.setProperty("fm.net.ws.api-version", previous);
+        }
+    }
+
     // --- the least of a WebSocket server a STOMP client needs ---
 
     private static final class _Server implements AutoCloseable {
@@ -226,6 +478,8 @@ class EventsSocketTest {
         private final List<_Connection> connections = new CopyOnWriteArrayList<>();
         private volatile int refuseWith;
         private volatile int handshakes;
+        private final java.util.concurrent.atomic.AtomicInteger dropHandshakes = new java.util.concurrent.atomic.AtomicInteger();
+        volatile boolean silent;
 
         _Server() throws IOException {
             Thread.startVirtualThread(this::_accept);
@@ -237,6 +491,11 @@ class EventsSocketTest {
 
         void refuseWith(int status) {
             refuseWith = status;
+        }
+
+        /** Hang up on the next {@code count} handshakes without a word: no status, so no handshake failure either. */
+        void dropHandshakes(int count) {
+            dropHandshakes.set(count);
         }
 
         int handshakes() {
@@ -269,7 +528,15 @@ class EventsSocketTest {
                 InputStream in = client.getInputStream();
                 OutputStream out = client.getOutputStream();
                 Map<String, String> headers = _readHeaders(in);
+                if (!headers.containsKey("sec-websocket-key")) {
+                    _signIn(client, in, out, headers);
+                    return;
+                }
                 handshakes++;
+                if (dropHandshakes.getAndUpdate(n -> Math.max(0, n - 1)) > 0) {
+                    client.close();
+                    return;
+                }
                 if (refuseWith != 0) {
                     out.write(("HTTP/1.1 " + refuseWith + " Refused\r\nContent-Length: 0\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
                     out.flush();
@@ -282,12 +549,27 @@ class EventsSocketTest {
                         + "Sec-WebSocket-Accept: " + accept + "\r\nSec-WebSocket-Protocol: v12.stomp\r\n\r\n")
                         .getBytes(StandardCharsets.US_ASCII));
                 out.flush();
-                _Connection connection = new _Connection(client, headers);
+                _Connection connection = new _Connection(client, headers, !silent);
                 connections.add(connection);
                 connection.read();
             } catch (Exception gone) {
                 try { client.close(); } catch (IOException ignored) { /* already gone */ }
             }
+        }
+
+        /** Anything that is not a WebSocket upgrade is the client signing in; answer with a token. */
+        private static void _signIn(Socket client, InputStream in, OutputStream out, Map<String, String> headers)
+                throws IOException {
+            in.readNBytes(Integer.parseInt(headers.getOrDefault("content-length", "0")));
+            byte[] token = """
+                {"token":"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl",
+                 "person":{"id":7,"accountId":1,"email":"dev@dev"},
+                 "account":{"id":1,"name":"dev"}}""".getBytes(StandardCharsets.UTF_8);
+            out.write(("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + token.length
+                    + "\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
+            out.write(token);
+            out.flush();
+            client.close();
         }
 
         private static Map<String, String> _readHeaders(InputStream in) throws IOException {
@@ -300,7 +582,9 @@ class EventsSocketTest {
                 matched = (b == "\r\n\r\n".charAt(matched)) ? matched + 1 : (b == '\r' ? 1 : 0);
             }
             Map<String, String> headers = new HashMap<>();
-            for (String line : head.toString(StandardCharsets.US_ASCII).split("\r\n")) {
+            String[] lines = head.toString(StandardCharsets.US_ASCII).split("\r\n");
+            headers.put(":request", lines[0]);
+            for (String line : lines) {
                 int colon = line.indexOf(':');
                 if (colon > 0) headers.put(line.substring(0, colon).trim().toLowerCase(Locale.ROOT), line.substring(colon + 1).trim());
             }
@@ -318,10 +602,16 @@ class EventsSocketTest {
         final Map<String, String> headers;
         private final Socket socket;
         private final List<String> received = new CopyOnWriteArrayList<>();
+        final List<String> pongs = new CopyOnWriteArrayList<>();
+        final java.util.concurrent.atomic.AtomicInteger heartbeats = new java.util.concurrent.atomic.AtomicInteger();
+        /** Whether the client sent a close frame, which is how it says it is done. */
+        volatile boolean closedByClient;
+        private final boolean answerConnect;
 
-        _Connection(Socket socket, Map<String, String> headers) {
+        _Connection(Socket socket, Map<String, String> headers, boolean answerConnect) {
             this.socket = socket;
             this.headers = headers;
+            this.answerConnect = answerConnect;
         }
 
         String received(int index) throws InterruptedException {
@@ -351,15 +641,16 @@ class EventsSocketTest {
                 byte[] mask = (second & 0x80) != 0 ? in.readNBytes(4) : new byte[4];
                 byte[] payload = in.readNBytes((int) length);
                 for (int i = 0; i < payload.length; i++) payload[i] ^= mask[i % 4];
-                if (opcode == 0x8) { close(); return; }
+                if (opcode == 0x8) { closedByClient = true; close(); return; }
+                if (opcode == 0xA) { pongs.add(new String(payload, StandardCharsets.UTF_8)); continue; }
                 if (opcode != 0x1 && opcode != 0x0) continue;
                 message.write(payload);
                 if (!fin) continue;
                 String text = message.toString(StandardCharsets.UTF_8);
                 message.reset();
-                if (text.isBlank()) continue; // a heartbeat
+                if (text.isBlank()) { heartbeats.incrementAndGet(); continue; }
                 received.add(text);
-                if (text.startsWith("CONNECT\n")) send("CONNECTED\nversion:1.2\nheart-beat:0,0\n\n\0");
+                if (answerConnect && text.startsWith("CONNECT\n")) send("CONNECTED\nversion:1.2\nheart-beat:0,0\n\n\0");
             }
         }
 
@@ -370,6 +661,18 @@ class EventsSocketTest {
         synchronized void sendFragmented(String first, String rest) throws IOException {
             _frame(0x1, first.getBytes(StandardCharsets.UTF_8));
             _frame(0x80, rest.getBytes(StandardCharsets.UTF_8));
+        }
+
+        synchronized void ping(String payload) throws IOException {
+            _frame(0x80 | 0x9, payload.getBytes(StandardCharsets.UTF_8));
+        }
+
+        /** Cut the connection without a close frame, as a dead network does. */
+        synchronized void abort() {
+            try {
+                socket.setSoLinger(true, 0);
+                socket.close();
+            } catch (IOException ignored) { /* already closed */ }
         }
 
         synchronized void close() {

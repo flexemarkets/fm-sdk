@@ -358,4 +358,33 @@ class BookTest {
         assertThatExceptionOfType(IllegalArgumentException.class).isThrownBy(() -> book.bestUnits(null));
     }
 
+
+    /**
+     * A CANCEL that arrives without the limit it consumed still takes that
+     * limit's units off. The pair is what fm-server broadcasts, and the book
+     * removes only once for it; alone, the cancel is the only row that says
+     * the units went. Two orders share the level so that removing nothing and
+     * removing the whole level both read wrong.
+     */
+    @Test
+    void aCancelArrivingWithoutItsLimitStillTakesItsUnitsOff() {
+        var market = _market(1, "N5");
+        var book = new Book(market);
+        var cancelled = _limitOf(market, 1, OrderSide.BUY, 5, 900);
+        book.update(_toArray(cancelled, _limitOf(market, 2, OrderSide.BUY, 3, 900)));
+        assertThat(book.bestBuyUnits()).isEqualTo(8L);
+
+        Order[] pair = _cancelSet(cancelled);
+        book.update(_toArray(pair[1]));
+
+        assertThat(book.bestBuyPrice()).isEqualTo(900L);
+        assertThat(book.bestBuyUnits()).as("the other order's three").isEqualTo(3L);
+    }
+
+    @Test
+    void aBookIsForTheMarketItWasMadeFor() {
+        var market = _market(4, "N5");
+        assertThat(new Book(market).market()).isSameAs(market);
+    }
+
 }

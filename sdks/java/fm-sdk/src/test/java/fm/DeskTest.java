@@ -390,4 +390,204 @@ class DeskTest {
         }
     }
 
+
+    /**
+     * {@link Desk#over} is how a host with its own {@link Flexemarkets} gets a
+     * desk, and every test above built {@link DefaultDesk} directly, so the
+     * factory itself never ran.
+     */
+    @Test
+    @Timeout(20)
+    void aDeskOverAnyConnectionIsSeededAndLive() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha),
+            new Snapshot<>(List.of(_limit(alpha, 101L, OrderSide.BUY, 5, 1000)), 4L),
+            new Snapshot<>(List.of(), 4L));
+
+        try (var desk = Desk.over(fake, MP, List.of(alpha))) {
+            assertThat(desk.marketplaceId()).isEqualTo(MP);
+            assertThat(desk.book(alpha.id()).bestBuyPrice()).isEqualTo(1000L);
+
+            fake.post(new OrdersUpdate(new Order[] { _limit(alpha, 102L, OrderSide.BUY, 3, 1100) }, 5L));
+            _await("the delta to land", () -> desk.book(alpha.id()).bestBuyPrice() == 1100L);
+        }
+    }
+
+    /** The session and holding a desk holds are the last ones streamed, and handlers hear each until they unsubscribe. */
+    @Test
+    @Timeout(20)
+    void sessionAndHoldingUpdatesAreKeptAndAnnounced() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha), new Snapshot<>(List.of(), 1L), new Snapshot<>(List.of(), 1L));
+        var open = new fm.model.Session(MP, 3L, 30L, 30L, fm.model.Session.STATE_OPEN, "s", null, null, null);
+        var paused = new fm.model.Session(MP, 3L, 30L, 30L, fm.model.Session.STATE_PAUSED, "s", null, null, null);
+        var rich = new fm.model.Holding(MP, 30L, 3L, 1L, "h", 5_000, 4_000, List.of());
+        var poor = new fm.model.Holding(MP, 30L, 3L, 1L, "h", 10, 10, List.of());
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            assertThat(desk.session()).as("nothing streamed yet").isNull();
+            assertThat(desk.holding()).as("nothing streamed yet").isNull();
+            var sessions = new java.util.concurrent.CopyOnWriteArrayList<fm.model.Session>();
+            var holdings = new java.util.concurrent.CopyOnWriteArrayList<fm.model.Holding>();
+            Subscription onSession = desk.onSessionChange(sessions::add);
+            Subscription onHolding = desk.onHoldingChange(holdings::add);
+
+            fake.post(open);
+            fake.post(rich);
+            _await("the holding", () -> rich.equals(desk.holding()));
+            assertThat(desk.session()).isEqualTo(open);
+            assertThat(sessions).containsExactly(open);
+            assertThat(holdings).containsExactly(rich);
+
+            onSession.close();
+            onHolding.close();
+            fake.post(paused);
+            fake.post(poor);
+            _await("the second holding", () -> poor.equals(desk.holding()));
+            assertThat(desk.session()).isEqualTo(paused);
+            assertThat(sessions).as("unsubscribed").containsExactly(open);
+            assertThat(holdings).as("unsubscribed").containsExactly(rich);
+        }
+    }
+
+    /**
+     * A trade reaches the handlers for its own market, and only those. The
+     * other trade test asserts a trade is <em>not</em> announced twice, which
+     * a desk that never announced one at all would pass.
+     */
+    @Test
+    @Timeout(20)
+    void aTradeIsAnnouncedToItsOwnMarketsHandlers() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        Market beta = _market(2L, "BETA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha, beta), new Snapshot<>(List.of(), 4L), new Snapshot<>(List.of(), 4L));
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha, beta))) {
+            var onAlpha = new java.util.concurrent.CopyOnWriteArrayList<fm.model.Trade>();
+            var onBeta = new java.util.concurrent.CopyOnWriteArrayList<fm.model.Trade>();
+            Subscription alphaTrades = desk.onTrade(alpha.id(), onAlpha::add);
+            desk.onTrade(beta.id(), onBeta::add);
+
+            fake.post(new OrdersUpdate(_trade(alpha, 101L, 102L, 500), 5L));
+            _await("the trade to be announced", () -> !onAlpha.isEmpty());
+            assertThat(onAlpha).extracting(fm.model.Trade::price).containsExactly(500L);
+            assertThat(onAlpha.get(0).aggressor().id()).isEqualTo(102L);
+
+            alphaTrades.close();
+            fake.post(new OrdersUpdate(_trade(alpha, 103L, 104L, 510), 6L));
+            fake.post(new OrdersUpdate(new Order[] { _limit(alpha, 200L, OrderSide.SELL, 2, 2000) }, 7L));
+            _await("the marker delta to land", () -> desk.book(alpha.id()).bestSellPrice() == 2000L);
+
+            assertThat(desk.tape(alpha.id()).mostRecentPrices()).containsExactly(500L, 510L);
+            assertThat(onAlpha).as("unsubscribed before the second trade").hasSize(1);
+            assertThat(onBeta).as("another market's trade").isEmpty();
+        }
+    }
+
+    @Test
+    @Timeout(20)
+    void ordersAreSentThroughTheConnectionForThisMarketplace() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha), new Snapshot<>(List.of(), 1L), new Snapshot<>(List.of(), 1L));
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            assertThat(desk.submitLimit(alpha.id(), OrderSide.SELL, 2, 1500).price()).isEqualTo(1500L);
+            assertThat(desk.submitCancel(alpha.id(), 900L).supplier()).isEqualTo(900L);
+
+            assertThat(fake.submitted()).containsExactly(
+                MP + "/" + alpha.id() + " SELL 2@1500",
+                MP + "/" + alpha.id() + " CANCEL 900");
+        }
+    }
+
+    @Test
+    @Timeout(20)
+    void aClosedDeskRefusesToBeReadAndClosesOnce() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha), new Snapshot<>(List.of(), 1L), new Snapshot<>(List.of(), 1L));
+        var desk = new DefaultDesk(fake, MP, List.of(alpha));
+
+        desk.close();
+        desk.close();
+
+        org.assertj.core.api.Assertions.assertThatIllegalStateException()
+            .isThrownBy(() -> desk.book(alpha.id()))
+            .withMessage("Desk for marketplace " + MP + " is closed");
+        org.assertj.core.api.Assertions.assertThatIllegalStateException()
+            .isThrownBy(() -> desk.submitLimit(alpha.id(), OrderSide.BUY, 1, 1000));
+        assertThat(fake.submitted()).as("nothing reached the connection").isEmpty();
+    }
+
+    /**
+     * Which markets an update touched is gathered into an array sized for
+     * sixteen and grown past it. One update across seventeen markets is what
+     * makes it grow, and every book handler must still hear its own.
+     */
+    @Test
+    @Timeout(20)
+    void anUpdateAcrossMoreThanSixteenMarketsReachesEveryBookHandler() throws Exception {
+        var markets = new ArrayList<Market>();
+        for (long id = 1; id <= 17; id++) markets.add(_market(id, "M" + id));
+        var fake = new FakeFlexemarkets(
+            markets, new Snapshot<>(List.of(), 4L), new Snapshot<>(List.of(), 4L));
+
+        try (var desk = new DefaultDesk(fake, MP, markets)) {
+            var heard = java.util.concurrent.ConcurrentHashMap.<Long>newKeySet();
+            for (var market : markets) desk.onBookChange(market.id(), book -> heard.add(book.marketId()));
+
+            Order[] update = markets.stream()
+                .map(m -> _limit(m, 100L + m.id(), OrderSide.BUY, 1, 1000))
+                .toArray(Order[]::new);
+            fake.post(new OrdersUpdate(update, 5L));
+
+            _await("all seventeen handlers", () -> heard.size() == 17);
+            assertThat(heard).containsExactlyInAnyOrderElementsOf(markets.stream().map(Market::id).toList());
+        }
+    }
+
+    /**
+     * A dropped or unreadable stream is said in the log, in words, and the
+     * desk keeps applying what arrives after it. A failure with no message --
+     * a reset connection carries none -- is named by its type, and a drop with
+     * no cause at all says that, rather than either printing "null".
+     */
+    @Test
+    @Timeout(20)
+    void aDroppedOrUnreadableStreamIsLoggedAndTheDeskCarriesOn() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha), new Snapshot<>(List.of(), 4L), new Snapshot<>(List.of(), 4L));
+        var logger = java.util.logging.Logger.getLogger(DefaultDesk.class.getName());
+        var logged = new java.util.concurrent.CopyOnWriteArrayList<String>();
+        var formatter = new java.util.logging.SimpleFormatter();
+        var capture = new java.util.logging.Handler() {
+            @Override public void publish(java.util.logging.LogRecord r) { logged.add(formatter.formatMessage(r)); }
+            @Override public void flush() { }
+            @Override public void close() { }
+        };
+        logger.addHandler(capture);
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            fake.post(new fm.event.StreamDropped(null));
+            fake.post(new fm.event.StreamDropped(new java.io.IOException()));
+            fake.post(new fm.event.StreamDropped(new java.io.IOException("connection reset")));
+            fake.post(new fm.event.FrameUnreadable("STOMP ERROR: no such marketplace", null));
+            fake.post(new OrdersUpdate(new Order[] { _limit(alpha, 102L, OrderSide.BUY, 3, 1100) }, 5L));
+
+            _await("the delta after them", () -> desk.book(alpha.id()).bestBuyPrice() == 1100L);
+            assertThat(logged).containsExactly(
+                "WS transport error on marketplace 7: no cause reported",
+                "WS transport error on marketplace 7: IOException",
+                "WS transport error on marketplace 7: IOException: connection reset",
+                "WS error on marketplace 7: STOMP ERROR: no such marketplace");
+        } finally {
+            logger.removeHandler(capture);
+        }
+    }
+
 }

@@ -76,4 +76,51 @@ class ProviderDiscoveryTest {
                 Flexemarkets.connect("credential", "http://127.0.0.1:1/api/marketplaces/1", "test"))
                 .isInstanceOfAny(IOException.class, RuntimeException.class);
     }
+
+    /**
+     * The capture-and-impersonate overload asks the providers too, and hands
+     * the claiming one the plain connect: both options are properties of the
+     * HTTP exchange, which a provider does not have.
+     */
+    @Test
+    void theTracingOverloadAlsoServesAProvidersEndpoint() throws IOException {
+        try (Flexemarkets fm = Flexemarkets.connect("credential", "loopback:1744", "test", true, "someone-else")) {
+            assertThat(fm.accountName()).isEqualTo(TestLoopbackProvider.DESCRIPTION);
+            assertThat(fm.endpointUrl()).isEqualTo("loopback:1744");
+        }
+    }
+
+    /**
+     * A services file naming a class that does not exist must not stop an
+     * ordinary connection: discovery comes back empty instead of throwing
+     * ServiceConfigurationError out of the first connect().
+     *
+     * <p>The provider list is loaded once per class loader, so this loads
+     * {@code Providers} afresh, in a loader whose only declaration is the
+     * broken one. In the suite's own loader the same lookup finds
+     * {@link TestLoopbackProvider}.
+     */
+    @Test
+    void aBrokenProviderDeclarationIsNoProviderAtAll() throws Exception {
+        Path services = Files.createDirectories(directory.resolve("META-INF/services"));
+        Files.writeString(services.resolve(FlexemarketsProvider.class.getName()), "fm.NoSuchProvider\n");
+        var classes = Providers.class.getProtectionDomain().getCodeSource().getLocation();
+        var thread = Thread.currentThread();
+        var previous = thread.getContextClassLoader();
+
+        try (var loader = new java.net.URLClassLoader(
+                new java.net.URL[] { directory.toUri().toURL(), classes },
+                ClassLoader.getPlatformClassLoader())) {
+            thread.setContextClassLoader(loader);
+            var forEndpoint = Class.forName(Providers.class.getName(), true, loader)
+                    .getDeclaredMethod("forEndpoint", String.class);
+            forEndpoint.setAccessible(true);
+
+            assertThat(forEndpoint.invoke(null, "loopback:1744")).isNull();
+        } finally {
+            thread.setContextClassLoader(previous);
+        }
+        assertThat(Providers.forEndpoint("loopback:1744")).isInstanceOf(TestLoopbackProvider.class);
+    }
+
 }

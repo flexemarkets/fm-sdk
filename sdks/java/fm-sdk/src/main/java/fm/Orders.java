@@ -285,6 +285,11 @@ public final class Orders {
             o2original = findOrder(orders, o2.original());
         }
 
+        // An original outside the batch cannot be aged against the other; the
+        // one that is missing counts as the older, as in Python and TypeScript.
+        if (o1original == null || o2original == null) {
+            return o1original == null;
+        }
         return _isCreatedEarlier(o1original, o2original);
     }
 

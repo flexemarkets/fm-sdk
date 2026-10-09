@@ -162,4 +162,96 @@ class OrdersTest {
         return new Order(null, null, id, id, supplier, null, OrderType.LIMIT, OrderSide.BUY,
                          1L, 1L, null, null, 1L, 1L, "ALPHA", 1L, null, null);
     }
+
+    // ---- isResting ---------------------------------------------------------
+
+    /** A row with every lineage field spelled out; side and size do not matter here. */
+    private static Order _row(long id, long original, long supplier, Long consumer, OrderType type) {
+        return new Order(null, null, id, original, supplier, consumer, type, OrderSide.BUY,
+                         1L, 100L, null, 8L, 1L, 300L, "STK", 11L, null, null);
+    }
+
+    /**
+     * Two fragments whose originals are not in the batch: a matched child of
+     * 201, consumed by a child of 299. Neither original can be found to
+     * compare by age, which Python and TypeScript answer as "the first is
+     * older" and Java answered with a NullPointerException out of a public
+     * method.
+     */
+    @Test
+    void fragmentsWhoseOriginalsAreNotInTheBatchDoNotThrow() {
+        Order matched = _row(205, 201, 203, 301L, OrderType.LIMIT);
+        Order[] batch = {
+            _row(203, 201, 201, 0L, OrderType.LIMIT),
+            matched,
+            _row(302, 299, 299, 0L, OrderType.LIMIT),
+            _row(301, 299, 302, 205L, OrderType.LIMIT),
+        };
+
+        assertThat(Orders.isResting(batch, matched)).isTrue();
+    }
+
+
+    /** A resting order has no consumer; nothing else needs consulting. */
+    @Test
+    void anAvailableOrderIsResting() {
+        Order resting = _row(5, 5, 5, null, OrderType.LIMIT);
+        assertThat(Orders.isResting(new Order[] { resting }, resting)).isTrue();
+    }
+
+    /** The CANCEL row of a cancellation never rested; the LIMIT it consumed did. */
+    @Test
+    void aCancelRowIsNotRestingButTheLimitItCancelledIs() {
+        Order limit = _row(5, 5, 5, 6L, OrderType.LIMIT);
+        Order cancel = _row(6, 6, 5, 5L, OrderType.CANCEL);
+        Order[] pair = { limit, cancel };
+
+        assertThat(Orders.isResting(pair, cancel)).isFalse();
+        assertThat(Orders.isResting(pair, limit)).isTrue();
+    }
+
+    /**
+     * A split marker is judged by its first real child: here 202, matched by
+     * the incoming 204, so the marker was on the book first. The marker's
+     * consumer is the 0 a split leaves, which no order in the batch has.
+     */
+    @Test
+    void aSplitMarkerIsJudgedByItsFirstMatchedChild() {
+        Order marker = _row(201, 201, 201, 0L, OrderType.LIMIT);
+        Order[] split = {
+            marker,
+            _row(202, 201, 201, 204L, OrderType.LIMIT),
+            _row(203, 201, 201, null, OrderType.LIMIT),
+            _row(204, 204, 204, 202L, OrderType.LIMIT),
+        };
+
+        assertThat(Orders.isResting(split, marker)).isTrue();
+    }
+
+    /**
+     * A marker whose children are not in the batch has nothing to be judged
+     * by, and is not resting -- whatever else the batch holds. The unrelated
+     * match beside it is there so that taking the wrong order for its child
+     * reads as resting.
+     */
+    @Test
+    void aSplitMarkerWithoutItsChildrenIsNotResting() {
+        Order marker = _row(201, 201, 201, 0L, OrderType.LIMIT);
+        Order[] batch = {
+            marker,
+            _row(600, 600, 600, 601L, OrderType.LIMIT),
+            _row(601, 601, 601, 600L, OrderType.LIMIT),
+        };
+
+        assertThat(Orders.isResting(batch, marker)).isFalse();
+    }
+
+    @Test
+    void aNullOrderIsNeitherConsumedNorSplit() {
+        assertThat(Orders.isConsumed(null)).isFalse();
+        assertThat(Orders.isSplit(null)).isFalse();
+        assertThat(Orders.isConsumed(withConsumer(9L))).isTrue();
+        assertThat(Orders.isSplit(withConsumer(0L))).isTrue();
+    }
+
 }
