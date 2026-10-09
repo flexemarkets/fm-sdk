@@ -303,11 +303,21 @@ public class Events implements Subscription {
         _heartbeats.shutdownNow();
     }
 
+    /**
+     * Close the current socket, detaching it first.
+     *
+     * <p>Detached so that its own onClose -- which arrives when the server
+     * answers this close -- is recognised as ours and not as a drop. Reported
+     * as a drop, a reconnect the caller asked for queued a StreamDropped and
+     * started a second reconnect that tore down the socket just opened.
+     */
     private void _closeWebSocket() {
         _stopHeartbeats();
-        if (_webSocket != null) {
+        var socket = _webSocket;
+        _webSocket = null;
+        if (socket != null) {
             try {
-                _webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "").join();
+                socket.sendClose(WebSocket.NORMAL_CLOSURE, "").join();
             } catch (Exception ignored) {}
         }
     }
@@ -495,7 +505,7 @@ public class Events implements Subscription {
 
         @Override
         public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
-            if (!_closed) {
+            if (!_closed && webSocket == _webSocket) {
                 _queue.offer(new StreamDropped(
                     new Exception("WebSocket closed: %d %s".formatted(statusCode, reason))));
                 reconnectInBackground();
@@ -505,6 +515,7 @@ public class Events implements Subscription {
 
         @Override
         public void onError(WebSocket webSocket, Throwable error) {
+            if (webSocket != _webSocket) return; // one this client closed
             _queue.offer(new StreamDropped(error));
             reconnectInBackground();
         }

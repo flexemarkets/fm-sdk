@@ -397,6 +397,29 @@ class EventsSocketTest {
         }
     }
 
+    /**
+     * A reconnect the caller asks for replaces the socket once, quietly. The
+     * old socket's close is the client's own doing, not a drop: reporting it
+     * as one queued a StreamDropped and set off a second reconnect that tore
+     * down the socket just opened.
+     */
+    @Test
+    @Timeout(30)
+    void aReconnectTheCallerAsksForReplacesTheSocketOnce() throws Exception {
+        try (var fm = client()) {
+            fm.listen(MP, queue);
+            _Connection first = server.connection(0);
+            assertThat(first.awaitReceived(4)).isTrue();
+
+            fm.reconnect();
+
+            assertThat(awaitClosedByClient(first)).as("the old socket closed").isTrue();
+            assertThat(server.connection(1).awaitReceived(4)).as("the new socket subscribes").isTrue();
+            assertThat(queue.poll(1, TimeUnit.SECONDS)).as("nothing reported").isNull();
+            assertThat(server.connectionCount()).as("one replacement").isEqualTo(2);
+        }
+    }
+
     /** subscribe() is a stream of its own, closed by closing what it returns; reconnect() leaves it alone. */
     @Test
     @Timeout(30)
