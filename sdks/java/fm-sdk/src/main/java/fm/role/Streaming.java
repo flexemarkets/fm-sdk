@@ -57,6 +57,29 @@ public interface Streaming {
     Desk desk(long marketplaceId);
 
     /**
+     * A desk whose {@code submitLimit} either refuses locally what fm-server
+     * would refuse -- a session that is not open, a side the holding does not
+     * grant -- with {@link fm.error.OrderRefusedLocallyException}, as
+     * {@link #desk(long)} does, or sends every order and leaves the answer to
+     * the server.
+     *
+     * <p>A default so that an implementation written before it still
+     * compiles; such an implementation cannot turn the check off, and says so.
+     *
+     * @param marketplaceId the marketplace to open a desk on
+     * @param refuseLocally false to send every order to the server
+     * @return a desk that keeps itself current until closed
+     */
+    default Desk desk(long marketplaceId, boolean refuseLocally) {
+        if (!refuseLocally) {
+            var name = getClass().getName();
+            var refused = new UnsupportedOperationException(name + " cannot open a desk that sends every order");
+            throw refused;
+        }
+        return desk(marketplaceId);
+    }
+
+    /**
      * Re-establish the subscription by hand.
      *
      * <p>Rarely needed: the client reconnects in the background after a

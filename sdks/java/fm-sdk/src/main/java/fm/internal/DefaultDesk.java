@@ -1,5 +1,6 @@
 package fm.internal;
 
+import fm.error.OrderRefusedLocallyException;
 import fm.event.FrameUnreadable;
 import fm.event.GapEvent;
 import fm.event.OrdersUpdate;
@@ -297,8 +298,43 @@ public class DefaultDesk implements Desk {
 
     @Override
     public Order submitLimit(long marketId, OrderSide side, long units, long price) {
+        return submitLimit(marketId, side, units, price, true);
+    }
+
+    /**
+     * Submit a limit order, unless the desk already knows fm-server would
+     * refuse it: a session the desk holds that is not OPEN, or a position in
+     * the market whose grant does not allow the side. Those are thrown as
+     * {@link OrderRefusedLocallyException} and never sent. What the desk does
+     * not know -- no session or holding yet, no position in the market -- goes
+     * to the server, which has the last word.
+     */
+    Order submitLimit(long marketId, OrderSide side, long units, long price, boolean refuseLocally) {
         _ensureOpen();
+        if (refuseLocally) {
+            _refuseLocally(marketId, side);
+        }
         return _flexemarkets.submitLimit(_marketplaceId, marketId, side, units, price);
+    }
+
+    private void _refuseLocally(long marketId, OrderSide side) {
+        var session = _session.get();
+        if (session != null && session.state() != null
+                && !Session.STATE_OPEN.equalsIgnoreCase(session.state())) {
+            throw new OrderRefusedLocallyException("SESSION_CLOSED",
+                "Not sent: session " + session.id() + " is " + session.state() + ", not OPEN.");
+        }
+        var holding = _holding.get();
+        if (holding == null || side == null) {
+            return;
+        }
+        holding.security(marketId).ifPresent(security -> {
+            boolean granted = OrderSide.BUY == side ? security.canBuy() : security.canSell();
+            if (!granted) {
+                throw new OrderRefusedLocallyException("ORDER_NOT_ALLOWED",
+                    "Not sent: your holding does not grant " + side + " in market " + marketId + ".");
+            }
+        });
     }
 
     @Override

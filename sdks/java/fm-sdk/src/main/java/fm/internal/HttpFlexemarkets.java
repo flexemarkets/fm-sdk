@@ -980,6 +980,11 @@ public class HttpFlexemarkets implements Flexemarkets {
      * concern, not a client-side one.
      */
     public Desk desk(long marketplaceId) {
+        return desk(marketplaceId, true);
+    }
+
+    @Override
+    public Desk desk(long marketplaceId, boolean refuseLocally) {
         DefaultDesk shared;
         synchronized (_viewLock) {
             SharedDesk entry = _sharedViews.get(marketplaceId);
@@ -997,7 +1002,7 @@ public class HttpFlexemarkets implements Flexemarkets {
             entry.refCount++;
             shared = entry.desk;
         }
-        return new DeskHandle(shared, () -> _releaseSharedView(marketplaceId));
+        return new DeskHandle(shared, () -> _releaseSharedView(marketplaceId), refuseLocally);
     }
 
     void _releaseSharedView(long marketplaceId) {

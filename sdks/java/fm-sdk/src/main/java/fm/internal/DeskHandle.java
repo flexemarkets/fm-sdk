@@ -37,11 +37,13 @@ class DeskHandle implements Desk {
     private final DefaultDesk _shared;
     private final Runnable _onClose;
     private final List<Subscription> _mySubscriptions = new CopyOnWriteArrayList<>();
+    private final boolean _refuseLocally;
     private volatile boolean _closed;
 
-    DeskHandle(DefaultDesk shared, Runnable onClose) {
+    DeskHandle(DefaultDesk shared, Runnable onClose, boolean refuseLocally) {
         this._shared = shared;
         this._onClose = onClose;
+        this._refuseLocally = refuseLocally;
     }
 
     @Override public long marketplaceId() {
@@ -127,7 +129,7 @@ class DeskHandle implements Desk {
 
     @Override public Order submitLimit(long marketId, OrderSide side, long units, long price) {
         _check();
-        return _shared.submitLimit(marketId, side, units, price);
+        return _shared.submitLimit(marketId, side, units, price, _refuseLocally);
     }
 
     @Override public Order submitCancel(long marketId, long originalId) {

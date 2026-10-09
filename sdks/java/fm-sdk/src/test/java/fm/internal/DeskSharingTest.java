@@ -2,6 +2,7 @@ package fm.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -28,11 +29,17 @@ import fm.Book;
 import fm.Desk;
 import fm.Snapshot;
 import fm.Subscription;
+import fm.error.InvalidArgumentException;
+import fm.error.OrderRefusedLocallyException;
 import fm.event.OrdersUpdate;
+import fm.model.Holding;
 import fm.model.Market;
 import fm.model.Order;
 import fm.model.OrderSide;
 import fm.model.OrderType;
+import fm.model.Security;
+import fm.model.Session;
+import fm.role.Streaming;
 
 /**
  * {@code Flexemarkets.desk(id)}, the call every caller makes: one desk and one
@@ -395,4 +402,102 @@ class DeskSharingTest {
         }
     }
 
+
+    // ---- refusing locally what the server would refuse ------------------
+
+    private static Session _session(String state) {
+        return new Session(MP, 3L, 30L, 30L, state, "s", null, null, null);
+    }
+
+    private static Holding _granting(boolean canBuy, boolean canSell) {
+        return new Holding(MP, 30L, 3L, 7L, "h", 10_000, 10_000,
+            List.of(new Security(ALPHA.id(), 5L, 5L, 0L, canBuy, canSell)));
+    }
+
+    @Test
+    @Timeout(20)
+    void anOrderIntoASessionThatIsNotOpenIsRefusedAndNotSent() throws Exception {
+        try (var fm = _connect(); Desk desk = fm.desk(MP)) {
+            fm.post(MP, _session(Session.STATE_CLOSED));
+            _await("the session to land", () -> desk.session() != null);
+
+            assertThatThrownBy(() -> desk.submitLimit(ALPHA.id(), OrderSide.BUY, 1, 1000))
+                .isInstanceOf(InvalidArgumentException.class)
+                .isInstanceOfSatisfying(OrderRefusedLocallyException.class,
+                    refused -> assertThat(refused.reason()).isEqualTo("SESSION_CLOSED"))
+                .hasMessageContaining("session 30 is CLOSED");
+            assertThat(fm.submitted).isEmpty();
+        }
+    }
+
+    @Test
+    @Timeout(20)
+    void aSideTheHoldingDoesNotGrantIsRefusedAndTheOtherIsSent() throws Exception {
+        try (var fm = _connect(); Desk desk = fm.desk(MP)) {
+            fm.post(MP, _session(Session.STATE_OPEN));
+            fm.post(MP, _granting(true, false));
+            _await("the holding to land", () -> desk.holding() != null);
+
+            assertThatThrownBy(() -> desk.submitLimit(ALPHA.id(), OrderSide.SELL, 1, 1000))
+                .isInstanceOfSatisfying(OrderRefusedLocallyException.class,
+                    refused -> assertThat(refused.reason()).isEqualTo("ORDER_NOT_ALLOWED"))
+                .hasMessageContaining("does not grant SELL");
+
+            desk.submitLimit(ALPHA.id(), OrderSide.BUY, 1, 1000);
+            assertThat(fm.submitted).containsExactly(MP + "/" + ALPHA.id() + " BUY 1@1000");
+        }
+    }
+
+    /** No session or holding yet, or no position in the market: the server decides. */
+    @Test
+    @Timeout(20)
+    void whatTheDeskDoesNotKnowGoesToTheServer() throws Exception {
+        try (var fm = _connect(); Desk desk = fm.desk(MP)) {
+            desk.submitLimit(ALPHA.id(), OrderSide.SELL, 1, 1000);
+            fm.post(MP, _session(Session.STATE_OPEN));
+            fm.post(MP, HELD);
+            _await("the holding to land", () -> desk.holding() != null);
+            desk.submitLimit(ALPHA.id(), OrderSide.SELL, 1, 1000);
+            assertThat(fm.submitted).hasSize(2);
+        }
+    }
+
+    @Test
+    @Timeout(20)
+    void refuseLocallyFalseSendsEveryOrder() throws Exception {
+        try (var fm = _connect(); Desk desk = fm.desk(MP, false)) {
+            fm.post(MP, _session(Session.STATE_CLOSED));
+            fm.post(MP, _granting(false, false));
+            _await("the holding to land", () -> desk.holding() != null);
+
+            desk.submitLimit(ALPHA.id(), OrderSide.BUY, 1, 1000);
+            assertThat(fm.submitted).containsExactly(MP + "/" + ALPHA.id() + " BUY 1@1000");
+        }
+    }
+
+    /** A manager may cancel in any state, and the desk cannot tell a manager. */
+    @Test
+    @Timeout(20)
+    void aCancelIsNeverRefusedLocally() throws Exception {
+        try (var fm = _connect(); Desk desk = fm.desk(MP)) {
+            fm.post(MP, _session(Session.STATE_CLOSED));
+            _await("the session to land", () -> desk.session() != null);
+            desk.submitCancel(ALPHA.id(), 900L);
+            assertThat(fm.submitted).containsExactly(MP + "/" + ALPHA.id() + " CANCEL 900");
+        }
+    }
+
+    /** An implementation that predates the overload keeps compiling, and cannot pretend to turn the check off. */
+    @Test
+    void theDefaultOverloadRefusesToSendEveryOrder() {
+        Streaming old = new Streaming() {
+            @Override public void listen(long marketplaceId, BlockingQueue<Object> queue) { }
+            @Override public Subscription subscribe(long marketplaceId, BlockingQueue<Object> queue) { return null; }
+            @Override public Desk desk(long marketplaceId) { return null; }
+            @Override public void reconnect() { }
+        };
+        assertThat(old.desk(MP, true)).isNull();
+        assertThatThrownBy(() -> old.desk(MP, false))
+            .isInstanceOf(UnsupportedOperationException.class);
+    }
 }
