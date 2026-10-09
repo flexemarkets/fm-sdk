@@ -322,12 +322,8 @@ export class EventListener {
           reject(err);
           return;
         }
-        // Wait for CONNECTED frame then subscribe
-        this._ws!.once("message", (raw) => {
-          const reply = decodeFrame(raw.toString());
-          if (reply.command !== "CONNECTED" && reply.command !== "") {
-            // unexpected but continue
-          }
+        // Wait for the server's first frame -- CONNECTED -- then subscribe.
+        this._ws!.once("message", () => {
           this._subscribe();
           this._startHeartbeats();
           this._receiveLoop();
@@ -453,6 +449,10 @@ export class EventListener {
     if (this._ws !== null) {
       try {
         this._ws.removeAllListeners();
+        // A socket closed before its handshake reports that as an 'error' on
+        // the next tick; with no listener left, Node throws it out of the
+        // process. This socket is being discarded, so the report is too.
+        this._ws.on("error", () => {});
         this._ws.close();
       } catch {
         // ignore

@@ -14,7 +14,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { Flexemarkets } from "../src/client.ts";
+import { Flexemarkets, parseHolding } from "../src/client.ts";
+import { parseSession } from "../src/stomp.ts";
+import type { Desk } from "../src/desk.ts";
 import type { Market, Order } from "../src/types.ts";
 import type { FmEvent, OrdersUpdate } from "../src/stomp.ts";
 import type { Snapshot } from "../src/snapshot.ts";
@@ -74,6 +76,10 @@ function scripted(): Scripted {
     async submitLimit(marketplaceId: number, marketId: number, side: string, units: number, price: number) {
       fm.submitted.push(`${marketplaceId}/${marketId} ${side} ${units}@${price}`);
       return limit(marketplaceId, 900, side, units, price);
+    },
+    async submitCancel(marketplaceId: number, marketId: number, originalId: number) {
+      fm.submitted.push(`${marketplaceId}/${marketId} cancel ${originalId}`);
+      return limit(marketplaceId, 901, "BUY", 0, 0);
     },
   });
   return fm;
@@ -205,7 +211,8 @@ test("a handle reads and trades through the shared desk", async () => {
   assert.notEqual(desk.tape(ALPHA), null);
 
   await desk.submitLimit(ALPHA, "SELL", 2, 1500);
-  assert.deepEqual(fm.submitted, [`${MP}/${ALPHA} SELL 2@1500`]);
+  await desk.submitCancel(ALPHA, 900);
+  assert.deepEqual(fm.submitted, [`${MP}/${ALPHA} SELL 2@1500`, `${MP}/${ALPHA} cancel 900`]);
   desk.close();
   fm.close();
 });
@@ -218,4 +225,63 @@ test("closing the client closes the desks its callers left open", async () => {
   fm.close();
 
   assert.equal(fm.unsubscribes, 2);
+});
+
+/** Registers a handler of every kind on `desk`, each recording its kind. */
+function listenToEverything(desk: Desk): string[] {
+  const heard: string[] = [];
+  desk.onSessionChange(() => heard.push("session"));
+  desk.onHoldingChange(() => heard.push("holding"));
+  desk.onBookChange(ALPHA, () => heard.push("book"));
+  desk.onTrade(ALPHA, () => heard.push("trade"));
+  desk.onGap(() => heard.push("gap"));
+  desk.onRecovery(() => heard.push("recovery"));
+  return heard;
+}
+
+/** One event of every kind a handler can hear, through the one stream. */
+async function postEverything(fm: Scripted): Promise<void> {
+  const at = new Date("2026-10-08T10:00:00Z");
+  fm.post(MP, parseSession({ id: 3, marketplaceId: MP, state: "OPEN" }));
+  fm.post(MP, parseHolding({ marketplaceId: MP, cash: 2500, securities: [] }));
+  fm.post(MP, update([
+    { ...limit(MP, 102, "SELL", 1, 1000), consumer: 103, lastModifiedDate: at },
+    { ...limit(MP, 103, "BUY", 1, 1000), consumer: 102, lastModifiedDate: at },
+  ], 5));
+  fm.post(MP, update([], 9));   // a gap
+  await new Promise((r) => setTimeout(r, 50));
+  fm.post(MP, { kind: "reconnected", marketplaceId: MP });
+  await new Promise((r) => setTimeout(r, 50));
+}
+
+test("a handle hears every kind of event, and reads what they carried", async () => {
+  const fm = scripted();
+  const desk = await fm.desk(MP);
+  const heard = listenToEverything(desk);
+
+  await postEverything(fm);
+
+  assert.deepEqual(heard, ["session", "holding", "trade", "book", "gap", "recovery"]);
+  assert.equal(desk.session()?.state, "OPEN");
+  assert.equal(desk.holding()?.cash, 2500);
+  desk.close();
+  fm.close();
+});
+
+test("a closed handle's handlers of every kind stop", async () => {
+  const fm = scripted();
+  const a = await fm.desk(MP);
+  const b = await fm.desk(MP);
+  const heardByA = listenToEverything(a);
+  const heardByB = listenToEverything(b);
+  a.close();
+
+  await postEverything(fm);
+
+  assert.deepEqual(heardByA, []);
+  assert.equal(heardByB.length, 6, heardByB.join(", "));
+  assert.throws(() => a.session(), /closed/);
+  assert.throws(() => a.holding(), /closed/);
+  b.close();
+  fm.close();
 });
