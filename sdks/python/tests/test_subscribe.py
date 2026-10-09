@@ -88,10 +88,11 @@ def test_listen_remains_one_per_connection(client, monkeypatch):
 
     class FakeListener:
         def __init__(self):
+            self.closed = False
             opened.append(self)
 
         def close(self):
-            pass
+            self.closed = True
 
     monkeypatch.setattr(
         Flexemarkets, "_connect_events", lambda self, mpid, q: FakeListener()
@@ -101,6 +102,8 @@ def test_listen_remains_one_per_connection(client, monkeypatch):
     client.listen(1, queue.Queue())
 
     assert client._event_listener is opened[-1], "the second listen replaces the first"
+    assert opened[0].closed is True, "the first is closed, not left running"
+    assert opened[1].closed is False
 
 
 class _Started:

@@ -1448,6 +1448,11 @@ class Flexemarkets:
         One per connection: a second call replaces the first. For streams that
         coexist, use :meth:`subscribe`.
         """
+        # The stream this replaces is closed, not dropped with its socket,
+        # heartbeats and reconnects still running.
+        if self._event_listener is not None:
+            self._event_listener.close()
+            self._event_listener = None
         self._event_listener = self._connect_events(marketplace_id, event_queue)
 
     def subscribe(
