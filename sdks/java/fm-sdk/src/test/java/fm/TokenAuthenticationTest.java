@@ -134,4 +134,15 @@ class TokenAuthenticationTest {
         assertThat(_requests)
                 .noneSatisfy(r -> assertThat(r).startsWith("POST /api/tokens auth"));
     }
+
+    /** Who signed in, and where to: the account and the marketplace the endpoint names. */
+    @Test
+    void theConnectionKnowsItsAccountAndMarketplace() throws Exception {
+        try (Flexemarkets fm = Flexemarkets.connect(TOKEN, _endpoint(), "token-test")) {
+            assertThat(fm.account().name()).isEqualTo("dev");
+            assertThat(fm.accountId()).isEqualTo(fm.account().id());
+            assertThat(fm.endpointMarketplaceId()).isEqualTo(1L);
+        }
+    }
+
 }
