@@ -173,22 +173,24 @@ class OrdersTest {
 
     /**
      * Two fragments whose originals are not in the batch: a matched child of
-     * 201, consumed by a child of 299. Neither original can be found to
-     * compare by age, which Python and TypeScript answer as "the first is
-     * older" and Java answered with a NullPointerException out of a public
-     * method.
+     * 201, consumed by a child of 299. Neither original is there to look up,
+     * but their ids are on the fragments, and ids are handed out in the order
+     * the exchange matches: 201 came first, so its side is the one resting
+     * and the match is one trade, not two.
      */
     @Test
-    void fragmentsWhoseOriginalsAreNotInTheBatchDoNotThrow() {
+    void fragmentsWhoseOriginalsAreNotInTheBatchRestByOriginalId() {
         Order matched = _row(205, 201, 203, 301L, OrderType.LIMIT);
+        Order taker = _row(301, 299, 302, 205L, OrderType.LIMIT);
         Order[] batch = {
             _row(203, 201, 201, 0L, OrderType.LIMIT),
             matched,
             _row(302, 299, 299, 0L, OrderType.LIMIT),
-            _row(301, 299, 302, 205L, OrderType.LIMIT),
+            taker,
         };
 
         assertThat(Orders.isResting(batch, matched)).isTrue();
+        assertThat(Orders.isResting(batch, taker)).isFalse();
     }
 
 

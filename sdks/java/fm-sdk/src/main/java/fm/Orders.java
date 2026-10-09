@@ -275,26 +275,11 @@ public final class Orders {
         if (!o1InTradeSet && o2InTradeSet) return true;
         if (o1InTradeSet && !o2InTradeSet) return false;
 
-        var o1original = o1;
-        if (o1.id() != o1.original()) {
-            o1original = findOrder(orders, o1.original());
-        }
-
-        var o2original = o2;
-        if (o2.id() != o2.original()) {
-            o2original = findOrder(orders, o2.original());
-        }
-
-        // An original outside the batch cannot be aged against the other; the
-        // one that is missing counts as the older, as in Python and TypeScript.
-        if (o1original == null || o2original == null) {
-            return o1original == null;
-        }
-        return _isCreatedEarlier(o1original, o2original);
-    }
-
-    private static boolean _isCreatedEarlier(Order order, Order consumer) {
-        return order.id() < consumer.id();
+        // Age by the originals' ids, which every fragment carries: the exchange
+        // hands out ids as it matches, one order at a time per marketplace, so
+        // the earlier id was on the book first. The originals themselves need
+        // not be in the batch.
+        return o1.original() < o2.original();
     }
 
     private static Order _firstChild(Order[] orders, Order order) {
