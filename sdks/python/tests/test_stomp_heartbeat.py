@@ -12,12 +12,11 @@ the same thing and were left behind, which is what a Java-only
 StompHeartbeatTest lets happen -- so this is the counterpart, and there is one
 in TypeScript too.
 
-WHAT THESE DO NOT COVER, so nobody reads more into them than is there: that a
-heartbeat actually reaches the socket. The sender is a daemon thread on a live
-connection, so proving the write would mean injecting a socket into production
-code for the test's benefit. These pin the arithmetic instead -- which is where
-the regression worth catching lives, because an interval edited past Heroku's
-timeout silently restores the original fault.
+These pin the arithmetic -- which is where the regression worth catching
+lives, because an interval edited past Heroku's timeout silently restores the
+original fault. That a heartbeat actually reaches the socket is
+test_events_socket's, against a real WebSocket server with the interval
+shortened.
 """
 
 from fm.events import (

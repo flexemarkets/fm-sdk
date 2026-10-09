@@ -50,8 +50,9 @@ packages = ["fm"]
 source = ["fm"]
 
 # The release gate over critical code: what places and cancels orders, signs
-# in, and keeps a desk's books current. fail_under is today's coverage, so it
-# can only go up; raise it as tests land, toward 90. `make test-python`.
+# in, and keeps a desk's books current. Every line of it is covered, so
+# fail_under is 100: a line added here without a test that reaches it fails
+# the build. `make test-python`; `coverage report -m` names the line.
 [tool.coverage.report]
 include = [
     "fm/client.py",
@@ -61,5 +62,5 @@ include = [
     "fm/orderbook.py",
     "fm/trades.py",
 ]
-fail_under = 85.4
+fail_under = 100
 precision = 1

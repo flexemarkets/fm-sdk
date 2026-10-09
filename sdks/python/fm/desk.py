@@ -195,6 +195,7 @@ class Desk:
         time. A caller scanning for the best opportunity across markets wants
         this rather than :meth:`markets` zipped against :meth:`book`.
         """
+        self._ensure_open()
         return list(self._books.collection())
 
     def tapes(self) -> list[Tape]:
@@ -344,10 +345,7 @@ class Desk:
         if self._closed:
             return
         self._closed = True
-        try:
-            self._events.close()
-        except Exception:
-            pass
+        self._events.close()
         # Flexemarkets is owned by the caller; we don't close it. The
         # dispatcher thread is daemon so it'll exit with the process,
         # and the next queue.get() with timeout will see _closed and
@@ -647,10 +645,7 @@ class DeskHandle:
             return
         self._closed = True
         for sub in self._my_subscriptions:
-            try:
-                sub()
-            except Exception:
-                pass
+            sub()
         self._my_subscriptions.clear()
         self._on_close()
 

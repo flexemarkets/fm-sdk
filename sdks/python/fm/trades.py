@@ -215,9 +215,6 @@ class TapeIndex:
     def collection(self) -> list[Tape]:
         return list(self._trades.values())
 
-    def __getitem__(self, market_id: int) -> Tape:
-        return self._trades[market_id]
-
     def get(self, market_id: int) -> "Tape | None":
         """That market's tape, or ``None`` when the market is not in this
         marketplace -- the lookup :class:`~fm.desk.Desk` needs,
