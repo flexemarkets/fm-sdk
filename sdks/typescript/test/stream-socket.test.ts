@@ -9,11 +9,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
+import { createServer, type IncomingMessage } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
 
 import { EventListener } from "../src/stomp.ts";
 import type { FmEvent, OrdersUpdate } from "../src/stomp.ts";
-import { parseHolding, parseOrder } from "../src/client.ts";
+import { Flexemarkets, parseHolding, parseOrder } from "../src/client.ts";
+import type { Holding } from "../src/types.ts";
 
 const MP = 7;
 
@@ -127,4 +129,52 @@ test("a server close is a drop that reconnects and says so", async () => {
     assert.equal(kind(events[0]), "stream-dropped");
     await until("the new socket subscribes again", () => s.received[1]?.length >= 4);
   } finally { await done(); }
+});
+
+test("a connection dials its endpoint's events socket with its own token", async () => {
+  // The socket's address is derived from the endpoint, and the handshake is
+  // what carries the token: a wrong scheme, path or header and nothing ever
+  // arrives. Until this, every test that opened a stream stubbed the dial.
+  const token = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl";
+  const http = createServer((req, res) => {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ token, person: { id: 7 }, account: { id: 1, name: "dev" } }));
+  });
+  const wss = new WebSocketServer({ server: http });
+  const upgrades: IncomingMessage[] = [];
+  const sockets: WebSocket[] = [];
+  wss.on("connection", (socket, request) => {
+    upgrades.push(request);
+    sockets.push(socket);
+    socket.on("message", (raw) => {
+      if (raw.toString().startsWith("CONNECT\n")) socket.send("CONNECTED\nversion:1.2\n\n\0");
+    });
+  });
+  await new Promise<void>((resolve) => http.listen(0, "127.0.0.1", () => resolve()));
+  const base = `http://127.0.0.1:${(http.address() as AddressInfo).port}/api`;
+
+  const fm = await Flexemarkets.connect(token, `${base}/marketplaces/${MP}`, "fm-sdk-test");
+  try {
+    const events: FmEvent[] = [];
+    await fm.reconnect();   // nothing to reconnect yet
+    assert.equal(upgrades.length, 0);
+
+    await fm.listen(MP, (e) => void events.push(e));
+    assert.equal(upgrades[0]!.url, "/api/events");
+    assert.equal(upgrades[0]!.headers.authorization, `Bearer ${token}`);
+
+    // Sent as "assets", which only the SDK's holding parser reads as securities.
+    sockets[0]!.send(message("HOLDING-UPDATE", '{"marketplaceId":7,"cash":2500,"assets":[{"marketId":3,"units":4}]}'));
+    await until("the holding", () => events.length >= 1);
+    assert.equal((events[0] as Holding).cash, 2500);
+    assert.equal((events[0] as Holding).securities[0]?.units, 4);
+
+    await fm.reconnect();
+    assert.equal(upgrades.length, 2, "reconnect dials again");
+  } finally {
+    fm.close();
+    for (const socket of sockets) socket.terminate();
+    await new Promise<void>((resolve) => wss.close(() => resolve()));
+    await new Promise<void>((resolve) => http.close(() => resolve()));
+  }
 });
