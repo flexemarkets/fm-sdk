@@ -342,29 +342,25 @@ public class Events implements Subscription {
                 "heart-beat:" + ADVERTISED_HEARTBEAT_MS + "," + ADVERTISED_HEARTBEAT_MS,
                 "agent-description:" + _clientDescription,
                 "marketplace-id:" + _marketplaceId
-            ),
-            null);
+            ));
         _webSocket.sendText(frame, true);
     }
 
     private void _subscribe(String destination) {
         var id = "sub-" + _subscriptionId.getAndIncrement();
         var frame = _stompFrame("SUBSCRIBE",
-            List.of("id:" + id, "destination:" + destination),
-            null);
+            List.of("id:" + id, "destination:" + destination));
         _webSocket.sendText(frame, true);
     }
 
-    private static String _stompFrame(String command, List<String> headers, String body) {
+    /** A frame with no body: the client sends only CONNECT and SUBSCRIBE. */
+    private static String _stompFrame(String command, List<String> headers) {
         var sb = new StringBuilder();
         sb.append(command).append('\n');
         for (var header : headers) {
             sb.append(header).append('\n');
         }
         sb.append('\n');
-        if (body != null) {
-            sb.append(body);
-        }
         sb.append('\0');
         return sb.toString();
     }
