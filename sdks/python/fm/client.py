@@ -103,15 +103,6 @@ _JWT_RE = re.compile(r"^[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+$")
 # JSON ↔ dataclass helpers
 # ---------------------------------------------------------------------------
 
-def _to_camel(name: str) -> str:
-    parts = name.split("_")
-    return parts[0] + "".join(p.capitalize() for p in parts[1:])
-
-
-def _to_snake(name: str) -> str:
-    return re.sub(r"(?<=[a-z0-9])([A-Z])", r"_\1", name).lower()
-
-
 def _parse_person(data: dict[str, Any] | None) -> Person | None:
     if data is None:
         return None
