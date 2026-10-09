@@ -364,3 +364,20 @@ def test_a_handler_that_raises_does_not_stop_the_desk():
         assert desk.holding().cash == 1500
     finally:
         desk.close()
+
+
+def test_a_closed_desk_refuses_every_read_books_included():
+    """close() promises that accessors raise afterwards. books() alone did
+    not: it answered with the books as the last frame left them, frozen and
+    looking current -- which is what a handle reads once Flexemarkets.close()
+    has closed the desk under it."""
+    alpha = _market(1, "ALPHA")
+    fake = FakeClient([alpha], Snapshot(body=[_limit(alpha, 101, "BUY", 5, 1000)], as_of_seq=1),
+                      Snapshot(body=[], as_of_seq=1))
+    desk = _desk(fake, [alpha])
+    desk.close()
+
+    for read in (desk.books, desk.tapes, desk.session, desk.holding,
+                 lambda: desk.book(alpha.id), lambda: desk.tape(alpha.id)):
+        with pytest.raises(RuntimeError, match="Desk for marketplace 7 is closed"):
+            read()

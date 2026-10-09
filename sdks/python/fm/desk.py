@@ -195,6 +195,7 @@ class Desk:
         time. A caller scanning for the best opportunity across markets wants
         this rather than :meth:`markets` zipped against :meth:`book`.
         """
+        self._ensure_open()
         return list(self._books.collection())
 
     def tapes(self) -> list[Tape]:
