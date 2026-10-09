@@ -1555,7 +1555,6 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     static long resourceId(String endpoint) {
-        if (endpoint == null) throw new NullPointerException("Endpoint is null.");
         var segments = endpoint.split("/");
         return Long.parseLong(segments[segments.length - 1]);
     }
