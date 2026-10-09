@@ -59,9 +59,10 @@ def test_a_consumed_order_whose_taker_is_not_in_the_batch_is_not_a_trade():
     assert tape.size() == 0
 
 
-def test_the_index_reads_every_markets_prices_in_market_order():
+def test_the_index_keeps_each_markets_prices_on_its_own_tape():
     index = TapeIndex([BETA, ALPHA])
 
     index.update(_match(101, 102, 950) + _match(201, 202, 1200, BETA) + _match(103, 104, 975))
 
-    assert index.most_recent_prices() == [[950, 975], [1200]]
+    assert index.get(ALPHA.id).most_recent_prices() == [950, 975]
+    assert index.get(BETA.id).most_recent_prices() == [1200]

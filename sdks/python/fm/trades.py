@@ -206,12 +206,6 @@ class TapeIndex:
                 added[market_id] = fresh
         return added
 
-    def most_recent_prices(self) -> list[list[int]]:
-        return [
-            t.most_recent_prices()
-            for t in sorted(self._trades.values(), key=lambda t: t.market_id)
-        ]
-
     def collection(self) -> list[Tape]:
         return list(self._trades.values())
 

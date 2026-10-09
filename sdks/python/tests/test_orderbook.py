@@ -97,9 +97,9 @@ def test_the_index_answers_for_the_market_asked_about():
     index = BookIndex([ALPHA, BETA])
     index.update([_resting(1, "BUY", 5, 1000), _resting(2, "SELL", 4, 2000, BETA)])
 
-    assert index.has_value(ALPHA.id, "BUY") is True
-    assert index.has_value(ALPHA.id, "SELL") is False
-    assert index.has_value(BETA.id, "SELL") is True
-    assert index.best_price(ALPHA.id, "BUY") == 1000
-    assert index.best_price(BETA.id, "SELL") == 2000
-    assert index.best_price(BETA.id, "BUY") == -1
+    assert index.get(ALPHA.id).has_value("BUY") is True
+    assert index.get(ALPHA.id).has_value("SELL") is False
+    assert index.get(BETA.id).has_value("SELL") is True
+    assert index.get(ALPHA.id).best_price("BUY") == 1000
+    assert index.get(BETA.id).best_price("SELL") == 2000
+    assert index.get(BETA.id).best_price("BUY") == -1

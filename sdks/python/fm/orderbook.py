@@ -222,12 +222,6 @@ class BookIndex:
         for book in self._books.values():
             book.update(orders)
 
-    def has_value(self, market_id: int, side: str) -> bool:
-        return self._books[market_id].has_value(side)
-
-    def best_price(self, market_id: int, side: str) -> int:
-        return self._books[market_id].best_price(side)
-
     def collection(self) -> list[Book]:
         return list(self._books.values())
 
