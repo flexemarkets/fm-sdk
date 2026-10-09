@@ -9,6 +9,7 @@ library already brings.
 
 from __future__ import annotations
 
+import logging
 import queue
 import threading
 import time
@@ -18,6 +19,7 @@ from typing import Any, Callable
 import pytest
 from websockets.sync.server import ServerConnection, serve
 
+from fm import events as fm_events
 from fm.events import (
     NO_SEQ,
     EventListener,
@@ -42,6 +44,8 @@ class _Server:
 
     def __init__(self) -> None:
         self.refuse_with: int | None = None
+        self.connect_reply = "CONNECTED\nversion:1.2\nheart-beat:0,0\n\n\0"
+        self.heartbeats = 0
         self.handshakes = 0
         self.connections: list[ServerConnection] = []
         self.received: list[list[str]] = []
@@ -71,10 +75,11 @@ class _Server:
             for message in connection:
                 text = message if isinstance(message, str) else message.decode()
                 if not text.strip():
-                    continue  # a heartbeat
+                    self.heartbeats += 1
+                    continue
                 self.received[index].append(text)
                 if text.startswith("CONNECT\n"):
-                    connection.send("CONNECTED\nversion:1.2\nheart-beat:0,0\n\n\0")
+                    connection.send(self.connect_reply)
         except Exception:
             pass
 
@@ -225,3 +230,45 @@ def test_a_refused_token_on_reconnect_ends_the_stream_and_says_why(server, event
     with pytest.raises(queue.Empty):
         events.get(timeout=3)
     assert server.handshakes == 2, "one refused attempt, not a retry loop"
+
+
+def test_the_heartbeats_it_promises_reach_the_server(server, listener, monkeypatch):
+    """test_stomp_heartbeat pins the interval; this is the write itself."""
+    monkeypatch.setattr(fm_events, "_HEARTBEAT_INTERVAL_SECONDS", 0.02)
+    listener()
+
+    _await("two heartbeats", lambda: server.heartbeats >= 2)
+
+
+def test_a_quiet_stream_is_waited_on_not_dropped(server, events, listener, monkeypatch):
+    """The read times out at twice the heartbeat interval. A timeout is the
+    server saying nothing, which it may; it is not a dead socket."""
+    monkeypatch.setattr(fm_events, "_HEARTBEAT_MS", 50)
+    listener()
+
+    time.sleep(0.4)
+    server.connection(0).send(_message("ORDERS-UPDATE", "[]", "seq:8"))
+
+    assert _next(events) == OrdersUpdate(orders=[], seq=8)
+    assert server.handshakes == 1, "no reconnect for a quiet stream"
+
+
+def test_an_empty_frame_is_a_heartbeat_not_a_drop(server, events, listener):
+    listener()
+    socket = server.connection(0)
+
+    socket.send(b"")
+    socket.send("\n")
+    socket.send(_message("ORDERS-UPDATE", "[]", "seq:9"))
+
+    assert _next(events) == OrdersUpdate(orders=[], seq=9)
+    assert server.handshakes == 1
+
+
+def test_a_connect_answered_with_anything_but_connected_is_logged(server, listener, caplog):
+    server.connect_reply = "ERROR\nmessage:bad credentials\n\n\0"
+
+    with caplog.at_level(logging.DEBUG, logger="fm.events"):
+        listener()
+
+    assert "STOMP CONNECT reply: ERROR" in caplog.text
