@@ -278,3 +278,15 @@ def test_every_kind_of_handler_fires_through_a_handle_and_stops_when_it_closes(
 
     assert len(heard) == count, "a handler fired after its handle closed"
     keeper.close()
+
+
+def test_a_handle_closed_after_its_client_releases_nothing_twice() -> None:
+    """Flexemarkets.close() has already closed the desk and forgotten it; the
+    caller closing their handle afterwards finds nothing left to release."""
+    client = Scripted()
+    handle = client.desk(MP)
+    client.close()
+
+    handle.close()
+
+    assert client.unsubscribes == 1
