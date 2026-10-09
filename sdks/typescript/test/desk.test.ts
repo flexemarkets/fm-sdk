@@ -219,6 +219,7 @@ test("books and tapes cover every market", async () => {
     assert.equal(desk.books().length, 2);
     assert.equal(desk.tapes().length, 2);
     assert.deepEqual(desk.books().map((b) => b.marketId).sort(), [alpha.id, beta.id]);
+    assert.deepEqual(desk.tapes().map((t) => t.marketId).sort(), [alpha.id, beta.id]);
   } finally { desk.close(); }
 });
 
