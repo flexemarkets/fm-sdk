@@ -339,6 +339,25 @@ class EventsSocketTest {
     }
 
     /**
+     * Closing the stream while it is retrying ends the retries: no further
+     * handshakes, and no StreamReconnected for a stream the caller closed.
+     */
+    @Test
+    @Timeout(30)
+    void closingWhileReconnectingStopsTheRetries() throws Exception {
+        connected();
+        server.dropHandshakes(Integer.MAX_VALUE);
+
+        server.connection(0).close();
+        assertThat(next()).isInstanceOf(StreamDropped.class);
+        events.close();
+        int attempts = server.handshakes();
+
+        assertThat(queue.poll(4, TimeUnit.SECONDS)).as("nothing after the close").isNull();
+        assertThat(server.handshakes()).as("no retry after the close").isEqualTo(attempts);
+    }
+
+    /**
      * An fm.net.ws.api-version other than v0 or v1 is refused when Events
      * loads, naming what it got, rather than quietly subscribing to a
      * destination the server does not have. The prefix is read once per
