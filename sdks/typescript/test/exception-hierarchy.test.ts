@@ -17,6 +17,7 @@ import type { AddressInfo } from "node:net";
 
 import {
   AccountNameConflictError,
+  AuthorizationError,
   ConflictError,
   Flexemarkets,
   FlexemarketsError,
@@ -25,8 +26,11 @@ import {
 
 const TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl";
 
-/** A server that answers signup and a user delete with a 409 carrying a suggestion. */
-function conflictingServer(): http.Server {
+/**
+ * A server that answers signup and a user delete with a 409 carrying a
+ * suggestion -- or, given another status, with that.
+ */
+function conflictingServer(status = 409): http.Server {
   return http.createServer((req, res) => {
     if (req.method === "POST" && req.url === "/api/tokens") {
       res.writeHead(200, { "Content-Type": "application/json" });
@@ -54,13 +58,13 @@ function conflictingServer(): http.Server {
       res.end();
       return;
     }
-    res.writeHead(409, { "Content-Type": "application/json" });
+    res.writeHead(status, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ status: "409", suggestedName: "acme-2" }));
   });
 }
 
-async function withClient(run: (fm: Flexemarkets) => Promise<void>): Promise<void> {
-  const server = conflictingServer();
+async function withClient(run: (fm: Flexemarkets) => Promise<void>, status = 409): Promise<void> {
+  const server = conflictingServer(status);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`;
   try {
@@ -118,4 +122,19 @@ test("conflicts remain catchable as the base error", async () => {
       (e: unknown) => e instanceof FlexemarketsError,
     );
   });
+});
+
+test("a refusal that is not a conflict reaches the caller as itself", async () => {
+  // Only a 409 means a taken name or a user who owns data. Anything else is
+  // passed on as the server said it, not swallowed and not renamed.
+  await withClient(async (fm) => {
+    await assert.rejects(
+      () => fm.signup("acme", "owner@new", "s3cret"),
+      (e: unknown) => e instanceof AuthorizationError && !(e instanceof ConflictError),
+    );
+    await assert.rejects(
+      () => fm.deleteUser(7),
+      (e: unknown) => e instanceof AuthorizationError && !(e instanceof ConflictError),
+    );
+  }, 403);
 });
