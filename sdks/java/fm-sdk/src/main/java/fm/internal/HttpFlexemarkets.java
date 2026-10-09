@@ -1652,11 +1652,13 @@ public class HttpFlexemarkets implements Flexemarkets {
         return message;
     }
 
-    /** Scheme and authority: where the request went, without the path. */
+    /**
+     * Scheme and authority: where the request went, without the path. An
+     * HttpRequest always has both -- its builder refuses a URI without an
+     * http(s) scheme and a host.
+     */
     private static String origin(URI uri) {
-        return null == uri.getScheme() || null == uri.getRawAuthority()
-                ? uri.toString()
-                : uri.getScheme() + "://" + uri.getRawAuthority();
+        return uri.getScheme() + "://" + uri.getRawAuthority();
     }
 
     /**
