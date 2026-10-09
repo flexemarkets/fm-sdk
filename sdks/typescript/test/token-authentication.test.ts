@@ -24,7 +24,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 
-import { Flexemarkets } from "../src/client.ts";
+import { ConfigurationError, Flexemarkets } from "../src/client.ts";
 
 const TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl";
 
@@ -89,5 +89,15 @@ test("a token never posts to /tokens", async () => {
       !requests.includes("POST /api/tokens"),
       requests.join(", "),
     );
+  });
+});
+
+test("a credential that is neither a file nor a token is refused before anything is sent", async () => {
+  await withServer(async (base, requests) => {
+    await assert.rejects(
+      () => Flexemarkets.connect("no-such-file-and-no-token", `${base}/marketplaces/1`, "token-test"),
+      (e: unknown) => e instanceof ConfigurationError && /no-such-file-and-no-token/.test((e as Error).message),
+    );
+    assert.deepEqual(requests, []);
   });
 });
