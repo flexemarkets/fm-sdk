@@ -111,6 +111,26 @@ test("listen remains one per connection", async () => {
     const held = (fm as unknown as { _eventListener: FakeListener })._eventListener;
     assert.equal(held, opened[opened.length - 1], "the second listen replaces the first");
     assert.equal(opened.length, 2);
+    assert.equal(opened[0]!.closed, true, "the first is closed, not left running");
+    assert.equal(opened[1]!.closed, false);
+  } finally {
+    fm.close();
+  }
+});
+
+test("two listens racing leave one stream, not two", async () => {
+  // Both start before either has connected, so neither sees the other to
+  // close until its own connect returns.
+  const fm = await connect();
+  try {
+    const opened = stubConnectEvents(fm);
+
+    await Promise.all([fm.listen(1, () => {}), fm.listen(1, () => {})]);
+
+    const held = (fm as unknown as { _eventListener: FakeListener })._eventListener;
+    assert.equal(opened.length, 2);
+    assert.deepEqual(opened.map((l) => l.closed).filter((c) => !c).length, 1, "one stream left open");
+    assert.equal(held.closed, false, "and it is the one held");
   } finally {
     fm.close();
   }

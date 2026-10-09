@@ -1553,7 +1553,16 @@ export class Flexemarkets {
 
   /** Start receiving real-time events via WebSocket STOMP. */
   async listen(marketplaceId: number, callback: EventCallback): Promise<void> {
-    this._eventListener = await this._connectEvents(marketplaceId, callback);
+    // The stream this replaces is closed, not dropped with its socket,
+    // heartbeats and reconnects still running.
+    const previous = this._eventListener;
+    this._eventListener = null;
+    if (previous !== null) previous.close();
+    const listener = await this._connectEvents(marketplaceId, callback);
+    // Another listen() may have finished while this one connected.
+    const raced = this._eventListener as EventListener | null;
+    if (raced !== null) raced.close();
+    this._eventListener = listener;
   }
 
   /**
