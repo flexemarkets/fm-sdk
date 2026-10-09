@@ -114,6 +114,19 @@ def test_a_refusal_that_is_not_json_is_reported_as_it_came(base: str) -> None:
     assert str(e.value) == "Invalid request: <html>edge</html>"
 
 
+def test_a_refusal_with_no_body_says_there_was_none(base: str) -> None:
+    with pytest.raises(InvalidArgumentError) as e:
+        _call(base, 400, "")
+    assert str(e.value) == "Invalid request: (no response body)"
+
+
+def test_a_json_refusal_without_a_message_is_reported_as_it_came(base: str) -> None:
+    """Nothing in it a caller can act on more than the whole, so the whole."""
+    with pytest.raises(InvalidArgumentError) as e:
+        _call(base, 400, {"error": "ORDER_INVALID", "message": " "})
+    assert str(e.value) == 'Invalid request: {"error": "ORDER_INVALID", "message": " "}'
+
+
 def test_a_plain_409_is_a_conflict(base: str) -> None:
     with pytest.raises(ConflictError):
         _call(base, 409, {"status": "CONFLICT", "message": "taken"})
@@ -165,6 +178,16 @@ def test_a_snapshot_carries_the_sequence_it_was_taken_at(base: str) -> None:
 def test_a_snapshot_without_a_sequence_says_so(base: str) -> None:
     """No header -- an older server -- is "no sequence", which a desk must not mistake for 0."""
     answers["/api/v1/marketplaces/1/orders"] = (200, [], None)
+    fm = _connect(base)
+    try:
+        assert fm.active_orders(1).as_of_seq == NO_SEQ
+    finally:
+        fm.close()
+
+
+def test_a_snapshot_whose_sequence_is_not_a_number_says_it_has_none(base: str) -> None:
+    """Not 0, which a desk would read as a sequence and filter every delta against."""
+    answers["/api/v1/marketplaces/1/orders"] = (200, [], "forty-one")
     fm = _connect(base)
     try:
         assert fm.active_orders(1).as_of_seq == NO_SEQ
