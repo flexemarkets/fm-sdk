@@ -110,6 +110,18 @@ public class Events implements Subscription {
      */
     static final long HEROKU_IDLE_TIMEOUT_MS = 55_000;
 
+    /** How long connect() waits for the server's CONNECTED frame. */
+    static final long CONNECTED_TIMEOUT_MS = 10_000;
+
+    /**
+     * The two waits above, as this instance uses them. Package-private so a
+     * test can shorten them: whether a missing CONNECTED is reported, and
+     * whether a heartbeat is actually written, cannot otherwise be seen in
+     * less than ten and twenty-five seconds.
+     */
+    long connectedTimeoutMillis = CONNECTED_TIMEOUT_MS;
+    long heartbeatIntervalMillis = TimeUnit.SECONDS.toMillis(HEARTBEAT_INTERVAL_SECONDS);
+
     private volatile WebSocket _webSocket;
     private volatile boolean _closed;
 
@@ -166,7 +178,7 @@ public class Events implements Subscription {
 
             _sendStompConnect();
 
-            if (!connectedLatch.await(10, TimeUnit.SECONDS)) {
+            if (!connectedLatch.await(connectedTimeoutMillis, TimeUnit.MILLISECONDS)) {
                 throw new ApiException("STOMP CONNECTED frame not received within timeout");
             }
 
@@ -322,7 +334,7 @@ public class Events implements Subscription {
             try {
                 socket.sendText("\n", true);
             } catch (Exception ignored) {}
-        }, HEARTBEAT_INTERVAL_SECONDS, HEARTBEAT_INTERVAL_SECONDS, TimeUnit.SECONDS);
+        }, heartbeatIntervalMillis, heartbeatIntervalMillis, TimeUnit.MILLISECONDS);
     }
 
     private void _stopHeartbeats() {
