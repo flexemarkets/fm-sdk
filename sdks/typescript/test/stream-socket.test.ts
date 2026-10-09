@@ -294,3 +294,31 @@ test("starting against a server that refuses fails the start", async () => {
     await server.close();
   }
 });
+
+test("closing a listener while its socket is still connecting does not crash the process", async () => {
+  // ws reports a close() before the handshake as an 'error' event on the next
+  // tick. The listener had just removed every listener, the error went
+  // unhandled, and Node threw it out of the process -- whenever a caller
+  // closed during a connect, which a reconnect makes routine.
+  const s = server();
+  await new Promise<void>((resolve) => s.wss.on("listening", () => resolve()));
+  const uncaught: Error[] = [];
+  const record = (e: Error) => void uncaught.push(e);
+  const runnersOwn = process.listeners("uncaughtException");
+  process.removeAllListeners("uncaughtException");
+  process.on("uncaughtException", record);
+  try {
+    const listener = new EventListener(s.url(), "Bearer t", MP, () => {},
+                                       "fm-sdk-test", parseHolding as never, parseOrder as never);
+    void listener.start().catch(() => {});
+    listener.close();
+    await new Promise((r) => setTimeout(r, 100));
+
+    assert.deepEqual(uncaught.map((e) => e.message), []);
+  } finally {
+    process.off("uncaughtException", record);
+    for (const l of runnersOwn) process.on("uncaughtException", l);
+    for (const socket of s.sockets) socket.terminate();
+    await new Promise<void>((resolve) => s.wss.close(() => resolve()));
+  }
+});

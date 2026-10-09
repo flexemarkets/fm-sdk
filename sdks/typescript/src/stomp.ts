@@ -449,6 +449,10 @@ export class EventListener {
     if (this._ws !== null) {
       try {
         this._ws.removeAllListeners();
+        // A socket closed before its handshake reports that as an 'error' on
+        // the next tick; with no listener left, Node throws it out of the
+        // process. This socket is being discarded, so the report is too.
+        this._ws.on("error", () => {});
         this._ws.close();
       } catch {
         // ignore
