@@ -246,6 +246,9 @@ class RouteFixturesTest {
                     ? fm.removeWidget(mp, a.get("key").asString(), a.get("userId").asLong())
                     : fm.removeWidget(mp, a.get("key").asString());
             case "allWidgets" -> fm.allWidgets(mp);
+            case "marketplaceRobots" -> fm.marketplaceRobots(mp);
+            case "configureRobotParameter" -> fm.configureRobotParameter(mp, a.get("robotId").asString(),
+                    a.get("paramName").asString(), a.get("value").asString(), _control(a.get("control")));
             case "signup" -> fm.signup(a.get("accountName").asString(), a.get("email").asString(),
                                        a.get("password").asString());
             case "approveAccount" -> fm.approveAccount(a.get("accountName").asString());
@@ -263,6 +266,11 @@ class RouteFixturesTest {
 
     private static List<Long> _longs(JsonNode array) {
         return StreamSupport.stream(array.spliterator(), false).map(JsonNode::asLong).toList();
+    }
+
+    private static fm.model.RobotParameterControl _control(JsonNode control) {
+        return control == null || control.isNull() ? null : new fm.model.RobotParameterControl(
+                control.get("min").decimalValue(), control.get("max").decimalValue(), control.get("step").decimalValue());
     }
 
     private static TickGrid _grid(JsonNode grid) {
