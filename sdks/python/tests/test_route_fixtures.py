@@ -21,7 +21,7 @@ from urllib.parse import parse_qsl, urlsplit
 import pytest
 
 from fm.client import Flexemarkets
-from fm.types import Holding, Security, TickGrid
+from fm.types import Holding, RobotParameterControl, Security, TickGrid
 
 ROUTES = Path(__file__).resolve().parents[2] / "fixtures" / "routes" / "routes.json"
 CASES: list[dict[str, Any]] = json.loads(ROUTES.read_text())["cases"]
@@ -74,6 +74,9 @@ CALLS: dict[str, Callable[[Flexemarkets, dict[str, Any], Path], Any]] = {
         a["marketplaceId"], _csv_file(a["csv"], tmp)),
     "uploadState": lambda fm, a, tmp: fm.upload_state(
         a["marketplaceId"], _csv_file(a["csv"], tmp)),
+    "configureRobotParameter": lambda fm, a, _: fm.configure_robot_parameter(
+        a["marketplaceId"], a["robotId"], a["paramName"], a["value"],
+        None if a["control"] is None else RobotParameterControl(**a["control"])),
 }
 
 

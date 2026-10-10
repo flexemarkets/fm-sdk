@@ -1343,6 +1343,116 @@
       ]
     },
     {
+      "call": "marketplaceRobots",
+      "args": {
+        "marketplaceId": 1
+      },
+      "why": "The catalogue a launch form is built from, and what fm-capm reads to see how the MVO robots' penalty is set. A collection under its marketplace, read with GET.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/robots",
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "manifest": {
+                  "id": "fm-maker-mvo",
+                  "version": "0.11.1",
+                  "parameters": {
+                    "manager": [
+                      {
+                        "name": "penalty",
+                        "default": "0.03"
+                      }
+                    ]
+                  }
+                },
+                "enabled": true,
+                "configuration": []
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "call": "configureRobotParameter",
+      "args": {
+        "marketplaceId": 1,
+        "robotId": "fm-maker-mvo",
+        "paramName": "penalty",
+        "value": "0.03",
+        "control": null
+      },
+      "why": "A fixed parameter is a PUT of the value alone: the server reads any bound as a control, so an SDK that sent min/max/step as null would be asking for something else.",
+      "requests": [
+        {
+          "method": "PUT",
+          "path": "/api/v1/marketplaces/1/robots/fm-maker-mvo/parameters/penalty",
+          "contentType": "application/json",
+          "body": {
+            "value": "0.03"
+          },
+          "response": {
+            "status": 200,
+            "body": {
+              "id": 4,
+              "marketplaceId": 1,
+              "robotId": "fm-maker-mvo",
+              "paramName": "penalty",
+              "value": "0.03",
+              "exposed": false
+            }
+          }
+        }
+      ]
+    },
+    {
+      "call": "configureRobotParameter",
+      "args": {
+        "marketplaceId": 1,
+        "robotId": "fm-maker-mvo",
+        "paramName": "penalty",
+        "value": "0.03",
+        "control": {
+          "min": 0.01,
+          "max": 0.05,
+          "step": 0.01
+        }
+      },
+      "why": "An exposed parameter sends its control flat beside the value, as the server's ParameterRequest reads it; nested under 'control' the server would see no bounds and fix it.",
+      "requests": [
+        {
+          "method": "PUT",
+          "path": "/api/v1/marketplaces/1/robots/fm-maker-mvo/parameters/penalty",
+          "contentType": "application/json",
+          "body": {
+            "value": "0.03",
+            "min": 0.01,
+            "max": 0.05,
+            "step": 0.01
+          },
+          "response": {
+            "status": 200,
+            "body": {
+              "id": 4,
+              "marketplaceId": 1,
+              "robotId": "fm-maker-mvo",
+              "paramName": "penalty",
+              "value": "0.03",
+              "exposed": true,
+              "control": {
+                "min": 0.01,
+                "max": 0.05,
+                "step": 0.01
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
       "call": "signup",
       "args": {
         "accountName": "acme",

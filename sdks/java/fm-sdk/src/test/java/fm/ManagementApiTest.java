@@ -12,6 +12,9 @@ import fm.model.Order;
 import fm.model.Person;
 import fm.model.Security;
 import fm.model.Session;
+import fm.model.MarketplaceRobot;
+import fm.model.RobotParameterConfig;
+import fm.model.RobotParameterControl;
 import fm.model.Widget;
 import fm.model.WidgetPush;
 import fm.model.WidgetTarget;
@@ -23,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -135,6 +139,15 @@ class ManagementApiTest {
                 case "DELETE /api/v1/marketplaces/1/widgets/score",
                      "DELETE /api/v1/marketplaces/1/participants/8/widgets/score" -> _respond(exchange, 204, "");
                 case "DELETE /api/v1/marketplaces/1/widgets/absent" -> _respond(exchange, 404, "");
+                // Robots: the catalogue, and a parameter PUT answered with
+                // what was stored -- exposed exactly when the body carried bounds.
+                case "GET /api/v1/marketplaces/1/robots" -> _respond(exchange, 200, _robotsJson());
+                case "PUT /api/v1/marketplaces/1/robots/fm-maker-mvo/parameters/penalty" -> _respond(exchange, 200,
+                        _bodies.getLast().contains("\"min\"")
+                                ? "{\"id\":4,\"marketplaceId\":1,\"robotId\":\"fm-maker-mvo\",\"paramName\":\"penalty\","
+                                  + "\"value\":\"0.03\",\"control\":{\"min\":0.01,\"max\":0.05,\"step\":0.01},\"exposed\":true}"
+                                : "{\"id\":4,\"marketplaceId\":1,\"robotId\":\"fm-maker-mvo\",\"paramName\":\"penalty\","
+                                  + "\"value\":\"0.03\",\"exposed\":false}");
                 // A marketplace that is not there: the 404 carries a failure document.
                 case "DELETE /api/v1/marketplaces/2/widgets/score" -> _respond(exchange, 404,
                         "{\"error\":\"MARKETPLACE_NOT_FOUND\",\"message\":\"no marketplace 2\",\"status\":\"NOT_FOUND\"}");
@@ -171,6 +184,23 @@ class ManagementApiTest {
              {"id":32,"marketplaceId":1,"scope":"USER","userId":8,"key":"values",
               "emphasis":"strong","ttlSeconds":60,
               "content":{"kind":"kv","items":[{"label":"value","value":120,"format":"price"}]}}]
+            """;
+    }
+
+    /**
+     * One robot as fm-server's catalogue answers it: a manifest with its
+     * parameter groups, and one configured parameter with a control.
+     */
+    private static String _robotsJson() {
+        return """
+            [{"manifest":{"id":"fm-maker-mvo","version":"0.11.1","name":"MVO maker",
+                          "parameters":{"manager":[{"name":"penalty","type":"option","valueType":"decimal",
+                                                    "required":null,"default":"0.03","min":0}],
+                                        "user":[]}},
+              "enabled":true,
+              "configuration":[{"id":4,"marketplaceId":1,"robotId":"fm-maker-mvo","paramName":"penalty",
+                                "value":"0.005","control":{"min":0.001,"max":0.009,"step":0.001},
+                                "exposed":true}]}]
             """;
     }
 
@@ -595,6 +625,67 @@ class ManagementApiTest {
     }
 
     /**
+     * The catalogue reads as the server sends it: the manifest's groups, the
+     * default spelled {@code default}, a null {@code required} as false, a
+     * group the manifest leaves out as empty, and the control's decimals
+     * exactly.
+     */
+    @Test
+    void marketplaceRobotsReadsTheCatalogue() throws Exception {
+        List<MarketplaceRobot> robots;
+        try (Flexemarkets fm = _connect()) {
+            robots = fm.marketplaceRobots(1);
+        }
+
+        assertThat(_requests).contains("GET /api/v1/marketplaces/1/robots");
+        assertThat(robots).hasSize(1);
+        var robot = robots.get(0);
+        assertThat(robot.enabled()).isTrue();
+        assertThat(robot.manifest().id()).isEqualTo("fm-maker-mvo");
+        var penalty = robot.manifest().parameters().manager().get(0);
+        assertThat(penalty.defaultValue()).isEqualTo("0.03");
+        assertThat(penalty.required()).isFalse();
+        assertThat(penalty.max()).isNull();
+        assertThat(robot.manifest().parameters().platform()).isEmpty();
+        var config = robot.configuration().get(0);
+        assertThat(config.exposed()).isTrue();
+        assertThat(config.value()).isEqualTo("0.005");
+        assertThat(config.control().max()).isEqualByComparingTo(new BigDecimal("0.009"));
+    }
+
+    /**
+     * A fixed parameter sends the value alone; the server reads any bound as
+     * a control, so sending nulls for them would not be the same request.
+     */
+    @Test
+    void configureRobotParameterFixesWithoutAControl() throws Exception {
+        RobotParameterConfig stored;
+        try (Flexemarkets fm = _connect()) {
+            stored = fm.configureRobotParameter(1, "fm-maker-mvo", "penalty", "0.03", null);
+        }
+
+        var request = "PUT /api/v1/marketplaces/1/robots/fm-maker-mvo/parameters/penalty";
+        assertThat(_requests).containsOnlyOnce(request);
+        assertThat(_bodyOf(request).replace(" ", "")).isEqualTo("{\"value\":\"0.03\"}");
+        assertThat(stored.exposed()).isFalse();
+        assertThat(stored.control()).isNull();
+    }
+
+    @Test
+    void configureRobotParameterSendsTheControlFlat() throws Exception {
+        RobotParameterConfig stored;
+        try (Flexemarkets fm = _connect()) {
+            stored = fm.configureRobotParameter(1, "fm-maker-mvo", "penalty", "0.03",
+                    new RobotParameterControl(new BigDecimal("0.01"), new BigDecimal("0.05"), new BigDecimal("0.01")));
+        }
+
+        var body = _bodyOf("PUT /api/v1/marketplaces/1/robots/fm-maker-mvo/parameters/penalty").replace(" ", "");
+        assertThat(body).isEqualTo("{\"value\":\"0.03\",\"min\":0.01,\"max\":0.05,\"step\":0.01}");
+        assertThat(stored.exposed()).isTrue();
+        assertThat(stored.control().min()).isEqualByComparingTo(new BigDecimal("0.01"));
+    }
+
+    /**
      * 204 is removed and an empty 404 is nothing to remove: both are answers,
      * and a robot clearing a key it may never have pushed should not have to
      * catch an exception to find out which.
@@ -664,6 +755,7 @@ class ManagementApiTest {
             public List<Person> users() { return List.of(); }
             public List<ClientConnection> connections(long id) { return List.of(); }
             public List<ClientConnection> connections(long id, List<Long> s) { return List.of(); }
+            public List<MarketplaceRobot> marketplaceRobots(long id) { return List.of(); }
             public Snapshot<List<Order>> activeOrders(long id) { return null; }
             public Snapshot<List<Order>> recentTrades(long id, int size) { return null; }
             public Snapshot<List<Order>> recentTrades(long id) { return null; }

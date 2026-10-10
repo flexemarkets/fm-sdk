@@ -1,0 +1,75 @@
+{
+  "type": "MarketplaceRobots",
+  "why": "What fm-capm reads to see whether a manager has fixed or exposed the MVO robots' penalty. Without it nothing holds the three parsers to the manifest's default spelled 'default' (not defaultValue), to a null 'required' read as false, to a parameter group the manifest leaves out read as empty rather than null, to a fixed parameter's absent control read as null, and to a control's decimals read as decimals -- a penalty range 0.001-0.009 read as integers is 0-0 and refuses every study penalty.",
+  "source": {
+    "constructed": "GET /v1/marketplaces/{marketplaceId}/robots asks the robot host for its catalogue, and the local fm-robots-server did not answer on 2026-10-09. Modelled on fm-server's MarketplaceRobotHandler.MarketplaceRobotView, RobotManifest.RobotParameter and MarketplaceRobotConfig (whose isExposed() serialises as 'exposed'), with the field set checked against fm-server's contract/wire-manifest.json."
+  },
+  "payload": [
+    {
+      "manifest": {
+        "id": "fm-maker-mvo",
+        "version": "0.11.1",
+        "name": "MVO maker",
+        "description": "Quotes around its mean-variance optimal holding",
+        "parameters": {
+          "manager": [
+            {"name": "penalty", "cli": "--penalty", "type": "option", "valueType": "decimal",
+             "label": "Risk penalty", "description": "Weight on variance", "required": null,
+             "default": "0.03", "unit": null, "source": null, "min": 0, "max": null}
+          ],
+          "user": [
+            {"name": "interval", "cli": "--interval", "type": "option", "valueType": "integer",
+             "label": "Interval", "required": true, "default": "5000", "unit": "ms", "min": 250, "max": 60000}
+          ]
+        }
+      },
+      "enabled": true,
+      "configuration": [
+        {"createdDate": "2026-10-01T09:00:00.125", "lastModifiedDate": "2026-10-01T09:00:00.125",
+         "id": 4, "marketplaceId": 3050, "robotId": "fm-maker-mvo", "paramName": "penalty",
+         "value": "0.005", "control": {"min": 0.001, "max": 0.009, "step": 0.001},
+         "updatedBy": 52, "exposed": true},
+        {"id": 5, "marketplaceId": 3050, "robotId": "fm-maker-mvo", "paramName": "interval",
+         "value": "2000", "control": null, "updatedBy": 52, "exposed": false}
+      ]
+    },
+    {
+      "manifest": {"id": "fm-taker-mvo", "version": "0.11.1", "name": "MVO taker",
+                   "parameters": {"manager": [], "user": [], "platform": []}},
+      "enabled": false,
+      "configuration": []
+    }
+  ],
+  "expect": {
+    "robots": [
+      {
+        "enabled": true,
+        "manifest": {
+          "id": "fm-maker-mvo",
+          "version": "0.11.1",
+          "parameters": {
+            "manager": [
+              {"name": "penalty", "valueType": "decimal", "required": false,
+               "defaultValue": "0.03", "unit": null, "min": 0, "max": null}
+            ],
+            "user": [
+              {"name": "interval", "required": true, "defaultValue": "5000", "unit": "ms",
+               "min": 250, "max": 60000}
+            ],
+            "platform": []
+          }
+        },
+        "configuration": [
+          {"marketplaceId": 3050, "robotId": "fm-maker-mvo", "paramName": "penalty", "value": "0.005",
+           "control": {"min": 0.001, "max": 0.009, "step": 0.001}, "exposed": true},
+          {"paramName": "interval", "value": "2000", "control": null, "exposed": false}
+        ]
+      },
+      {
+        "enabled": false,
+        "manifest": {"id": "fm-taker-mvo", "description": null},
+        "configuration": []
+      }
+    ]
+  }
+}

@@ -61,8 +61,10 @@ TYPESCRIPT = [TYPESCRIPT_SRC / "types.ts",
 # and 20 -> 23 with Widget, WidgetPush and WidgetTarget (the floor had stayed at
 # 19 when ParticipantState made it 20). 23 -> 22 in 0.4.0, on purpose: ApiRoot
 # went from all three when the SDKs stopped reading the HAL root, and the
-# _hal and hal modules that held it went with it.
-EXPECTED_SHARED = 22
+# _hal and hal modules that held it went with it. 22 -> 28 with MarketplaceRobot,
+# RobotManifest, RobotParameters, RobotParameter, RobotParameterConfig and
+# RobotParameterControl.
+EXPECTED_SHARED = 28
 
 # Divergences that are intended. Each needs a reason, so that adding one is a
 # decision someone wrote down rather than a way to silence the check.

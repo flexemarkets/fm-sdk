@@ -9,6 +9,7 @@ import fm.model.ClientConnection;
 import fm.model.Holding;
 import fm.model.Market;
 import fm.model.Marketplace;
+import fm.model.MarketplaceRobot;
 import fm.model.Order;
 import fm.model.Person;
 import fm.model.Session;
@@ -221,6 +222,19 @@ public interface Reading {
      * @return every connection it has recorded
      */
     List<ClientConnection> connections(long marketplaceId);
+
+    /**
+     * Every robot the marketplace's robot host offers, with whether it is
+     * enabled here and how a manager has configured its parameters.
+     *
+     * <p>Readable by participants as well as managers: it is what a launch
+     * form is built from. Asks the robot host for its catalogue, so it fails
+     * when the host cannot be reached.
+     *
+     * @param marketplaceId the marketplace to read
+     * @return each robot the host offers, enabled here or not
+     */
+    List<MarketplaceRobot> marketplaceRobots(long marketplaceId);
 
     /**
      * Resting orders, with the sequence number they were correct as of.

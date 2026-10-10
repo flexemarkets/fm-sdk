@@ -3,6 +3,8 @@ package fm.role;
 import fm.model.Holding;
 import fm.model.ParticipantState;
 import fm.model.Marketplace;
+import fm.model.RobotParameterConfig;
+import fm.model.RobotParameterControl;
 import fm.model.Session;
 import fm.model.Widget;
 import fm.model.WidgetPush;
@@ -184,4 +186,25 @@ public interface Management {
      * @return the widgets, marketplace-scoped and user-scoped alike
      */
     List<Widget> allWidgets(long marketplaceId);
+
+    /**
+     * Set a robot parameter's value in a marketplace, and whether participants
+     * may move it.
+     *
+     * <p>A null {@code control} fixes the value: participants launching the
+     * robot see it read-only and cannot change it. A control exposes it within
+     * that range, starting at {@code value}, which must lie inside it. The
+     * server refuses a parameter the robot does not declare, a platform
+     * parameter, and a range outside the robot's own bounds.
+     *
+     * @param marketplaceId the marketplace to configure
+     * @param robotId       the robot, e.g. {@code fm-maker-mvo}
+     * @param paramName     the parameter, e.g. {@code penalty}
+     * @param value         the value, as the robot reads it
+     * @param control       the range participants may choose within, or null
+     *                      to fix the value
+     * @return the parameter's configuration as stored
+     */
+    RobotParameterConfig configureRobotParameter(long marketplaceId, String robotId, String paramName,
+                                                 String value, RobotParameterControl control);
 }

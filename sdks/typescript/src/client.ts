@@ -27,6 +27,10 @@ import type {
   Token,
   Widget,
   WidgetPush,
+  MarketplaceRobot,
+  RobotParameter,
+  RobotParameterConfig,
+  RobotParameterControl,
 } from "./types.js";
 import { EventListener, NO_SEQ, type EventCallback } from "./stomp.js";
 import {
@@ -248,6 +252,57 @@ export function parseParticipantState(data: JsonObject): ParticipantState {
     ownerId: (data.ownerId as number) ?? null,
     ownerEmail: (data.ownerEmail as string) ?? null,
     fields: { ...((data.fields as Record<string, unknown>) ?? {}) },
+  };
+}
+
+function numberOrNull(value: unknown): number | null {
+  return value === null || value === undefined ? null : Number(value);
+}
+
+function parseRobotParameter(data: JsonObject): RobotParameter {
+  return {
+    name: (data.name as string) ?? "",
+    label: (data.label as string) ?? null,
+    description: (data.description as string) ?? null,
+    type: (data.type as string) ?? null,
+    valueType: (data.valueType as string) ?? null,
+    // The robots write "required": null for a parameter that is not.
+    required: data.required === true,
+    defaultValue: (data.default as string) ?? null,
+    unit: (data.unit as string) ?? null,
+    min: numberOrNull(data.min),
+    max: numberOrNull(data.max),
+  };
+}
+
+export function parseRobotParameterConfig(data: JsonObject): RobotParameterConfig {
+  const control = (data.control as JsonObject | null | undefined) ?? null;
+  return {
+    marketplaceId: (data.marketplaceId as number) ?? null,
+    robotId: (data.robotId as string) ?? "",
+    paramName: (data.paramName as string) ?? "",
+    value: (data.value as string) ?? "",
+    control: control === null
+      ? null
+      : { min: Number(control.min), max: Number(control.max), step: Number(control.step) },
+    exposed: data.exposed === true,
+  };
+}
+
+export function parseMarketplaceRobot(data: JsonObject): MarketplaceRobot {
+  const manifest = (data.manifest as JsonObject) ?? {};
+  const groups = (manifest.parameters as JsonObject) ?? {};
+  const group = (name: string) => ((groups[name] as JsonObject[]) ?? []).map(parseRobotParameter);
+  return {
+    manifest: {
+      id: (manifest.id as string) ?? "",
+      version: (manifest.version as string) ?? null,
+      name: (manifest.name as string) ?? null,
+      description: (manifest.description as string) ?? null,
+      parameters: { manager: group("manager"), user: group("user"), platform: group("platform") },
+    },
+    enabled: data.enabled === true,
+    configuration: ((data.configuration as JsonObject[]) ?? []).map(parseRobotParameterConfig),
   };
 }
 
@@ -732,8 +787,17 @@ export class Flexemarkets {
 
   /** PATCH with a JSON body -- the shape every session transition takes. */
   private async _patch(url: string, json: unknown): Promise<JsonObject> {
+    return this._sendJson("PATCH", url, json);
+  }
+
+  /** PUT with a JSON body -- a robot parameter's configuration, say. */
+  private async _put(url: string, json: unknown): Promise<JsonObject> {
+    return this._sendJson("PUT", url, json);
+  }
+
+  private async _sendJson(method: string, url: string, json: unknown): Promise<JsonObject> {
     const resp = await fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
-      method: "PATCH",
+      method,
       headers: {
         ...this._authHeaders(),
         "Content-Type": "application/json",
@@ -1488,6 +1552,50 @@ export class Flexemarkets {
   async allWidgets(marketplaceId: number): Promise<Widget[]> {
     const data = await this._get(`${this._marketplace(marketplaceId)}/widgets?participant=all`);
     return (data as unknown as JsonObject[]).map(parseWidget);
+  }
+
+  /**
+   * Every robot the marketplace's robot host offers, with whether it is
+   * enabled here and how a manager has configured its parameters.
+   *
+   * Readable by participants as well as managers: it is what a launch form is
+   * built from. Asks the robot host for its catalogue, so it fails when the
+   * host cannot be reached.
+   */
+  async marketplaceRobots(marketplaceId: number): Promise<MarketplaceRobot[]> {
+    const data = await this._get(`${this._marketplace(marketplaceId)}/robots`);
+    return (data as unknown as JsonObject[]).map(parseMarketplaceRobot);
+  }
+
+  /**
+   * Set a robot parameter's value in a marketplace, and whether participants
+   * may move it, returning the configuration as stored.
+   *
+   * A null `control` fixes the value: participants launching the robot see it
+   * read-only. A control exposes it within that range, starting at `value`,
+   * which must lie inside it. The server refuses a parameter the robot does
+   * not declare, a platform parameter, and a range outside the robot's own
+   * bounds.
+   *
+   * The control goes up flat beside the value, and a fixed parameter sends the
+   * value alone: the server reads any bound as a control.
+   */
+  async configureRobotParameter(
+    marketplaceId: number,
+    robotId: string,
+    paramName: string,
+    value: string,
+    control: RobotParameterControl | null,
+  ): Promise<RobotParameterConfig> {
+    const body: JsonObject = { value };
+    if (control !== null) {
+      body.min = control.min;
+      body.max = control.max;
+      body.step = control.step;
+    }
+    const url = `${this._marketplace(marketplaceId)}/robots/${encodeURIComponent(robotId)}`
+      + `/parameters/${encodeURIComponent(paramName)}`;
+    return parseRobotParameterConfig(await this._put(url, body));
   }
 
   // -- events / WebSocket ----------------------------------------------------

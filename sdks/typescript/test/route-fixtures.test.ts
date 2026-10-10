@@ -122,6 +122,9 @@ const RUNNERS: Record<string, (fm: Flexemarkets, a: Args) => Promise<unknown>> =
   uploadState: (fm, a) => fm.uploadState(a.marketplaceId, csvFile(a.csv)),
   removeWidget: (fm, a) => fm.removeWidget(a.marketplaceId, a.key, a.userId),
   allWidgets: (fm, a) => fm.allWidgets(a.marketplaceId),
+  marketplaceRobots: (fm, a) => fm.marketplaceRobots(a.marketplaceId),
+  configureRobotParameter: (fm, a) =>
+    fm.configureRobotParameter(a.marketplaceId, a.robotId, a.paramName, a.value, a.control),
   signup: (fm, a) => fm.signup(a.accountName, a.email, a.password),
   approveAccount: (fm, a) => fm.approveAccount(a.accountName),
   deleteMyAccount: (fm) => fm.deleteMyAccount(),

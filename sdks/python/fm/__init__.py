@@ -41,6 +41,12 @@ from .types import (
     Widget,
     WidgetPush,
     WidgetTarget,
+    MarketplaceRobot,
+    RobotManifest,
+    RobotParameter,
+    RobotParameterConfig,
+    RobotParameterControl,
+    RobotParameters,
 )
 
 __all__ = [
@@ -65,6 +71,12 @@ __all__ = [
     "Widget",
     "WidgetPush",
     "WidgetTarget",
+    "MarketplaceRobot",
+    "RobotManifest",
+    "RobotParameter",
+    "RobotParameterConfig",
+    "RobotParameterControl",
+    "RobotParameters",
     "ConflictFailure",
     "ManagerOtpBundle",
     "Token",

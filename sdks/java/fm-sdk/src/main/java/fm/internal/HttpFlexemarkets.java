@@ -12,6 +12,9 @@ import fm.model.Market;
 import fm.model.Marketplace;
 import fm.model.Order;
 import fm.model.ParticipantState;
+import fm.model.MarketplaceRobot;
+import fm.model.RobotParameterConfig;
+import fm.model.RobotParameterControl;
 import fm.model.Widget;
 import fm.model.WidgetPush;
 import fm.model.OrderSide;
@@ -191,6 +194,8 @@ public class HttpFlexemarkets implements Flexemarkets {
     private static final TypeReference<List<Allotment>>      ALLOTMENTS_TYPE   = new TypeReference<>() {};
     private static final TypeReference<List<ParticipantState>> PARTICIPANT_STATES_TYPE = new TypeReference<>() {};
     private static final TypeReference<List<Widget>>         WIDGETS_TYPE      = new TypeReference<>() {};
+    private static final TypeReference<List<MarketplaceRobot>> MARKETPLACE_ROBOTS_TYPE = new TypeReference<>() {};
+    private static final TypeReference<RobotParameterConfig> ROBOT_PARAMETER_CONFIG_TYPE = new TypeReference<>() {};
 
     /**
      * Who the server should treat the caller as, rather than whoever the
@@ -893,6 +898,29 @@ public class HttpFlexemarkets implements Flexemarkets {
         return List.copyOf(_get(_marketplace(marketplaceId) + "/widgets?participant=all", WIDGETS_TYPE));
     }
 
+    @Override
+    public List<MarketplaceRobot> marketplaceRobots(long marketplaceId) {
+        return List.copyOf(_get(_marketplace(marketplaceId) + "/robots", MARKETPLACE_ROBOTS_TYPE));
+    }
+
+    /**
+     * The server reads the control flat, beside the value: no bounds at all
+     * is a fixed parameter, so a null control sends only the value.
+     */
+    @Override
+    public RobotParameterConfig configureRobotParameter(long marketplaceId, String robotId, String paramName,
+                                                        String value, RobotParameterControl control) {
+        var body = new java.util.LinkedHashMap<String, Object>();
+        body.put("value", value);
+        if (control != null) {
+            body.put("min", control.min());
+            body.put("max", control.max());
+            body.put("step", control.step());
+        }
+        return _put(_marketplace(marketplaceId) + "/robots/" + _segment(robotId)
+                + "/parameters/" + _segment(paramName), body, ROBOT_PARAMETER_CONFIG_TYPE);
+    }
+
     /*
      * Allotment <-> Holding. The allocation endpoints speak allotments; callers
      * hold holdings. Converting here keeps that asymmetry out of every caller,
@@ -1282,19 +1310,31 @@ public class HttpFlexemarkets implements Flexemarkets {
         return _send(request, type);
     }
 
+    /** PUT {@code body} as the resource's new state -- a robot parameter's configuration, say. */
+    private <T> T _put(String url, Object body, TypeReference<T> type) {
+        var request = _request(url, "application/json")
+            .header("Content-Type", "application/json")
+            .PUT(HttpRequest.BodyPublishers.ofString(_requestJson(body)))
+            .build();
+        return _send(request, type);
+    }
+
     /** PATCH the fields named in {@code body} -- a session's {@code state}, say. */
     private <T> T _patch(String url, Object body, TypeReference<T> type) {
-        String json;
+        var request = _request(url, "application/json")
+            .header("Content-Type", "application/json")
+            .method("PATCH", HttpRequest.BodyPublishers.ofString(_requestJson(body)))
+            .build();
+        return _send(request, type);
+    }
+
+    /** A request body as JSON; only the write is guarded, for the reason {@link #_post} gives. */
+    private static String _requestJson(Object body) {
         try {
-            json = MAPPER.writeValueAsString(body);
+            return MAPPER.writeValueAsString(body);
         } catch (JacksonException e) {
             throw new ApiException("Failed to serialize request body", e);
         }
-        var request = _request(url, "application/json")
-            .header("Content-Type", "application/json")
-            .method("PATCH", HttpRequest.BodyPublishers.ofString(json))
-            .build();
-        return _send(request, type);
     }
 
     /** DELETE, whose answer is a status and nothing worth parsing. */

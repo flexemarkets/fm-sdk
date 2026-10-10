@@ -86,9 +86,15 @@ class WireFixturesTest {
     private static final tools.jackson.core.type.TypeReference<java.util.List<fm.model.Widget>> WIDGETS =
             new tools.jackson.core.type.TypeReference<>() { };
 
+    /** The robot catalogue is a bare array too, read as a list as marketplaceRobots() reads it. */
+    record MarketplaceRobots(java.util.List<fm.model.MarketplaceRobot> robots) { }
+
+    private static final tools.jackson.core.type.TypeReference<java.util.List<fm.model.MarketplaceRobot>> ROBOTS =
+            new tools.jackson.core.type.TypeReference<>() { };
+
     /** Types the fixture run handles by a route other than {@link #TYPES}. */
     private static final java.util.Set<String> HANDLED_WITHOUT_A_TYPE =
-            java.util.Set.of("OrdersSnapshot", "Widgets");
+            java.util.Set.of("OrdersSnapshot", "Widgets", "MarketplaceRobots");
 
     record Fixture(String name, String type, JsonNode payload, JsonNode expect) {
         @Override
@@ -119,6 +125,8 @@ class WireFixturesTest {
                     new fm.Snapshot<>(fixture.payload(), fm.Snapshot.NO_SEQ)).body());
         } else if ("Widgets".equals(fixture.type())) {
             parsed = new Widgets(HttpFlexemarkets.MAPPER.convertValue(fixture.payload(), WIDGETS));
+        } else if ("MarketplaceRobots".equals(fixture.type())) {
+            parsed = new MarketplaceRobots(HttpFlexemarkets.MAPPER.convertValue(fixture.payload(), ROBOTS));
         } else {
             var type = TYPES.get(fixture.type());
             assertNotNull(type, "no Java type mapped for " + fixture.type());
@@ -202,8 +210,12 @@ class WireFixturesTest {
             return;
         }
         if (expected.isNumber()) {
-            assertNotNull(actual, where + ": expected " + expected.asLong() + ", got null");
-            assertEquals(expected.asLong(), ((Number) actual).longValue(), where);
+            assertNotNull(actual, where + ": expected " + expected.asString() + ", got null");
+            // Compared as decimals, not longs: a long comparison reads a
+            // penalty range of 0.001-0.009 as 0-0 and passes whatever the
+            // parser did with it.
+            assertEquals(0, expected.decimalValue().compareTo(new java.math.BigDecimal(actual.toString())),
+                    where + ": expected " + expected.asString() + ", got " + actual);
             return;
         }
         // Enums compare by name, so a parser that never converted is visible.
