@@ -177,6 +177,11 @@ class FakeFlexemarkets implements Flexemarkets {
     @Override public boolean removeWidget(long id, String key) { throw _no("removeWidget"); }
     @Override public boolean removeWidget(long id, String key, long userId) { throw _no("removeWidget"); }
     @Override public List<Widget> allWidgets(long id) { throw _no("allWidgets"); }
+    @Override public List<MarketplaceRobot> marketplaceRobots(long id) { throw _no("marketplaceRobots"); }
+    @Override public RobotParameterConfig configureRobotParameter(long id, String robotId, String paramName,
+                                                                  String value, RobotParameterControl control) {
+        throw _no("configureRobotParameter");
+    }
 
     @Override public Token signup(String a, String e, String p) { throw _no("signup"); }
     @Override public Token signup(String a, String e, String p, String first, String last) { throw _no("signup"); }
