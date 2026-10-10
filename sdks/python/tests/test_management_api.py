@@ -15,7 +15,7 @@ import pytest
 
 from fm.client import Flexemarkets
 from fm.exceptions import HttpError, InvalidArgumentError
-from fm.types import Holding, Security, WidgetPush, WidgetTarget
+from fm.types import Holding, RobotParameterControl, Security, WidgetPush, WidgetTarget
 
 TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl"
 
@@ -42,6 +42,27 @@ WIDGETS = [
         "id": 32, "marketplaceId": 1, "scope": "USER", "userId": 8, "key": "values",
         "emphasis": "strong", "ttlSeconds": 60,
         "content": {"kind": "kv", "items": [{"label": "value", "value": 120, "format": "price"}]},
+    },
+]
+
+# One robot as fm-server's catalogue answers it: a manifest with its parameter
+# groups, and one configured parameter with a control.
+ROBOTS = [
+    {
+        "manifest": {
+            "id": "fm-maker-mvo", "version": "0.11.1", "name": "MVO maker",
+            "parameters": {
+                "manager": [{"name": "penalty", "type": "option", "valueType": "decimal",
+                             "required": None, "default": "0.03", "min": 0}],
+                "user": [],
+            },
+        },
+        "enabled": True,
+        "configuration": [{
+            "id": 4, "marketplaceId": 1, "robotId": "fm-maker-mvo", "paramName": "penalty",
+            "value": "0.005", "control": {"min": 0.001, "max": 0.009, "step": 0.001},
+            "exposed": True,
+        }],
     },
 ]
 
@@ -78,6 +99,8 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif self.path == "/api/v1/marketplaces/1/widgets?participant=all":
             self._send(WIDGETS)
+        elif self.path == "/api/v1/marketplaces/1/robots":
+            self._send(ROBOTS)
         elif self.path == "/api/v1/marketplaces/1/allocations/42/allotments":
             self._send(ALLOTMENTS)
         elif (self.path.startswith("/api/v1/marketplaces/1/holdings")
@@ -106,6 +129,16 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(204 if found else 404)
         self.send_header("Content-Length", "0")
         self.end_headers()
+
+    def do_PUT(self):
+        self._record()
+        # Answered with what was stored: exposed exactly when the body carried bounds.
+        body = json.loads(bodies[f"PUT {self.path}"])
+        stored = {"id": 4, "marketplaceId": 1, "robotId": "fm-maker-mvo",
+                  "paramName": "penalty", "value": body["value"], "exposed": "min" in body}
+        if "min" in body:
+            stored["control"] = {"min": body["min"], "max": body["max"], "step": body["step"]}
+        self._send(stored)
 
     def do_POST(self):
         self._record()
@@ -351,6 +384,52 @@ def test_all_widgets_reads_the_manager_route(fm):
     assert ("GET", "/api/v1/marketplaces/1/widgets?participant=all") in requests
     assert [w.key for w in widgets] == ["score", "values"]
     assert widgets[1].content["kind"] == "kv"
+
+
+def test_marketplace_robots_reads_the_catalogue(fm):
+    """The catalogue reads as the server sends it: the manifest's groups, the
+    default spelled ``default``, a null ``required`` as False, a group the
+    manifest leaves out as empty, and the control's decimals as decimals."""
+    robots = fm.marketplace_robots(1)
+
+    assert ("GET", "/api/v1/marketplaces/1/robots") in requests
+    assert len(robots) == 1
+    robot = robots[0]
+    assert robot.enabled is True
+    assert robot.manifest.id == "fm-maker-mvo"
+    penalty = robot.manifest.parameters.manager[0]
+    assert penalty.default_value == "0.03"
+    assert penalty.required is False
+    assert penalty.max is None
+    assert robot.manifest.parameters.platform == []
+    config = robot.configuration[0]
+    assert config.exposed is True
+    assert config.value == "0.005"
+    assert config.control == RobotParameterControl(min=0.001, max=0.009, step=0.001)
+
+
+def test_configure_robot_parameter_fixes_without_a_control(fm):
+    """A fixed parameter sends the value alone; the server reads any bound as a
+    control, so sending nulls for them would not be the same request."""
+    stored = fm.configure_robot_parameter(1, "fm-maker-mvo", "penalty", "0.03", None)
+
+    path = "/api/v1/marketplaces/1/robots/fm-maker-mvo/parameters/penalty"
+    assert [r for r in requests if r[0] == "PUT"] == [("PUT", path)]
+    assert json.loads(bodies[f"PUT {path}"]) == {"value": "0.03"}
+    assert stored.exposed is False
+    assert stored.control is None
+
+
+def test_configure_robot_parameter_sends_the_control_flat(fm):
+    stored = fm.configure_robot_parameter(
+        1, "fm-maker-mvo", "penalty", "0.03",
+        RobotParameterControl(min=0.01, max=0.05, step=0.01))
+
+    path = "/api/v1/marketplaces/1/robots/fm-maker-mvo/parameters/penalty"
+    assert json.loads(bodies[f"PUT {path}"]) == {
+        "value": "0.03", "min": 0.01, "max": 0.05, "step": 0.01}
+    assert stored.exposed is True
+    assert stored.control == RobotParameterControl(min=0.01, max=0.05, step=0.01)
 
 
 def test_remove_widget_answers_whether_anything_was_there(fm):

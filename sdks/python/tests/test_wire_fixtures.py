@@ -45,6 +45,9 @@ PARSERS: dict[str, list[tuple[str, Callable[[dict[str, Any]], Any]]]] = {
     # a list -- which is what push_widgets and all_widgets do with the body.
     "Widgets": [("client", lambda body: SimpleNamespace(
         widgets=[rest._parse_widget(w) for w in body]))],
+    # The robot catalogue is a bare array too, read as marketplace_robots reads it.
+    "MarketplaceRobots": [("client", lambda body: SimpleNamespace(
+        robots=[rest._parse_marketplace_robot(r) for r in body]))],
     # Not a parser but the shape check active_orders/recent_trades apply to a
     # response body: a bare array, or ApiError.
     "OrdersSnapshot": [("client", lambda body: SimpleNamespace(

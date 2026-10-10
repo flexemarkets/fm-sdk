@@ -65,6 +65,12 @@ from .types import (
     TickGrid,
     Token,
     Widget,
+    MarketplaceRobot,
+    RobotManifest,
+    RobotParameter,
+    RobotParameterConfig,
+    RobotParameterControl,
+    RobotParameters,
     WidgetPush,
 )
 
@@ -260,6 +266,57 @@ def _parse_participant_state(data: dict[str, Any]) -> ParticipantState:
         owner_id=data.get("ownerId"),
         owner_email=data.get("ownerEmail"),
         fields=dict(data.get("fields") or {}),
+    )
+
+
+def _number(value: Any) -> float | None:
+    return None if value is None else float(value)
+
+
+def _parse_robot_parameter(data: dict[str, Any]) -> RobotParameter:
+    return RobotParameter(
+        name=data.get("name") or "",
+        label=data.get("label"),
+        description=data.get("description"),
+        type=data.get("type"),
+        value_type=data.get("valueType"),
+        # The robots write "required": null for a parameter that is not.
+        required=bool(data.get("required")),
+        default_value=data.get("default"),
+        unit=data.get("unit"),
+        min=_number(data.get("min")),
+        max=_number(data.get("max")),
+    )
+
+
+def _parse_robot_parameter_config(data: dict[str, Any]) -> RobotParameterConfig:
+    control = data.get("control")
+    return RobotParameterConfig(
+        marketplace_id=data.get("marketplaceId"),
+        robot_id=data.get("robotId") or "",
+        param_name=data.get("paramName") or "",
+        value=data.get("value") or "",
+        control=None if control is None else RobotParameterControl(
+            min=float(control["min"]), max=float(control["max"]), step=float(control["step"])),
+        exposed=bool(data.get("exposed")),
+    )
+
+
+def _parse_marketplace_robot(data: dict[str, Any]) -> MarketplaceRobot:
+    manifest = data.get("manifest") or {}
+    groups = manifest.get("parameters") or {}
+    return MarketplaceRobot(
+        manifest=RobotManifest(
+            id=manifest.get("id") or "",
+            version=manifest.get("version"),
+            name=manifest.get("name"),
+            description=manifest.get("description"),
+            parameters=RobotParameters(**{
+                group: [_parse_robot_parameter(p) for p in groups.get(group) or []]
+                for group in ("manager", "user", "platform")}),
+        ),
+        enabled=bool(data.get("enabled")),
+        configuration=[_parse_robot_parameter_config(c) for c in data.get("configuration") or []],
     )
 
 
@@ -746,6 +803,18 @@ class Flexemarkets:
 
     def _patch(self, url: str, json: Any) -> httpx.Response:
         resp = self._http.patch(
+            url,
+            json=json,
+            headers={
+                **self._auth_headers(),
+                "Accept": "application/json",
+            },
+        )
+        _check_response(resp)
+        return resp
+
+    def _put(self, url: str, json: Any) -> httpx.Response:
+        resp = self._http.put(
             url,
             json=json,
             headers={
@@ -1391,6 +1460,40 @@ class Flexemarkets:
         participant -- what a manager reads to check on a robot."""
         url = _marketplace(self._endpoint, marketplace_id) + "/widgets?participant=all"
         return [_parse_widget(w) for w in _json(self._get(url))]
+
+    def marketplace_robots(self, marketplace_id: int) -> list[MarketplaceRobot]:
+        """Every robot the marketplace's robot host offers, with whether it is
+        enabled here and how a manager has configured its parameters.
+
+        Readable by participants as well as managers: it is what a launch form
+        is built from. Asks the robot host for its catalogue, so it fails when
+        the host cannot be reached.
+        """
+        url = _marketplace(self._endpoint, marketplace_id) + "/robots"
+        return [_parse_marketplace_robot(r) for r in _json(self._get(url))]
+
+    def configure_robot_parameter(
+        self, marketplace_id: int, robot_id: str, param_name: str, value: str,
+        control: RobotParameterControl | None,
+    ) -> RobotParameterConfig:
+        """Set a robot parameter's value in a marketplace, and whether
+        participants may move it, returning the configuration as stored.
+
+        ``control`` None fixes the value: participants launching the robot see
+        it read-only. A control exposes it within that range, starting at
+        ``value``, which must lie inside it. The server refuses a parameter the
+        robot does not declare, a platform parameter, and a range outside the
+        robot's own bounds.
+
+        The control goes up flat beside the value, and a fixed parameter sends
+        the value alone: the server reads any bound as a control.
+        """
+        body: dict[str, Any] = {"value": value}
+        if control is not None:
+            body.update(min=control.min, max=control.max, step=control.step)
+        url = (_marketplace(self._endpoint, marketplace_id)
+               + f"/robots/{quote(robot_id, safe='')}/parameters/{quote(param_name, safe='')}")
+        return _parse_robot_parameter_config(_json(self._put(url, body)))
 
     def allotments(self, marketplace_id: int, allocation_id: int) -> list[Allotment]:
         """The opening positions of one allocation.

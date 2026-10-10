@@ -358,6 +358,91 @@ class Widget:
 
 
 @dataclass
+class RobotParameter:
+    """One parameter a robot declares.
+
+    ``min`` and ``max`` are the robot's hard bounds -- what is physically
+    valid, not what suits a study -- and None when it declares none. A
+    manager's range must sit inside them. ``default_value`` is what the robot
+    runs on unless configured; the wire spells it ``default``.
+    """
+    name: str = ""
+    label: str | None = None
+    description: str | None = None
+    type: str | None = None
+    value_type: str | None = None
+    required: bool = False
+    default_value: str | None = None
+    unit: str | None = None
+    min: float | None = None
+    max: float | None = None
+
+
+@dataclass
+class RobotParameters:
+    """A robot's parameters, grouped by who may set them.
+
+    A ``platform`` parameter -- a credential, an endpoint -- is never a
+    manager's to configure, and the server refuses one. A group the manifest
+    leaves out is empty.
+    """
+    manager: list[RobotParameter] = field(default_factory=list)
+    user: list[RobotParameter] = field(default_factory=list)
+    platform: list[RobotParameter] = field(default_factory=list)
+
+
+@dataclass
+class RobotManifest:
+    """What a robot declares about itself: its id, version and parameters."""
+    id: str = ""
+    version: str | None = None
+    name: str | None = None
+    description: str | None = None
+    parameters: RobotParameters = field(default_factory=RobotParameters)
+
+
+@dataclass
+class RobotParameterControl:
+    """The range a manager exposes to participants for one robot parameter.
+
+    Both ends are inclusive. ``step`` is how the participant's control moves;
+    the server refuses a launch value outside the range, not one off the step.
+    """
+    min: float
+    max: float
+    step: float
+
+
+@dataclass
+class RobotParameterConfig:
+    """How a manager has disposed of one robot parameter in one marketplace.
+
+    ``value`` is always present. ``control`` None means the value is fixed and
+    the participant's launch form shows it read-only; ``exposed`` is True
+    exactly when there is a control.
+    """
+    marketplace_id: int | None = None
+    robot_id: str = ""
+    param_name: str = ""
+    value: str = ""
+    control: RobotParameterControl | None = None
+    exposed: bool = False
+
+
+@dataclass
+class MarketplaceRobot:
+    """One robot the marketplace's robot host offers, as the marketplace sees it.
+
+    ``configuration`` holds only the parameters a manager has disposed of; a
+    parameter with no entry runs on the manifest's default and is not shown to
+    participants.
+    """
+    manifest: RobotManifest = field(default_factory=RobotManifest)
+    enabled: bool = False
+    configuration: list[RobotParameterConfig] = field(default_factory=list)
+
+
+@dataclass
 class ClientConnection:
     marketplace_id: int = 0
     connection_id: int = 0
