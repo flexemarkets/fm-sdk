@@ -417,6 +417,39 @@ raises the generic HTTP error (`HttpException` / `HttpError`) with
 | `POST participants/me/robot-launches` | user | `{robotId, ...}` → 201 with `Location` |
 | `GET robot-launches[?state=LIVE]` · `GET robot-launches/{launchId}` | user | launches, or one |
 | `PATCH robot-launches/{launchId}` | manager | `{"state": "STOPPED"}` |
+| `GET robots` | user | each robot the host offers: `{manifest, enabled, configuration}` |
+| `PUT robots/{robotId}/parameters/{paramName}` | manager | `{value}` fixes it; `{value, min, max, step}` exposes it in that range |
+
+A manager decides two things per parameter: its value, always, and whether
+participants may move it. A fixed parameter shows read-only on the launch
+form; an exposed one is a control over the manager's range, starting at
+`value`. The server refuses a parameter the robot does not declare, a
+`platform` one, and a range outside the robot's own `min`/`max`. Reading the
+catalogue asks the robot host, so it fails when the host is down.
+
+From the SDKs:
+
+| | Read the catalogue | Fix or expose a parameter |
+|---|---|---|
+| Java | `List<MarketplaceRobot> marketplaceRobots(long marketplaceId)` | `RobotParameterConfig configureRobotParameter(long marketplaceId, String robotId, String paramName, String value, RobotParameterControl control)` |
+| Python | `marketplace_robots(marketplace_id) -> list[MarketplaceRobot]` | `configure_robot_parameter(marketplace_id, robot_id, param_name, value, control) -> RobotParameterConfig` |
+| TypeScript | `marketplaceRobots(marketplaceId): Promise<MarketplaceRobot[]>` | `configureRobotParameter(marketplaceId, robotId, paramName, value, control): Promise<RobotParameterConfig>` |
+
+```java
+// The study's penalty, fixed: participants see 0.03 and cannot change it.
+fm.configureRobotParameter(marketplaceId, "fm-maker-mvo", "penalty", "0.03", null);
+
+// Or exposed between 0.01 and 0.05, starting at 0.03.
+fm.configureRobotParameter(marketplaceId, "fm-maker-mvo", "penalty", "0.03",
+        new RobotParameterControl(new BigDecimal("0.01"), new BigDecimal("0.05"), new BigDecimal("0.01")));
+```
+
+A null `control` is fixed, and the SDK then sends the value alone: the server
+reads any bound as a control. `MarketplaceRobot.configuration` lists only the
+parameters a manager has set; one with no entry runs on the manifest's
+`defaultValue` (the wire's `default`) and is not shown to participants.
+`RobotParameter.min`/`max` are the robot's hard bounds, null when it declares
+none. Bounds are `BigDecimal` in Java and numbers in Python and TypeScript.
 
 ### Studies
 
