@@ -47,6 +47,28 @@ const WIDGETS = [
   },
 ];
 
+/**
+ * One robot as fm-server's catalogue answers it: a manifest with its parameter
+ * groups, and one configured parameter with a control.
+ */
+const ROBOTS = [
+  {
+    manifest: {
+      id: "fm-maker-mvo", version: "0.11.1", name: "MVO maker",
+      parameters: {
+        manager: [{ name: "penalty", type: "option", valueType: "decimal",
+                    required: null, default: "0.03", min: 0 }],
+        user: [],
+      },
+    },
+    enabled: true,
+    configuration: [{
+      id: 4, marketplaceId: 1, robotId: "fm-maker-mvo", paramName: "penalty",
+      value: "0.005", control: { min: 0.001, max: 0.009, step: 0.001 }, exposed: true,
+    }],
+  },
+];
+
 let server: Server;
 let port: number;
 let requests: string[] = [];
@@ -92,6 +114,17 @@ before(async () => {
       } else if (url === `${mp}/widgets?participant=all`
                  || (url === `${mp}/widgets` && req.method === "POST")) {
         send(WIDGETS);
+      } else if (url === `${mp}/robots`) {
+        send(ROBOTS);
+      } else if (url === `${mp}/robots/fm-maker-mvo/parameters/penalty` && req.method === "PUT") {
+        // Answered with what was stored: exposed exactly when the body carried bounds.
+        const sent = JSON.parse(bodies.get(key) || "{}") as Record<string, unknown>;
+        const exposed = "min" in sent;
+        send({
+          id: 4, marketplaceId: 1, robotId: "fm-maker-mvo", paramName: "penalty",
+          value: sent.value, exposed,
+          ...(exposed ? { control: { min: sent.min, max: sent.max, step: sent.step } } : {}),
+        });
       } else if (url === "/api/v1/marketplaces" && req.method === "POST") {
         send({ id: 77, name: "simple-dividend", markets: [] });
       } else if (url === `${mp}/sessions/current` && req.method === "PATCH") {
@@ -619,6 +652,62 @@ test("allWidgets reads the manager route", async () => {
     fm.close();
   }
   assert.ok(requests.includes("GET /api/v1/marketplaces/1/widgets?participant=all"));
+});
+
+test("marketplaceRobots reads the catalogue", async () => {
+  // The catalogue reads as the server sends it: the manifest's groups, the
+  // default spelled "default", a null "required" as false, a group the
+  // manifest leaves out as empty, and the control's decimals as decimals.
+  const fm = await connect();
+  try {
+    const robots = await fm.marketplaceRobots(1);
+    assert.equal(robots.length, 1);
+    const robot = robots[0];
+    assert.equal(robot.enabled, true);
+    assert.equal(robot.manifest.id, "fm-maker-mvo");
+    const penalty = robot.manifest.parameters.manager[0];
+    assert.equal(penalty.defaultValue, "0.03");
+    assert.equal(penalty.required, false);
+    assert.equal(penalty.max, null);
+    assert.deepEqual(robot.manifest.parameters.platform, []);
+    const config = robot.configuration[0];
+    assert.equal(config.exposed, true);
+    assert.equal(config.value, "0.005");
+    assert.deepEqual(config.control, { min: 0.001, max: 0.009, step: 0.001 });
+  } finally {
+    fm.close();
+  }
+  assert.ok(requests.includes("GET /api/v1/marketplaces/1/robots"));
+});
+
+test("configureRobotParameter fixes without a control", async () => {
+  // A fixed parameter sends the value alone; the server reads any bound as a
+  // control, so sending nulls for them would not be the same request.
+  const fm = await connect();
+  const key = "PUT /api/v1/marketplaces/1/robots/fm-maker-mvo/parameters/penalty";
+  try {
+    const stored = await fm.configureRobotParameter(1, "fm-maker-mvo", "penalty", "0.03", null);
+    assert.equal(stored.exposed, false);
+    assert.equal(stored.control, null);
+  } finally {
+    fm.close();
+  }
+  assert.equal(requests.filter((r) => r.startsWith("PUT ")).length, 1);
+  assert.deepEqual(JSON.parse(bodies.get(key) ?? ""), { value: "0.03" });
+});
+
+test("configureRobotParameter sends the control flat", async () => {
+  const fm = await connect();
+  const key = "PUT /api/v1/marketplaces/1/robots/fm-maker-mvo/parameters/penalty";
+  try {
+    const stored = await fm.configureRobotParameter(1, "fm-maker-mvo", "penalty", "0.03",
+      { min: 0.01, max: 0.05, step: 0.01 });
+    assert.equal(stored.exposed, true);
+    assert.deepEqual(stored.control, { min: 0.01, max: 0.05, step: 0.01 });
+  } finally {
+    fm.close();
+  }
+  assert.deepEqual(JSON.parse(bodies.get(key) ?? ""), { value: "0.03", min: 0.01, max: 0.05, step: 0.01 });
 });
 
 test("removeWidget answers whether anything was there", async () => {

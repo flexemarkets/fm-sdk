@@ -23,6 +23,7 @@ import {
   parseAccount, parseConnection, parseHolding, parseMarket, parseMarketplace,
   parseOrder, parseParticipantState, parsePerson, parseSecurity, parseSession, parseToken,
   parseWidget,
+  parseMarketplaceRobot,
   ordersOf,
 } from "../src/client.ts";
 import { parseSession as parseSessionOverWs } from "../src/stomp.ts";
@@ -50,6 +51,8 @@ const PARSERS: Record<string, [string, (data: Json) => unknown][]> = {
   // A push and a read of all widgets both answer with a bare array, read as a
   // list -- which is what pushWidgets and allWidgets do with the body.
   Widgets: [["client", (d) => ({ widgets: (d as unknown as Json[]).map((w) => parseWidget(w)) })]],
+  // The robot catalogue is a bare array too, read as marketplaceRobots reads it.
+  MarketplaceRobots: [["client", (d) => ({ robots: (d as unknown as Json[]).map((r) => parseMarketplaceRobot(r)) })]],
 };
 
 interface Fixture {

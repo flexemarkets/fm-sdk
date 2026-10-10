@@ -450,3 +450,87 @@ export interface ConflictFailure {
   path: string | null;
   suggestedName: string | null;
 }
+
+/**
+ * One parameter a robot declares.
+ *
+ * `min` and `max` are the robot's hard bounds -- what is physically valid, not
+ * what suits a study -- and null when it declares none. A manager's range must
+ * sit inside them. `defaultValue` is what the robot runs on unless configured;
+ * the wire spells it `default`.
+ */
+export interface RobotParameter {
+  name: string;
+  label: string | null;
+  description: string | null;
+  type: string | null;
+  valueType: string | null;
+  required: boolean;
+  defaultValue: string | null;
+  unit: string | null;
+  min: number | null;
+  max: number | null;
+}
+
+/**
+ * A robot's parameters, grouped by who may set them.
+ *
+ * A `platform` parameter -- a credential, an endpoint -- is never a manager's
+ * to configure, and the server refuses one. A group the manifest leaves out is
+ * empty.
+ */
+export interface RobotParameters {
+  manager: RobotParameter[];
+  user: RobotParameter[];
+  platform: RobotParameter[];
+}
+
+/** What a robot declares about itself: its id, version and parameters. */
+export interface RobotManifest {
+  id: string;
+  version: string | null;
+  name: string | null;
+  description: string | null;
+  parameters: RobotParameters;
+}
+
+/**
+ * The range a manager exposes to participants for one robot parameter.
+ *
+ * Both ends are inclusive. `step` is how the participant's control moves; the
+ * server refuses a launch value outside the range, not one off the step.
+ */
+export interface RobotParameterControl {
+  min: number;
+  max: number;
+  step: number;
+}
+
+/**
+ * How a manager has disposed of one robot parameter in one marketplace.
+ *
+ * `value` is always present. A null `control` means the value is fixed and the
+ * participant's launch form shows it read-only; `exposed` is true exactly when
+ * there is a control.
+ */
+export interface RobotParameterConfig {
+  marketplaceId: number | null;
+  robotId: string;
+  paramName: string;
+  value: string;
+  control: RobotParameterControl | null;
+  exposed: boolean;
+}
+
+/**
+ * One robot the marketplace's robot host offers, as the marketplace sees it.
+ *
+ * `configuration` holds only the parameters a manager has disposed of; a
+ * parameter with no entry runs on the manifest's default and is not shown to
+ * participants.
+ */
+export interface MarketplaceRobot {
+  manifest: RobotManifest;
+  enabled: boolean;
+  configuration: RobotParameterConfig[];
+}
