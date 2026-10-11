@@ -120,7 +120,8 @@ public final class Endpoints {
      */
     static String marketplaceUrl(String marketplaceId) {
         String host = System.getenv("FM_URL");
-        return (null == host ? DEFAULT_HOST : host) + "/api/marketplaces/" + marketplaceId;
+        // Blank is unset, as in the Python and TypeScript SDKs.
+        return (null == host || host.isBlank() ? DEFAULT_HOST : host) + "/api/marketplaces/" + marketplaceId;
     }
 
     private static String _endpointIn(Path path) throws IOException {
