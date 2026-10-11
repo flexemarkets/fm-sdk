@@ -1771,14 +1771,20 @@ public class HttpFlexemarkets implements Flexemarkets {
      * @throws IOException if a named credential file cannot be read
      */
     public static Properties loadProperties(String credential, String endpoint, String clientDescription) throws IOException {
-        var properties = setDefaultProperties(System::getenv, Path.of(System.getProperty("user.home")));
+        return loadProperties(System::getenv, Path.of(System.getProperty("user.home")), credential, endpoint, clientDescription);
+    }
+
+    /** As {@link #loadProperties(String, String, String)}, with the environment and home directory a test supplies. */
+    static Properties loadProperties(Function<String, String> env, Path home,
+                                     String credential, String endpoint, String clientDescription) throws IOException {
+        var properties = setDefaultProperties(env, home);
 
         if (credential != null) {
             _loadCredential(properties, credential);
         }
 
         if (endpoint != null) {
-            _loadEndpoint(properties, endpoint);
+            _loadEndpoint(properties, endpoint, env);
         }
 
         // Last, because an endpoint arrives from three places and only one of
@@ -1787,7 +1793,7 @@ public class HttpFlexemarkets implements Flexemarkets {
         // setDefaultProperties on every connection -- or in a file named by -E
         // reached the HTTP client as "1234". Normalising here covers all three,
         // and is a no-op on the form the argument path already produced.
-        _expandBareMarketplaceId(properties);
+        _expandBareMarketplaceId(properties, env);
 
         if (clientDescription != null) {
             properties.setProperty("client-description", clientDescription);
@@ -1849,13 +1855,13 @@ public class HttpFlexemarkets implements Flexemarkets {
         }
     }
 
-    private static void _loadEndpoint(Properties properties, String endpoint) {
-        // A bare marketplace id (e.g. "2540") resolves to that marketplace on the
-        // default production host. Development environments give a full URL when
-        // localhost is wanted. Checked before the URL branch: a bare number is a
-        // valid relative URI, so isValidUrl would otherwise swallow it.
+    private static void _loadEndpoint(Properties properties, String endpoint, Function<String, String> env) {
+        // A bare marketplace id (e.g. "2540") resolves to that marketplace on
+        // $FM_URL's host, or the default production host. Checked before the
+        // URL branch: a bare number is a valid relative URI, so isValidUrl
+        // would otherwise swallow it.
         if (_isMarketplaceId(endpoint)) {
-            properties.setProperty("endpoint", _marketplaceEndpoint(endpoint));
+            properties.setProperty("endpoint", _marketplaceEndpoint(endpoint, env));
             properties.setProperty("endpoint-source", ENDPOINT_ARGUMENT);
             return;
         }
@@ -1901,16 +1907,24 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     /** Expand an endpoint that is still a bare marketplace id, wherever it came from. */
-    private static void _expandBareMarketplaceId(Properties properties) {
+    private static void _expandBareMarketplaceId(Properties properties, Function<String, String> env) {
         var endpoint = properties.getProperty("endpoint");
         if (endpoint != null && _isMarketplaceId(endpoint.trim())) {
-            properties.setProperty("endpoint", _marketplaceEndpoint(endpoint.trim()));
+            properties.setProperty("endpoint", _marketplaceEndpoint(endpoint.trim(), env));
         }
     }
 
-    /** A bare marketplace id resolves to that marketplace on the default production host. */
-    private static String _marketplaceEndpoint(String marketplaceId) {
-        return Endpoints.DEFAULT_HOST + "/api/marketplaces/" + marketplaceId;
+    /**
+     * A bare marketplace id resolves to that marketplace on {@code $FM_URL}'s
+     * host, or on the default production host when it is unset or blank --
+     * as {@code Endpoints.marketplaceUrl} and the Python and TypeScript SDKs
+     * do. This one ignored {@code $FM_URL}, so {@code FM_URL=http://localhost:8080
+     * fm-ssw -E 3305}, which reads as a local rehearsal, ran against
+     * production (2026-09-24).
+     */
+    private static String _marketplaceEndpoint(String marketplaceId, Function<String, String> env) {
+        var host = env.apply("FM_URL");
+        return (host == null || host.isBlank() ? Endpoints.DEFAULT_HOST : host) + "/api/marketplaces/" + marketplaceId;
     }
 
     private static void _loadConfiguration(Properties properties, Path filePath) {

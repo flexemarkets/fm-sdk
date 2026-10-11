@@ -36,6 +36,40 @@ public class FlexemarketsEndpointTest {
             .isEqualTo("https://api.flexemarkets.com/api/marketplaces/2540");
     }
 
+    /**
+     * {@code $FM_URL} moves a bare id's host, as in Python and TypeScript.
+     * Java ignored it: {@code FM_URL=http://localhost:8080 fm-ssw -E 3305},
+     * which reads as a local rehearsal, ran against production on 2026-09-24.
+     */
+    @Test
+    public void aBareIdHonoursFmUrl(@TempDir Path home) throws Exception {
+        var properties = HttpFlexemarkets.loadProperties(
+            name -> "FM_URL".equals(name) ? "http://localhost:8080" : null, home, null, "3305", "fm-endpoint-test");
+
+        assertThat(properties.getProperty("endpoint")).isEqualTo("http://localhost:8080/api/marketplaces/3305");
+    }
+
+    /** The same for a bare id written in a file, the path a study's -E usually takes. */
+    @Test
+    public void aBareIdInAFileHonoursFmUrl(@TempDir Path home) throws Exception {
+        Path file = home.resolve("endpoint");
+        Files.writeString(file, "endpoint=3305\n");
+
+        var properties = HttpFlexemarkets.loadProperties(
+            name -> "FM_URL".equals(name) ? "http://localhost:8080" : null, home, null, file.toString(), "fm-endpoint-test");
+
+        assertThat(properties.getProperty("endpoint")).isEqualTo("http://localhost:8080/api/marketplaces/3305");
+    }
+
+    /** Unset or blank, the default host: blank is unset in all three SDKs. */
+    @Test
+    public void aBlankFmUrlIsTheDefaultHost(@TempDir Path home) throws Exception {
+        var properties = HttpFlexemarkets.loadProperties(
+            name -> "FM_URL".equals(name) ? "  " : null, home, null, "3305", "fm-endpoint-test");
+
+        assertThat(properties.getProperty("endpoint")).isEqualTo("https://api.flexemarkets.com/api/marketplaces/3305");
+    }
+
     @Test
     public void fullUrlIsPreserved() throws Exception {
         var url = "http://localhost:8080/api/marketplaces/2540";
