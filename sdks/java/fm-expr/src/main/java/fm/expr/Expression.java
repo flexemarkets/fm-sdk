@@ -28,6 +28,7 @@ import java.util.function.Consumer;
  * arithmetic   + - * /   and unary -          (numbers only; no text joining)
  * comparison   == != &lt; &lt;= &gt; &gt;=                (both sides the same kind)
  * functions    if(cond, a, b)   abs(x)   sum(v)   take(v, n)
+ *              min(a, b)   max(a, b)   round(x)   exp(x)   ln(x)   sqrt(x)
  * </pre>
  *
  * <ul>
@@ -38,6 +39,14 @@ import java.util.function.Consumer;
  *       schedule consumed past its end contributes nothing, as Smith 62's
  *       settlement has it.</li>
  *   <li><b>{@code sum}</b> and <b>{@code abs}</b> are what they say.</li>
+ *   <li><b>{@code min}</b>, <b>{@code max}</b> and <b>{@code round}</b>
+ *       (half up, to a whole number) are exact. <b>{@code exp}</b>,
+ *       <b>{@code ln}</b> and <b>{@code sqrt}</b> are computed in double
+ *       precision and kept to the division scale; a result that is not a
+ *       finite number -- {@code ln} of zero or less, {@code sqrt} of a
+ *       negative, an {@code exp} too large -- is an error, not a value. They
+ *       were added so a state-contingent payment such as
+ *       {@code round(exp(me.x) / 100)} needs no robot.</li>
  * </ul>
  *
  * <p>Deliberately absent: loops, user functions, assignment, text
@@ -349,8 +358,8 @@ public final class Expression {
             expect(Token.Kind.RPAREN, "')' closing " + name.text() + "(");
             var arity = switch (name.text()) {
                 case "if" -> 3;
-                case "abs", "sum" -> 1;
-                case "take" -> 2;
+                case "abs", "sum", "round", "exp", "ln", "sqrt" -> 1;
+                case "take", "min", "max" -> 2;
                 default -> throw new ExpressionException("unknown function " + name.text(), name.position());
             };
             if (args.size() != arity) {
@@ -463,6 +472,15 @@ public final class Expression {
                         yield (b.value() ? args.get(1) : args.get(2)).evaluate(scope);
                     }
                     case "abs" -> new Value.Num(number(args.get(0).evaluate(scope), "abs").abs());
+                    case "min" -> new Value.Num(number(args.get(0).evaluate(scope), "min")
+                            .min(number(args.get(1).evaluate(scope), "min")));
+                    case "max" -> new Value.Num(number(args.get(0).evaluate(scope), "max")
+                            .max(number(args.get(1).evaluate(scope), "max")));
+                    case "round" -> new Value.Num(number(args.get(0).evaluate(scope), "round")
+                            .setScale(0, RoundingMode.HALF_UP));
+                    case "exp" -> real("exp", Math.exp(number(args.get(0).evaluate(scope), "exp").doubleValue()));
+                    case "ln" -> real("ln", Math.log(number(args.get(0).evaluate(scope), "ln").doubleValue()));
+                    case "sqrt" -> real("sqrt", Math.sqrt(number(args.get(0).evaluate(scope), "sqrt").doubleValue()));
                     case "sum" -> {
                         var total = BigDecimal.ZERO;
                         for (var v : vector(args.get(0).evaluate(scope), "sum").values()) {
@@ -489,6 +507,14 @@ public final class Expression {
                     arg.collect(references);
                 }
             }
+        }
+
+        /** A double result as a number at the division scale, or an error when it is not a finite number. */
+        private static Value real(String op, double result) {
+            if (!Double.isFinite(result)) {
+                throw new ExpressionException(op + " has no finite value there");
+            }
+            return new Value.Num(BigDecimal.valueOf(result).setScale(DIVISION_SCALE, RoundingMode.HALF_UP));
         }
 
         private static BigDecimal number(Value value, String op) {
