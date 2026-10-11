@@ -218,4 +218,35 @@ class CliBuilderContractTest {
                 .isInstanceOf(CliBuilder.InvalidLaunchException.class)
                 .hasMessageContaining("penalty");
     }
+
+    private static Manifest _bounded() {
+        ParameterSpec penalty = new ParameterSpec("penalty", "PENALTY", ParameterType.POSITIONAL,
+                ValueType.FLOAT, null, null, true, null, null, null, null, null,
+                new java.math.BigDecimal("0"), new java.math.BigDecimal("1"));
+        return new Manifest("fm-maker-mvo", "MVO Market Maker", "0.9.0", null, null, "jar",
+                new Manifest.Parameters(List.of(penalty), List.of(_pairs("symbolSpreads")),
+                        List.of(_platform("credential", "-C", "session-token"))));
+    }
+
+    /**
+     * Launching refuses a value outside the robot's own bounds, in every host
+     * that builds its command line here -- not only in the one that thought to
+     * check, which let a container launched directly take what fm-server refused.
+     */
+    @Test
+    void aValueOutsideTheRobotsOwnBoundsIsRefusedAtLaunch() {
+        assertThatThrownBy(() -> CliBuilder.arguments(_bounded(),
+                Map.of("penalty", "1.5"), Map.of("symbolSpreads", "AAPL 0.5"),
+                Map.of("credential", "a-token")))
+                .isInstanceOf(CliBuilder.InvalidLaunchException.class)
+                .hasMessageContaining("'penalty' must be within 0 to 1, got: 1.5");
+    }
+
+    @Test
+    void aValueWithinTheRobotsOwnBoundsIsLaunched() {
+        assertThat(CliBuilder.arguments(_bounded(),
+                Map.of("penalty", "0.25"), Map.of("symbolSpreads", "AAPL 0.5"),
+                Map.of("credential", "a-token")))
+                .contains("0.25");
+    }
 }

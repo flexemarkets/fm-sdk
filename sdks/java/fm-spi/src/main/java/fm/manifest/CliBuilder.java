@@ -138,6 +138,15 @@ public final class CliBuilder {
                 throw new InvalidLaunchException(
                         "'" + name + "' expects " + spec.valueType().json() + ", got: " + value);
             }
+            // The robot's own hard bounds, checked here so every host refuses
+            // the same values: fm-server checked them and a container launched
+            // directly did not, so the bound was only as strong as the path a
+            // caller chose. Only numbers have bounds; absent ones admit all.
+            if (_isNumeric(spec) && value != null && (spec.min() != null || spec.max() != null)
+                    && !spec.withinHardBounds(new java.math.BigDecimal(value.trim()))) {
+                throw new InvalidLaunchException(
+                        "'" + name + "' must be within " + spec.hardBoundsDescription() + ", got: " + value);
+            }
             merged.put(name, value);
         }
     }
@@ -214,5 +223,9 @@ public final class CliBuilder {
             Map<String, String> user,
             Map<String, String> platform) {
         return arguments(manifest, merge(manifest, manager, user, platform));
+    }
+
+    private static boolean _isNumeric(ParameterSpec spec) {
+        return spec.valueType() == ValueType.INTEGER || spec.valueType() == ValueType.FLOAT;
     }
 }
