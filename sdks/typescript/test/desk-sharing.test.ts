@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 import { Flexemarkets, parseHolding } from "../src/client.ts";
 import { parseSession } from "../src/stomp.ts";
 import type { Desk } from "../src/desk.ts";
-import type { Market, Order } from "../src/types.ts";
+import type { Market, Order, Session } from "../src/types.ts";
 import type { FmEvent, OrdersUpdate } from "../src/stomp.ts";
 import type { Snapshot } from "../src/snapshot.ts";
 
@@ -48,6 +48,10 @@ interface Scripted extends Flexemarkets {
   unsubscribes: number;
   subscribed: number[];
   submitted: string[];
+  /** What GET session answers; null mirrors the last session posted. */
+  serverSession: Session | null;
+  sessionFailure: Error | null;
+  sessionReads: number;
   post(marketplaceId: number, event: FmEvent): void;
 }
 
@@ -56,12 +60,24 @@ function scripted(): Scripted {
   const Ctor = Flexemarkets as unknown as new (...args: string[]) => Flexemarkets;
   const fm = new Ctor(`http://127.0.0.1:1/api/marketplaces/${MP}`, "http://127.0.0.1:1/api", "Bearer t", "desk-sharing-test") as Scripted;
   const streams = new Map<number, (e: FmEvent) => void>();
+  let posted: Session | null = null;
   Object.assign(fm, {
+    serverSession: null,
+    sessionFailure: null,
+    sessionReads: 0,
+    async session(): Promise<Session> {
+      fm.sessionReads++;
+      if (fm.sessionFailure !== null) throw fm.sessionFailure;
+      return (fm.serverSession ?? posted) as Session;
+    },
     activeReads: 0,
     unsubscribes: 0,
     subscribed: [] as number[],
     submitted: [] as string[],
-    post(marketplaceId: number, event: FmEvent) { streams.get(marketplaceId)!(event); },
+    post(marketplaceId: number, event: FmEvent) {
+      if (typeof event === "object" && event !== null && "state" in event && "marketplaceId" in event) posted = event as Session;
+      streams.get(marketplaceId)!(event);
+    },
     async markets(marketplaceId: number) { return [market(marketplaceId)]; },
     async activeOrders(marketplaceId: number): Promise<Snapshot<Order[]>> {
       fm.activeReads++;
@@ -373,4 +389,47 @@ test("a cancel is never refused locally: a manager may cancel in any state", asy
   assert.deepEqual(fm.submitted, [`${MP}/${ALPHA} cancel 900`]);
   desk.close();
   fm.close();
+});
+
+test("an order just after the open is sent though the OPEN event has not landed", async () => {
+  const fm = scripted();
+  const desk = await fm.desk(MP);
+  fm.post(MP, parseSession({ id: 30, marketplaceId: MP, state: "PAUSED" }));
+  await settle();
+  fm.serverSession = parseSession({ id: 30, marketplaceId: MP, state: "OPEN" });
+
+  await desk.submitLimit(ALPHA, "BUY", 1, 1000);
+
+  assert.deepEqual(fm.submitted, [`${MP}/${ALPHA} BUY 1@1000`]);
+  desk.close();
+});
+
+test("a closed session is read at most once a second while refusing", async () => {
+  const { OrderRefusedLocallyError } = await import("../src/client.ts");
+  const fm = scripted();
+  const desk = await fm.desk(MP);
+  fm.post(MP, parseSession({ id: 30, marketplaceId: MP, state: "CLOSED" }));
+  await settle();
+
+  for (let i = 0; i < 20; i++) {
+    await assert.rejects(desk.submitLimit(ALPHA, "BUY", 1, 1000), (e: unknown) => e instanceof OrderRefusedLocallyError);
+  }
+
+  assert.equal(fm.sessionReads, 1);
+  assert.deepEqual(fm.submitted, []);
+  desk.close();
+});
+
+test("a session read that fails refuses on what the desk holds", async () => {
+  const { OrderRefusedLocallyError } = await import("../src/client.ts");
+  const fm = scripted();
+  const desk = await fm.desk(MP);
+  fm.post(MP, parseSession({ id: 30, marketplaceId: MP, state: "CLOSED" }));
+  await settle();
+  fm.sessionFailure = new Error("down");
+
+  await assert.rejects(desk.submitLimit(ALPHA, "BUY", 1, 1000),
+    (e: unknown) => e instanceof OrderRefusedLocallyError && /session 30 is CLOSED/.test(e.message));
+  assert.deepEqual(fm.submitted, []);
+  desk.close();
 });

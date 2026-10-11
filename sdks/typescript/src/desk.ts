@@ -366,17 +366,54 @@ export class DefaultDesk implements Desk {
    */
   submitLimit(marketId: number, side: string, units: number, price: number, refuseLocally = true): Promise<Order> {
     this._ensureOpen();
-    const refusal = refuseLocally ? this._refusal(marketId, side) : null;
-    if (refusal !== null) return Promise.reject(refusal);
-    return this._flexemarkets.submitLimit(this.marketplaceId, marketId, side, units, price);
+    const send = (): Promise<Order> => {
+      const refusal = refuseLocally ? this._grantRefusal(marketId, side) : null;
+      if (refusal !== null) return Promise.reject(refusal);
+      return this._flexemarkets.submitLimit(this.marketplaceId, marketId, side, units, price);
+    };
+    const closed = refuseLocally ? this._sessionRefusal() : null;
+    if (closed === null) return send();
+    return this._openedSince().then((open) => (open ? send() : Promise.reject(closed)));
   }
 
-  private _refusal(marketId: number, side: string): OrderRefusedLocallyError | null {
+  /** How long one re-read of the session answers for: a refusing robot asks again at most this often. */
+  static readonly SESSION_RECHECK_MS = 1000;
+  private _sessionRechecked: { at: number; open: boolean } | null = null;
+
+  /**
+   * Whether the session has opened although the desk has not heard yet.
+   *
+   * A robot submitting on a timer right at the open is ahead of the OPEN
+   * event, and was refused locally for an order the server would take. So
+   * before refusing on a session that is not OPEN, read it once -- at most
+   * every second -- and send if it is OPEN now. A read that fails changes
+   * nothing: the desk refuses on what it holds, as before.
+   */
+  private async _openedSince(): Promise<boolean> {
+    const now = Date.now();
+    const checked = this._sessionRechecked;
+    if (checked !== null && now - checked.at < DefaultDesk.SESSION_RECHECK_MS) return checked.open;
+    let open: boolean;
+    try {
+      const fresh = await this._flexemarkets.session(this.marketplaceId);
+      open = fresh != null && String(fresh.state).toUpperCase() === "OPEN";
+    } catch {
+      open = false;
+    }
+    this._sessionRechecked = { at: now, open };
+    return open;
+  }
+
+  private _sessionRefusal(): OrderRefusedLocallyError | null {
     const session = this._session;
     if (session !== null && session.state != null && session.state.toUpperCase() !== "OPEN") {
       return new OrderRefusedLocallyError("SESSION_CLOSED",
         `Not sent: session ${session.id} is ${session.state}, not OPEN.`);
     }
+    return null;
+  }
+
+  private _grantRefusal(marketId: number, side: string): OrderRefusedLocallyError | null {
     const security = this._holding !== null ? getSecurity(this._holding, marketId) : null;
     if (security === null) return null;
     const upper = String(side).toUpperCase();
