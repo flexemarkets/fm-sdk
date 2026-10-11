@@ -602,6 +602,17 @@ def _json(response: httpx.Response) -> Any:
         raise ApiError("Failed to parse the response body") from e
 
 
+def _token_expired(response: httpx.Response) -> bool:
+    """A 401 that says the token ran out, as distinct from one that is wrong."""
+    if response.status_code != 401:
+        return False
+    try:
+        body = response.json()
+    except ValueError:
+        return False
+    return isinstance(body, dict) and "ACCOUNT_TOKEN_EXPIRED" in (body.get("error"), body.get("type"))
+
+
 def _check_response(response: httpx.Response) -> None:
     status = response.status_code
     if 200 <= status < 300:
@@ -697,6 +708,13 @@ class Flexemarkets:
             timeout=30.0,
         )
 
+        # Kept only to sign in again when the 24-hour token runs out under a
+        # long-running robot; a client given a bare token cannot, and does not.
+        self._credentials = (dict(config) if config.get("account") and config.get("email")
+                             and config.get("password") and not _is_valid_token(config.get("token", ""))
+                             else None)
+        self._renew_lock = threading.Lock()
+
         # Authenticate
         self._token_obj = self._sign_in(config)
         self._account = self._token_obj.account
@@ -778,58 +796,53 @@ class Flexemarkets:
     def _auth_headers(self) -> dict[str, str]:
         return {"Authorization": self._bearer_token}
 
-    def _get(self, url: str) -> httpx.Response:
-        resp = self._http.get(
-            url,
-            headers={
-                **self._auth_headers(),
-                "Accept": "application/json",
-            },
-        )
+    def _renew_token(self, expired: str | None = None) -> bool:
+        """Sign in again with the credentials this client was made with.
+
+        Tokens live 24 hours, so a robot that runs longer used to end the
+        first time it asked for anything after that -- or loop on the refusal
+        (a Utah poller, about 250 times a day at 00Z). One sign-in renews it.
+        False when this client holds no credentials (it was given a token) or
+        the sign-in fails; the caller then answers with the refusal it had.
+        ``expired`` skips the sign-in when another thread has already renewed.
+        """
+        if self._credentials is None:
+            return False
+        with self._renew_lock:
+            if expired is not None and self._bearer_token != expired:
+                return True
+            try:
+                token = self._sign_in(self._credentials)
+            except FlexemarketsError:
+                return False
+            self._token_obj = token
+            self._bearer_token = f"Bearer {token.token}"
+            return True
+
+    def _request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+        """Send with this client's token; if it has expired, renew it once and send again."""
+        extra = kwargs.pop("headers", {})
+        presented = self._bearer_token
+        resp = self._http.request(method, url, headers={**self._auth_headers(), **extra}, **kwargs)
+        if _token_expired(resp) and self._renew_token(presented):
+            resp = self._http.request(method, url, headers={**self._auth_headers(), **extra}, **kwargs)
         _check_response(resp)
         return resp
+
+    def _get(self, url: str) -> httpx.Response:
+        return self._request("GET", url, headers={"Accept": "application/json"})
 
     def _post(self, url: str, json: Any) -> httpx.Response:
-        resp = self._http.post(
-            url,
-            json=json,
-            headers={
-                **self._auth_headers(),
-                "Accept": "application/json",
-            },
-        )
-        _check_response(resp)
-        return resp
+        return self._request("POST", url, json=json, headers={"Accept": "application/json"})
 
     def _patch(self, url: str, json: Any) -> httpx.Response:
-        resp = self._http.patch(
-            url,
-            json=json,
-            headers={
-                **self._auth_headers(),
-                "Accept": "application/json",
-            },
-        )
-        _check_response(resp)
-        return resp
+        return self._request("PATCH", url, json=json, headers={"Accept": "application/json"})
 
     def _put(self, url: str, json: Any) -> httpx.Response:
-        resp = self._http.put(
-            url,
-            json=json,
-            headers={
-                **self._auth_headers(),
-                "Accept": "application/json",
-            },
-        )
-        _check_response(resp)
-        return resp
+        return self._request("PUT", url, json=json, headers={"Accept": "application/json"})
 
     def _delete(self, url: str) -> httpx.Response:
-        resp = self._http.delete(
-            url, headers={**self._auth_headers(), "Accept": "application/json"})
-        _check_response(resp)
-        return resp
+        return self._request("DELETE", url, headers={"Accept": "application/json"})
 
     def _send_csv(self, method: str, url: str, filename: str) -> httpx.Response:
         """The file as the request body, declared text/csv.
@@ -1593,10 +1606,11 @@ class Flexemarkets:
         ws_url = _server(self._endpoint).replace("https://", "wss://").replace("http://", "ws://") + "/events"
         ev = EventListener(
             ws_url=ws_url,
-            bearer_token=self._bearer_token,
+            bearer_token=lambda: self._bearer_token,
             marketplace_id=marketplace_id,
             event_queue=event_queue,
             client_description=self._client_description,
+            renew=self._renew_token,
         )
         ev.start()
         return ev
