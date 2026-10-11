@@ -653,11 +653,26 @@ function suggestedNameIn(body: string): string | null {
 // Flexemarkets client
 // ---------------------------------------------------------------------------
 
+/** A 401 that says the token ran out, as distinct from one that is wrong. */
+async function tokenExpired(resp: Response): Promise<boolean> {
+  if (resp.status !== 401) return false;
+  try {
+    const body = JSON.parse(await resp.clone().text()) as Record<string, unknown>;
+    return body.error === "ACCOUNT_TOKEN_EXPIRED" || body.type === "ACCOUNT_TOKEN_EXPIRED";
+  } catch {
+    return false;
+  }
+}
+
 export class Flexemarkets {
   private readonly _clientDescription: string;
   private readonly _endpoint: string;
   private readonly _baseUrl: string;
-  private readonly _bearerToken: string;
+  /** Replaced when an expired token is renewed (see {@link _renewToken}). */
+  private _bearerToken: string;
+  /** Kept only to sign in again when the token runs out; null for a client given a token. */
+  private _credentials: Record<string, string> | null = null;
+  private _renewing: Promise<boolean> | null = null;
   private _account!: Account;
   private _user!: Person;
   private _tokenObj!: Token;
@@ -708,6 +723,9 @@ export class Flexemarkets {
     const bearer = `Bearer ${tokenObj.token}`;
 
     const fm = new Flexemarkets(ep, baseUrl, bearer, desc);
+    if (config.account && config.email && config.password && !(config.token && isValidToken(config.token))) {
+      fm._credentials = { ...config } as Record<string, string>;
+    }
     fm._tokenObj = tokenObj;
     fm._account = tokenObj.account!;
     fm._user = tokenObj.person!;
@@ -751,8 +769,48 @@ export class Flexemarkets {
     return { Authorization: this._bearerToken };
   }
 
+  /**
+   * fetch with this client's token; if it has expired, renew it once and send
+   * again. Tokens live 24 hours, so a robot that ran longer ended the first
+   * time it asked for anything after that, or looped on the refusal -- a Utah
+   * poller, about 250 times a day at 00Z.
+   */
+  private async _fetch(url: string, init: RequestInit): Promise<Response> {
+    const presented = this._bearerToken;
+    const resp = await fetch(url, init);
+    if (!(await tokenExpired(resp)) || !(await this._renewToken(presented))) return resp;
+    const headers = { ...(init.headers as Record<string, string>), Authorization: this._bearerToken };
+    return fetch(url, { ...init, headers });
+  }
+
+  /**
+   * Sign in again with the credentials this client was made with. False when
+   * it was given a token rather than credentials, or the sign-in fails; the
+   * caller then answers with the refusal it had. A `presented` token another
+   * caller has already replaced is not renewed again, and concurrent callers
+   * share one sign-in.
+   */
+  async _renewToken(presented: string | null): Promise<boolean> {
+    if (this._credentials === null) return false;
+    if (presented !== null && presented !== this._bearerToken) return true;
+    if (this._renewing === null) {
+      this._renewing = (async () => {
+        try {
+          const token = await signIn(this._baseUrl, this._credentials!, this._clientDescription);
+          this._bearerToken = `Bearer ${token.token}`;
+          return true;
+        } catch {
+          return false;
+        } finally {
+          this._renewing = null;
+        }
+      })();
+    }
+    return this._renewing;
+  }
+
   private async _get(url: string): Promise<JsonObject> {
-    const resp = await fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
+    const resp = await this._fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
       headers: {
         ...this._authHeaders(),
         Accept: "application/json",
@@ -771,7 +829,7 @@ export class Flexemarkets {
    * `Snapshot.NO_SEQ` when the header is absent.
    */
   private async _getSnapshot(url: string): Promise<{ data: JsonObject; asOfSeq: number }> {
-    const resp = await fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
+    const resp = await this._fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
       headers: {
         ...this._authHeaders(),
         Accept: "application/json",
@@ -796,7 +854,7 @@ export class Flexemarkets {
   }
 
   private async _sendJson(method: string, url: string, json: unknown): Promise<JsonObject> {
-    const resp = await fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
+    const resp = await this._fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
       method,
       headers: {
         ...this._authHeaders(),
@@ -817,7 +875,7 @@ export class Flexemarkets {
    * the header row.
    */
   private async _getText(url: string): Promise<string> {
-    const resp = await fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
+    const resp = await this._fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
       headers: {
         ...this._authHeaders(),
         Accept: "text/csv, */*",
@@ -830,7 +888,7 @@ export class Flexemarkets {
   }
 
   private async _post(url: string, json: unknown): Promise<JsonObject> {
-    const resp = await fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
+    const resp = await this._fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
       method: "POST",
       headers: {
         ...this._authHeaders(),
@@ -1036,7 +1094,7 @@ export class Flexemarkets {
 
   /** DELETE, whose answer is a status and nothing worth parsing. */
   private async _delete(url: string): Promise<void> {
-    const resp = await fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
+    const resp = await this._fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
       method: "DELETE",
       headers: { ...this._authHeaders(), Accept: "application/json" },
     });
@@ -1048,7 +1106,7 @@ export class Flexemarkets {
    * DELETE whose answer is the resource as it ended -- an order's CANCEL.
    */
   private async _deleteFor(url: string): Promise<JsonObject> {
-    const resp = await fetch(url, {
+    const resp = await this._fetch(url, {
       method: "DELETE",
       headers: { ...this._authHeaders(), Accept: "application/json", "User-Agent": FM_NETWORK_CLIENT },
     });
@@ -1063,7 +1121,7 @@ export class Flexemarkets {
    * segment. Bytes, not a string, so the file's own encoding survives.
    */
   private async _sendCsv(method: string, url: string, filename: string): Promise<unknown> {
-    const resp = await fetch(url, {
+    const resp = await this._fetch(url, {
       method,
       headers: {
         ...this._authHeaders(),
@@ -1535,7 +1593,7 @@ export class Flexemarkets {
   async removeWidget(marketplaceId: number, key: string, userId?: number): Promise<boolean> {
     const owner = userId !== undefined && userId !== null ? `/participants/${userId}` : "";
     const url = `${this._marketplace(marketplaceId)}${owner}/widgets/${encodeURIComponent(key)}`;
-    const resp = await fetch(url, {
+    const resp = await this._fetch(url, {
       method: "DELETE",
       headers: { ...this._authHeaders(), Accept: "application/json", "User-Agent": FM_NETWORK_CLIENT },
     });
@@ -1708,12 +1766,13 @@ export class Flexemarkets {
         .replace("http://", "ws://") + "/events";
     const events = new EventListener(
       wsUrl,
-      this._bearerToken,
+      () => this._bearerToken,
       marketplaceId,
       callback,
       this._clientDescription,
       parseHolding,
       parseOrder,
+      () => this._renewToken(null),
     );
     await events.start();
     return events;

@@ -266,7 +266,10 @@ function isAuthRefusal(failure: unknown): boolean {
 
 export class EventListener {
   private readonly _wsUrl: string;
-  private readonly _bearerToken: string;
+  /** Read on every connect, so a reconnect after the client renewed its sign-in presents the new token. */
+  private readonly _bearerToken: () => string;
+  /** Asks the client to sign in again; false when it cannot. */
+  private readonly _renew: () => Promise<boolean>;
   private readonly _marketplaceId: number;
   private readonly _callback: EventCallback;
   private readonly _clientDescription: string;
@@ -294,15 +297,17 @@ export class EventListener {
 
   constructor(
     wsUrl: string,
-    bearerToken: string,
+    bearerToken: string | (() => string),
     marketplaceId: number,
     callback: EventCallback,
     clientDescription: string,
     parseHolding: (data: Record<string, unknown>) => Holding,
     parseOrder: (data: Record<string, unknown>) => Order,
+    renew: () => Promise<boolean> = async () => false,
   ) {
     this._wsUrl = wsUrl;
-    this._bearerToken = bearerToken;
+    this._bearerToken = typeof bearerToken === "function" ? bearerToken : () => bearerToken;
+    this._renew = renew;
     this._marketplaceId = marketplaceId;
     this._callback = callback;
     this._clientDescription = clientDescription;
@@ -367,6 +372,7 @@ export class EventListener {
   }
 
   async reconnect(): Promise<void> {
+    let renewed = false;
     while (!this._closed) {
       try {
         this._disconnect();
@@ -383,6 +389,13 @@ export class EventListener {
         // So an auth refusal ends the stream and says why, and every other
         // failure keeps the existing retry: a server restart or a network drop
         // IS a blip, and recovering from it is what this loop is for.
+        // Except once: a client that holds credentials signs in again -- the
+        // 24-hour token ran out under a long-running robot -- and the next
+        // attempt presents the new token. A second refusal is final, as before.
+        if (isAuthRefusal(exception) && !renewed && (await this._renew())) {
+          renewed = true;
+          continue;
+        }
         if (isAuthRefusal(exception)) {
           this._closed = true;
           this._callback({
@@ -439,7 +452,7 @@ export class EventListener {
   private _connect(): WebSocket {
     return new WebSocket(this._wsUrl, ["v12.stomp", "v11.stomp", "v10.stomp"], {
       headers: {
-        Authorization: this._bearerToken,
+        Authorization: this._bearerToken(),
       },
       maxPayload: 128 * 1024 * 1024,
     });
