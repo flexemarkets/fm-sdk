@@ -287,7 +287,8 @@ public class HttpFlexemarkets implements Flexemarkets {
     private final Duration _requestTimeout;
 
     private final HttpClient _httpClient;
-    private final String _bearerToken;
+    /** Replaced when an expired token is renewed (see {@link #_renewToken}). */
+    private volatile String _bearerToken;
     private final Token _token;
     private final Account _account;
     private final Person _user;
@@ -963,7 +964,8 @@ public class HttpFlexemarkets implements Flexemarkets {
         // One per connection: the stream this replaces is closed, not dropped
         // with its socket, heartbeats and reconnects still running.
         if (_events != null) _events.close();
-        _events = new Events(_wsUrl(), _bearerToken, marketplaceId, _clientDescription(), MAPPER, queue);
+        _events = new Events(_wsUrl(), () -> _bearerToken, marketplaceId, _clientDescription(), MAPPER, queue,
+            this::_renewForStream);
         _events.connect();
     }
 
@@ -981,7 +983,8 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     Events _connectEvents(long marketplaceId, BlockingQueue<Object> queue) {
-        var ev = new Events(_wsUrl(), _bearerToken, marketplaceId, _clientDescription(), MAPPER, queue);
+        var ev = new Events(_wsUrl(), () -> _bearerToken, marketplaceId, _clientDescription(), MAPPER, queue,
+            this::_renewForStream);
         ev.connect();
         return ev;
     }
@@ -1151,6 +1154,70 @@ public class HttpFlexemarkets implements Flexemarkets {
      * fm-lib-net printed both in full, which this deliberately does not.
      */
     private HttpResponse<String> _exchange(HttpRequest request) throws IOException, InterruptedException {
+        var response = _exchangeOnce(request);
+        var presented = request.headers().firstValue("Authorization").orElse(null);
+        if (presented != null && _tokenExpired(response) && _renewToken(presented)) {
+            var renewed = HttpRequest.newBuilder(request, (name, value) -> !"Authorization".equalsIgnoreCase(name))
+                .header("Authorization", _bearerToken)
+                .build();
+            response = _exchangeOnce(renewed);
+        }
+        return response;
+    }
+
+    /** A 401 that says the token ran out, as distinct from one that is wrong. */
+    static boolean _tokenExpired(HttpResponse<String> response) {
+        if (response.statusCode() != 401 || response.body() == null) {
+            return false;
+        }
+        try {
+            var body = MAPPER.readTree(response.body());
+            return "ACCOUNT_TOKEN_EXPIRED".equals(body.path("error").asString(""))
+                || "ACCOUNT_TOKEN_EXPIRED".equals(body.path("type").asString(""));
+        } catch (RuntimeException notJson) {
+            return false;
+        }
+    }
+
+    /**
+     * Sign in again with the credentials this client was made with.
+     *
+     * <p>Tokens live 24 hours, so a robot that ran longer ended the first time
+     * it asked for anything after that, or looped on the refusal -- a Utah
+     * poller, about 250 times a day at 00Z. One sign-in renews it. False when
+     * this client was given a token rather than credentials, or the sign-in
+     * fails; the caller then answers with the refusal it had. A {@code
+     * presented} token another thread has already replaced is not renewed again.
+     */
+    synchronized boolean _renewToken(String presented) {
+        var token = _properties.getProperty("token");
+        if ((token != null && !token.isBlank())
+                || _isBlank(_properties.getProperty("account"))
+                || _isBlank(_properties.getProperty("email"))
+                || _isBlank(_properties.getProperty("password"))) {
+            return false;
+        }
+        if (presented != null && !presented.equals(_bearerToken)) {
+            return true;
+        }
+        try {
+            _bearerToken = "Bearer " + _signIn().token();
+            return true;
+        } catch (FlexemarketsException refused) {
+            return false;
+        }
+    }
+
+    /** The stream's renewal: it holds no token of its own to compare, so it always asks. */
+    boolean _renewForStream() {
+        return _renewToken(null);
+    }
+
+    private static boolean _isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    private HttpResponse<String> _exchangeOnce(HttpRequest request) throws IOException, InterruptedException {
         var started = System.nanoTime();
         var response = _dispatch(request);
 

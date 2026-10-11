@@ -86,7 +86,10 @@ public class Events implements Subscription {
     private static final TypeReference<Order[]>    ORDERS_TYPE   = new TypeReference<>() {};
 
     private final String _wsUrl;
-    private final String _bearerToken;
+    /** Read on every connect, so a reconnect after the client renewed its sign-in presents the new token. */
+    private final java.util.function.Supplier<String> _bearerToken;
+    /** Asks the client to sign in again; false when it cannot. */
+    private final java.util.function.BooleanSupplier _renew;
     private final long _marketplaceId;
     private final String _clientDescription;
     private final ObjectMapper _mapper;
@@ -150,8 +153,14 @@ public class Events implements Subscription {
 
     Events(String wsUrl, String bearerToken, long marketplaceId, String clientDescription,
            ObjectMapper mapper, BlockingQueue<Object> queue) {
+        this(wsUrl, () -> bearerToken, marketplaceId, clientDescription, mapper, queue, () -> false);
+    }
+
+    Events(String wsUrl, java.util.function.Supplier<String> bearerToken, long marketplaceId, String clientDescription,
+           ObjectMapper mapper, BlockingQueue<Object> queue, java.util.function.BooleanSupplier renew) {
         this._wsUrl = wsUrl;
         this._bearerToken = bearerToken;
+        this._renew = renew;
         this._marketplaceId = marketplaceId;
         this._clientDescription = clientDescription;
         this._mapper = mapper;
@@ -170,7 +179,7 @@ public class Events implements Subscription {
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .build()
                 .newWebSocketBuilder()
-                .header("Authorization", _bearerToken)
+                .header("Authorization", _bearerToken.get())
                 .subprotocols("v12.stomp", "v11.stomp", "v10.stomp")
                 .buildAsync(URI.create(_wsUrl), listener)
                 .join();
@@ -214,6 +223,7 @@ public class Events implements Subscription {
      * from recovering a drop, and only the recovery moved in here.
      */
     void reconnect() throws InterruptedException {
+        boolean renewed = false;
         while (!_closed) {
             try {
                 _closeWebSocket();
@@ -232,6 +242,14 @@ public class Events implements Subscription {
                 // other failure keeps the existing retry: a server restart or
                 // a network drop IS a blip and recovering from it is the whole
                 // point of this loop.
+                // Except once: a client that holds credentials signs in again
+                // -- the 24-hour token ran out under a long-running robot --
+                // and the next attempt presents the new token. A second
+                // refusal is final, as before.
+                if (_isAuthRefusal(e) && !renewed && _renew.getAsBoolean()) {
+                    renewed = true;
+                    continue;
+                }
                 if (_isAuthRefusal(e)) {
                     _closed = true;
                     _queue.offer(new StreamDropped(new AuthenticationException(
