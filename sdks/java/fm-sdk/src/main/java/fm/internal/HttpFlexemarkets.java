@@ -1085,6 +1085,7 @@ public class HttpFlexemarkets implements Flexemarkets {
             .uri(URI.create(url))
             .header("Authorization", _bearerToken)
             .header("Accept", accept)
+            .header(GzipBodies.ACCEPT_ENCODING, GzipBodies.GZIP)
             .header("User-Agent", FM_SDK_CLIENT);
 
         _applyTimeout(builder, _requestTimeout);
@@ -1209,7 +1210,7 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     private HttpResponse<String> _dispatch(HttpRequest request) throws IOException, InterruptedException {
         if (!_capture) {
-            return _httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            return _httpClient.send(request, GzipBodies.ofString());
         }
 
         var out = System.out;
@@ -1217,7 +1218,7 @@ public class HttpFlexemarkets implements Flexemarkets {
         _printCapturedHeaders(out, ">", request.headers().map());
         out.println(">");
 
-        var response = _httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        var response = _httpClient.send(request, GzipBodies.ofString());
 
         out.printf("< %s%n", response.statusCode());
         _printCapturedHeaders(out, "<", response.headers().map());
