@@ -4,5 +4,11 @@
     "label": "Smith 62 — demand and supply",
     "description": "A group and a role badge in the header, the profit under the order form, and the private state they read: a participant's group, side and induced-value schedule.",
     "resource": "smith62.json"
+  },
+  {
+    "id": "ssw",
+    "label": "SSW — dividends earned, paid at the end",
+    "description": "The usual trading panels, and under them the dividends a participant has earned so far, sequestered until the last period (fm-ssw --accrue-dividend --show-accrued-dividends): the private state it reads is dividends, in cents.",
+    "resource": "ssw.json"
   }
 ]

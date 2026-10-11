@@ -35,4 +35,20 @@ class StudyViewsTest {
         assertThat(root.path("slots").path("header").size()).isEqualTo(2);
         assertThat(root.path("state").path("private").path("valuations").path("type").asString()).isEqualTo("vector");
     }
+
+    /**
+     * SSW's sequestered dividends: what a participant has earned, shown under
+     * the trading panels, read from the private state fm-ssw uploads. It lived
+     * only in fm-robots' study, so the server could not offer it.
+     */
+    @Test
+    void sswShowsTheDividendsEarnedFromPrivateState() {
+        var view = StudyViews.of("ssw").orElseThrow();
+        var root = JsonMapper.builder().build().readTree(view.render("WDG"));
+        var score = root.path("slots").path("sidebar-bottom").get(0);
+        assertThat(score.path("panel").asString()).isEqualTo("score");
+        assertThat(score.path("opts").path("expr").asString()).isEqualTo("me.dividends");
+        assertThat(score.path("opts").path("format").asString()).isEqualTo("cents");
+        assertThat(root.path("state").path("private").path("dividends").path("unit").asString()).isEqualTo("cents");
+    }
 }

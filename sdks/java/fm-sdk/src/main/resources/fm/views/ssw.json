@@ -1,0 +1,27 @@
+{
+  "v": 1,
+  "slots": {
+    "sidebar-bottom": [
+      {
+        "panel": "score",
+        "opts": {
+          "label": "Dividends earned — paid at the end",
+          "format": "cents",
+          "expr": "me.dividends"
+        }
+      }
+    ],
+    "sidebar": [
+      { "panel": "holdings" },
+      { "panel": "order-form" }
+    ],
+    "market-left": [ { "panel": "book" } ],
+    "market-right": [ { "panel": "trades" } ]
+  },
+  "state": {
+    "version": 1,
+    "private": {
+      "dividends": { "type": "number", "unit": "cents" }
+    }
+  }
+}
