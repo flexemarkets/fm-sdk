@@ -50,6 +50,10 @@ class Scripted(Flexemarkets):
         self.subscribed: list[int] = []
         self.submitted: list[str] = []
         self._streams: dict[int, queue.Queue[object]] = {}
+        #: What GET session answers; None mirrors the last session posted.
+        self.server_session: Session | None = None
+        self.session_reads = 0
+        self._posted_session: Session | None = None
         super().__init__(token="t", endpoint=f"http://127.0.0.1:1/api/marketplaces/{MP}")
 
     def _sign_in(self, config: dict[str, str]) -> Any:
@@ -87,7 +91,13 @@ class Scripted(Flexemarkets):
         self.submitted.append(f"{marketplace_id}/{market_id} CANCEL {original_id}")
         return Order(id=original_id + 1, original=original_id, type="CANCEL")
 
+    def session(self, marketplace_id: int) -> Session:  # type: ignore[override]
+        self.session_reads += 1
+        return self.server_session or self._posted_session
+
     def post(self, marketplace_id: int, event: object) -> None:
+        if isinstance(event, Session):
+            self._posted_session = event
         self._streams[marketplace_id].put(event)
 
 
@@ -315,6 +325,48 @@ def test_an_order_into_a_session_that_is_not_open_is_refused_and_not_sent(fm: Sc
             desk.submit_limit(ALPHA, "BUY", 1, 1000)
         assert refused.value.reason == "SESSION_CLOSED"
         assert isinstance(refused.value, InvalidArgumentError), "caught where the server's 400 is"
+        assert fm.submitted == []
+
+
+def test_an_order_just_after_the_open_is_sent_though_the_event_has_not_landed(fm: Scripted) -> None:
+    """A robot on a timer submits at the open, ahead of the OPEN event. The
+    server has opened, so the desk reads the session once and sends."""
+    with fm.desk(MP) as desk:
+        fm.post(MP, _session("PAUSED"))
+        _await("the session to land", lambda: desk.session() is not None)
+        fm.server_session = _session("OPEN")
+
+        desk.submit_limit(ALPHA, "BUY", 1, 1000)
+
+        assert fm.submitted == [f"{MP}/{ALPHA} BUY 1@1000"]
+
+
+def test_a_closed_session_is_read_at_most_once_a_second_while_refusing(fm: Scripted) -> None:
+    from fm.exceptions import OrderRefusedLocallyError
+    with fm.desk(MP) as desk:
+        fm.post(MP, _session("CLOSED"))
+        _await("the session to land", lambda: desk.session() is not None)
+
+        for _ in range(20):
+            with pytest.raises(OrderRefusedLocallyError):
+                desk.submit_limit(ALPHA, "BUY", 1, 1000)
+
+        assert fm.session_reads == 1
+        assert fm.submitted == []
+
+
+def test_a_session_read_that_fails_refuses_on_what_the_desk_holds(fm: Scripted) -> None:
+    from fm.exceptions import ConnectionFailedError, OrderRefusedLocallyError
+    with fm.desk(MP) as desk:
+        fm.post(MP, _session("CLOSED"))
+        _await("the session to land", lambda: desk.session() is not None)
+
+        def unreachable(marketplace_id: int) -> Session:
+            raise ConnectionFailedError("down")
+        fm.session = unreachable  # type: ignore[method-assign]
+
+        with pytest.raises(OrderRefusedLocallyError, match="session 30 is CLOSED"):
+            desk.submit_limit(ALPHA, "BUY", 1, 1000)
         assert fm.submitted == []
 
 

@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import queue
 import threading
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
@@ -98,6 +99,8 @@ class Desk:
         self._trades = TapeIndex(self.markets, TAPE_CAPACITY)
 
         self._session: Optional[Session] = None
+        # (monotonic time, was it OPEN) of the last re-read before a refusal.
+        self._session_rechecked: Optional[tuple[float, bool]] = None
         self._holding: Optional[Holding] = None
 
         self._session_handlers: list[Callable[[Session], None]] = []
@@ -350,7 +353,8 @@ class Desk:
     def _refuse_locally(self, market_id: int, side: str) -> None:
         session = self._session
         if session is not None and session.state is not None \
-                and session.state.upper() != Session.STATE_OPEN:
+                and session.state.upper() != Session.STATE_OPEN \
+                and not self._opened_since(session):
             raise OrderRefusedLocallyError(
                 "SESSION_CLOSED",
                 f"Not sent: session {session.id} is {session.state}, not OPEN.",
@@ -364,6 +368,32 @@ class Desk:
                 "ORDER_NOT_ALLOWED",
                 f"Not sent: your holding does not grant {str(side).upper()} in market {market_id}.",
             )
+
+    #: How long one re-read of the session answers for. A robot refused while
+    #: the session is closed asks again at most this often, not per order.
+    SESSION_RECHECK_SECONDS = 1.0
+
+    def _opened_since(self, held: Session) -> bool:
+        """Whether the session has opened although the desk has not heard yet.
+
+        A robot that submits on a timer right at the open is ahead of the OPEN
+        event, and was refused locally for an order the server would take. So
+        before refusing on a session that is not OPEN, read it once -- at most
+        every :attr:`SESSION_RECHECK_SECONDS` -- and send if it is OPEN now. A
+        read that fails changes nothing: the desk refuses on what it holds, as
+        it did before.
+        """
+        now = time.monotonic()
+        checked = self._session_rechecked
+        if checked is not None and now - checked[0] < self.SESSION_RECHECK_SECONDS:
+            return checked[1]
+        try:
+            fresh = self._flexemarkets.session(self.marketplace_id)
+            is_open = fresh is not None and str(fresh.state).upper() == Session.STATE_OPEN
+        except Exception:  # noqa: BLE001 -- unknown is not open; refuse as before
+            is_open = False
+        self._session_rechecked = (now, is_open)
+        return is_open
 
     def submit_cancel(self, market_id: int, original_id: int) -> Order:
         self._ensure_open()
