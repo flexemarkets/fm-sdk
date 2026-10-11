@@ -70,6 +70,11 @@ class DeskSharingTest {
         final Map<Long, BlockingQueue<Object>> streams = new ConcurrentHashMap<>();
         final List<Long> subscribed = new CopyOnWriteArrayList<>();
         final List<String> submitted = new CopyOnWriteArrayList<>();
+        /** What GET session answers; null mirrors the last session posted. */
+        volatile Session serverSession;
+        volatile Session postedSession;
+        volatile RuntimeException sessionFailure;
+        final AtomicInteger sessionReads = new AtomicInteger();
 
         Scripted(String endpoint) throws IOException {
             super(HttpFlexemarkets.loadProperties(TOKEN, endpoint, "desk-sharing-test"));
@@ -115,7 +120,18 @@ class DeskSharingTest {
             return _limit(marketplaceId, 901L, OrderSide.BUY, 0, 0);
         }
 
+        @Override public Session session(long marketplaceId) {
+            sessionReads.incrementAndGet();
+            if (sessionFailure != null) {
+                throw sessionFailure;
+            }
+            return serverSession != null ? serverSession : postedSession;
+        }
+
         void post(long marketplaceId, Object event) throws InterruptedException {
+            if (event instanceof Session session) {
+                postedSession = session;
+            }
             streams.get(marketplaceId).put(event);
         }
     }
@@ -425,6 +441,53 @@ class DeskSharingTest {
                 .isInstanceOf(InvalidArgumentException.class)
                 .isInstanceOfSatisfying(OrderRefusedLocallyException.class,
                     refused -> assertThat(refused.reason()).isEqualTo("SESSION_CLOSED"))
+                .hasMessageContaining("session 30 is CLOSED");
+            assertThat(fm.submitted).isEmpty();
+        }
+    }
+
+    /** A robot on a timer submits at the open, ahead of the OPEN event: the desk reads the session and sends. */
+    @Test
+    @Timeout(20)
+    void anOrderJustAfterTheOpenIsSentThoughTheEventHasNotLanded() throws Exception {
+        try (var fm = _connect(); Desk desk = fm.desk(MP)) {
+            fm.post(MP, _session(Session.STATE_PAUSED));
+            _await("the session to land", () -> desk.session() != null);
+            fm.serverSession = _session(Session.STATE_OPEN);
+
+            desk.submitLimit(ALPHA.id(), OrderSide.BUY, 1, 1000);
+
+            assertThat(fm.submitted).containsExactly(MP + "/" + ALPHA.id() + " BUY 1@1000");
+        }
+    }
+
+    @Test
+    @Timeout(20)
+    void aClosedSessionIsReadAtMostOnceASecondWhileRefusing() throws Exception {
+        try (var fm = _connect(); Desk desk = fm.desk(MP)) {
+            fm.post(MP, _session(Session.STATE_CLOSED));
+            _await("the session to land", () -> desk.session() != null);
+
+            for (int i = 0; i < 20; i++) {
+                assertThatThrownBy(() -> desk.submitLimit(ALPHA.id(), OrderSide.BUY, 1, 1000))
+                    .isInstanceOf(OrderRefusedLocallyException.class);
+            }
+
+            assertThat(fm.sessionReads).hasValue(1);
+            assertThat(fm.submitted).isEmpty();
+        }
+    }
+
+    @Test
+    @Timeout(20)
+    void aSessionReadThatFailsRefusesOnWhatTheDeskHolds() throws Exception {
+        try (var fm = _connect(); Desk desk = fm.desk(MP)) {
+            fm.post(MP, _session(Session.STATE_CLOSED));
+            _await("the session to land", () -> desk.session() != null);
+            fm.sessionFailure = new fm.error.ConnectionFailedException("down");
+
+            assertThatThrownBy(() -> desk.submitLimit(ALPHA.id(), OrderSide.BUY, 1, 1000))
+                .isInstanceOf(OrderRefusedLocallyException.class)
                 .hasMessageContaining("session 30 is CLOSED");
             assertThat(fm.submitted).isEmpty();
         }

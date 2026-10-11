@@ -93,6 +93,13 @@ public class DefaultDesk implements Desk {
     private final BookIndex _books;
     private final TapeIndex _trades;
     private final AtomicReference<Session> _session = new AtomicReference<>();
+    /** When the session was last re-read before a refusal, and whether it was OPEN. */
+    private volatile long _sessionRecheckedAtNanos;
+    private volatile boolean _sessionRecheckedOpen;
+    private volatile boolean _sessionRechecked;
+
+    /** How long one re-read of the session answers for: a refusing robot asks again at most this often. */
+    static final long SESSION_RECHECK_NANOS = TimeUnit.SECONDS.toNanos(1);
     private final AtomicReference<Holding> _holding = new AtomicReference<>();
 
     // CopyOnWriteArrayList because handler arrays are read once per
@@ -320,7 +327,8 @@ public class DefaultDesk implements Desk {
     private void _refuseLocally(long marketId, OrderSide side) {
         var session = _session.get();
         if (session != null && session.state() != null
-                && !Session.STATE_OPEN.equalsIgnoreCase(session.state())) {
+                && !Session.STATE_OPEN.equalsIgnoreCase(session.state())
+                && !_openedSince()) {
             throw new OrderRefusedLocallyException("SESSION_CLOSED",
                 "Not sent: session " + session.id() + " is " + session.state() + ", not OPEN.");
         }
@@ -335,6 +343,33 @@ public class DefaultDesk implements Desk {
                     "Not sent: your holding does not grant " + side + " in market " + marketId + ".");
             }
         });
+    }
+
+    /**
+     * Whether the session has opened although the desk has not heard yet.
+     *
+     * <p>A robot submitting on a timer right at the open is ahead of the OPEN
+     * event, and was refused locally for an order the server would take. So
+     * before refusing on a session that is not OPEN, read it once -- at most
+     * every second -- and send if it is OPEN now. A read that fails changes
+     * nothing: the desk refuses on what it holds, as before.
+     */
+    private boolean _openedSince() {
+        long now = System.nanoTime();
+        if (_sessionRechecked && now - _sessionRecheckedAtNanos < SESSION_RECHECK_NANOS) {
+            return _sessionRecheckedOpen;
+        }
+        boolean open;
+        try {
+            Session fresh = _flexemarkets.session(_marketplaceId);
+            open = fresh != null && Session.STATE_OPEN.equalsIgnoreCase(fresh.state());
+        } catch (RuntimeException unknown) {
+            open = false;
+        }
+        _sessionRecheckedOpen = open;
+        _sessionRecheckedAtNanos = now;
+        _sessionRechecked = true;
+        return open;
     }
 
     @Override
