@@ -155,7 +155,7 @@ test-java:
 	cd sdks/java && mvn -o test
 
 ticker-java:
-	java --enable-preview -jar sdks/java/examples/ticker/target/fm-ticker-$(VERSION).jar $(ARGS)
+	java -jar sdks/java/examples/ticker/target/fm-ticker-$(VERSION).jar $(ARGS)
 
 # -pl drops the example from the reactor, for the same reason publish-spi
 # narrows it below: whichever module ends the reactor bundles

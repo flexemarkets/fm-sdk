@@ -19,7 +19,7 @@ Java SDK for the [Flexemarkets](https://api.flexemarkets.com) API.
 
 ## Requirements
 
-- Java 25+ (the SDK uses preview features, so build and run with `--enable-preview`)
+- Java 21 or later. The artifact is built for 21 (`<java.version>` in `sdks/java/pom.xml`) and uses no preview features, so it needs no `--enable-preview`.
 
 ## Install
 
