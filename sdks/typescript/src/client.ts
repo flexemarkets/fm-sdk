@@ -747,12 +747,40 @@ export class Flexemarkets {
 
   // -- internal HTTP helpers -------------------------------------------------
 
+  /** What the previous call cost, waiting to ride on the next as Client-Timing. */
+  private _lastTiming: string | null = null;
+
+  /**
+   * Every call the client makes, timed: it carries what the previous call cost
+   * -- `rtt=<ns>`, and `;net=<ns>` when the server's `Server-Timing: st=` said
+   * its own share -- the format the Java SDK and fm-ui send and fm-server's
+   * ApiMetricsFilter reads, so a robot's latency shows in the Connections
+   * view. Each figure arrives one call late, since a round trip is not known
+   * until its own request has gone; taken rather than read, so it is reported
+   * once; net= left out rather than zero when the server's share is unknown.
+   * Measured to the response headers; a call that throws records nothing.
+   */
+  private async _fetch(url: string, init: RequestInit): Promise<Response> {
+    const headers = new Headers(init.headers);
+    const timing = this._lastTiming;
+    this._lastTiming = null;
+    if (timing !== null) headers.set("Client-Timing", timing);
+    const started = process.hrtime.bigint();
+    const resp = await fetch(url, { ...init, headers });
+    const rtt = process.hrtime.bigint() - started;
+    const served = /st=(\d+)/.exec(resp.headers.get("Server-Timing") ?? "");
+    this._lastTiming = served
+      ? `rtt=${rtt};net=${rtt > BigInt(served[1]) ? rtt - BigInt(served[1]) : 0n}`
+      : `rtt=${rtt}`;
+    return resp;
+  }
+
   private _authHeaders(): Record<string, string> {
     return { Authorization: this._bearerToken };
   }
 
   private async _get(url: string): Promise<JsonObject> {
-    const resp = await fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
+    const resp = await this._fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
       headers: {
         ...this._authHeaders(),
         Accept: "application/json",
@@ -771,7 +799,7 @@ export class Flexemarkets {
    * `Snapshot.NO_SEQ` when the header is absent.
    */
   private async _getSnapshot(url: string): Promise<{ data: JsonObject; asOfSeq: number }> {
-    const resp = await fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
+    const resp = await this._fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
       headers: {
         ...this._authHeaders(),
         Accept: "application/json",
@@ -796,7 +824,7 @@ export class Flexemarkets {
   }
 
   private async _sendJson(method: string, url: string, json: unknown): Promise<JsonObject> {
-    const resp = await fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
+    const resp = await this._fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
       method,
       headers: {
         ...this._authHeaders(),
@@ -817,7 +845,7 @@ export class Flexemarkets {
    * the header row.
    */
   private async _getText(url: string): Promise<string> {
-    const resp = await fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
+    const resp = await this._fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
       headers: {
         ...this._authHeaders(),
         Accept: "text/csv, */*",
@@ -830,7 +858,7 @@ export class Flexemarkets {
   }
 
   private async _post(url: string, json: unknown): Promise<JsonObject> {
-    const resp = await fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
+    const resp = await this._fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
       method: "POST",
       headers: {
         ...this._authHeaders(),
@@ -1036,7 +1064,7 @@ export class Flexemarkets {
 
   /** DELETE, whose answer is a status and nothing worth parsing. */
   private async _delete(url: string): Promise<void> {
-    const resp = await fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
+    const resp = await this._fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
       method: "DELETE",
       headers: { ...this._authHeaders(), Accept: "application/json" },
     });
@@ -1048,7 +1076,7 @@ export class Flexemarkets {
    * DELETE whose answer is the resource as it ended -- an order's CANCEL.
    */
   private async _deleteFor(url: string): Promise<JsonObject> {
-    const resp = await fetch(url, {
+    const resp = await this._fetch(url, {
       method: "DELETE",
       headers: { ...this._authHeaders(), Accept: "application/json", "User-Agent": FM_NETWORK_CLIENT },
     });
@@ -1063,7 +1091,7 @@ export class Flexemarkets {
    * segment. Bytes, not a string, so the file's own encoding survives.
    */
   private async _sendCsv(method: string, url: string, filename: string): Promise<unknown> {
-    const resp = await fetch(url, {
+    const resp = await this._fetch(url, {
       method,
       headers: {
         ...this._authHeaders(),
@@ -1535,7 +1563,7 @@ export class Flexemarkets {
   async removeWidget(marketplaceId: number, key: string, userId?: number): Promise<boolean> {
     const owner = userId !== undefined && userId !== null ? `/participants/${userId}` : "";
     const url = `${this._marketplace(marketplaceId)}${owner}/widgets/${encodeURIComponent(key)}`;
-    const resp = await fetch(url, {
+    const resp = await this._fetch(url, {
       method: "DELETE",
       headers: { ...this._authHeaders(), Accept: "application/json", "User-Agent": FM_NETWORK_CLIENT },
     });
