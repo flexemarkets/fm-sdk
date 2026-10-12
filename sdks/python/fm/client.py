@@ -9,6 +9,7 @@ import os
 import queue
 import re
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
@@ -602,6 +603,9 @@ def _json(response: httpx.Response) -> Any:
         raise ApiError("Failed to parse the response body") from e
 
 
+_SERVER_TIMING_ST = re.compile(r"st=(\d+)")
+
+
 def _check_response(response: httpx.Response) -> None:
     status = response.status_code
     if 200 <= status < 300:
@@ -687,6 +691,10 @@ class Flexemarkets:
 
         self._endpoint = config.get("endpoint", _DEFAULT_ENDPOINT)
 
+        # What the previous call cost, carried on the next (see _carry_timing).
+        self._timing_lock = threading.Lock()
+        self._last_timing: str | None = None
+
         # Build httpx client
         self._http = httpx.Client(
             base_url=_server(self._endpoint),
@@ -695,6 +703,7 @@ class Flexemarkets:
                 "User-Agent": _FM_NETWORK_CLIENT,
             },
             timeout=30.0,
+            event_hooks={"request": [self._carry_timing], "response": [self._record_timing]},
         )
 
         # Authenticate
@@ -849,6 +858,43 @@ class Flexemarkets:
         )
         _check_response(resp)
         return resp
+
+    # -- round-trip timing -------------------------------------------------
+
+    def _carry_timing(self, request: httpx.Request) -> None:
+        """Send what the previous call cost on this one, as ``Client-Timing``.
+
+        A round trip is not known until it has finished, by which time its own
+        request has gone, so each figure arrives one call late -- for a robot on
+        an interval, a lag of one tick. Taken rather than read, so a figure is
+        reported once: repeating it would weight one slow call by however many
+        quiet ones followed. The format is the Java SDK's and fm-ui's:
+        ``rtt=<ns>`` and, when the server said what its own share was,
+        ``;net=<ns>`` (fm-server's ApiMetricsFilter). Every request goes through
+        here, sign-in included.
+        """
+        with self._timing_lock:
+            timing, self._last_timing = self._last_timing, None
+        if timing is not None:
+            request.headers["Client-Timing"] = timing
+        request.extensions["fm_started_ns"] = time.perf_counter_ns()
+
+    def _record_timing(self, response: httpx.Response) -> None:
+        """Keep what this call cost for the next request to report.
+
+        Measured to the response's headers, on this machine's clock. The
+        server reports its own handling as ``Server-Timing: st=<ns>``; what is
+        left of the round trip is the wire. Without it the wire is unknown and
+        left out rather than sent as zero, which would claim there was none.
+        """
+        # Always there: httpx runs the request hook before this one.
+        rtt = time.perf_counter_ns() - response.request.extensions["fm_started_ns"]
+        timing = f"rtt={rtt}"
+        served = _SERVER_TIMING_ST.search(response.headers.get("Server-Timing", ""))
+        if served:
+            timing += f";net={max(0, rtt - int(served.group(1)))}"
+        with self._timing_lock:
+            self._last_timing = timing
 
     # -- authentication ----------------------------------------------------
 
