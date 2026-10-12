@@ -49,7 +49,7 @@ public interface Streaming {
     Subscription subscribe(long marketplaceId, BlockingQueue<Object> queue);
 
     /**
-     * A maintained desk of the order books, kept current from the event stream.
+     * A maintained view of the order books, kept current from the event stream.
      *
      * @param marketplaceId the marketplace to open a desk on
      * @return a desk that keeps itself current until closed
