@@ -610,7 +610,7 @@ def _token_expired(response: httpx.Response) -> bool:
         body = response.json()
     except ValueError:
         return False
-    return isinstance(body, dict) and "ACCOUNT_TOKEN_EXPIRED" in (body.get("error"), body.get("type"))
+    return isinstance(body, dict) and body.get("error") == "ACCOUNT_TOKEN_EXPIRED"
 
 
 def _check_response(response: httpx.Response) -> None:
@@ -719,7 +719,6 @@ class Flexemarkets:
         self._token_obj = self._sign_in(config)
         self._account = self._token_obj.account
         self._user = self._token_obj.person
-        self._bearer_token = f"Bearer {self._token_obj.token}"
 
         self._event_listener = None
 
@@ -794,9 +793,14 @@ class Flexemarkets:
     # -- internal HTTP helpers ---------------------------------------------
 
     def _auth_headers(self) -> dict[str, str]:
-        return {"Authorization": self._bearer_token}
+        return {"Authorization": self._bearer_token()}
 
-    def _renew_token(self, expired: str | None = None) -> bool:
+    def _bearer_token(self) -> str:
+        """The Authorization header for the current sign-in, derived from it
+        so that ``token()`` and every request agree on which is current."""
+        return f"Bearer {self._token_obj.token}"
+
+    def _renew_token(self, presented: str) -> bool:
         """Sign in again with the credentials this client was made with.
 
         Tokens live 24 hours, so a robot that runs longer used to end the
@@ -804,25 +808,26 @@ class Flexemarkets:
         (a Utah poller, about 250 times a day at 00Z). One sign-in renews it.
         False when this client holds no credentials (it was given a token) or
         the sign-in fails; the caller then answers with the refusal it had.
-        ``expired`` skips the sign-in when another thread has already renewed.
+        ``presented`` is the header the refused request or stream connect
+        carried; if another caller has renewed since, the sign-in is skipped
+        and the caller retries with the token now current.
         """
         if self._credentials is None:
             return False
         with self._renew_lock:
-            if expired is not None and self._bearer_token != expired:
+            if presented != self._bearer_token():
                 return True
             try:
                 token = self._sign_in(self._credentials)
             except FlexemarketsError:
                 return False
             self._token_obj = token
-            self._bearer_token = f"Bearer {token.token}"
             return True
 
     def _request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         """Send with this client's token; if it has expired, renew it once and send again."""
         extra = kwargs.pop("headers", {})
-        presented = self._bearer_token
+        presented = self._bearer_token()
         resp = self._http.request(method, url, headers={**self._auth_headers(), **extra}, **kwargs)
         if _token_expired(resp) and self._renew_token(presented):
             resp = self._http.request(method, url, headers={**self._auth_headers(), **extra}, **kwargs)
@@ -1606,7 +1611,7 @@ class Flexemarkets:
         ws_url = _server(self._endpoint).replace("https://", "wss://").replace("http://", "ws://") + "/events"
         ev = EventListener(
             ws_url=ws_url,
-            bearer_token=lambda: self._bearer_token,
+            bearer_token=self._bearer_token,
             marketplace_id=marketplace_id,
             event_queue=event_queue,
             client_description=self._client_description,

@@ -99,6 +99,7 @@ def test_an_expired_token_is_renewed_once_and_the_request_repeated(server, tmp_p
     client = Flexemarkets.connect(_credential(tmp_path), f"{server.base}/marketplaces/1", "renewal-test")
     try:
         markets = client.markets(1)
+        assert client.token().token == NEW, "the token the client reports is the one it presents"
     finally:
         client.close()
 
@@ -157,7 +158,7 @@ def test_a_renewal_that_fails_answers_with_the_refusal_it_had(server, tmp_path):
 def test_a_token_another_thread_already_renewed_is_not_renewed_again(server, tmp_path):
     client = Flexemarkets.connect(_credential(tmp_path), f"{server.base}/marketplaces/1", "renewal-test")
     try:
-        assert client._renew_token(expired="Bearer something-older") is True
+        assert client._renew_token("Bearer something-older") is True
     finally:
         client.close()
 

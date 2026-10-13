@@ -29,8 +29,9 @@ class _Listener(EventListener):
         self.accepted = token["bearer"]
 
     def _connect(self):  # type: ignore[override]
-        self.presented.append(self._bearer())
-        if self._bearer() != self.accepted:
+        bearer = self._present()
+        self.presented.append(bearer)
+        if bearer != self.accepted:
             raise _Refused(401)
         return object()
 
@@ -52,7 +53,10 @@ def test_a_refused_reconnect_renews_the_token_and_comes_back() -> None:
     q: queue.Queue[object] = queue.Queue()
     token = {"bearer": "Bearer old"}
 
-    def renew() -> bool:
+    refused_with: list[str] = []
+
+    def renew(presented: str) -> bool:
+        refused_with.append(presented)
         token["bearer"] = "Bearer new"
         return True
 
@@ -66,13 +70,14 @@ def test_a_refused_reconnect_renews_the_token_and_comes_back() -> None:
     assert isinstance(events[0], StreamDropped)
     assert isinstance(events[1], StreamReconnected)
     assert listener.presented == ["Bearer old", "Bearer old", "Bearer new"]
+    assert refused_with == ["Bearer old"], "the stream says which token was refused"
     listener.close()
 
 
 def test_a_refused_reconnect_that_cannot_renew_ends_the_stream_as_before() -> None:
     q: queue.Queue[object] = queue.Queue()
     token = {"bearer": "Bearer old"}
-    listener = _Listener(q, token, renew=lambda: False)
+    listener = _Listener(q, token, renew=lambda presented: False)
     listener.start()
     listener.accepted = "Bearer new"
 

@@ -279,13 +279,17 @@ class EventListener:
         marketplace_id: int,
         event_queue: queue.Queue[object],
         client_description: str = "Unspecified client",
-        renew: Callable[[], bool] | None = None,
+        renew: Callable[[str], bool] | None = None,
     ):
         self._ws_url = ws_url
         # A callable reads the client's current token on every connect, so a
         # reconnect after the client renewed its sign-in presents the new one.
         self._bearer_token = bearer_token
+        # Given the token this stream's refused connect presented -- the same
+        # check the client's requests make, so a token another caller has just
+        # renewed is not renewed twice.
         self._renew = renew
+        self._presented = ""
         self._marketplace_id = marketplace_id
         self._queue = event_queue
         self._client_description = client_description
@@ -391,7 +395,7 @@ class EventListener:
                 # -- the 24-hour token ran out under a long-running robot --
                 # and the next attempt presents the new token. A second
                 # refusal is final, as before.
-                if _is_auth_refusal(exc) and not renewed and self._renew is not None and self._renew():
+                if _is_auth_refusal(exc) and not renewed and self._renew is not None and self._renew(self._presented):
                     renewed = True
                     continue
                 if _is_auth_refusal(exc):
@@ -441,14 +445,16 @@ class EventListener:
 
     # -- WebSocket connection ----------------------------------------------
 
-    def _bearer(self) -> str:
-        return self._bearer_token() if callable(self._bearer_token) else self._bearer_token
+    def _present(self) -> str:
+        """The token to present on this connect, kept as the one presented."""
+        self._presented = self._bearer_token() if callable(self._bearer_token) else self._bearer_token
+        return self._presented
 
     def _connect(self) -> ws_sync.ClientConnection:
         return ws_sync.connect(
             self._ws_url,
             additional_headers={
-                "Authorization": self._bearer(),
+                "Authorization": self._present(),
             },
             subprotocols=["v12.stomp", "v11.stomp", "v10.stomp"],
             max_size=_INBOUND_MESSAGE_SIZE,
