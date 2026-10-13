@@ -6,6 +6,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 
@@ -42,11 +44,13 @@ import java.util.function.Consumer;
  *   <li><b>{@code min}</b>, <b>{@code max}</b> and <b>{@code round}</b>
  *       (half up, to a whole number) are exact. <b>{@code exp}</b>,
  *       <b>{@code ln}</b> and <b>{@code sqrt}</b> are computed in double
- *       precision and kept to the division scale; a result that is not a
- *       finite number -- {@code ln} of zero or less, {@code sqrt} of a
- *       negative, an {@code exp} too large -- is an error, not a value. They
- *       were added so a state-contingent payment such as
- *       {@code round(exp(me.x) / 100)} needs no robot.</li>
+ *       precision with {@link StrictMath}, so every process gets the same
+ *       answer, and kept to six places; a result that is not a finite number
+ *       -- {@code ln} of zero or less, {@code sqrt} of a negative, an
+ *       {@code exp} too large -- is an error, not a value. The six were
+ *       added for instructors who score a state-contingent payment, such as
+ *       {@code round(exp(me.x) / 100)}, without writing a robot: Utah's MVO
+ *       study, Smith 62 and Cambridge (CUSTOMER-VALUE-TOP-100 item 47).</li>
  * </ul>
  *
  * <p>Deliberately absent: loops, user functions, assignment, text
@@ -56,10 +60,11 @@ import java.util.function.Consumer;
  *
  * <h2>Numbers</h2>
  *
- * <p>Decimal throughout. Addition, subtraction and multiplication are exact;
- * division is carried at scale six, rounded half up. Comparisons are by
- * value, so {@code 1 == 1.0}. Whole cents in, whole cents out unless
- * something divided.
+ * <p>Decimal throughout. Addition, subtraction, multiplication, {@code min},
+ * {@code max} and {@code round} are exact; division, {@code exp}, {@code ln}
+ * and {@code sqrt} are carried at scale six, rounded half up. Comparisons are
+ * by value, so {@code 1 == 1.0}. Whole cents in, whole cents out unless
+ * something divided or took a root, a log or a power of e.
  *
  * <h2>Use</h2>
  *
@@ -71,8 +76,8 @@ import java.util.function.Consumer;
  */
 public final class Expression {
 
-    /** Scale for the one operation that can leave a fraction. */
-    static final int DIVISION_SCALE = 6;
+    /** Scale for a result that can leave a fraction: a division, and exp, ln and sqrt. */
+    static final int FRACTION_SCALE = 6;
 
     private final String source;
     private final Node root;
@@ -356,17 +361,127 @@ public final class Expression {
                 }
             }
             expect(Token.Kind.RPAREN, "')' closing " + name.text() + "(");
-            var arity = switch (name.text()) {
-                case "if" -> 3;
-                case "abs", "sum", "round", "exp", "ln", "sqrt" -> 1;
-                case "take", "min", "max" -> 2;
-                default -> throw new ExpressionException("unknown function " + name.text(), name.position());
-            };
-            if (args.size() != arity) {
-                throw new ExpressionException(name.text() + " takes " + arity + " argument" + (arity == 1 ? "" : "s")
-                        + ", not " + args.size(), name.position());
+            var function = Function.named(name.text())
+                    .orElseThrow(() -> new ExpressionException("unknown function " + name.text(), name.position()));
+            if (args.size() != function.arity) {
+                throw new ExpressionException(name.text() + " takes " + function.arity + " argument"
+                        + (function.arity == 1 ? "" : "s") + ", not " + args.size(), name.position());
             }
-            return new Node.Call(name.text(), args, name.position());
+            return new Node.Call(function, args, name.position());
+        }
+    }
+
+    // ------------------------------------------------------------ functions
+
+    /**
+     * The functions, each with its arity and what it does: the parser
+     * resolves a name to one of these once, so a call that parsed always has
+     * a function to run, and adding one is one entry here.
+     */
+    enum Function {
+        /** Only the arm it takes is evaluated, so the other may reference what this participant lacks. */
+        IF(3) {
+            @Override Value apply(List<Node> args, Scope scope) {
+                var cond = args.get(0).evaluate(scope);
+                if (!(cond instanceof Value.Bool b)) {
+                    throw new ExpressionException("if needs a comparison first, not a " + cond.kind());
+                }
+                return (b.value() ? args.get(1) : args.get(2)).evaluate(scope);
+            }
+        },
+        ABS(1) {
+            @Override Value apply(List<Node> args, Scope scope) {
+                return new Value.Num(number(args, 0, scope).abs());
+            }
+        },
+        MIN(2) {
+            @Override Value apply(List<Node> args, Scope scope) {
+                return new Value.Num(number(args, 0, scope).min(number(args, 1, scope)));
+            }
+        },
+        MAX(2) {
+            @Override Value apply(List<Node> args, Scope scope) {
+                return new Value.Num(number(args, 0, scope).max(number(args, 1, scope)));
+            }
+        },
+        /** Half up, to a whole number. */
+        ROUND(1) {
+            @Override Value apply(List<Node> args, Scope scope) {
+                return new Value.Num(number(args, 0, scope).setScale(0, RoundingMode.HALF_UP));
+            }
+        },
+        EXP(1) {
+            @Override Value apply(List<Node> args, Scope scope) {
+                return real(StrictMath.exp(number(args, 0, scope).doubleValue()));
+            }
+        },
+        LN(1) {
+            @Override Value apply(List<Node> args, Scope scope) {
+                return real(StrictMath.log(number(args, 0, scope).doubleValue()));
+            }
+        },
+        SQRT(1) {
+            @Override Value apply(List<Node> args, Scope scope) {
+                return real(StrictMath.sqrt(number(args, 0, scope).doubleValue()));
+            }
+        },
+        SUM(1) {
+            @Override Value apply(List<Node> args, Scope scope) {
+                var total = BigDecimal.ZERO;
+                for (var v : Node.vector(args.get(0).evaluate(scope), text).values()) {
+                    total = total.add(v);
+                }
+                return new Value.Num(total);
+            }
+        },
+        /** The first n entries, or the whole vector when it has fewer, as Smith 62's settlement has it. */
+        TAKE(2) {
+            @Override Value apply(List<Node> args, Scope scope) {
+                var v = Node.vector(args.get(0).evaluate(scope), text);
+                var n = number(args, 1, scope);
+                if (n.signum() < 0 || n.stripTrailingZeros().scale() > 0) {
+                    throw new ExpressionException("take needs a whole number of entries, not " + n.stripTrailingZeros().toPlainString());
+                }
+                int count = Math.min(v.values().size(), n.intValue());
+                return new Value.Vector(v.values().subList(0, count));
+            }
+        };
+
+        /** As written in an expression. */
+        final String text = name().toLowerCase(Locale.ROOT);
+        final int arity;
+
+        Function(int arity) {
+            this.arity = arity;
+        }
+
+        abstract Value apply(List<Node> args, Scope scope);
+
+        static Optional<Function> named(String text) {
+            for (var function : values()) {
+                if (function.text.equals(text)) {
+                    return Optional.of(function);
+                }
+            }
+            return Optional.empty();
+        }
+
+        /** Argument {@code i} as a number, or an error naming this function. */
+        BigDecimal number(List<Node> args, int i, Scope scope) {
+            return Node.number(args.get(i).evaluate(scope), text);
+        }
+
+        /**
+         * A double result as a number at the fraction scale, or an error when
+         * it is not a finite number. StrictMath, not Math: Math may differ by
+         * an ulp across JVMs and intrinsics, and a payment evaluated on the
+         * server and in a robot has to come out the same.
+         */
+        Value real(double result) {
+            if (!Double.isFinite(result)) {
+                throw new ExpressionException(text + " has no finite value there");
+            }
+            return new Value.Num(BigDecimal.valueOf(result).setScale(FRACTION_SCALE, RoundingMode.HALF_UP));
         }
     }
 
@@ -413,7 +528,7 @@ public final class Expression {
                         if (b.signum() == 0) {
                             throw new ExpressionException("division by zero");
                         }
-                        yield a.divide(b, DIVISION_SCALE, RoundingMode.HALF_UP);
+                        yield a.divide(b, FRACTION_SCALE, RoundingMode.HALF_UP);
                     }
                     default -> throw new IllegalStateException(op);
                 });
@@ -460,45 +575,10 @@ public final class Expression {
             }
         }
 
-        record Call(String name, List<Node> args, int position) implements Node {
+        record Call(Function function, List<Node> args, int position) implements Node {
             @Override
             public Value evaluate(Scope scope) {
-                return switch (name) {
-                    case "if" -> {
-                        var cond = args.get(0).evaluate(scope);
-                        if (!(cond instanceof Value.Bool b)) {
-                            throw new ExpressionException("if needs a comparison first, not a " + cond.kind());
-                        }
-                        yield (b.value() ? args.get(1) : args.get(2)).evaluate(scope);
-                    }
-                    case "abs" -> new Value.Num(number(args.get(0).evaluate(scope), "abs").abs());
-                    case "min" -> new Value.Num(number(args.get(0).evaluate(scope), "min")
-                            .min(number(args.get(1).evaluate(scope), "min")));
-                    case "max" -> new Value.Num(number(args.get(0).evaluate(scope), "max")
-                            .max(number(args.get(1).evaluate(scope), "max")));
-                    case "round" -> new Value.Num(number(args.get(0).evaluate(scope), "round")
-                            .setScale(0, RoundingMode.HALF_UP));
-                    case "exp" -> real("exp", Math.exp(number(args.get(0).evaluate(scope), "exp").doubleValue()));
-                    case "ln" -> real("ln", Math.log(number(args.get(0).evaluate(scope), "ln").doubleValue()));
-                    case "sqrt" -> real("sqrt", Math.sqrt(number(args.get(0).evaluate(scope), "sqrt").doubleValue()));
-                    case "sum" -> {
-                        var total = BigDecimal.ZERO;
-                        for (var v : vector(args.get(0).evaluate(scope), "sum").values()) {
-                            total = total.add(v);
-                        }
-                        yield new Value.Num(total);
-                    }
-                    case "take" -> {
-                        var v = vector(args.get(0).evaluate(scope), "take");
-                        var n = number(args.get(1).evaluate(scope), "take");
-                        if (n.signum() < 0 || n.stripTrailingZeros().scale() > 0) {
-                            throw new ExpressionException("take needs a whole number of entries, not " + n.stripTrailingZeros().toPlainString());
-                        }
-                        int count = Math.min(v.values().size(), n.intValue());
-                        yield new Value.Vector(v.values().subList(0, count));
-                    }
-                    default -> throw new IllegalStateException(name);
-                };
+                return function.apply(args, scope);
             }
 
             @Override
@@ -509,22 +589,14 @@ public final class Expression {
             }
         }
 
-        /** A double result as a number at the division scale, or an error when it is not a finite number. */
-        private static Value real(String op, double result) {
-            if (!Double.isFinite(result)) {
-                throw new ExpressionException(op + " has no finite value there");
-            }
-            return new Value.Num(BigDecimal.valueOf(result).setScale(DIVISION_SCALE, RoundingMode.HALF_UP));
-        }
-
-        private static BigDecimal number(Value value, String op) {
+        static BigDecimal number(Value value, String op) {
             if (value instanceof Value.Num n) {
                 return n.value();
             }
             throw new ExpressionException(op + " needs a number, not a " + value.kind());
         }
 
-        private static Value.Vector vector(Value value, String op) {
+        static Value.Vector vector(Value value, String op) {
             if (value instanceof Value.Vector v) {
                 return v;
             }
