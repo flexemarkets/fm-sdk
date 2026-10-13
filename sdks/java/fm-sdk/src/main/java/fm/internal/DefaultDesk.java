@@ -16,6 +16,7 @@ import fm.model.Session;
 import fm.model.Trade;
 import fm.Flexemarkets;
 import fm.Desk;
+import fm.Desk.OrderChecks;
 import fm.Book;
 import fm.Snapshot;
 import fm.Subscription;
@@ -93,10 +94,10 @@ public class DefaultDesk implements Desk {
     private final BookIndex _books;
     private final TapeIndex _trades;
     private final AtomicReference<Session> _session = new AtomicReference<>();
-    /** When the session was last re-read before a refusal, and whether it was OPEN. */
-    private volatile long _sessionRecheckedAtNanos;
-    private volatile boolean _sessionRecheckedOpen;
-    private volatile boolean _sessionRechecked;
+    /** The last re-read of the session before a refusal: when, and whether it was OPEN. Null until the first. */
+    private final AtomicReference<Recheck> _recheck = new AtomicReference<>();
+
+    private record Recheck(long atNanos, boolean open) { }
 
     /** How long one re-read of the session answers for: a refusing robot asks again at most this often. */
     static final long SESSION_RECHECK_NANOS = TimeUnit.SECONDS.toNanos(1);
@@ -305,7 +306,7 @@ public class DefaultDesk implements Desk {
 
     @Override
     public Order submitLimit(long marketId, OrderSide side, long units, long price) {
-        return submitLimit(marketId, side, units, price, true);
+        return submitLimit(marketId, side, units, price, OrderChecks.LOCAL);
     }
 
     /**
@@ -316,9 +317,9 @@ public class DefaultDesk implements Desk {
      * not know -- no session or holding yet, no position in the market -- goes
      * to the server, which has the last word.
      */
-    Order submitLimit(long marketId, OrderSide side, long units, long price, boolean refuseLocally) {
+    Order submitLimit(long marketId, OrderSide side, long units, long price, OrderChecks checks) {
         _ensureOpen();
-        if (refuseLocally) {
+        if (checks == OrderChecks.LOCAL) {
             _refuseLocally(marketId, side);
         }
         return _flexemarkets.submitLimit(_marketplaceId, marketId, side, units, price);
@@ -353,11 +354,17 @@ public class DefaultDesk implements Desk {
      * before refusing on a session that is not OPEN, read it once -- at most
      * every second -- and send if it is OPEN now. A read that fails changes
      * nothing: the desk refuses on what it holds, as before.
+     *
+     * <p>The read decides this order only. {@link #session()} still answers
+     * with what the stream last said, and catches up when the OPEN event
+     * arrives: the stream orders session changes, and a read slotted between
+     * its events could put an older state back.
      */
     private boolean _openedSince() {
         long now = System.nanoTime();
-        if (_sessionRechecked && now - _sessionRecheckedAtNanos < SESSION_RECHECK_NANOS) {
-            return _sessionRecheckedOpen;
+        var last = _recheck.get();
+        if (last != null && now - last.atNanos() < SESSION_RECHECK_NANOS) {
+            return last.open();
         }
         boolean open;
         try {
@@ -366,9 +373,7 @@ public class DefaultDesk implements Desk {
         } catch (RuntimeException unknown) {
             open = false;
         }
-        _sessionRecheckedOpen = open;
-        _sessionRecheckedAtNanos = now;
-        _sessionRechecked = true;
+        _recheck.set(new Recheck(now, open));
         return open;
     }
 

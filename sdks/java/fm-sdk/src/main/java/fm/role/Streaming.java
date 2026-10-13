@@ -49,35 +49,26 @@ public interface Streaming {
     Subscription subscribe(long marketplaceId, BlockingQueue<Object> queue);
 
     /**
-     * A maintained desk of the order books, kept current from the event stream.
+     * A maintained desk of the order books, kept current from the event
+     * stream, that refuses locally what fm-server would refuse
+     * ({@link Desk.OrderChecks#LOCAL}).
      *
      * @param marketplaceId the marketplace to open a desk on
      * @return a desk that keeps itself current until closed
      */
-    Desk desk(long marketplaceId);
+    default Desk desk(long marketplaceId) {
+        return desk(marketplaceId, Desk.OrderChecks.LOCAL);
+    }
 
     /**
-     * A desk whose {@code submitLimit} either refuses locally what fm-server
-     * would refuse -- a session that is not open, a side the holding does not
-     * grant -- with {@link fm.error.OrderRefusedLocallyException}, as
-     * {@link #desk(long)} does, or sends every order and leaves the answer to
-     * the server.
-     *
-     * <p>A default so that an implementation written before it still
-     * compiles; such an implementation cannot turn the check off, and says so.
+     * A maintained desk of the order books, kept current from the event
+     * stream, checking orders as {@code checks} says before it sends them.
      *
      * @param marketplaceId the marketplace to open a desk on
-     * @param refuseLocally false to send every order to the server
+     * @param checks        {@link Desk.OrderChecks#SERVER_ONLY} to send every order to the server
      * @return a desk that keeps itself current until closed
      */
-    default Desk desk(long marketplaceId, boolean refuseLocally) {
-        if (!refuseLocally) {
-            var name = getClass().getName();
-            var refused = new UnsupportedOperationException(name + " cannot open a desk that sends every order");
-            throw refused;
-        }
-        return desk(marketplaceId);
-    }
+    Desk desk(long marketplaceId, Desk.OrderChecks checks);
 
     /**
      * Re-establish the subscription by hand.

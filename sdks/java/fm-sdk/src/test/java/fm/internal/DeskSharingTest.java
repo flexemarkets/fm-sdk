@@ -527,8 +527,8 @@ class DeskSharingTest {
 
     @Test
     @Timeout(20)
-    void refuseLocallyFalseSendsEveryOrder() throws Exception {
-        try (var fm = _connect(); Desk desk = fm.desk(MP, false)) {
+    void serverOnlyChecksSendEveryOrder() throws Exception {
+        try (var fm = _connect(); Desk desk = fm.desk(MP, Desk.OrderChecks.SERVER_ONLY)) {
             fm.post(MP, _session(Session.STATE_CLOSED));
             fm.post(MP, _granting(false, false));
             _await("the holding to land", () -> desk.holding() != null);
@@ -548,19 +548,5 @@ class DeskSharingTest {
             desk.submitCancel(ALPHA.id(), 900L);
             assertThat(fm.submitted).containsExactly(MP + "/" + ALPHA.id() + " CANCEL 900");
         }
-    }
-
-    /** An implementation that predates the overload keeps compiling, and cannot pretend to turn the check off. */
-    @Test
-    void theDefaultOverloadRefusesToSendEveryOrder() {
-        Streaming old = new Streaming() {
-            @Override public void listen(long marketplaceId, BlockingQueue<Object> queue) { }
-            @Override public Subscription subscribe(long marketplaceId, BlockingQueue<Object> queue) { return null; }
-            @Override public Desk desk(long marketplaceId) { return null; }
-            @Override public void reconnect() { }
-        };
-        assertThat(old.desk(MP, true)).isNull();
-        assertThatThrownBy(() -> old.desk(MP, false))
-            .isInstanceOf(UnsupportedOperationException.class);
     }
 }

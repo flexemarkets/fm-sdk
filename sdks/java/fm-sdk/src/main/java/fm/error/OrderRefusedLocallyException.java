@@ -8,7 +8,7 @@ package fm.error;
  * -- the two refusals fm-server answers with 400 {@code SESSION_CLOSED} and
  * {@code ORDER_NOT_ALLOWED}, which {@link #reason()} names. An
  * {@link InvalidArgumentException}, so a caller catching the server's answer
- * catches this too. {@code flexemarkets.desk(id, false)} sends every order
+ * catches this too. {@code flexemarkets.desk(id, Desk.OrderChecks.SERVER_ONLY)} sends every order
  * instead.
  */
 public final class OrderRefusedLocallyException extends InvalidArgumentException {
