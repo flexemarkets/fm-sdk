@@ -68,6 +68,7 @@ test("an expired token is renewed once and the request repeated", async () => {
     const fm = await Flexemarkets.connect(credential(), `${base}/marketplaces/1`, "renewal-test");
     try {
       assert.deepEqual(await fm.markets(1), []);
+      assert.equal(fm.token().token, NEW, "the token the client reports is the one it presents");
     } finally {
       await fm.close();
     }
@@ -121,7 +122,8 @@ test("a token another caller already renewed is not renewed again", async () => 
   await withServer({}, async (base, state) => {
     const fm = await Flexemarkets.connect(credential(), `${base}/marketplaces/1`, "renewal-test");
     try {
-      assert.equal(await fm._renewToken("Bearer something-older"), true);
+      const renew = (fm as unknown as { _renewToken(presented: string): Promise<boolean> })._renewToken.bind(fm);
+      assert.equal(await renew("Bearer something-older"), true);
     } finally {
       await fm.close();
     }

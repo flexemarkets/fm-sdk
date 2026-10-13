@@ -268,8 +268,14 @@ export class EventListener {
   private readonly _wsUrl: string;
   /** Read on every connect, so a reconnect after the client renewed its sign-in presents the new token. */
   private readonly _bearerToken: () => string;
-  /** Asks the client to sign in again; false when it cannot. */
-  private readonly _renew: () => Promise<boolean>;
+  /**
+   * Asks the client to sign in again, given the token this stream's refused
+   * connect presented -- the check the client's requests make, so a token
+   * another caller has just renewed is not renewed twice. False when it cannot.
+   */
+  private readonly _renew: (presented: string) => Promise<boolean>;
+  /** The Authorization header the last connect presented. */
+  private _presented = "";
   private readonly _marketplaceId: number;
   private readonly _callback: EventCallback;
   private readonly _clientDescription: string;
@@ -303,7 +309,7 @@ export class EventListener {
     clientDescription: string,
     parseHolding: (data: Record<string, unknown>) => Holding,
     parseOrder: (data: Record<string, unknown>) => Order,
-    renew: () => Promise<boolean> = async () => false,
+    renew: (presented: string) => Promise<boolean> = async () => false,
   ) {
     this._wsUrl = wsUrl;
     this._bearerToken = typeof bearerToken === "function" ? bearerToken : () => bearerToken;
@@ -392,7 +398,7 @@ export class EventListener {
         // Except once: a client that holds credentials signs in again -- the
         // 24-hour token ran out under a long-running robot -- and the next
         // attempt presents the new token. A second refusal is final, as before.
-        if (isAuthRefusal(exception) && !renewed && (await this._renew())) {
+        if (isAuthRefusal(exception) && !renewed && (await this._renew(this._presented))) {
           renewed = true;
           continue;
         }
@@ -452,7 +458,7 @@ export class EventListener {
   private _connect(): WebSocket {
     return new WebSocket(this._wsUrl, ["v12.stomp", "v11.stomp", "v10.stomp"], {
       headers: {
-        Authorization: this._bearerToken(),
+        Authorization: (this._presented = this._bearerToken()),
       },
       maxPayload: 128 * 1024 * 1024,
     });

@@ -658,7 +658,7 @@ async function tokenExpired(resp: Response): Promise<boolean> {
   if (resp.status !== 401) return false;
   try {
     const body = JSON.parse(await resp.clone().text()) as Record<string, unknown>;
-    return body.error === "ACCOUNT_TOKEN_EXPIRED" || body.type === "ACCOUNT_TOKEN_EXPIRED";
+    return body.error === "ACCOUNT_TOKEN_EXPIRED";
   } catch {
     return false;
   }
@@ -668,25 +668,28 @@ export class Flexemarkets {
   private readonly _clientDescription: string;
   private readonly _endpoint: string;
   private readonly _baseUrl: string;
-  /** Replaced when an expired token is renewed (see {@link _renewToken}). */
-  private _bearerToken: string;
+  /**
+   * The sign-in this client presents, replaced whole when an expired one is
+   * renewed (see {@link _renewToken}); the bearer header is derived from it,
+   * so `token()` and every request agree on which token is current.
+   */
+  private _tokenObj: Token;
   /** Kept only to sign in again when the token runs out; null for a client given a token. */
   private _credentials: Record<string, string> | null = null;
   private _renewing: Promise<boolean> | null = null;
   private _account!: Account;
   private _user!: Person;
-  private _tokenObj!: Token;
   private _eventListener: EventListener | null = null;
 
   private constructor(
     endpoint: string,
     baseUrl: string,
-    bearerToken: string,
+    tokenObj: Token,
     clientDescription: string,
   ) {
     this._endpoint = endpoint;
     this._baseUrl = baseUrl;
-    this._bearerToken = bearerToken;
+    this._tokenObj = tokenObj;
     this._clientDescription = clientDescription;
   }
 
@@ -720,13 +723,11 @@ export class Flexemarkets {
 
     // Authenticate
     const tokenObj = await signIn(baseUrl, config, desc);
-    const bearer = `Bearer ${tokenObj.token}`;
 
-    const fm = new Flexemarkets(ep, baseUrl, bearer, desc);
+    const fm = new Flexemarkets(ep, baseUrl, tokenObj, desc);
     if (config.account && config.email && config.password && !(config.token && isValidToken(config.token))) {
       fm._credentials = { ...config } as Record<string, string>;
     }
-    fm._tokenObj = tokenObj;
     fm._account = tokenObj.account!;
     fm._user = tokenObj.person!;
 
@@ -769,6 +770,11 @@ export class Flexemarkets {
     return { Authorization: this._bearerToken };
   }
 
+  /** The Authorization header for the current sign-in. */
+  private get _bearerToken(): string {
+    return `Bearer ${this._tokenObj.token}`;
+  }
+
   /**
    * fetch with this client's token; if it has expired, renew it once and send
    * again. Tokens live 24 hours, so a robot that ran longer ended the first
@@ -786,18 +792,18 @@ export class Flexemarkets {
   /**
    * Sign in again with the credentials this client was made with. False when
    * it was given a token rather than credentials, or the sign-in fails; the
-   * caller then answers with the refusal it had. A `presented` token another
-   * caller has already replaced is not renewed again, and concurrent callers
-   * share one sign-in.
+   * caller then answers with the refusal it had. `presented` is the header
+   * the refused request or stream connect carried: one another caller has
+   * already replaced is not renewed again, and concurrent callers share one
+   * sign-in.
    */
-  async _renewToken(presented: string | null): Promise<boolean> {
+  private async _renewToken(presented: string): Promise<boolean> {
     if (this._credentials === null) return false;
-    if (presented !== null && presented !== this._bearerToken) return true;
+    if (presented !== this._bearerToken) return true;
     if (this._renewing === null) {
       this._renewing = (async () => {
         try {
-          const token = await signIn(this._baseUrl, this._credentials!, this._clientDescription);
-          this._bearerToken = `Bearer ${token.token}`;
+          this._tokenObj = await signIn(this._baseUrl, this._credentials!, this._clientDescription);
           return true;
         } catch {
           return false;
@@ -1772,7 +1778,7 @@ export class Flexemarkets {
       this._clientDescription,
       parseHolding,
       parseOrder,
-      () => this._renewToken(null),
+      (presented) => this._renewToken(presented),
     );
     await events.start();
     return events;

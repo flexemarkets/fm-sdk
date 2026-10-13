@@ -301,14 +301,16 @@ test("a refused reconnect renews the token once and the stream comes back", asyn
   await new Promise<void>((resolve) => wss.on("listening", () => resolve()));
   const url = `ws://127.0.0.1:${(wss.address() as AddressInfo).port}/api/events`;
   let token = "Bearer expired";
+  const refusedWith: string[] = [];
   const events: FmEvent[] = [];
   const listener = new EventListener(url, () => token, MP, (e) => void events.push(e),
                                      "fm-sdk-test", parseHolding as never, parseOrder as never,
-                                     async () => { token = "Bearer renewed"; return true; });
+                                     async (presented) => { refusedWith.push(presented); token = "Bearer renewed"; return true; });
   try {
     await listener.reconnect();
 
     assert.deepEqual(presented, ["Bearer expired", "Bearer renewed"]);
+    assert.deepEqual(refusedWith, ["Bearer expired"], "the stream says which token was refused");
     assert.equal(events.filter((e) => kind(e) === "stream-dropped").length, 0, "not ended");
   } finally {
     listener.close();
