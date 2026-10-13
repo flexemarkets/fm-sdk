@@ -2,14 +2,18 @@ package fm.views;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.TreeSet;
+import java.util.regex.Pattern;
+
 import org.junit.jupiter.api.Test;
 
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 class StudyViewsTest {
     @Test
     void shipsSmith62() {
-        assertThat(StudyViews.all()).extracting(StudyView::id).contains("smith62");
+        assertThat(StudyViews.all()).extracting(StudyView::id).contains("smith62", "ssw-sequestered-dividends");
         assertThat(StudyViews.of("smith62")).isPresent();
         assertThat(StudyViews.of("nope")).isEmpty();
     }
@@ -37,18 +41,26 @@ class StudyViewsTest {
     }
 
     /**
-     * SSW's sequestered dividends: what a participant has earned, shown under
-     * the trading panels, read from the private state fm-ssw uploads. It lived
-     * only in fm-robots' study, so the server could not offer it.
+     * What a view reads of a participant, {@code me.*}, is what it declares
+     * in its private state: the declaration is what tells a study what to
+     * upload and the server what to keep, so an undeclared name reads as
+     * nothing in every participant's panel.
      */
     @Test
-    void sswShowsTheDividendsEarnedFromPrivateState() {
-        var view = StudyViews.of("ssw").orElseThrow();
-        var root = JsonMapper.builder().build().readTree(view.render("WDG"));
-        var score = root.path("slots").path("sidebar-bottom").get(0);
-        assertThat(score.path("panel").asString()).isEqualTo("score");
-        assertThat(score.path("opts").path("expr").asString()).isEqualTo("me.dividends");
-        assertThat(score.path("opts").path("format").asString()).isEqualTo("cents");
-        assertThat(root.path("state").path("private").path("dividends").path("unit").asString()).isEqualTo("cents");
+    void everyViewDeclaresThePrivateStateItReads() {
+        var reference = Pattern.compile("\\bme\\.([A-Za-z_][A-Za-z0-9_]*)");
+        for (StudyView view : StudyViews.all()) {
+            var root = JsonMapper.builder().build().readTree(view.render("WDG"));
+            var read = new TreeSet<String>();
+            for (JsonNode expr : root.path("slots").findValues("expr")) {
+                var m = reference.matcher(expr.asString());
+                while (m.find()) {
+                    read.add(m.group(1));
+                }
+            }
+            assertThat(read).as(view.id() + " reads me.*").isNotEmpty();
+            assertThat(root.path("state").path("private").propertyNames())
+                    .as(view.id() + " declares what it reads").containsAll(read);
+        }
     }
 }

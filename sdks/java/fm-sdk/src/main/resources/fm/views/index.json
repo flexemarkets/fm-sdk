@@ -6,9 +6,9 @@
     "resource": "smith62.json"
   },
   {
-    "id": "ssw",
+    "id": "ssw-sequestered-dividends",
     "label": "SSW — dividends earned, paid at the end",
-    "description": "The usual trading panels, and under them the dividends a participant has earned so far, sequestered until the last period (fm-ssw --accrue-dividend --show-accrued-dividends): the private state it reads is dividends, in cents.",
-    "resource": "ssw.json"
+    "description": "The usual trading panels, and under them the dividends a participant has earned so far, held back until the last period, and the private state they read: a participant's dividends, in cents.",
+    "resource": "ssw-sequestered-dividends.json"
   }
 ]
