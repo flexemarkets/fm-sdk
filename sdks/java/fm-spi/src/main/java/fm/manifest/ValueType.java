@@ -1,5 +1,7 @@
 package fm.manifest;
 
+import java.math.BigDecimal;
+
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 
@@ -73,7 +75,10 @@ public enum ValueType {
         try {
             switch (this) {
                 case INTEGER -> Long.parseLong(raw.trim());
-                case FLOAT -> Double.parseDouble(raw.trim());
+                // Decimal syntax, not Java's double syntax: NaN, Infinity, 1.5d
+                // and hex floats parse as doubles, are no penalty or spread,
+                // and cannot be compared with a bound.
+                case FLOAT -> new BigDecimal(raw.trim());
                 case BOOLEAN -> {
                     String t = raw.trim();
                     if (!"true".equalsIgnoreCase(t) && !"false".equalsIgnoreCase(t)) {
@@ -88,5 +93,14 @@ public enum ValueType {
         } catch (NumberFormatException e) {
             return false;
         }
+    }
+
+    /**
+     * Whether a value of this type is a number, and so has bounds.
+     *
+     * @return true for {@link #INTEGER} and {@link #FLOAT}.
+     */
+    public boolean isNumeric() {
+        return this == INTEGER || this == FLOAT;
     }
 }

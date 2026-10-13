@@ -1,5 +1,6 @@
 package fm.manifest;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -45,7 +46,9 @@ public final class CliBuilder {
      *         each owner's own.
      * @throws InvalidLaunchException if a value is supplied by someone who does
      *         not own it, is not a parameter of this robot, does not satisfy
-     *         its declared type, or is required and missing.
+     *         its declared type or the robot's own bounds, or is required and
+     *         missing. A declared default is the robot's own and is not
+     *         checked against its bounds.
      */
     public static Map<String, String> merge(
             Manifest manifest,
@@ -141,9 +144,10 @@ public final class CliBuilder {
             // The robot's own hard bounds, checked here so every host refuses
             // the same values: fm-server checked them and a container launched
             // directly did not, so the bound was only as strong as the path a
-            // caller chose. Only numbers have bounds; absent ones admit all.
-            if (_isNumeric(spec) && value != null && (spec.min() != null || spec.max() != null)
-                    && !spec.withinHardBounds(new java.math.BigDecimal(value.trim()))) {
+            // caller chose. Only numbers have bounds; absent ones admit all. The
+            // type check above has parsed the value, so this parse cannot fail.
+            if (spec.valueType() != null && spec.valueType().isNumeric() && value != null
+                    && !spec.withinHardBounds(new BigDecimal(value.trim()))) {
                 throw new InvalidLaunchException(
                         "'" + name + "' must be within " + spec.hardBoundsDescription() + ", got: " + value);
             }
@@ -223,9 +227,5 @@ public final class CliBuilder {
             Map<String, String> user,
             Map<String, String> platform) {
         return arguments(manifest, merge(manifest, manager, user, platform));
-    }
-
-    private static boolean _isNumeric(ParameterSpec spec) {
-        return spec.valueType() == ValueType.INTEGER || spec.valueType() == ValueType.FLOAT;
     }
 }
