@@ -1,6 +1,7 @@
 package fm.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -14,9 +15,11 @@ import java.util.zip.GZIPOutputStream;
 import org.junit.jupiter.api.Test;
 
 import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 
 import fm.Flexemarkets;
+import fm.error.ApiException;
 import fm.model.Holding;
 
 /**
@@ -58,16 +61,27 @@ class GzipResponseTest {
         assertThat(GzipBodies._gunzip(new byte[0], StandardCharsets.UTF_8)).isEmpty();
     }
 
-    /** A body that says gzip and is not is an error, not text that fails to parse later. */
+    /**
+     * A body that says gzip and is not is an error, not text that fails to
+     * parse later. The decoder's UncheckedIOException does not reach the
+     * caller as itself: HttpClient.send wraps what a body handler throws in
+     * an IOException, so the caller sees the transport failure every other
+     * broken answer is, with the reason in its causes.
+     */
     @Test
-    void aBodyThatIsNotTheGzipItClaimsIsAnError() {
-        org.assertj.core.api.Assertions.assertThatThrownBy(
-                () -> GzipBodies._gunzip("not gzip".getBytes(StandardCharsets.UTF_8), StandardCharsets.UTF_8))
-            .isInstanceOf(java.io.UncheckedIOException.class)
-            .hasMessageContaining("would not decompress");
+    void aBodyThatIsNotTheGzipItClaimsIsATransportFailure() {
+        assertThatThrownBy(() -> _holdings(exchange -> _respondLabelledGzip(exchange, "not gzip"),
+                new CopyOnWriteArrayList<>()))
+            .isInstanceOf(ApiException.class)
+            .hasMessageContaining("HTTP request failed")
+            .hasStackTraceContaining("would not decompress");
     }
 
     private static List<Holding> _holdings(boolean gzip, List<String> asked) throws Exception {
+        return _holdings(exchange -> _respond(exchange, HOLDINGS, gzip), asked);
+    }
+
+    private static List<Holding> _holdings(HttpHandler holdingsRoute, List<String> asked) throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/api/tokens", exchange -> _respond(exchange, """
                 {"token":"%s",
@@ -76,7 +90,7 @@ class GzipResponseTest {
                 """.formatted(TOKEN), false));
         server.createContext("/api/v1/marketplaces/1/holdings", exchange -> {
             asked.add(String.valueOf(exchange.getRequestHeaders().getFirst("Accept-Encoding")));
-            _respond(exchange, HOLDINGS, gzip);
+            holdingsRoute.handle(exchange);
         });
         server.createContext("/api", exchange -> _respond(exchange, "{\"_links\":{}}", false));
         server.start();
@@ -90,6 +104,12 @@ class GzipResponseTest {
         }
     }
 
+    /** {@code body} as it is, labelled gzip. */
+    private static void _respondLabelledGzip(HttpExchange exchange, String body) throws IOException {
+        exchange.getResponseHeaders().add("Content-Encoding", "gzip");
+        _send(exchange, body.getBytes(StandardCharsets.UTF_8));
+    }
+
     private static void _respond(HttpExchange exchange, String body, boolean gzip) throws IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         if (gzip) {
@@ -100,6 +120,10 @@ class GzipResponseTest {
             bytes = zipped.toByteArray();
             exchange.getResponseHeaders().add("Content-Encoding", "gzip");
         }
+        _send(exchange, bytes);
+    }
+
+    private static void _send(HttpExchange exchange, byte[] bytes) throws IOException {
         exchange.getResponseHeaders().add("Content-Type", "application/json");
         exchange.sendResponseHeaders(200, bytes.length);
         try (OutputStream out = exchange.getResponseBody()) {
