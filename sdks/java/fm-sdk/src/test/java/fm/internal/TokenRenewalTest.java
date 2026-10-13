@@ -99,6 +99,7 @@ class TokenRenewalTest {
     void anExpiredTokenIsRenewedOnceAndTheRequestRepeated() throws Exception {
         try (Flexemarkets fm = Flexemarkets.connect(_credential(), _endpoint(), "renewal-test")) {
             assertThat(fm.markets(1L)).isEmpty();
+            assertThat(fm.token().token()).as("the token the client reports is the one it presents").isEqualTo(NEW);
         }
 
         assertThat(_signIns).hasValue(2);
@@ -149,7 +150,7 @@ class TokenRenewalTest {
     @Test
     void theStreamsRenewalSignsInAgain() throws Exception {
         try (var fm = (HttpFlexemarkets) Flexemarkets.connect(_credential(), _endpoint(), "renewal-test")) {
-            assertThat(fm._renewForStream()).isTrue();
+            assertThat(fm._renewToken("Bearer " + OLD)).isTrue();
             assertThat(fm.markets(1L)).as("the renewed token is the one presented").isEmpty();
         }
 

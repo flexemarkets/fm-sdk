@@ -226,7 +226,9 @@ class EventsSocketTest {
     @Timeout(30)
     void aRefusedTokenOnReconnectIsRenewedOnceAndTheStreamComesBack() throws Exception {
         var token = new java.util.concurrent.atomic.AtomicReference<>("Bearer the-token");
-        events = new Events(server.url(), token::get, MP, "fm-sdk-test", HttpFlexemarkets.MAPPER, queue, () -> {
+        var refusedWith = new java.util.concurrent.atomic.AtomicReference<String>();
+        events = new Events(server.url(), token::get, MP, "fm-sdk-test", HttpFlexemarkets.MAPPER, queue, presented -> {
+            refusedWith.set(presented);
             token.set("Bearer renewed");
             server.refuseWith(0);
             return true;
@@ -239,6 +241,7 @@ class EventsSocketTest {
         assertThat(next()).isInstanceOf(StreamDropped.class);
         assertThat(next()).isEqualTo(new StreamReconnected(MP));
         assertThat(server.connection(1).headers.get("authorization")).isEqualTo("Bearer renewed");
+        assertThat(refusedWith).as("the stream says which token was refused").hasValue("Bearer the-token");
     }
 
     @Test

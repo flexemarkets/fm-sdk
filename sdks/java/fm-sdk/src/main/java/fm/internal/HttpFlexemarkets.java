@@ -287,9 +287,15 @@ public class HttpFlexemarkets implements Flexemarkets {
     private final Duration _requestTimeout;
 
     private final HttpClient _httpClient;
-    /** Replaced when an expired token is renewed (see {@link #_renewToken}). */
-    private volatile String _bearerToken;
-    private final Token _token;
+    /**
+     * The sign-in this client presents, replaced whole when an expired one is
+     * renewed (see {@link #_renewToken}); the bearer header is derived from
+     * it, so {@link #token()} and every request agree on which token is current.
+     */
+    private volatile Token _token;
+    /** Whether this client holds credentials to sign in again with; a client given a token does not. */
+    private final boolean _canRenew;
+    private final Object _renewLock = new Object();
     private final Account _account;
     private final Person _user;
 
@@ -319,10 +325,18 @@ public class HttpFlexemarkets implements Flexemarkets {
         this._impersonateAccount = impersonate == null || impersonate.isBlank() ? null : impersonate;
         this._capture = Boolean.parseBoolean(properties.getProperty("capture"));
 
+        this._canRenew = _isBlank(properties.getProperty("token"))
+                && !_isBlank(properties.getProperty("account"))
+                && !_isBlank(properties.getProperty("email"))
+                && !_isBlank(properties.getProperty("password"));
         this._token = _signIn();
         this._account = _token.account();
         this._user = _token.person();
-        this._bearerToken = "Bearer " + _token.token();
+    }
+
+    /** The Authorization header for the current sign-in. */
+    private String _bearer() {
+        return "Bearer " + _token.token();
     }
 
 
@@ -964,8 +978,8 @@ public class HttpFlexemarkets implements Flexemarkets {
         // One per connection: the stream this replaces is closed, not dropped
         // with its socket, heartbeats and reconnects still running.
         if (_events != null) _events.close();
-        _events = new Events(_wsUrl(), () -> _bearerToken, marketplaceId, _clientDescription(), MAPPER, queue,
-            this::_renewForStream);
+        _events = new Events(_wsUrl(), this::_bearer, marketplaceId, _clientDescription(), MAPPER, queue,
+            this::_renewToken);
         _events.connect();
     }
 
@@ -983,8 +997,8 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     Events _connectEvents(long marketplaceId, BlockingQueue<Object> queue) {
-        var ev = new Events(_wsUrl(), () -> _bearerToken, marketplaceId, _clientDescription(), MAPPER, queue,
-            this::_renewForStream);
+        var ev = new Events(_wsUrl(), this::_bearer, marketplaceId, _clientDescription(), MAPPER, queue,
+            this::_renewToken);
         ev.connect();
         return ev;
     }
@@ -1086,7 +1100,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     private HttpRequest.Builder _request(String url, String accept) {
         var builder = HttpRequest.newBuilder()
             .uri(URI.create(url))
-            .header("Authorization", _bearerToken)
+            .header("Authorization", _bearer())
             .header("Accept", accept)
             .header("User-Agent", FM_SDK_CLIENT);
 
@@ -1158,7 +1172,7 @@ public class HttpFlexemarkets implements Flexemarkets {
         var presented = request.headers().firstValue("Authorization").orElse(null);
         if (presented != null && _tokenExpired(response) && _renewToken(presented)) {
             var renewed = HttpRequest.newBuilder(request, (name, value) -> !"Authorization".equalsIgnoreCase(name))
-                .header("Authorization", _bearerToken)
+                .header("Authorization", _bearer())
                 .build();
             response = _exchangeOnce(renewed);
         }
@@ -1170,13 +1184,8 @@ public class HttpFlexemarkets implements Flexemarkets {
         if (response.statusCode() != 401 || response.body() == null) {
             return false;
         }
-        try {
-            var body = MAPPER.readTree(response.body());
-            return "ACCOUNT_TOKEN_EXPIRED".equals(body.path("error").asString(""))
-                || "ACCOUNT_TOKEN_EXPIRED".equals(body.path("type").asString(""));
-        } catch (RuntimeException notJson) {
-            return false;
-        }
+        var failure = _tryParseConflict(response.body());
+        return failure != null && "ACCOUNT_TOKEN_EXPIRED".equals(failure.error());
     }
 
     /**
@@ -1186,31 +1195,27 @@ public class HttpFlexemarkets implements Flexemarkets {
      * it asked for anything after that, or looped on the refusal -- a Utah
      * poller, about 250 times a day at 00Z. One sign-in renews it. False when
      * this client was given a token rather than credentials, or the sign-in
-     * fails; the caller then answers with the refusal it had. A {@code
-     * presented} token another thread has already replaced is not renewed again.
+     * fails; the caller then answers with the refusal it had.
+     *
+     * <p>{@code presented} is the Authorization header the refused request or
+     * stream connect carried. If another thread has renewed since, the token
+     * is not renewed again: the caller retries with the one now current.
      */
-    synchronized boolean _renewToken(String presented) {
-        var token = _properties.getProperty("token");
-        if ((token != null && !token.isBlank())
-                || _isBlank(_properties.getProperty("account"))
-                || _isBlank(_properties.getProperty("email"))
-                || _isBlank(_properties.getProperty("password"))) {
+    boolean _renewToken(String presented) {
+        if (!_canRenew) {
             return false;
         }
-        if (presented != null && !presented.equals(_bearerToken)) {
-            return true;
+        synchronized (_renewLock) {
+            if (!presented.equals(_bearer())) {
+                return true;
+            }
+            try {
+                _token = _signIn();
+                return true;
+            } catch (FlexemarketsException refused) {
+                return false;
+            }
         }
-        try {
-            _bearerToken = "Bearer " + _signIn().token();
-            return true;
-        } catch (FlexemarketsException refused) {
-            return false;
-        }
-    }
-
-    /** The stream's renewal: it holds no token of its own to compare, so it always asks. */
-    boolean _renewForStream() {
-        return _renewToken(null);
     }
 
     private static boolean _isBlank(String value) {

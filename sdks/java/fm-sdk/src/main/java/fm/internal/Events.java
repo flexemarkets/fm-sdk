@@ -31,6 +31,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
@@ -87,9 +89,15 @@ public class Events implements Subscription {
 
     private final String _wsUrl;
     /** Read on every connect, so a reconnect after the client renewed its sign-in presents the new token. */
-    private final java.util.function.Supplier<String> _bearerToken;
-    /** Asks the client to sign in again; false when it cannot. */
-    private final java.util.function.BooleanSupplier _renew;
+    private final Supplier<String> _bearerToken;
+    /**
+     * Asks the client to sign in again, given the token this stream last
+     * presented -- the same check the client's requests make, so a token
+     * another caller has just renewed is not renewed twice. False when it cannot.
+     */
+    private final Predicate<String> _renew;
+    /** The Authorization header the last connect presented. */
+    private volatile String _presented;
     private final long _marketplaceId;
     private final String _clientDescription;
     private final ObjectMapper _mapper;
@@ -153,11 +161,11 @@ public class Events implements Subscription {
 
     Events(String wsUrl, String bearerToken, long marketplaceId, String clientDescription,
            ObjectMapper mapper, BlockingQueue<Object> queue) {
-        this(wsUrl, () -> bearerToken, marketplaceId, clientDescription, mapper, queue, () -> false);
+        this(wsUrl, () -> bearerToken, marketplaceId, clientDescription, mapper, queue, presented -> false);
     }
 
-    Events(String wsUrl, java.util.function.Supplier<String> bearerToken, long marketplaceId, String clientDescription,
-           ObjectMapper mapper, BlockingQueue<Object> queue, java.util.function.BooleanSupplier renew) {
+    Events(String wsUrl, Supplier<String> bearerToken, long marketplaceId, String clientDescription,
+           ObjectMapper mapper, BlockingQueue<Object> queue, Predicate<String> renew) {
         this._wsUrl = wsUrl;
         this._bearerToken = bearerToken;
         this._renew = renew;
@@ -179,7 +187,7 @@ public class Events implements Subscription {
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .build()
                 .newWebSocketBuilder()
-                .header("Authorization", _bearerToken.get())
+                .header("Authorization", _presented = _bearerToken.get())
                 .subprotocols("v12.stomp", "v11.stomp", "v10.stomp")
                 .buildAsync(URI.create(_wsUrl), listener)
                 .join();
@@ -246,7 +254,7 @@ public class Events implements Subscription {
                 // -- the 24-hour token ran out under a long-running robot --
                 // and the next attempt presents the new token. A second
                 // refusal is final, as before.
-                if (_isAuthRefusal(e) && !renewed && _renew.getAsBoolean()) {
+                if (_isAuthRefusal(e) && !renewed && _renew.test(_presented)) {
                     renewed = true;
                     continue;
                 }
