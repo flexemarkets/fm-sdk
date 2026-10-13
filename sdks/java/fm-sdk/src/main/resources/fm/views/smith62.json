@@ -25,14 +25,6 @@
       {
         "panel": "score",
         "opts": {
-          "label": "Your values / costs",
-          "format": "cents",
-          "expr": "me.valuations"
-        }
-      },
-      {
-        "panel": "score",
-        "opts": {
           "label": "Profit",
           "format": "cents",
           "fields": [
@@ -45,6 +37,14 @@
               "expr": "if(me.side == \"S\", f.gross - f.cost, f.cost - f.gross)"
             }
           ]
+        }
+      },
+      {
+        "panel": "score",
+        "opts": {
+          "label": "Your values / costs",
+          "format": "cents",
+          "expr": "me.valuations"
         }
       }
     ],

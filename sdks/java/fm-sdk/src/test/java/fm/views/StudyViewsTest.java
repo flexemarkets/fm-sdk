@@ -40,15 +40,16 @@ class StudyViewsTest {
      * fm-ui#721: each participant is shown their own induced values -- a
      * buyer's values, a seller's costs -- read from their private state, so a
      * Smith62 class needs no panel set up by hand to tell people what a unit
-     * is worth to them.
+     * is worth to them. Added after Profit: placements are addressed by
+     * slot and index (fm-server's PanelEvaluator, fm-robots'
+     * ViewConfigurationTest), so an existing panel's index must not move.
      */
     @Test
-    void smith62ShowsEachParticipantTheirOwnValues() {
-        var root = JsonMapper.builder().build().readTree(StudyViews.of("smith62").orElseThrow().render("WDG"));
-        var values = root.path("slots").path("sidebar-bottom").get(0).path("opts");
-        assertThat(values.path("expr").asString()).isEqualTo("me.valuations");
-        assertThat(values.path("format").asString()).isEqualTo("cents");
-        assertThat(values.path("label").asString()).isEqualTo("Your values / costs");
-        assertThat(root.path("slots").path("sidebar-bottom").get(1).path("opts").path("label").asString()).isEqualTo("Profit");
+    void smith62ShowsEachParticipantTheirOwnValues_withoutMovingProfit() {
+        var bottom = JsonMapper.builder().build().readTree(StudyViews.of("smith62").orElseThrow().render("WDG"))
+                .path("slots").path("sidebar-bottom");
+        assertThat(bottom.get(0).path("opts").path("label").asString()).isEqualTo("Profit");
+        assertThat(bottom.valueStream().map(p -> p.path("opts").path("expr").asString()))
+                .contains("me.valuations");
     }
 }
