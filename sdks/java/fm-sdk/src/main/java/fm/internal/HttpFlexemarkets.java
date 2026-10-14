@@ -50,6 +50,7 @@ import java.time.Duration;
 import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.math.BigDecimal;
 import java.nio.channels.UnresolvedAddressException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -66,6 +67,7 @@ import java.util.Properties;
 import java.util.concurrent.BlockingQueue;
 
 import javax.net.ssl.SSLException;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
@@ -695,6 +697,16 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     private record ManagerOtpRequest(List<Long> userIds) {}
 
+    /** The value, with the control's bounds flat beside it; no bounds is a fixed parameter. */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private record ConfigureRobotParameter(String value, BigDecimal min, BigDecimal max, BigDecimal step) {
+        static ConfigureRobotParameter of(String value, RobotParameterControl control) {
+            return null == control
+                    ? new ConfigureRobotParameter(value, null, null, null)
+                    : new ConfigureRobotParameter(value, control.min(), control.max(), control.step());
+        }
+    }
+
     public Order submitLimit(long marketplaceId, long marketId, OrderSide side, long units, long price) {
         return submitLimit(marketplaceId, marketId, side, units, price, null);
     }
@@ -925,15 +937,9 @@ public class HttpFlexemarkets implements Flexemarkets {
     @Override
     public RobotParameterConfig configureRobotParameter(long marketplaceId, String robotId, String paramName,
                                                         String value, RobotParameterControl control) {
-        var body = new java.util.LinkedHashMap<String, Object>();
-        body.put("value", value);
-        if (control != null) {
-            body.put("min", control.min());
-            body.put("max", control.max());
-            body.put("step", control.step());
-        }
         return _put(_marketplace(marketplaceId) + "/robots/" + _segment(robotId)
-                + "/parameters/" + _segment(paramName), body, ROBOT_PARAMETER_CONFIG_TYPE);
+                + "/parameters/" + _segment(paramName), ConfigureRobotParameter.of(value, control),
+                ROBOT_PARAMETER_CONFIG_TYPE);
     }
 
     /*
@@ -1173,7 +1179,10 @@ public class HttpFlexemarkets implements Flexemarkets {
         var response = _exchangeOnce(request);
         var presented = request.headers().firstValue("Authorization").orElse(null);
         if (presented != null && _tokenExpired(response) && _renewToken(presented)) {
-            var renewed = HttpRequest.newBuilder(request, (name, value) -> !"Authorization".equalsIgnoreCase(name))
+            // Without the timing the first send carried, too: that figure was
+            // reported once already, and the resend is a call of its own.
+            var renewed = HttpRequest.newBuilder(request, (name, value) -> !"Authorization".equalsIgnoreCase(name)
+                    && !HEADER_CLIENT_TIMING.equalsIgnoreCase(name))
                 .header("Authorization", _bearer())
                 .build();
             response = _exchangeOnce(renewed);

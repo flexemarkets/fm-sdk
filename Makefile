@@ -12,7 +12,7 @@ VERSION := $(shell cat VERSION)
        check-release-workflow check-parity check-sdks check-python check-typescript check-java check-mcp \
        build-release build-release-java build-release-python build-release-typescript \
        test-python test-typescript test-java \
-       ticker-python ticker-typescript ticker-java \
+       ticker-python ticker-typescript ticker-java first-robot-python first-robot-typescript \
        mcp-server \
        publish publish-python publish-typescript publish-java \
        check-publish check-publish-release check-publish-python check-publish-typescript check-publish-java \
@@ -112,6 +112,10 @@ test-python:
 ticker-python:
 	$(VENV_PY) sdks/python/ticker.py $(ARGS)
 
+# docs/FIRST-ROBOT.md: make first-robot-python ARGS="-C ~/.fm/credential -E 1234"
+first-robot-python:
+	$(VENV_PY) sdks/python/first_robot.py $(ARGS)
+
 publish-python: check-sdks check-publish-python build-release-python
 	$(VENV_PY) -m pip install build twine
 	$(VENV_PY) -m build sdks/python
@@ -139,6 +143,9 @@ test-typescript:
 ticker-typescript:
 	cd sdks/typescript && npx tsx src/ticker.ts $(ARGS)
 
+first-robot-typescript:
+	cd sdks/typescript && npx tsx src/first-robot.ts $(ARGS)
+
 # OTP=<code> is passed through to npm for accounts with two-factor auth on
 # writes. Without it npm prompts, and a prompt inside make is a hang.
 publish-typescript: check-sdks check-publish-typescript build-release-typescript
@@ -161,7 +168,7 @@ test-java:
 	cd sdks/java && mvn -o test
 
 ticker-java:
-	java --enable-preview -jar sdks/java/examples/ticker/target/fm-ticker-$(VERSION).jar $(ARGS)
+	java -jar sdks/java/examples/ticker/target/fm-ticker-$(VERSION).jar $(ARGS)
 
 # -pl drops the example from the reactor, for the same reason publish-spi
 # narrows it below: whichever module ends the reactor bundles
