@@ -785,6 +785,36 @@ export class Flexemarkets {
 
   // -- internal HTTP helpers -------------------------------------------------
 
+  /** What the previous call cost, waiting to ride on the next as Client-Timing. */
+  private _lastTiming: string | null = null;
+
+  /**
+   * Every call the client makes, timed: it carries what the previous call cost
+   * -- `rtt=<ns>`, and `;net=<ns>` when the server's `Server-Timing: st=` said
+   * its own share -- the format the Java SDK and fm-ui send and fm-server's
+   * ApiMetricsFilter reads, so a robot's latency shows in the Connections
+   * view. Each figure arrives one call late, since a round trip is not known
+   * until its own request has gone; taken rather than read, so it is reported
+   * once; net= left out rather than zero when the server's share is unknown.
+   * Measured to the response headers; a call that throws records nothing.
+   * _fetch sends through this, so a resend after renewing the token is
+   * timed as its own call.
+   */
+  private async _timedFetch(url: string, init: RequestInit): Promise<Response> {
+    const headers = new Headers(init.headers);
+    const timing = this._lastTiming;
+    this._lastTiming = null;
+    if (timing !== null) headers.set("Client-Timing", timing);
+    const started = process.hrtime.bigint();
+    const resp = await fetch(url, { ...init, headers });
+    const rtt = process.hrtime.bigint() - started;
+    const served = /st=(\d+)/.exec(resp.headers.get("Server-Timing") ?? "");
+    this._lastTiming = served
+      ? `rtt=${rtt};net=${rtt > BigInt(served[1]) ? rtt - BigInt(served[1]) : 0n}`
+      : `rtt=${rtt}`;
+    return resp;
+  }
+
   private _authHeaders(): Record<string, string> {
     return { Authorization: this._bearerToken };
   }
@@ -802,10 +832,10 @@ export class Flexemarkets {
    */
   private async _fetch(url: string, init: RequestInit): Promise<Response> {
     const presented = this._bearerToken;
-    const resp = await fetch(url, init);
+    const resp = await this._timedFetch(url, init);
     if (!(await tokenExpired(resp)) || !(await this._renewToken(presented))) return resp;
     const headers = { ...(init.headers as Record<string, string>), Authorization: this._bearerToken };
-    return fetch(url, { ...init, headers });
+    return this._timedFetch(url, { ...init, headers });
   }
 
   /**
