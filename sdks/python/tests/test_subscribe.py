@@ -130,7 +130,7 @@ def test_a_stream_opens_on_the_servers_events_route_as_the_caller(client, monkey
     (listener,) = started.listeners
     port = client.endpoint_url.split(":")[2].split("/")[0]
     assert listener._ws_url == f"ws://127.0.0.1:{port}/api/events"
-    assert listener._bearer_token == f"Bearer {TOKEN}"
+    assert listener._bearer_token() == f"Bearer {TOKEN}"
     assert listener._marketplace_id == 4
     assert listener._queue is q
     assert listener._client_description == "subscribe-test"
