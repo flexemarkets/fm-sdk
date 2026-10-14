@@ -78,12 +78,6 @@ client signs in again once and resends, and the event stream renews on a
 refused reconnect. A client given a token rather than credentials has
 nothing to sign in with, and still gets the 401.
 
-**Each call reports what the last one cost** (all three). The previous
-round trip rides on the next request as `Client-Timing: rtt=<ns>`, with
-`;net=<ns>` when the server's `Server-Timing` said its share, so fm-server's
-Connections view shows a robot's latency. Nothing to do; the figure is one
-call late by design.
-
 **Java asks for compressed responses** (`Accept-Encoding: gzip`) and
 decodes them. Nothing to do.
 
