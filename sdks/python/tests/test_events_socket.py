@@ -272,3 +272,20 @@ def test_a_connect_answered_with_anything_but_connected_is_logged(server, listen
         listener()
 
     assert "STOMP CONNECT reply: ERROR" in caplog.text
+
+
+def test_a_reconnect_the_caller_asks_for_replaces_the_socket_once(server, events, listener):
+    """Ported from Java's EventsSocketTest (c981b65). The old socket's close is
+    the client's own doing, not a drop: reported as one, it queued a
+    StreamDropped and set off a second reconnect that tore down the socket
+    just opened."""
+    l = listener()
+    _await("the first socket subscribes", lambda: len(server.received[0]) >= 4)
+
+    l.reconnect()
+
+    _await("the new socket subscribes", lambda: len(server.received) > 1 and len(server.received[1]) >= 4)
+    with pytest.raises(queue.Empty):
+        events.get(timeout=1.5)
+    time.sleep(0.5)
+    assert len(server.connections) == 2, "one replacement"

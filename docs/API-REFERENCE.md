@@ -284,7 +284,7 @@ of the lineage — a split's remainder cancels the order it came from.
 **Prices are integer cents.** `950` is $9.50. Prices must land on the market's
 tick and inside its bounds, or the submit fails with `ORDER_INVALID`.
 `clientDescription` is free text that surfaces in manager exports and the
-connections desk — set it to something you can grep for.
+connections view — set it to something you can grep for.
 
 Reads default to the **current** run. `orders`, `holdings` and
 `connections` take `sessions` to widen that:
@@ -564,7 +564,7 @@ The same bearer token authenticates the connection, by either route:
 
 Two further `CONNECT` headers are conventional and worth sending: an
 `agent-description` identifying your client, and `marketplace-id`. Both surface
-in the manager's connections desk.
+in the manager's connections view.
 
 Origins are allow-listed server-side, so browser clients must be served from a
 registered origin; non-browser clients are unaffected.

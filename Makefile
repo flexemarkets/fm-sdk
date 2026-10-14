@@ -9,7 +9,7 @@ VERSION := $(shell cat VERSION)
        check-fixtures check-fixtures-live \
        install-python install-typescript install-java install-mcp \
        build-python build-typescript build-java \
-       check-parity check-sdks check-python check-typescript check-java check-mcp \
+       check-release-workflow check-parity check-sdks check-python check-typescript check-java check-mcp \
        build-release build-release-java build-release-python build-release-typescript \
        test-python test-typescript test-java \
        ticker-python ticker-typescript ticker-java \
@@ -34,8 +34,14 @@ check: check-sdks check-mcp
 # Everything that gates a publish, which is everything but the MCP server --
 # that is a local tool, in no publish target, and a missing venv for it must
 # not stand between a fix and a registry.
-check-sdks: check-parity check-fixtures check-python check-typescript check-java \
+check-sdks: check-release-workflow check-parity check-fixtures check-python check-typescript check-java \
        test-python test-typescript test-java check-quickstarts
+
+# The release workflow's npm step skips a version npm already has (a re-run
+# after a partial publish), and "view" stays where the View -> Desk rename once
+# wrote "desk". No toolchain needed.
+check-release-workflow:
+	scripts/check-release-workflow.sh
 
 # The three SDKs are hand-written and every type is declared three times, so
 # nothing but this holds them to the same wire format. Runs first because it
@@ -218,7 +224,7 @@ mcp-server:
 # Gated on purpose. The three uploads cannot be undone and cannot be replaced,
 # so a run that succeeds on PyPI and fails on Central burns the version on one
 # and leaves it unusable on the other. check-publish verifies every credential
-# and every registry's desk of this version before the first byte is sent.
+# and every registry's view of this version before the first byte is sent.
 #
 # npm goes FIRST, and the order is load-bearing. It is the only registry that
 # can stop and ask a human something -- a 2FA one-time password -- and when it

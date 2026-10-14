@@ -287,8 +287,15 @@ public class HttpFlexemarkets implements Flexemarkets {
     private final Duration _requestTimeout;
 
     private final HttpClient _httpClient;
-    private final String _bearerToken;
-    private final Token _token;
+    /**
+     * The sign-in this client presents, replaced whole when an expired one is
+     * renewed (see {@link #_renewToken}); the bearer header is derived from
+     * it, so {@link #token()} and every request agree on which token is current.
+     */
+    private volatile Token _token;
+    /** Whether this client holds credentials to sign in again with; a client given a token does not. */
+    private final boolean _canRenew;
+    private final Object _renewLock = new Object();
     private final Account _account;
     private final Person _user;
 
@@ -318,10 +325,18 @@ public class HttpFlexemarkets implements Flexemarkets {
         this._impersonateAccount = impersonate == null || impersonate.isBlank() ? null : impersonate;
         this._capture = Boolean.parseBoolean(properties.getProperty("capture"));
 
+        this._canRenew = _isBlank(properties.getProperty("token"))
+                && !_isBlank(properties.getProperty("account"))
+                && !_isBlank(properties.getProperty("email"))
+                && !_isBlank(properties.getProperty("password"));
         this._token = _signIn();
         this._account = _token.account();
         this._user = _token.person();
-        this._bearerToken = "Bearer " + _token.token();
+    }
+
+    /** The Authorization header for the current sign-in. */
+    private String _bearer() {
+        return "Bearer " + _token.token();
     }
 
 
@@ -963,7 +978,8 @@ public class HttpFlexemarkets implements Flexemarkets {
         // One per connection: the stream this replaces is closed, not dropped
         // with its socket, heartbeats and reconnects still running.
         if (_events != null) _events.close();
-        _events = new Events(_wsUrl(), _bearerToken, marketplaceId, _clientDescription(), MAPPER, queue);
+        _events = new Events(_wsUrl(), this::_bearer, marketplaceId, _clientDescription(), MAPPER, queue,
+            this::_renewToken);
         _events.connect();
     }
 
@@ -981,7 +997,8 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     Events _connectEvents(long marketplaceId, BlockingQueue<Object> queue) {
-        var ev = new Events(_wsUrl(), _bearerToken, marketplaceId, _clientDescription(), MAPPER, queue);
+        var ev = new Events(_wsUrl(), this::_bearer, marketplaceId, _clientDescription(), MAPPER, queue,
+            this::_renewToken);
         ev.connect();
         return ev;
     }
@@ -1007,7 +1024,8 @@ public class HttpFlexemarkets implements Flexemarkets {
      * their own desk — multi-tenant WS multiplexing is a server-side
      * concern, not a client-side one.
      */
-    public Desk desk(long marketplaceId) {
+    @Override
+    public Desk desk(long marketplaceId, Desk.OrderChecks checks) {
         DefaultDesk shared;
         synchronized (_viewLock) {
             SharedDesk entry = _sharedViews.get(marketplaceId);
@@ -1025,7 +1043,7 @@ public class HttpFlexemarkets implements Flexemarkets {
             entry.refCount++;
             shared = entry.desk;
         }
-        return new DeskHandle(shared, () -> _releaseSharedView(marketplaceId));
+        return new DeskHandle(shared, () -> _releaseSharedView(marketplaceId), checks);
     }
 
     void _releaseSharedView(long marketplaceId) {
@@ -1083,8 +1101,9 @@ public class HttpFlexemarkets implements Flexemarkets {
     private HttpRequest.Builder _request(String url, String accept) {
         var builder = HttpRequest.newBuilder()
             .uri(URI.create(url))
-            .header("Authorization", _bearerToken)
+            .header("Authorization", _bearer())
             .header("Accept", accept)
+            .header(GzipBodies.ACCEPT_ENCODING, GzipBodies.GZIP)
             .header("User-Agent", FM_SDK_CLIENT);
 
         _applyTimeout(builder, _requestTimeout);
@@ -1151,6 +1170,61 @@ public class HttpFlexemarkets implements Flexemarkets {
      * fm-lib-net printed both in full, which this deliberately does not.
      */
     private HttpResponse<String> _exchange(HttpRequest request) throws IOException, InterruptedException {
+        var response = _exchangeOnce(request);
+        var presented = request.headers().firstValue("Authorization").orElse(null);
+        if (presented != null && _tokenExpired(response) && _renewToken(presented)) {
+            var renewed = HttpRequest.newBuilder(request, (name, value) -> !"Authorization".equalsIgnoreCase(name))
+                .header("Authorization", _bearer())
+                .build();
+            response = _exchangeOnce(renewed);
+        }
+        return response;
+    }
+
+    /** A 401 that says the token ran out, as distinct from one that is wrong. */
+    static boolean _tokenExpired(HttpResponse<String> response) {
+        if (response.statusCode() != 401 || response.body() == null) {
+            return false;
+        }
+        var failure = _tryParseConflict(response.body());
+        return failure != null && "ACCOUNT_TOKEN_EXPIRED".equals(failure.error());
+    }
+
+    /**
+     * Sign in again with the credentials this client was made with.
+     *
+     * <p>Tokens live 24 hours, so a robot that ran longer ended the first time
+     * it asked for anything after that, or looped on the refusal -- a Utah
+     * poller, about 250 times a day at 00Z. One sign-in renews it. False when
+     * this client was given a token rather than credentials, or the sign-in
+     * fails; the caller then answers with the refusal it had.
+     *
+     * <p>{@code presented} is the Authorization header the refused request or
+     * stream connect carried. If another thread has renewed since, the token
+     * is not renewed again: the caller retries with the one now current.
+     */
+    boolean _renewToken(String presented) {
+        if (!_canRenew) {
+            return false;
+        }
+        synchronized (_renewLock) {
+            if (!presented.equals(_bearer())) {
+                return true;
+            }
+            try {
+                _token = _signIn();
+                return true;
+            } catch (FlexemarketsException refused) {
+                return false;
+            }
+        }
+    }
+
+    private static boolean _isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    private HttpResponse<String> _exchangeOnce(HttpRequest request) throws IOException, InterruptedException {
         var started = System.nanoTime();
         var response = _dispatch(request);
 
@@ -1209,7 +1283,7 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     private HttpResponse<String> _dispatch(HttpRequest request) throws IOException, InterruptedException {
         if (!_capture) {
-            return _httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            return _httpClient.send(request, GzipBodies.ofString());
         }
 
         var out = System.out;
@@ -1217,7 +1291,7 @@ public class HttpFlexemarkets implements Flexemarkets {
         _printCapturedHeaders(out, ">", request.headers().map());
         out.println(">");
 
-        var response = _httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        var response = _httpClient.send(request, GzipBodies.ofString());
 
         out.printf("< %s%n", response.statusCode());
         _printCapturedHeaders(out, "<", response.headers().map());

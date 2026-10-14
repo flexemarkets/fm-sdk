@@ -50,6 +50,10 @@ class Scripted(Flexemarkets):
         self.subscribed: list[int] = []
         self.submitted: list[str] = []
         self._streams: dict[int, queue.Queue[object]] = {}
+        #: What GET session answers; None mirrors the last session posted.
+        self.server_session: Session | None = None
+        self.session_reads = 0
+        self._posted_session: Session | None = None
         super().__init__(token="t", endpoint=f"http://127.0.0.1:1/api/marketplaces/{MP}")
 
     def _sign_in(self, config: dict[str, str]) -> Any:
@@ -87,7 +91,13 @@ class Scripted(Flexemarkets):
         self.submitted.append(f"{marketplace_id}/{market_id} CANCEL {original_id}")
         return Order(id=original_id + 1, original=original_id, type="CANCEL")
 
+    def session(self, marketplace_id: int) -> Session:  # type: ignore[override]
+        self.session_reads += 1
+        return self.server_session or self._posted_session
+
     def post(self, marketplace_id: int, event: object) -> None:
+        if isinstance(event, Session):
+            self._posted_session = event
         self._streams[marketplace_id].put(event)
 
 
@@ -290,3 +300,116 @@ def test_a_handle_closed_after_its_client_releases_nothing_twice() -> None:
     handle.close()
 
     assert client.unsubscribes == 1
+
+
+# -- refusing locally what the server would refuse ---------------------------
+
+def _session(state: str) -> Session:
+    return Session(marketplace_id=MP, id=30, original=30, state=state)
+
+
+def _holding(can_buy: bool, can_sell: bool) -> Holding:
+    from fm.types import Security
+    return Holding(marketplace_id=MP, session_id=30, owner_id=7, cash=10_000, available_cash=10_000,
+                   securities=[Security(market_id=ALPHA, units=5, available_units=5,
+                                        can_buy=can_buy, can_sell=can_sell)])
+
+
+def test_an_order_into_a_session_that_is_not_open_is_refused_and_not_sent(fm: Scripted) -> None:
+    from fm.exceptions import InvalidArgumentError, OrderRefusedLocallyError
+    with fm.desk(MP) as desk:
+        fm.post(MP, _session("CLOSED"))
+        _await("the session to land", lambda: desk.session() is not None)
+
+        with pytest.raises(OrderRefusedLocallyError, match="session 30 is CLOSED") as refused:
+            desk.submit_limit(ALPHA, "BUY", 1, 1000)
+        assert refused.value.reason == "SESSION_CLOSED"
+        assert isinstance(refused.value, InvalidArgumentError), "caught where the server's 400 is"
+        assert fm.submitted == []
+
+
+def test_an_order_just_after_the_open_is_sent_though_the_event_has_not_landed(fm: Scripted) -> None:
+    """A robot on a timer submits at the open, ahead of the OPEN event. The
+    server has opened, so the desk reads the session once and sends."""
+    with fm.desk(MP) as desk:
+        fm.post(MP, _session("PAUSED"))
+        _await("the session to land", lambda: desk.session() is not None)
+        fm.server_session = _session("OPEN")
+
+        desk.submit_limit(ALPHA, "BUY", 1, 1000)
+
+        assert fm.submitted == [f"{MP}/{ALPHA} BUY 1@1000"]
+
+
+def test_a_closed_session_is_read_at_most_once_a_second_while_refusing(fm: Scripted) -> None:
+    from fm.exceptions import OrderRefusedLocallyError
+    with fm.desk(MP) as desk:
+        fm.post(MP, _session("CLOSED"))
+        _await("the session to land", lambda: desk.session() is not None)
+
+        for _ in range(20):
+            with pytest.raises(OrderRefusedLocallyError):
+                desk.submit_limit(ALPHA, "BUY", 1, 1000)
+
+        assert fm.session_reads == 1
+        assert fm.submitted == []
+
+
+def test_a_session_read_that_fails_refuses_on_what_the_desk_holds(fm: Scripted) -> None:
+    from fm.exceptions import ConnectionFailedError, OrderRefusedLocallyError
+    with fm.desk(MP) as desk:
+        fm.post(MP, _session("CLOSED"))
+        _await("the session to land", lambda: desk.session() is not None)
+
+        def unreachable(marketplace_id: int) -> Session:
+            raise ConnectionFailedError("down")
+        fm.session = unreachable  # type: ignore[method-assign]
+
+        with pytest.raises(OrderRefusedLocallyError, match="session 30 is CLOSED"):
+            desk.submit_limit(ALPHA, "BUY", 1, 1000)
+        assert fm.submitted == []
+
+
+def test_a_side_the_holding_does_not_grant_is_refused_and_the_other_is_sent(fm: Scripted) -> None:
+    from fm.exceptions import OrderRefusedLocallyError
+    with fm.desk(MP) as desk:
+        fm.post(MP, _session("OPEN"))
+        fm.post(MP, _holding(can_buy=True, can_sell=False))
+        _await("the holding to land", lambda: desk.holding() is not None)
+
+        with pytest.raises(OrderRefusedLocallyError, match="does not grant SELL") as refused:
+            desk.submit_limit(ALPHA, "sell", 1, 1000)
+        assert refused.value.reason == "ORDER_NOT_ALLOWED"
+
+        desk.submit_limit(ALPHA, "BUY", 1, 1000)
+        assert fm.submitted == [f"{MP}/{ALPHA} BUY 1@1000"]
+
+
+def test_what_the_desk_does_not_know_goes_to_the_server(fm: Scripted) -> None:
+    """No session or holding yet, or no position in the market: the server decides."""
+    with fm.desk(MP) as desk:
+        desk.submit_limit(ALPHA, "SELL", 1, 1000)
+        fm.post(MP, _session("OPEN"))
+        fm.post(MP, Holding(marketplace_id=MP, session_id=30, owner_id=7))
+        _await("the holding to land", lambda: desk.holding() is not None)
+        desk.submit_limit(ALPHA, "SELL", 1, 1000)
+        assert len(fm.submitted) == 2
+
+
+def test_refuse_locally_false_sends_every_order(fm: Scripted) -> None:
+    with fm.desk(MP, refuse_locally=False) as desk:
+        fm.post(MP, _session("CLOSED"))
+        fm.post(MP, _holding(can_buy=False, can_sell=False))
+        _await("the holding to land", lambda: desk.holding() is not None)
+
+        desk.submit_limit(ALPHA, "BUY", 1, 1000)
+        assert fm.submitted == [f"{MP}/{ALPHA} BUY 1@1000"]
+
+
+def test_a_cancel_is_never_refused_locally(fm: Scripted) -> None:
+    """A manager may cancel in any state, and the desk cannot tell a manager."""
+    with fm.desk(MP) as desk:
+        fm.post(MP, _session("CLOSED"))
+        _await("the session to land", lambda: desk.session() is not None)
+        desk.submit_cancel(ALPHA, 900)
+        assert fm.submitted == [f"{MP}/{ALPHA} CANCEL 900"]

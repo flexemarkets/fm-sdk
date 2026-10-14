@@ -43,6 +43,22 @@ import java.util.function.Consumer;
 public interface Desk extends AutoCloseable {
 
     /**
+     * What a desk checks before it sends a limit order.
+     *
+     * @see fm.role.Streaming#desk(long, OrderChecks)
+     */
+    enum OrderChecks {
+        /**
+         * Refuse locally, with {@link fm.error.OrderRefusedLocallyException},
+         * what fm-server would refuse: a session that is not open, a side the
+         * holding does not grant. The default.
+         */
+        LOCAL,
+        /** Send every order and leave the answer to the server. */
+        SERVER_ONLY
+    }
+
+    /**
      * A desk on any connection, maintained from its event stream.
      *
      * <p>The way a host that supplies its own {@link Flexemarkets} gets one.

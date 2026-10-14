@@ -283,6 +283,42 @@ for (const status of [401, 403]) {
   });
 }
 
+test("a refused reconnect renews the token once and the stream comes back", async () => {
+  // Unless the client can sign in again: the 24-hour token ran out under a
+  // long-running robot, the client renews it, and the next attempt presents
+  // the new token and gets through.
+  const presented: string[] = [];
+  const wss = new WebSocketServer({
+    host: "127.0.0.1", port: 0,
+    verifyClient: (info, cb) => {
+      presented.push(String(info.req.headers.authorization));
+      if (info.req.headers.authorization === "Bearer renewed") cb(true); else cb(false, 401);
+    },
+  });
+  wss.on("connection", (socket) => socket.on("message", (raw) => {
+    if (raw.toString().startsWith("CONNECT\n")) socket.send("CONNECTED\nversion:1.2\nheart-beat:0,0\n\n\0");
+  }));
+  await new Promise<void>((resolve) => wss.on("listening", () => resolve()));
+  const url = `ws://127.0.0.1:${(wss.address() as AddressInfo).port}/api/events`;
+  let token = "Bearer expired";
+  const refusedWith: string[] = [];
+  const events: FmEvent[] = [];
+  const listener = new EventListener(url, () => token, MP, (e) => void events.push(e),
+                                     "fm-sdk-test", parseHolding as never, parseOrder as never,
+                                     async (presented) => { refusedWith.push(presented); token = "Bearer renewed"; return true; });
+  try {
+    await listener.reconnect();
+
+    assert.deepEqual(presented, ["Bearer expired", "Bearer renewed"]);
+    assert.deepEqual(refusedWith, ["Bearer expired"], "the stream says which token was refused");
+    assert.equal(events.filter((e) => kind(e) === "stream-dropped").length, 0, "not ended");
+  } finally {
+    listener.close();
+    for (const client of wss.clients) client.terminate();
+    await new Promise<void>((r) => wss.close(() => r()));
+  }
+});
+
 test("starting against a server that refuses fails the start", async () => {
   const server = await refusing(503);
   const listener = new EventListener(server.url, "Bearer t", MP, () => {},

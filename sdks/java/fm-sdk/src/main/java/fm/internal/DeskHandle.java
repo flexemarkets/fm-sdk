@@ -10,6 +10,7 @@ import fm.model.Session;
 import fm.model.Trade;
 import fm.Flexemarkets;
 import fm.Desk;
+import fm.Desk.OrderChecks;
 import fm.Book;
 import fm.Tape;
 import fm.Subscription;
@@ -37,11 +38,13 @@ class DeskHandle implements Desk {
     private final DefaultDesk _shared;
     private final Runnable _onClose;
     private final List<Subscription> _mySubscriptions = new CopyOnWriteArrayList<>();
+    private final OrderChecks _checks;
     private volatile boolean _closed;
 
-    DeskHandle(DefaultDesk shared, Runnable onClose) {
+    DeskHandle(DefaultDesk shared, Runnable onClose, OrderChecks checks) {
         this._shared = shared;
         this._onClose = onClose;
+        this._checks = checks;
     }
 
     @Override public long marketplaceId() {
@@ -127,7 +130,7 @@ class DeskHandle implements Desk {
 
     @Override public Order submitLimit(long marketId, OrderSide side, long units, long price) {
         _check();
-        return _shared.submitLimit(marketId, side, units, price);
+        return _shared.submitLimit(marketId, side, units, price, _checks);
     }
 
     @Override public Order submitCancel(long marketId, long originalId) {

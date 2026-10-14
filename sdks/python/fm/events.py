@@ -13,7 +13,7 @@ import queue
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 import websockets.sync.client as ws_sync
 
@@ -275,13 +275,21 @@ class EventListener:
     def __init__(
         self,
         ws_url: str,
-        bearer_token: str,
+        bearer_token: str | Callable[[], str],
         marketplace_id: int,
         event_queue: queue.Queue[object],
         client_description: str = "Unspecified client",
+        renew: Callable[[str], bool] | None = None,
     ):
         self._ws_url = ws_url
+        # A callable reads the client's current token on every connect, so a
+        # reconnect after the client renewed its sign-in presents the new one.
         self._bearer_token = bearer_token
+        # Given the token this stream's refused connect presented -- the same
+        # check the client's requests make, so a token another caller has just
+        # renewed is not renewed twice.
+        self._renew = renew
+        self._presented = ""
         self._marketplace_id = marketplace_id
         self._queue = event_queue
         self._client_description = client_description
@@ -354,6 +362,7 @@ class EventListener:
 
     def reconnect(self) -> None:
         """Reconnect after a transport error.  Blocks until connected."""
+        renewed = False
         while not self._closed:
             try:
                 self._disconnect()
@@ -382,6 +391,13 @@ class EventListener:
                 # other failure keeps the existing retry: a server restart or a
                 # network drop IS a blip, and recovering from it is what this
                 # loop is for.
+                # Except once: a client that holds credentials signs in again
+                # -- the 24-hour token ran out under a long-running robot --
+                # and the next attempt presents the new token. A second
+                # refusal is final, as before.
+                if _is_auth_refusal(exc) and not renewed and self._renew is not None and self._renew(self._presented):
+                    renewed = True
+                    continue
                 if _is_auth_refusal(exc):
                     self._closed = True
                     self._queue.put(StreamDropped(exception=PermissionError(
@@ -429,23 +445,30 @@ class EventListener:
 
     # -- WebSocket connection ----------------------------------------------
 
+    def _present(self) -> str:
+        """The token to present on this connect, kept as the one presented."""
+        self._presented = self._bearer_token() if callable(self._bearer_token) else self._bearer_token
+        return self._presented
+
     def _connect(self) -> ws_sync.ClientConnection:
         return ws_sync.connect(
             self._ws_url,
             additional_headers={
-                "Authorization": self._bearer_token,
+                "Authorization": self._present(),
             },
             subprotocols=["v12.stomp", "v11.stomp", "v10.stomp"],
             max_size=_INBOUND_MESSAGE_SIZE,
         )
 
     def _disconnect(self) -> None:
-        if self._ws is not None:
+        # Detached before it is closed, so the receive loop reading it -- which
+        # fails when it closes -- can tell this client's own close from a drop.
+        ws, self._ws = self._ws, None
+        if ws is not None:
             try:
-                self._ws.close()
+                ws.close()
             except Exception:
                 pass
-            self._ws = None
 
     # -- STOMP framing -----------------------------------------------------
 
@@ -497,10 +520,15 @@ class EventListener:
     # -- receive loop (background thread) ----------------------------------
 
     def _receive_loop(self) -> None:
+        # The socket this loop was started for. A reconnect the caller asks for
+        # closes it under this loop, which then fails; that is not a drop, and
+        # reporting one queued a StreamDropped and a second reconnect that tore
+        # down the socket just opened (as Java's c981b65 found).
+        ws = self._ws
         try:
             while not self._closed:
                 try:
-                    raw = self._ws.recv(timeout=_HEARTBEAT_MS / 1000 * 2)  # type: ignore[union-attr]
+                    raw = ws.recv(timeout=_HEARTBEAT_MS / 1000 * 2)  # type: ignore[union-attr]
                 except TimeoutError:
                     continue
 
@@ -537,4 +565,5 @@ class EventListener:
                 # Ignore RECEIPT, CONNECTED, heartbeats, etc.
 
         except Exception as exc:
-            self._on_stream_dropped(exc)
+            if ws is self._ws:
+                self._on_stream_dropped(exc)
