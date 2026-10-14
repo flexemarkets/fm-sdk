@@ -1,5 +1,6 @@
 package fm.internal;
 
+import fm.error.OrderRefusedLocallyException;
 import fm.event.FrameUnreadable;
 import fm.event.GapEvent;
 import fm.event.OrdersUpdate;
@@ -15,6 +16,7 @@ import fm.model.Session;
 import fm.model.Trade;
 import fm.Flexemarkets;
 import fm.Desk;
+import fm.Desk.OrderChecks;
 import fm.Book;
 import fm.Snapshot;
 import fm.Subscription;
@@ -92,6 +94,13 @@ public class DefaultDesk implements Desk {
     private final BookIndex _books;
     private final TapeIndex _trades;
     private final AtomicReference<Session> _session = new AtomicReference<>();
+    /** The last re-read of the session before a refusal: when, and whether it was OPEN. Null until the first. */
+    private final AtomicReference<Recheck> _recheck = new AtomicReference<>();
+
+    private record Recheck(long atNanos, boolean open) { }
+
+    /** How long one re-read of the session answers for: a refusing robot asks again at most this often. */
+    static final long SESSION_RECHECK_NANOS = TimeUnit.SECONDS.toNanos(1);
     private final AtomicReference<Holding> _holding = new AtomicReference<>();
 
     // CopyOnWriteArrayList because handler arrays are read once per
@@ -297,8 +306,75 @@ public class DefaultDesk implements Desk {
 
     @Override
     public Order submitLimit(long marketId, OrderSide side, long units, long price) {
+        return submitLimit(marketId, side, units, price, OrderChecks.LOCAL);
+    }
+
+    /**
+     * Submit a limit order, unless the desk already knows fm-server would
+     * refuse it: a session the desk holds that is not OPEN, or a position in
+     * the market whose grant does not allow the side. Those are thrown as
+     * {@link OrderRefusedLocallyException} and never sent. What the desk does
+     * not know -- no session or holding yet, no position in the market -- goes
+     * to the server, which has the last word.
+     */
+    Order submitLimit(long marketId, OrderSide side, long units, long price, OrderChecks checks) {
         _ensureOpen();
+        if (checks == OrderChecks.LOCAL) {
+            _refuseLocally(marketId, side);
+        }
         return _flexemarkets.submitLimit(_marketplaceId, marketId, side, units, price);
+    }
+
+    private void _refuseLocally(long marketId, OrderSide side) {
+        var session = _session.get();
+        if (session != null && session.state() != null
+                && !Session.STATE_OPEN.equalsIgnoreCase(session.state())
+                && !_openedSince()) {
+            throw new OrderRefusedLocallyException("SESSION_CLOSED",
+                "Not sent: session " + session.id() + " is " + session.state() + ", not OPEN.");
+        }
+        var holding = _holding.get();
+        if (holding == null || side == null) {
+            return;
+        }
+        holding.security(marketId).ifPresent(security -> {
+            boolean granted = OrderSide.BUY == side ? security.canBuy() : security.canSell();
+            if (!granted) {
+                throw new OrderRefusedLocallyException("ORDER_NOT_ALLOWED",
+                    "Not sent: your holding does not grant " + side + " in market " + marketId + ".");
+            }
+        });
+    }
+
+    /**
+     * Whether the session has opened although the desk has not heard yet.
+     *
+     * <p>A robot submitting on a timer right at the open is ahead of the OPEN
+     * event, and was refused locally for an order the server would take. So
+     * before refusing on a session that is not OPEN, read it once -- at most
+     * every second -- and send if it is OPEN now. A read that fails changes
+     * nothing: the desk refuses on what it holds, as before.
+     *
+     * <p>The read decides this order only. {@link #session()} still answers
+     * with what the stream last said, and catches up when the OPEN event
+     * arrives: the stream orders session changes, and a read slotted between
+     * its events could put an older state back.
+     */
+    private boolean _openedSince() {
+        long now = System.nanoTime();
+        var last = _recheck.get();
+        if (last != null && now - last.atNanos() < SESSION_RECHECK_NANOS) {
+            return last.open();
+        }
+        boolean open;
+        try {
+            Session fresh = _flexemarkets.session(_marketplaceId);
+            open = fresh != null && Session.STATE_OPEN.equalsIgnoreCase(fresh.state());
+        } catch (RuntimeException unknown) {
+            open = false;
+        }
+        _recheck.set(new Recheck(now, open));
+        return open;
     }
 
     @Override

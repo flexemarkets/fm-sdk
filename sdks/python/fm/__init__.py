@@ -15,6 +15,7 @@ from .exceptions import (
     FlexemarketsError,
     HttpError,
     InvalidArgumentError,
+    OrderRefusedLocallyError,
     PersonHasMarketplaceDataError,
 )
 from .desk import GapEvent, Desk, DeskRecovery, Subscription
@@ -103,6 +104,7 @@ __all__ = [
     "AuthenticationError",
     "AuthorizationError",
     "InvalidArgumentError",
+    "OrderRefusedLocallyError",
     "AccountNameConflictError",
     "ApiError",
     "HttpError",

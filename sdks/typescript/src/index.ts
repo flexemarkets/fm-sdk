@@ -58,6 +58,7 @@ export {
   AuthenticationError,
   AuthorizationError,
   InvalidArgumentError,
+  OrderRefusedLocallyError,
   ConnectionFailedError,
   ConfigurationError,
   ConflictError,

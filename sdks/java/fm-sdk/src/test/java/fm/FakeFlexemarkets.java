@@ -200,5 +200,5 @@ class FakeFlexemarkets implements Flexemarkets {
 
     @Override public void listen(long id, BlockingQueue<Object> queue) { throw _no("listen"); }
     @Override public void reconnect() { throw _no("reconnect"); }
-    @Override public Desk desk(long id) { throw _no("desk"); }
+    @Override public Desk desk(long id, Desk.OrderChecks checks) { throw _no("desk"); }
 }

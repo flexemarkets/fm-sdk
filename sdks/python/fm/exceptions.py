@@ -17,6 +17,23 @@ class InvalidArgumentError(FlexemarketsError):
     """Raised on 400 Bad Request responses."""
 
 
+class OrderRefusedLocallyError(InvalidArgumentError):
+    """An order the desk did not send, because fm-server would refuse it.
+
+    Raised by ``Desk.submit_limit`` when the session the desk holds is not
+    open, or the holding it holds does not grant the order's side in that
+    market -- the two refusals fm-server answers with 400 ``SESSION_CLOSED``
+    and ``ORDER_NOT_ALLOWED``, which ``reason`` names. A subclass of
+    :class:`InvalidArgumentError`, so a caller catching the server's answer
+    catches this too. ``flexemarkets.desk(id, refuse_locally=False)`` sends
+    every order to the server instead.
+    """
+
+    def __init__(self, reason: str, message: str):
+        super().__init__(message)
+        self.reason = reason
+
+
 class ConflictError(FlexemarketsError):
     """General 409 Conflict error."""
 

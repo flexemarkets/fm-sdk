@@ -63,6 +63,25 @@ export class FlexemarketsError extends Error {}
 export class AuthenticationError extends FlexemarketsError {}
 export class AuthorizationError extends FlexemarketsError {}
 export class InvalidArgumentError extends FlexemarketsError {}
+
+/**
+ * An order the desk did not send, because fm-server would refuse it.
+ *
+ * Rejected by `Desk.submitLimit` when the session the desk holds is not open,
+ * or the holding it holds does not grant the order's side in that market --
+ * the two refusals fm-server answers with 400 `SESSION_CLOSED` and
+ * `ORDER_NOT_ALLOWED`, which `reason` names. An {@link InvalidArgumentError},
+ * so a caller catching the server's answer catches this too.
+ * `flexemarkets.desk(id, { refuseLocally: false })` sends every order instead.
+ */
+export class OrderRefusedLocallyError extends InvalidArgumentError {
+  constructor(
+    readonly reason: "SESSION_CLOSED" | "ORDER_NOT_ALLOWED",
+    message: string,
+  ) {
+    super(message);
+  }
+}
 export class ConnectionFailedError extends FlexemarketsError {}
 export class ConfigurationError extends FlexemarketsError {}
 
@@ -1678,12 +1697,19 @@ export class Flexemarkets {
    * callers with different identities each get their own desk —
    * multi-tenant WS multiplexing is a server-side concern, not a
    * client-side one.
+   *
+   * `submitLimit` on the returned handle rejects, without sending, an order
+   * the desk knows fm-server would refuse -- a session that is not open, a
+   * side the holding does not grant -- with {@link OrderRefusedLocallyError}.
+   * `{ refuseLocally: false }` sends every order and leaves the answer to the
+   * server.
    */
-  async desk(marketplaceId: number): Promise<Desk> {
+  async desk(marketplaceId: number, options: { refuseLocally?: boolean } = {}): Promise<Desk> {
+    const refuseLocally = options.refuseLocally ?? true;
     const existing = this._sharedViews.get(marketplaceId);
     if (existing !== undefined) {
       existing.refCount++;
-      return new DeskHandle(existing.desk, () => this._releaseSharedView(marketplaceId));
+      return new DeskHandle(existing.desk, () => this._releaseSharedView(marketplaceId), refuseLocally);
     }
     // Two concurrent desk() calls for the same marketplaceId need
     // to dedupe — JS is single-threaded but awaits introduce
@@ -1708,10 +1734,10 @@ export class Flexemarkets {
     if (registered !== undefined) {
       if (registered.desk !== shared) shared.close();
       registered.refCount++;
-      return new DeskHandle(registered.desk, () => this._releaseSharedView(marketplaceId));
+      return new DeskHandle(registered.desk, () => this._releaseSharedView(marketplaceId), refuseLocally);
     }
     this._sharedViews.set(marketplaceId, { desk: shared, refCount: 1 });
-    return new DeskHandle(shared, () => this._releaseSharedView(marketplaceId));
+    return new DeskHandle(shared, () => this._releaseSharedView(marketplaceId), refuseLocally);
   }
 
   _releaseSharedView(marketplaceId: number): void {
