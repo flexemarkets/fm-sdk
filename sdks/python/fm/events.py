@@ -461,12 +461,14 @@ class EventListener:
         )
 
     def _disconnect(self) -> None:
-        if self._ws is not None:
+        # Detached before it is closed, so the receive loop reading it -- which
+        # fails when it closes -- can tell this client's own close from a drop.
+        ws, self._ws = self._ws, None
+        if ws is not None:
             try:
-                self._ws.close()
+                ws.close()
             except Exception:
                 pass
-            self._ws = None
 
     # -- STOMP framing -----------------------------------------------------
 
@@ -518,10 +520,15 @@ class EventListener:
     # -- receive loop (background thread) ----------------------------------
 
     def _receive_loop(self) -> None:
+        # The socket this loop was started for. A reconnect the caller asks for
+        # closes it under this loop, which then fails; that is not a drop, and
+        # reporting one queued a StreamDropped and a second reconnect that tore
+        # down the socket just opened (as Java's c981b65 found).
+        ws = self._ws
         try:
             while not self._closed:
                 try:
-                    raw = self._ws.recv(timeout=_HEARTBEAT_MS / 1000 * 2)  # type: ignore[union-attr]
+                    raw = ws.recv(timeout=_HEARTBEAT_MS / 1000 * 2)  # type: ignore[union-attr]
                 except TimeoutError:
                     continue
 
@@ -558,4 +565,5 @@ class EventListener:
                 # Ignore RECEIPT, CONNECTED, heartbeats, etc.
 
         except Exception as exc:
-            self._on_stream_dropped(exc)
+            if ws is self._ws:
+                self._on_stream_dropped(exc)
