@@ -72,6 +72,21 @@ With new types `MarketplaceRobot`, `RobotManifest`, `RobotParameter`,
 manager fixes a parameter (a value; `control` null) or exposes it to
 participants within a range. See API-REFERENCE.md, *Robots*.
 
+**A client made with credentials renews its own sign-in** (all three). A
+token lives 24 hours; when a call is refused as `ACCOUNT_TOKEN_EXPIRED`, the
+client signs in again once and resends, and the event stream renews on a
+refused reconnect. A client given a token rather than credentials has
+nothing to sign in with, and still gets the 401.
+
+**Each call reports what the last one cost** (all three). The previous
+round trip rides on the next request as `Client-Timing: rtt=<ns>`, with
+`;net=<ns>` when the server's `Server-Timing` said its share, so fm-server's
+Connections view shows a robot's latency. Nothing to do; the figure is one
+call late by design.
+
+**Java asks for compressed responses** (`Accept-Encoding: gzip`) and
+decodes them. Nothing to do.
+
 ---
 
 ## What answers differently
@@ -97,6 +112,21 @@ Fixes that change what a call does, in the order a robot would notice them:
   `onSessionChange` never fired.
 - **Python: a closed desk's `books()` raises**, as its other reads already
   did, rather than answering the books it had when it closed.
+- **A desk refuses locally what fm-server would refuse** (all three): a
+  limit order while the session the desk holds is not open -- after
+  reading the session once more, in case the server opened before the
+  event arrived -- or on a side the holding does not grant. It raises
+  `OrderRefusedLocallyException` (Java) / `OrderRefusedLocallyError`
+  (Python, TypeScript), an invalid-argument error, so code that catches
+  those catches this too, and no request is sent. To send every order and
+  leave the answer to the server: `desk(id, Desk.OrderChecks.SERVER_ONLY)`
+  (Java), `desk(id, refuse_locally=False)` or per order
+  `submit_limit(..., refuse_locally=False)` (Python),
+  `desk(id, { refuseLocally: false })` (TypeScript).
+- **Python: a reconnect you ask for no longer reports a drop**, as Java's
+  already did not.
+- **"view" is back where the 0.4 View -> Desk rename took the English
+  word** in the documentation and comments. No API changed.
 
 ---
 
