@@ -154,6 +154,35 @@ jobs:
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
           gpg-passphrase: GPG_PASSPHRASE
 
+      # The runner's own Maven is not the one this bundle was ever good under.
+      # ubuntu-24.04 moved to Maven 3.10.0, whose staging install leaves the
+      # local-repository bookkeeping -- com/flexemarkets/fm-sdk/
+      # maven-metadata-local.xml and 0.x.y/_remote.repositories -- in
+      # central-staging, and central-publishing zips that directory whole.
+      # Central then refuses every bundle with "Bundle has content that does
+      # NOT have a .pom file: com/flexemarkets/fm-sdk". 0.3.4, 0.4.0 and 0.5.0
+      # all failed that way here, and all three went up from a desktop on
+      # 3.9.16, whose bundle carries only the artifacts. Built at v0.5.0 under
+      # both, the difference is exactly those two files.
+      - name: Use Maven 3.9.16
+        env:
+          MAVEN_VERSION: "3.9.16"
+        run: |
+          base="https://repo1.maven.org/maven2/org/apache/maven/apache-maven/$MAVEN_VERSION"
+          curl -fsSL -o maven.tar.gz "$base/apache-maven-$MAVEN_VERSION-bin.tar.gz"
+          echo "$(curl -fsSL "$base/apache-maven-$MAVEN_VERSION-bin.tar.gz.sha512")  maven.tar.gz" | sha512sum -c -
+          tar xzf maven.tar.gz -C "$RUNNER_TEMP"
+          rm maven.tar.gz
+          echo "$RUNNER_TEMP/apache-maven-$MAVEN_VERSION/bin" >> "$GITHUB_PATH"
+
+      - name: Refuse any other Maven
+        run: |
+          mvn -v
+          mvn -v | head -1 | grep -q '^Apache Maven 3\.9\.16 ' || {
+            echo "maven: not 3.9.16 -- the bundle would carry staging bookkeeping and Central would refuse it."
+            exit 1
+          }
+
       # Same env as the deploy below, deliberately: a secret that is missing or
       # scoped to an environment this job does not name arrives empty, and
       # Central answers that with a 401 -- by which point npm and PyPI have
@@ -193,14 +222,10 @@ jobs:
           # dependency. So: run it, and if it goes red, ask Central.
           #
           # -pl keeps the ticker example out of the reactor, as `make
-          # publish-java` does. The plugin zips central-staging in whichever
-          # module ends the reactor; when that is the ticker, which stages
-          # nothing, the zip carries the staging install's own bookkeeping
-          # (com/flexemarkets/fm-sdk/maven-metadata-local.xml and
-          # _remote.repositories) and Central refuses the whole bundle with
-          # "Bundle has content that does NOT have a .pom file:
-          # com/flexemarkets/fm-sdk". 0.3.4 and 0.4.0 both failed that way
-          # here; 0.3.4 then passed from `make publish-java`.
+          # publish-java` does. It was added believing the ticker ending the
+          # reactor put the staging bookkeeping in the bundle; 0.5.0 went out
+          # without the ticker and was refused the same way. The cause was the
+          # runner's Maven 3.10.0 -- see "Use Maven 3.9.16" above.
           set +e
           mvn -B deploy -P release --file sdks/java/pom.xml -pl '!examples/ticker'
           STATUS=$?
