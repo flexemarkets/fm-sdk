@@ -34,8 +34,15 @@ class UserAgentTest {
      * the pom; the filtered resource carries the pom's. A SNAPSHOT build
      * reads x.y.z-SNAPSHOT, which the server still cuts to x.y.
      */
+    /**
+     * The version Maven builds, from VERSION: the same at a release, and
+     * between releases the Maven spelling of a development version --
+     * {@code 0.5.0-dev0} in VERSION is {@code 0.5.0-SNAPSHOT} in the poms
+     * ({@code make set-version}). Read verbatim, the test held only at a
+     * release, and failed the first build after one.
+     */
     private static String _released() throws IOException {
-        return Files.readString(Path.of("../../../VERSION")).trim();
+        return Files.readString(Path.of("../../../VERSION")).trim().replaceAll("-dev\\d+$", "-SNAPSHOT");
     }
 
     @Test
