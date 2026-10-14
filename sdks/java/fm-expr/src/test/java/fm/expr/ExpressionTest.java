@@ -139,6 +139,53 @@ class ExpressionTest {
         }
 
         @Test
+        void minAndMax() {
+            assertThat(eval("min(3, -2)")).isEqualTo(num("-2"));
+            assertThat(eval("max(3, -2)")).isEqualTo(num("3"));
+            assertThat(eval("max(now.cash, 0)", Map.of("now.cash", new Value.Num(new java.math.BigDecimal("-50"))))).isEqualTo(num("0"));
+        }
+
+        @Test
+        @DisplayName("round is half up, to a whole number")
+        void round() {
+            assertThat(eval("round(2.5)")).isEqualTo(num("3"));
+            assertThat(eval("round(2.49)")).isEqualTo(num("2"));
+            assertThat(eval("round(-2.5)")).isEqualTo(num("-3"));
+        }
+
+        @Test
+        void expLnAndSqrtAreKeptToTheDivisionScale() {
+            assertThat(eval("exp(0)")).isEqualTo(num("1"));
+            assertThat(eval("exp(1)")).isEqualTo(num("2.718282"));
+            assertThat(eval("ln(1)")).isEqualTo(num("0"));
+            assertThat(eval("ln(exp(2))")).isEqualTo(num("2"));
+            assertThat(eval("sqrt(16)")).isEqualTo(num("4"));
+            assertThat(eval("sqrt(2)")).isEqualTo(num("1.414214"));
+        }
+
+        @Test
+        @DisplayName("a state-contingent payment needs no robot: round(exp(me.x) / 100)")
+        void aStateContingentPayment() {
+            assertThat(eval("round(exp(me.x) / 100)", Map.of("me.x", new Value.Num(new java.math.BigDecimal("10")))))
+                .isEqualTo(num("220"));
+        }
+
+        @Test
+        void noFiniteValueIsAnError() {
+            assertThatThrownBy(() -> eval("ln(0)")).hasMessage("ln has no finite value there");
+            assertThatThrownBy(() -> eval("ln(-1)")).hasMessage("ln has no finite value there");
+            assertThatThrownBy(() -> eval("sqrt(-4)")).hasMessage("sqrt has no finite value there");
+            assertThatThrownBy(() -> eval("exp(1000)")).hasMessage("exp has no finite value there");
+        }
+
+        @Test
+        void theNewFunctionsTakeNumbersAndTheirArity() {
+            assertThatThrownBy(() -> eval("round(me.v)", Map.of("me.v", Value.Vector.of(1)))).hasMessage("round needs a number, not a vector");
+            assertThatThrownBy(() -> eval("min(1)")).hasMessageContaining("min takes 2 arguments, not 1");
+            assertThatThrownBy(() -> eval("sqrt(1, 2)")).hasMessageContaining("sqrt takes 1 argument, not 2");
+        }
+
+        @Test
         void sum() {
             assertThat(eval("sum(me.v)", Map.of("me.v", Value.Vector.of(15, 5, 3)))).isEqualTo(num("23"));
             assertThat(eval("sum(me.v)", Map.of("me.v", Value.Vector.of()))).isEqualTo(num("0"));
