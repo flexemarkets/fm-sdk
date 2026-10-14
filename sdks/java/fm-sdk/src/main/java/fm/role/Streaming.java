@@ -61,7 +61,7 @@ public interface Streaming {
     }
 
     /**
-     * A maintained desk of the order books, kept current from the event
+     * A maintained view of the order books, kept current from the event
      * stream, checking orders as {@code checks} says before it sends them.
      *
      * @param marketplaceId the marketplace to open a desk on
