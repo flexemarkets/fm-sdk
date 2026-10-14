@@ -1173,7 +1173,10 @@ public class HttpFlexemarkets implements Flexemarkets {
         var response = _exchangeOnce(request);
         var presented = request.headers().firstValue("Authorization").orElse(null);
         if (presented != null && _tokenExpired(response) && _renewToken(presented)) {
-            var renewed = HttpRequest.newBuilder(request, (name, value) -> !"Authorization".equalsIgnoreCase(name))
+            // Without the timing the first send carried, too: that figure was
+            // reported once already, and the resend is a call of its own.
+            var renewed = HttpRequest.newBuilder(request, (name, value) -> !"Authorization".equalsIgnoreCase(name)
+                    && !HEADER_CLIENT_TIMING.equalsIgnoreCase(name))
                 .header("Authorization", _bearer())
                 .build();
             response = _exchangeOnce(renewed);
