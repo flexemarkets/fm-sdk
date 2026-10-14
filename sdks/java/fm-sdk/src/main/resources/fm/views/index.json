@@ -2,7 +2,13 @@
   {
     "id": "smith62",
     "label": "Smith 62 — demand and supply",
-    "description": "A group and a role badge in the header, the profit under the order form, and the private state they read: a participant's group, side and induced-value schedule.",
+    "description": "A group and a role badge in the header, the profit and the participant's own values or costs under the order form, and the private state they read: a participant's group, side and induced-value schedule.",
     "resource": "smith62.json"
+  },
+  {
+    "id": "ssw-sequestered-dividends",
+    "label": "SSW — dividends earned, paid at the end",
+    "description": "The usual trading panels, and under them the dividends a participant has earned so far, held back until the last period, and the private state they read: a participant's dividends, in cents.",
+    "resource": "ssw-sequestered-dividends.json"
   }
 ]

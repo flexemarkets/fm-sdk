@@ -38,6 +38,14 @@
             }
           ]
         }
+      },
+      {
+        "panel": "score",
+        "opts": {
+          "label": "Your values / costs",
+          "format": "cents",
+          "expr": "me.valuations"
+        }
       }
     ],
     "sidebar": [
