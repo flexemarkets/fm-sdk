@@ -135,7 +135,7 @@ try (var fm = Flexemarkets.connect(null, null, "my-bot")) {
 }
 ```
 
-Requires Java 25+ (the SDK uses preview features).
+Requires Java 21 or later. No preview features, so no flags.
 
 See [sdks/java/README.md](sdks/java/README.md) for full documentation.
 
