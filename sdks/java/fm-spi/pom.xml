@@ -32,6 +32,9 @@
         form and its command line from flags, through one implementation.
         0.0.13 adds settle(): what each participant is paid when a rotation's
         session closes, from their holding and the state it was staged with.
+        0.0.14: CliBuilder refuses a launch value outside the robot's own hard
+        bounds, on every host, and a float is decimal syntax -- NaN, Infinity,
+        1.5d and hex floats are refused rather than parsed as doubles.
         Bump the patch for an additive change, and the major only alongside
         ServiceProvider.SPI_VERSION, since hosts reject a provider whose major
         differs from their own.
@@ -39,7 +42,7 @@
         Set with `make set-spi-version V=x.y.z`. `make set-version` moves the
         parent reference below but leaves this alone.
     -->
-    <version>0.0.13</version><!-- spi-version -->
+    <version>0.0.14</version><!-- spi-version -->
 
     <packaging>jar</packaging>
 

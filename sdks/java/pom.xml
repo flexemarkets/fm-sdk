@@ -349,18 +349,11 @@
                             <excludeArtifacts>
                                 <excludeArtifact>fm-sdk-parent</excludeArtifact>
                                 <excludeArtifact>fm-ticker</excludeArtifact>
-                                <!-- fm-spi is excluded again: 0.0.13 went to
-                                     Central on 2026-09-22 and has not moved
-                                     since, so this bundle would carry an
-                                     already-published coordinate and Central
-                                     would refuse the whole thing, fm-sdk
-                                     included. Take it off this list the next
-                                     time set-spi-version moves the contract. -->
-                                <excludeArtifact>fm-spi</excludeArtifact>
                                 <!-- fm-expr is excluded again: 0.0.1 went to
                                      Central on 2026-09-22 and has not moved
-                                     since. Same rule as fm-spi above: take it
-                                     off when set-expr-version moves it. -->
+                                     since. A bundle carrying an already-published
+                                     coordinate is refused whole, so take it off
+                                     this list when set-expr-version moves it. -->
                                 <excludeArtifact>fm-expr</excludeArtifact>
                             </excludeArtifacts>
                         </configuration>
