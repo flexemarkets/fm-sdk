@@ -64,6 +64,11 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v6
+        with:
+          # The publish check below reads the release record -- v<version>,
+          # and fm-spi-v<n> / fm-expr-v<n> when they ship -- as the gate does.
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v6
@@ -99,6 +104,11 @@ jobs:
       id-token: write # OIDC for npm Trusted Publishing — no token needed
     steps:
       - uses: actions/checkout@v6
+        with:
+          # The publish check below reads the release record -- v<version>,
+          # and fm-spi-v<n> / fm-expr-v<n> when they ship -- as the gate does.
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -142,6 +152,11 @@ jobs:
     environment: maven
     steps:
       - uses: actions/checkout@v6
+        with:
+          # The publish check below reads the release record -- v<version>,
+          # and fm-spi-v<n> / fm-expr-v<n> when they ship -- as the gate does.
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Set up JDK 25
         uses: actions/setup-java@v5
