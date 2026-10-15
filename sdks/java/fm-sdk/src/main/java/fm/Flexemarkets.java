@@ -91,7 +91,10 @@ public interface Flexemarkets
      * out what the server actually said, and {@code impersonateAccount} makes
      * an administrator's calls answer for that account instead of their own.
      * The server refuses impersonation for anyone else, so this is a request,
-     * not a grant.
+     * not a grant. Since fm-server 4.7 it also asks for the administrator's
+     * password again, for a fifteen-minute token sent beside the account: the
+     * connection gets one at connect and renews it as it runs, so impersonating
+     * needs a credential file with a password, not a token.
      *
      * <p>A provider that claims the endpoint is handed the plain connect: these
      * two are properties of the HTTP exchange, and a provider that does not

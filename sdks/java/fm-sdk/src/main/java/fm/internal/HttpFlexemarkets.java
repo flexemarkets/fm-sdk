@@ -47,6 +47,7 @@ import java.net.URISyntaxException;
 import java.net.UnknownHostException;
 import java.net.http.HttpClient;
 import java.time.Duration;
+import java.time.Instant;
 import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -206,6 +207,24 @@ public class HttpFlexemarkets implements Flexemarkets {
     private static final String HEADER_IMPERSONATION = "X-FM-Account";
 
     /**
+     * The token fm-server asks for beside {@link #HEADER_IMPERSONATION}
+     * (fm-server 4.7, SECURITY-VULNERABILITIES #3): issued to this
+     * administrator for that account by {@code POST /api/v1/impersonation},
+     * given their password again, and good for fifteen minutes. Without it
+     * the server refuses the account header, however the caller signed in.
+     */
+    private static final String HEADER_IMPERSONATION_TOKEN = "X-FM-Impersonation";
+
+    /** How long before it expires an impersonation token is asked for again, so none lapses in flight. */
+    static final Duration IMPERSONATION_RENEW_BEFORE = Duration.ofSeconds(30);
+
+    /** What {@code POST /api/v1/impersonation} answers. */
+    private record ImpersonationGrant(String token, Long accountId, Instant expiresAt) {
+    }
+
+    private static final TypeReference<ImpersonationGrant> IMPERSONATION_GRANT_TYPE = new TypeReference<>() {};
+
+    /**
      * What the previous call cost, reported to the server on the next one.
      *
      * <p>The same header fm-ui has always sent, and the same one fm-server
@@ -302,6 +321,9 @@ public class HttpFlexemarkets implements Flexemarkets {
     private final Person _user;
 
     private final String _impersonateAccount;
+    /** The current impersonation token, renewed by {@link #_impersonationToken}; null when not impersonating. */
+    private volatile ImpersonationGrant _impersonation;
+    private final Object _impersonationLock = new Object();
     private final boolean _capture;
 
     private Events _events;
@@ -331,9 +353,26 @@ public class HttpFlexemarkets implements Flexemarkets {
                 && !_isBlank(properties.getProperty("account"))
                 && !_isBlank(properties.getProperty("email"))
                 && !_isBlank(properties.getProperty("password"));
+        if (_impersonateAccount != null) {
+            // Only a password gets an impersonation token. Refused here, at
+            // connect, rather than as a 403 on the first call that names the
+            // account -- by which time a robot has started and a script has
+            // half run.
+            if (_isBlank(properties.getProperty("password"))) {
+                throw new ConfigurationException("Acting as another account (" + _impersonateAccount
+                        + ") needs the administrator's password: fm-server asks for it again to issue an"
+                        + " impersonation token. Connect with a credential file holding account, email and"
+                        + " password, not a token.");
+            }
+        }
+
         this._token = _signIn();
         this._account = _token.account();
         this._user = _token.person();
+
+        if (_impersonateAccount != null) {
+            this._impersonation = _grantImpersonation();
+        }
     }
 
     /** The Authorization header for the current sign-in. */
@@ -1116,6 +1155,7 @@ public class HttpFlexemarkets implements Flexemarkets {
 
         if (_impersonateAccount != null) {
             builder.header(HEADER_IMPERSONATION, _impersonateAccount);
+            builder.header(HEADER_IMPERSONATION_TOKEN, _impersonationToken());
         }
 
         // What the previous call cost, carried on this one. A round trip is not
@@ -1319,13 +1359,14 @@ public class HttpFlexemarkets implements Flexemarkets {
     private static boolean _isCredentialRoute(HttpRequest request) {
         var path = request.uri().getPath();
 
-        return path.endsWith("/tokens") || path.endsWith("/refresh") || path.contains("/otp");
+        return path.endsWith("/tokens") || path.endsWith("/refresh") || path.contains("/otp")
+                || path.endsWith("/impersonation");
     }
 
     private static void _printCapturedHeaders(java.io.PrintStream out, String prefix,
                                              Map<String, List<String>> headers) {
         headers.keySet().stream().sorted().forEach(name -> {
-            var value = "authorization".equalsIgnoreCase(name)
+            var value = "authorization".equalsIgnoreCase(name) || HEADER_IMPERSONATION_TOKEN.equalsIgnoreCase(name)
                     ? "[redacted]"
                     : headers.get(name).toString();
             out.printf("%s %s: %s%n", prefix, name, value);
@@ -1605,6 +1646,44 @@ public class HttpFlexemarkets implements Flexemarkets {
             Thread.currentThread().interrupt();
             throw new ApiException(what + " request interrupted", e);
         }
+    }
+
+    /** The impersonation token to send, asked for again when it is within {@link #IMPERSONATION_RENEW_BEFORE} of expiring. */
+    private String _impersonationToken() {
+        var grant = _impersonation;
+        if (_current(grant)) {
+            return grant.token();
+        }
+        synchronized (_impersonationLock) {
+            if (!_current(_impersonation)) {
+                _impersonation = _grantImpersonation();
+            }
+            return _impersonation.token();
+        }
+    }
+
+    private static boolean _current(ImpersonationGrant grant) {
+        return grant != null && grant.expiresAt() != null
+                && Instant.now().isBefore(grant.expiresAt().minus(IMPERSONATION_RENEW_BEFORE));
+    }
+
+    /**
+     * Trade the administrator's password for a token to act as the account
+     * named at connect. Built here rather than by {@link #_request}, which
+     * would put the impersonation headers on the very call that gets them.
+     */
+    private ImpersonationGrant _grantImpersonation() {
+        var json = MAPPER.writeValueAsString(Map.of(
+                "account", _impersonateAccount, "currentPassword", _properties.getProperty("password")));
+        var builder = HttpRequest.newBuilder()
+            .uri(URI.create(_v1("/impersonation")))
+            .header("Authorization", _bearer())
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json")
+            .header("User-Agent", FM_SDK_CLIENT)
+            .POST(HttpRequest.BodyPublishers.ofString(json));
+        _applyTimeout(builder, _requestTimeout);
+        return _credentialExchange(builder.build(), IMPERSONATION_GRANT_TYPE, "Impersonation token");
     }
 
     /** Applies a timeout unless it was configured away. */
