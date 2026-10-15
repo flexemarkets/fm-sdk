@@ -1582,19 +1582,28 @@ public class HttpFlexemarkets implements Flexemarkets {
                 .build();
         }
 
+        return _credentialExchange(request, TOKEN_TYPE, "Sign-in");
+    }
+
+    /**
+     * Send a request whose answer is a credential -- a sign-in, an
+     * impersonation token -- and read it, or throw what the server said.
+     * {@code what} names the request in a transport failure.
+     */
+    private <T> T _credentialExchange(HttpRequest request, TypeReference<T> type, String what) {
         try {
             var response = _exchange(request);
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw _failureFor(response.statusCode(), response.body());
             }
-            return MAPPER.readValue(response.body(), TOKEN_TYPE);
+            return MAPPER.readValue(response.body(), type);
         } catch (FlexemarketsException e) {
             throw e;
         } catch (IOException e) {
-            throw transportFailure("Sign-in request failed", request, e);
+            throw transportFailure(what + " request failed", request, e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new ApiException("Sign-in request interrupted", e);
+            throw new ApiException(what + " request interrupted", e);
         }
     }
 
