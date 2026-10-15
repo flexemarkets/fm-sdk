@@ -3,6 +3,7 @@ package fm.manifest;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
@@ -186,13 +187,13 @@ class CliBuilderContractTest {
     void aValueOutsideTheRobotsOwnBoundsIsNotWithinThem() {
         ParameterSpec bounded = new ParameterSpec("penalty", "PENALTY", ParameterType.POSITIONAL,
                 ValueType.FLOAT, null, null, true, null, null, null, null, null,
-                new java.math.BigDecimal("0"), new java.math.BigDecimal("1"));
+                new BigDecimal("0"), new BigDecimal("1"));
 
-        assertThat(bounded.withinHardBounds(new java.math.BigDecimal("0.5"))).isTrue();
-        assertThat(bounded.withinHardBounds(new java.math.BigDecimal("0"))).as("inclusive").isTrue();
-        assertThat(bounded.withinHardBounds(new java.math.BigDecimal("1"))).as("inclusive").isTrue();
-        assertThat(bounded.withinHardBounds(new java.math.BigDecimal("-0.1"))).isFalse();
-        assertThat(bounded.withinHardBounds(new java.math.BigDecimal("1.1"))).isFalse();
+        assertThat(bounded.withinHardBounds(new BigDecimal("0.5"))).isTrue();
+        assertThat(bounded.withinHardBounds(new BigDecimal("0"))).as("inclusive").isTrue();
+        assertThat(bounded.withinHardBounds(new BigDecimal("1"))).as("inclusive").isTrue();
+        assertThat(bounded.withinHardBounds(new BigDecimal("-0.1"))).isFalse();
+        assertThat(bounded.withinHardBounds(new BigDecimal("1.1"))).isFalse();
         assertThat(bounded.withinHardBounds(null)).as("nothing is not a value in range").isFalse();
         assertThat(bounded.hardBoundsDescription()).isEqualTo("0 to 1");
     }
@@ -205,8 +206,8 @@ class CliBuilderContractTest {
     void anUndeclaredBoundAdmitsEverything() {
         ParameterSpec unbounded = _positional("penalty", true);
 
-        assertThat(unbounded.withinHardBounds(new java.math.BigDecimal("-1e9"))).isTrue();
-        assertThat(unbounded.withinHardBounds(new java.math.BigDecimal("1e9"))).isTrue();
+        assertThat(unbounded.withinHardBounds(new BigDecimal("-1e9"))).isTrue();
+        assertThat(unbounded.withinHardBounds(new BigDecimal("1e9"))).isTrue();
         assertThat(unbounded.hardBoundsDescription()).isEqualTo("unbounded to unbounded");
     }
 
@@ -217,5 +218,53 @@ class CliBuilderContractTest {
                 Map.of("credential", "a-token")))
                 .isInstanceOf(CliBuilder.InvalidLaunchException.class)
                 .hasMessageContaining("penalty");
+    }
+
+    private static Manifest _bounded() {
+        ParameterSpec penalty = new ParameterSpec("penalty", "PENALTY", ParameterType.POSITIONAL,
+                ValueType.FLOAT, null, null, true, null, null, null, null, null,
+                new BigDecimal("0"), new BigDecimal("1"));
+        return new Manifest("fm-maker-mvo", "MVO Market Maker", "0.9.0", null, null, "jar",
+                new Manifest.Parameters(List.of(penalty), List.of(_pairs("symbolSpreads")),
+                        List.of(_platform("credential", "-C", "session-token"))));
+    }
+
+    /**
+     * Launching refuses a value outside the robot's own bounds, in every host
+     * that builds its command line here -- not only in the one that thought to
+     * check, which let a container launched directly take what fm-server refused.
+     */
+    @Test
+    void aValueOutsideTheRobotsOwnBoundsIsRefusedAtLaunch() {
+        assertThatThrownBy(() -> CliBuilder.arguments(_bounded(),
+                Map.of("penalty", "1.5"), Map.of("symbolSpreads", "AAPL 0.5"),
+                Map.of("credential", "a-token")))
+                .isInstanceOf(CliBuilder.InvalidLaunchException.class)
+                .hasMessageContaining("'penalty' must be within 0 to 1, got: 1.5");
+    }
+
+    @Test
+    void aValueWithinTheRobotsOwnBoundsIsLaunched() {
+        assertThat(CliBuilder.arguments(_bounded(),
+                Map.of("penalty", "0.25"), Map.of("symbolSpreads", "AAPL 0.5"),
+                Map.of("credential", "a-token")))
+                .contains("0.25");
+    }
+
+    /**
+     * A float the robot could not compare with its bounds is refused as a
+     * launch error, as any value of the wrong type is -- not thrown out of the
+     * bounds check as a NumberFormatException, which a host answers with 500.
+     */
+    @Test
+    void aFloatThatIsNoDecimalIsRefusedAsTheWrongType() {
+        for (String notADecimal : List.of("NaN", "Infinity", "0.5d", "0x1p-1")) {
+            assertThatThrownBy(() -> CliBuilder.arguments(_bounded(),
+                    Map.of("penalty", notADecimal), Map.of("symbolSpreads", "AAPL 0.5"),
+                    Map.of("credential", "a-token")))
+                    .as(notADecimal)
+                    .isInstanceOf(CliBuilder.InvalidLaunchException.class)
+                    .hasMessageContaining("'penalty' expects float");
+        }
     }
 }

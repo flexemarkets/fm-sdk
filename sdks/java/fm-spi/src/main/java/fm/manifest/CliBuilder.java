@@ -1,5 +1,6 @@
 package fm.manifest;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -45,7 +46,9 @@ public final class CliBuilder {
      *         each owner's own.
      * @throws InvalidLaunchException if a value is supplied by someone who does
      *         not own it, is not a parameter of this robot, does not satisfy
-     *         its declared type, or is required and missing.
+     *         its declared type or the robot's own bounds, or is required and
+     *         missing. A declared default is the robot's own and is not
+     *         checked against its bounds.
      */
     public static Map<String, String> merge(
             Manifest manifest,
@@ -137,6 +140,16 @@ public final class CliBuilder {
             if (spec.valueType() != null && value != null && !spec.valueType().accepts(value)) {
                 throw new InvalidLaunchException(
                         "'" + name + "' expects " + spec.valueType().json() + ", got: " + value);
+            }
+            // The robot's own hard bounds, checked here so every host refuses
+            // the same values: fm-server checked them and a container launched
+            // directly did not, so the bound was only as strong as the path a
+            // caller chose. Only numbers have bounds; absent ones admit all. The
+            // type check above has parsed the value, so this parse cannot fail.
+            if (spec.valueType() != null && spec.valueType().isNumeric() && value != null
+                    && !spec.withinHardBounds(new BigDecimal(value.trim()))) {
+                throw new InvalidLaunchException(
+                        "'" + name + "' must be within " + spec.hardBoundsDescription() + ", got: " + value);
             }
             merged.put(name, value);
         }
