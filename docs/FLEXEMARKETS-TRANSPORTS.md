@@ -2,6 +2,11 @@
 
 Moved from fm-server/docs on 2026-09-25.
 
+**Obsolete (2026-10-19): history only.** Superseded by fm-sdk's `fm.Flexemarkets`
+interface (`fm.internal.HttpFlexemarkets`) with `fm.FlexemarketsProvider`
+(`ServiceLoader`) for in-process hosts; the `fm.net` code it describes was
+deleted in fm-robots `d5297ce1c` (2026-08-22, v0.12.0).
+
 > **Where this stands now.** This doc describes fm-robots' fm-lib-net
 > (`fm.net.*`), which was deleted (fm-robots `d5297ce1c`). The
 > interface survives as the SDK's `fm.Flexemarkets`
@@ -43,8 +48,9 @@ for [ROBOT-TRADER](https://github.com/adhocmarkets/fm-robots/blob/main/libraries
 - ✅ **Phase 5** — `fm-manager` `TraderCommand` (load and replay
   subcommands) uses `FlexemarketsSession.mode(REST_ONLY)` plus
   `asOtp(...)` per user.
-- ⏳ **Phase 6** — `WS_ONLY` mode and demuxed-STOMP / FIX transports.
+- ⏳ ~~**Phase 6** — `WS_ONLY` mode and demuxed-STOMP / FIX transports.~~
   `Mode.WS_ONLY` is declared but no impl yet; no caller asks for it.
+  — obsolete: `fm.net` and `Mode` were deleted (d5297ce1c); the SDK has no modes.
 
 ---
 
@@ -387,21 +393,24 @@ still never got written.
 
 ## 8. Open items
 
-1. **`WS_ONLY` mode.** Declared in the enum, no impl yet. No caller
+1. ~~**`WS_ONLY` mode.**~~ Declared in the enum, no impl yet. No caller
    asks for it. Ship when the first read-only-monitor use case
-   appears.
-2. **Demuxed STOMP / FIX.** Phase 6. Lands inside `WsTransport`
-   impls; no caller changes. Each option deserves its own design doc.
-3. **Per-user metrics under shared transport.** Today's `metrics()`
+   appears. — obsolete: the transports and modes were deleted (d5297ce1c).
+2. ~~**Demuxed STOMP / FIX.**~~ Phase 6. Lands inside `WsTransport`
+   impls; no caller changes. Each option deserves its own design doc. — obsolete: the transports and modes were deleted (d5297ce1c).
+3. ~~**Per-user metrics under shared transport.**~~ Today's `metrics()`
    returns per-instance `Histogram`s; under `Session.as` mode the
    histograms are session-level. Per-bearer breakdowns can be added
-   as labels (token-id tag) if a real use case appears.
-4. **`reconnect()` semantics under demuxed WS.** Today `reconnect()`
+   as labels (token-id tag) if a real use case appears. — obsolete: the transports and modes were deleted (d5297ce1c).
+4. ~~**`reconnect()` semantics under demuxed WS.**~~ Today `reconnect()`
    re-establishes one STOMP session per `Flexemarkets`. Under demuxed
    WS, one reconnect would affect every façade sharing the transport.
-   Document in the Phase 6 design.
-5. **Splitting trader vs admin interfaces.** Deferred — see §4.2.
-6. **Replacing `Mono<T>`.** A separate, much bigger project.
+   Document in the Phase 6 design. — obsolete: the transports and modes were deleted (d5297ce1c).
+5. ~~**Splitting trader vs admin interfaces.**~~ Deferred — see §4.2. — done in
+   fm-sdk: `Flexemarkets` extends the `fm.role` interfaces (`Reading`,
+   `Writing`, `Management`, `Administration`, ...; 262da90, 2026-09-03).
+6. ~~**Replacing `Mono<T>`.**~~ A separate, much bigger project. — done: fm-sdk's
+   `Flexemarkets` returns no `Mono`.
 
 ---
 
