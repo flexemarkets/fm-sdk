@@ -1,11 +1,17 @@
 # Public API changes under consideration for 0.4
 
+**Status (2026-10-19):** the SDK is at 0.6.0. Shipped: item 1 in 0.4.0
+(d245f1c, 2026-10-08); item 2's Java `System.Logger` and item 4's SDK half in
+0.3.1 (9d43ad3, 2026-09-23). Not done and not rescheduled: item 2's TypeScript
+logger, both questions in item 3, and item 4's consumer side (fm-robots' Venture
+still hand-rolls its `onRecovery` beside `StreamHealth`).
+
 **0.4.0 ships with fm-server 4.6 and moves straight onto its model-REST
 routes** (fm-server `docs/API-V1.md` §4, decided 2026-10-07). That release and
 this one are the same release: item 1 lands on the model forms, not on today's
 V1 routes, so the SDK migrates once. The panel calls (`participants/me/panels`,
-the filtered `GET panels`, the `config/fm.view?dryRun=true` preview) arrive
-then too. Widgets and `uploadState` ship earlier, in 0.3.x, on routes 4.6 keeps
+the filtered `GET panels`, the `config/fm.view?dryRun=true` preview) were to
+arrive then too; none is in the SDK as of 0.6.0. Widgets and `uploadState` ship earlier, in 0.3.x, on routes 4.6 keeps
 as aliases.
 
 What 0.3.0 left on the table. Each item carries the reasoning that produced it,
@@ -50,8 +56,8 @@ fm-server now checks the root against the links released SDKs navigate
 (`RepositoryExportTest`), but a client that finds its routes through the root
 stays one server refactor away from the same outage.
 
-**The server side is done.** fm-server#968 is still open, but only for this
-SDK half. The note this item used to carry ("three routes are still missing")
+**The server side is done.** fm-server#968 was then still open, but only for this
+SDK half (closed 2026-10-09 with 0.4.0). The note this item used to carry ("three routes are still missing")
 was wrong by the time it was written: the routes shipped in 4.5.0 (fm-server
 `e2305ea29`, `7c45832a0`), and #964, #965 and #966 closed into #968 because it
 covered them, not because it had not been done. See the 2026-09-08 comments
@@ -100,7 +106,7 @@ and one of the three was made consistent in 0.3.x:
 | SDK | Narration | Assessment |
 |---|---|---|
 | Python | `logging.getLogger(__name__)` in `desk.py`, `events.py` | the canonical library pattern; nothing to do |
-| Java | `System.Logger` | brought level with Python; was `System.err.println` |
+| Java | `System.Logger` | brought level with Python in 0.3.1 (9d43ad3); was `System.err.println` |
 | TypeScript | `console.warn` / `console.error` | the Node idiom, but the only one a host cannot redirect |
 
 **The question for 0.4 is whether TypeScript needs an injectable logger.** It is
@@ -231,7 +237,8 @@ REPLACED, not added to, or every line prints twice -- once from the new
 handler and once from JUL's own. That failure passes every test and
 surprises an operator, which is the worst combination.
 
-Not scheduled. It moves every reporter's output path at once, and the
+Not scheduled — partly done: the SDK half shipped in 0.3.1; the consumer-side
+reporters are unchanged as of 2026-10-19. It moves every reporter's output path at once, and the
 value is tidiness plus one genuine gain (the SDK's narration reaching the
 run log) rather than a capability nobody has.
 
