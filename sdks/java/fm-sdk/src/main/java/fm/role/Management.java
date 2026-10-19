@@ -44,7 +44,8 @@ public interface Management {
      * re-opening it does not consume a staged allocation.
      *
      * @param marketplaceId the marketplace whose session to pause
-     * @return the session, now PAUSED
+     * @return the session as it now stands: PAUSED, or unchanged when it
+     *         cannot be paused from where it is (never opened, or closed)
      */
     Session pauseSession(long marketplaceId);
 
@@ -53,7 +54,8 @@ public interface Management {
      * what applies a staged allocation.
      *
      * @param marketplaceId the marketplace whose session to close
-     * @return the session, now CLOSED
+     * @return the session as it now stands: CLOSED, or unchanged when it was
+     *         never opened
      */
     Session closeSession(long marketplaceId);
 

@@ -869,9 +869,12 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     /**
      * A session's lifecycle is its state, PATCHed. Asking for the state it is
-     * already in changes nothing; one it cannot reach from where it is --
-     * pausing a closed session -- is refused, where V0 answered with the
-     * session unchanged.
+     * already in changes nothing, and so does asking for one it cannot reach
+     * from where it is -- closing or pausing a session never opened, pausing a
+     * closed one: the server answers the session as it stands, as V0 always
+     * did, so read the answered state when it matters. fm-server refused those
+     * with 400 from 4.5.37 until 2026-10-19, which stopped fm-robots' studies,
+     * which close before they stage, on a marketplace never opened.
      */
     private Session _sessionState(long marketplaceId, String state) {
         return _patch(_marketplace(marketplaceId) + "/sessions/current", Map.of("state", state), SESSION_TYPE);
