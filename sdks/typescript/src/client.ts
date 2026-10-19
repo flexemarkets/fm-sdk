@@ -1531,8 +1531,11 @@ export class Flexemarkets {
 
   /**
    * A session's lifecycle is its state, PATCHed. Asking for the state it is
-   * already in changes nothing; one it cannot reach from where it is --
-   * pausing a closed session -- is refused.
+   * already in changes nothing, and so does asking for one it cannot reach
+   * from where it is -- closing or pausing a session never opened, pausing a
+   * closed one: the server answers the session as it stands, so read the
+   * answered state when it matters. fm-server refused those with 400 from
+   * 4.5.37 until 2026-10-19.
    */
   private async _sessionState(marketplaceId: number, state: string): Promise<Session> {
     return parseSession(
