@@ -467,6 +467,6 @@ Python       fm-sdk==0.2.0
 TypeScript   "@flexemarkets/fm-sdk": "0.2.0"
 ```
 
-0.2.0 is not yet published. While it is unreleased the three ecosystems carry
+0.2.0 was published on 2026-09-04. While it was unreleased the three ecosystems carried
 prerelease coordinates — `0.2.0-SNAPSHOT` for Maven, `0.2.0-dev0` for PyPI and
 npm — and none of them resolves by accident from a caret or a range.
