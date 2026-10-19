@@ -307,7 +307,7 @@ plugin jar without exposing its source.
 <dependency>
     <groupId>com.flexemarkets</groupId>
     <artifactId>fm-spi</artifactId>
-    <version>0.0.5</version>
+    <version>0.0.14</version>
 </dependency>
 ```
 
