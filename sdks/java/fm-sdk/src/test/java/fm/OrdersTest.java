@@ -23,7 +23,7 @@ class OrdersTest {
 
     private static Order _order(long id, long original, long supplier, OrderType type) {
         return new Order(null, null, id, original, supplier, null, type, OrderSide.BUY,
-                10L, 100L, null, 8L, 1L, 300L, "STK", 11L, null, null);
+                10L, 100L, null, 8L, 1L, 300L, "STK", 11L, null, null, null);
     }
 
     @Test
@@ -155,12 +155,12 @@ class OrdersTest {
 
     private static Order withConsumer(Long consumer) {
         return new Order(null, null, 1L, 1L, 0L, consumer, OrderType.LIMIT, OrderSide.BUY,
-                         1L, 1L, null, null, 1L, 1L, "ALPHA", 1L, null, null);
+                         1L, 1L, null, null, 1L, 1L, "ALPHA", 1L, null, null, null);
     }
 
     private static Order order(long id, long supplier) {
         return new Order(null, null, id, id, supplier, null, OrderType.LIMIT, OrderSide.BUY,
-                         1L, 1L, null, null, 1L, 1L, "ALPHA", 1L, null, null);
+                         1L, 1L, null, null, 1L, 1L, "ALPHA", 1L, null, null, null);
     }
 
     // ---- isResting ---------------------------------------------------------
@@ -168,7 +168,7 @@ class OrdersTest {
     /** A row with every lineage field spelled out; side and size do not matter here. */
     private static Order _row(long id, long original, long supplier, Long consumer, OrderType type) {
         return new Order(null, null, id, original, supplier, consumer, type, OrderSide.BUY,
-                         1L, 100L, null, 8L, 1L, 300L, "STK", 11L, null, null);
+                         1L, 100L, null, 8L, 1L, 300L, "STK", 11L, null, null, null);
     }
 
     /**

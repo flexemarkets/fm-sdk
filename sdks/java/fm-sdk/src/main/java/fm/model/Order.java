@@ -39,6 +39,11 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
  * @param marketId          the market's id
  * @param ownerTarget       the named counterparty, resolved server-side
  * @param clientDescription how the submitting client identified itself
+ * @param ownerTargetId     the counterparty of a private order, by owner id:
+ *                          what a session's order history carries in place of
+ *                          {@code ownerTarget}, which only the book and trade
+ *                          reads resolve to a name; null for an untargeted
+ *                          order, and wherever the server does not send it
  */
 
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -61,7 +66,8 @@ public record Order(
     String symbol,
     long marketId,
     String ownerTarget,
-    String clientDescription) {
+    String clientDescription,
+    Long ownerTargetId) {
 
 
     /**
@@ -88,8 +94,9 @@ public record Order(
             @JsonProperty("symbol") String symbol,
             @JsonProperty("marketId") long marketId,
             @JsonProperty("ownerTarget") String ownerTarget,
-            @JsonProperty("clientDescription") String clientDescription) {
-        return new Order(Timestamps.parse(createdDate), Timestamps.parse(lastModifiedDate), id, original, supplier, consumer, type, side, units, price, mine, ownerId, marketplaceId, sessionId, symbol, marketId, ownerTarget, clientDescription);
+            @JsonProperty("clientDescription") String clientDescription,
+            @JsonProperty("ownerTargetId") Long ownerTargetId) {
+        return new Order(Timestamps.parse(createdDate), Timestamps.parse(lastModifiedDate), id, original, supplier, consumer, type, side, units, price, mine, ownerId, marketplaceId, sessionId, symbol, marketId, ownerTarget, clientDescription, ownerTargetId);
     }
 
 }

@@ -47,7 +47,7 @@ class DeskTest {
     private static Order _limit(Market market, long id, OrderSide side, long units, long price) {
         return new Order(null, null, id, id, id, null,
                          OrderType.LIMIT, side, units, price, null, null,
-                         MP, 1L, market.symbol(), market.id(), null, null);
+                         MP, 1L, market.symbol(), market.id(), null, null, null);
     }
 
     /** Polls for a condition instead of sleeping on it; the desk applies on its own thread. */
@@ -128,9 +128,9 @@ class DeskTest {
         Instant taken = rested.plusSeconds(1000);
         return new Order[] {
             new Order(rested, taken, restingId, restingId, restingId, aggressorId, OrderType.LIMIT, OrderSide.SELL,
-                      1, price, null, 900L, MP, 1L, market.symbol(), market.id(), null, null),
+                      1, price, null, 900L, MP, 1L, market.symbol(), market.id(), null, null, null),
             new Order(taken, taken, aggressorId, aggressorId, aggressorId, restingId, OrderType.LIMIT, OrderSide.BUY,
-                      1, price, null, 901L, MP, 1L, market.symbol(), market.id(), null, null)
+                      1, price, null, 901L, MP, 1L, market.symbol(), market.id(), null, null, null)
         };
     }
 

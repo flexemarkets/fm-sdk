@@ -169,7 +169,7 @@ class DeskSharingTest {
     private static Order _limit(long marketplaceId, long id, OrderSide side, long units, long price) {
         return new Order(null, null, id, id, id, null,
                          OrderType.LIMIT, side, units, price, null, null,
-                         marketplaceId, 1L, ALPHA.symbol(), ALPHA.id(), null, null);
+                         marketplaceId, 1L, ALPHA.symbol(), ALPHA.id(), null, null, null);
     }
 
     private static void _await(String what, BooleanSupplier condition) throws InterruptedException {
@@ -335,9 +335,9 @@ class DeskSharingTest {
         java.time.Instant at = java.time.Instant.parse("2026-10-08T10:00:00Z");
         return new Order[] {
             new Order(at, at.plusSeconds(1), restingId, restingId, restingId, aggressorId, OrderType.LIMIT,
-                      OrderSide.SELL, 1, price, null, 900L, MP, 1L, ALPHA.symbol(), ALPHA.id(), null, null),
+                      OrderSide.SELL, 1, price, null, 900L, MP, 1L, ALPHA.symbol(), ALPHA.id(), null, null, null),
             new Order(at.plusSeconds(1), at.plusSeconds(1), aggressorId, aggressorId, aggressorId, restingId,
-                      OrderType.LIMIT, OrderSide.BUY, 1, price, null, 901L, MP, 1L, ALPHA.symbol(), ALPHA.id(), null, null)
+                      OrderType.LIMIT, OrderSide.BUY, 1, price, null, 901L, MP, 1L, ALPHA.symbol(), ALPHA.id(), null, null, null)
         };
     }
 

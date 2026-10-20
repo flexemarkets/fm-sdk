@@ -28,9 +28,9 @@ class TapeTest {
         Instant at = Instant.parse("2026-10-08T10:00:00Z").plusSeconds(restingId);
         return new Order[] {
             new Order(at, at, restingId, restingId, restingId, aggressorId, OrderType.LIMIT, OrderSide.SELL,
-                      1, price, null, 900L, 1L, 1L, "A", 7L, null, null),
+                      1, price, null, 900L, 1L, 1L, "A", 7L, null, null, null),
             new Order(at, at, aggressorId, aggressorId, aggressorId, restingId, OrderType.LIMIT, OrderSide.BUY,
-                      1, price, null, 901L, 1L, 1L, "A", 7L, null, null)
+                      1, price, null, 901L, 1L, 1L, "A", 7L, null, null, null)
         };
     }
 
