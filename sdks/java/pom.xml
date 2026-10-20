@@ -6,7 +6,7 @@
 
     <groupId>com.flexemarkets</groupId>
     <artifactId>fm-sdk-parent</artifactId>
-    <version>0.7.0-SNAPSHOT</version><!-- fm-version -->
+    <version>0.7.0</version><!-- fm-version -->
     <packaging>pom</packaging>
 
     <name>Flexemarkets SDK Parent</name>
@@ -349,12 +349,10 @@
                             <excludeArtifacts>
                                 <excludeArtifact>fm-sdk-parent</excludeArtifact>
                                 <excludeArtifact>fm-ticker</excludeArtifact>
-                                <!-- fm-expr is excluded again: 0.0.1 went to
-                                     Central on 2026-09-22 and has not moved
-                                     since. A bundle carrying an already-published
-                                     coordinate is refused whole, so take it off
-                                     this list when set-expr-version moves it. -->
-                                <excludeArtifact>fm-expr</excludeArtifact>
+                                <!-- fm-spi is on Central and has not moved since, so a bundle
+                                     carrying it would be refused whole. The sdk publish of
+                                     fm-release takes it off this list when its code changes. -->
+                                <excludeArtifact>fm-spi</excludeArtifact>
                             </excludeArtifacts>
                         </configuration>
                     </plugin>

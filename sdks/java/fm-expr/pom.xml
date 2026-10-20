@@ -7,7 +7,7 @@
     <parent>
         <groupId>com.flexemarkets</groupId>
         <artifactId>fm-sdk-parent</artifactId>
-        <version>0.7.0-SNAPSHOT</version><!-- fm-version -->
+        <version>0.7.0</version><!-- fm-version -->
     </parent>
 
     <artifactId>fm-expr</artifactId>
@@ -22,7 +22,7 @@
         Set with `make set-expr-version V=x.y.z`. `make set-version` moves the
         parent reference above but leaves this alone.
     -->
-    <version>0.0.1</version><!-- expr-version -->
+    <version>0.0.2</version><!-- expr-version -->
 
     <packaging>jar</packaging>
 
