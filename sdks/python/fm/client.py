@@ -219,6 +219,7 @@ def _parse_order(data: dict[str, Any]) -> Order:
         market_id=data.get("marketId", 0),
         owner_target=data.get("ownerTarget"),
         client_description=data.get("clientDescription"),
+        owner_target_id=data.get("ownerTargetId"),
         created_date=_timestamp(data.get("createdDate")),
         last_modified_date=_timestamp(data.get("lastModifiedDate")),
     )

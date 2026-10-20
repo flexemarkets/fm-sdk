@@ -553,7 +553,7 @@ public class HttpFlexemarkets implements Flexemarkets {
                                     o.original(), o.supplier(), o.consumer(), o.type(), o.side(),
                                     o.units(), o.price(), o.mine(), o.ownerId(), o.marketplaceId(),
                                     o.sessionId(), symbol, o.marketId(), o.ownerTarget(),
-                                    o.clientDescription()))
+                                    o.clientDescription(), o.ownerTargetId()))
                 .toList();
     }
 
@@ -574,7 +574,7 @@ public class HttpFlexemarkets implements Flexemarkets {
                                     o.original(), o.supplier(), o.consumer(), o.type(), o.side(),
                                     o.units(), o.price(), o.mine(), o.ownerId(), o.marketplaceId(),
                                     o.sessionId(), symbol, o.marketId(), o.ownerTarget(),
-                                    o.clientDescription()))
+                                    o.clientDescription(), o.ownerTargetId()))
                 .toList();
     }
 

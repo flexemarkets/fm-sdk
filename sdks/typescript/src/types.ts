@@ -366,6 +366,12 @@ export interface Order {
   marketId: number;
   ownerTarget: string | null;
   clientDescription: string | null;
+  /**
+   * A private order's counterparty, by owner id: what a session's order
+   * history carries in place of `ownerTarget`. Null for an untargeted order,
+   * and wherever the server does not send it.
+   */
+  ownerTargetId: number | null;
   createdDate: Date | null;
   lastModifiedDate: Date | null;
 }

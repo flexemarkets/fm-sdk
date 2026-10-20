@@ -33,7 +33,7 @@ class BookTest {
     private static Order _limitOf(Market market, long orderId, OrderSide side, long units, long price) {
         return new Order(null, null, orderId, orderId, orderId, null,
                          OrderType.LIMIT, side, units, price, null, null,
-                         market.marketplaceId(), 0L, market.symbol(), market.id(), null, null);
+                         market.marketplaceId(), 0L, market.symbol(), market.id(), null, null, null);
     }
 
     /** The SDK's records are positional; this is the {@code toBuilder} the test was written against. */
@@ -48,7 +48,7 @@ class BookTest {
                          side != null ? side : o.side(),
                          units != null ? units : o.units(),
                          o.price(), o.mine(), o.ownerId(), o.marketplaceId(), o.sessionId(),
-                         o.symbol(), o.marketId(), o.ownerTarget(), o.clientDescription());
+                         o.symbol(), o.marketId(), o.ownerTarget(), o.clientDescription(), null);
     }
 
     private static Order[] _toArray(Order... orders) {
@@ -66,7 +66,7 @@ class BookTest {
         var cancel = new Order(null, null, cancelId, cancelId, order.id(), order.id(),
                                OrderType.CANCEL, order.side(), order.units(), order.price(),
                                null, null, order.marketplaceId(), order.sessionId(),
-                               order.symbol(), order.marketId(), null, null);
+                               order.symbol(), order.marketId(), null, null, null);
         var limit = _with(order, null, null, cancel.id(), null, null, null);
 
         return _toArray(limit, cancel);
@@ -332,7 +332,7 @@ class BookTest {
     private static Order _sidelessCancel(Market market, long cancelledId) {
         return new Order(null, null, cancelledId + 1, cancelledId, cancelledId, null,
                          OrderType.CANCEL, null, 0L, 0L, null, null,
-                         market.marketplaceId(), 0L, market.symbol(), market.id(), null, null);
+                         market.marketplaceId(), 0L, market.symbol(), market.id(), null, null, null);
     }
 
     @Test

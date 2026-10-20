@@ -1,0 +1,71 @@
+{
+  "type": "Order",
+  "why": "A session's order history -- GET /v1/marketplaces/{id}/orders?sessions=, the manager's read that fm replay and the studies rebuild a round from -- is the raw order: a private order's counterparty is ownerTargetId, an owner id, and there is no ownerTarget at all. Since 0.4.0 moved the SDK onto V1 routes, reading only ownerTarget lost every private order's counterparty; a replay then submitted them untargeted and fm-server refused each one as 'owner target is unknown: null'.",
+  "source": {
+    "captured": {
+      "path": "/v1/marketplaces/{marketplaceId}/orders?sessions={sessionId}",
+      "select": {
+        "type": "LIMIT",
+        "privateMarket": true
+      },
+      "server": "4.10.3",
+      "on": "2026-10-20",
+      "note": "Ids replaced; the shape, the nested market and the nulls are as sent."
+    }
+  },
+  "payload": {
+    "accountId": null,
+    "clientDescription": "T001",
+    "consumer": 9016,
+    "createdDate": "2025-02-20T03:09:10.731685",
+    "id": 8997,
+    "lastModifiedDate": "2025-02-20T03:11:50.818395",
+    "market": {
+      "createdDate": "2025-01-15T18:10:18.402033",
+      "description": "private",
+      "id": 12,
+      "lastModifiedDate": "2026-06-07T09:52:49.10114",
+      "marketplaceId": 3050,
+      "name": "private",
+      "priceMaximum": 1000,
+      "priceMinimum": 1,
+      "priceTick": 1,
+      "privateMarket": true,
+      "symbol": "private",
+      "unitMaximum": 10,
+      "unitMinimum": 1,
+      "unitTick": 1
+    },
+    "marketId": 12,
+    "marketplaceId": 3050,
+    "original": 8997,
+    "ownerId": 7,
+    "ownerTargetId": 9,
+    "price": 185,
+    "sessionId": 41,
+    "side": "BUY",
+    "submissionId": null,
+    "supplier": 8997,
+    "symbol": "private",
+    "type": "LIMIT",
+    "units": 5
+  },
+  "expect": {
+    "id": 8997,
+    "original": 8997,
+    "supplier": 8997,
+    "consumer": 9016,
+    "type": "LIMIT",
+    "side": "BUY",
+    "units": 5,
+    "price": 185,
+    "ownerId": 7,
+    "marketplaceId": 3050,
+    "sessionId": 41,
+    "symbol": "private",
+    "marketId": 12,
+    "ownerTarget": null,
+    "ownerTargetId": 9,
+    "clientDescription": "T001"
+  }
+}

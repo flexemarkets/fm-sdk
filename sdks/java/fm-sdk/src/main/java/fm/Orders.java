@@ -100,7 +100,8 @@ public final class Orders {
                 0L,                  // sessionId
                 market.symbol(),
                 market.id(),
-                null, null);         // ownerTarget, clientDescription
+                null, null,          // ownerTarget, clientDescription
+                null);               // ownerTargetId
     }
 
     /**

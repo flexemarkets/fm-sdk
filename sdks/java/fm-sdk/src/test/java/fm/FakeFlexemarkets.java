@@ -119,13 +119,13 @@ class FakeFlexemarkets implements Flexemarkets {
     @Override public Order submitLimit(long mp, long marketId, OrderSide side, long units, long price) {
         _submitted.add(mp + "/" + marketId + " " + side + " " + units + "@" + price);
         return new Order(null, null, 900L, 900L, 900L, null, OrderType.LIMIT, side, units, price,
-                         null, null, mp, 1L, null, marketId, null, null);
+                         null, null, mp, 1L, null, marketId, null, null, null);
     }
 
     @Override public Order submitCancel(long mp, long marketId, long originalId) {
         _submitted.add(mp + "/" + marketId + " CANCEL " + originalId);
         return new Order(null, null, 901L, 901L, originalId, null, OrderType.CANCEL, OrderSide.BUY, 0, 0,
-                         null, null, mp, 1L, null, marketId, null, null);
+                         null, null, mp, 1L, null, marketId, null, null, null);
     }
 
     @Override public void close() { }

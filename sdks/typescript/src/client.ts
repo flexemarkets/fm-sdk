@@ -259,6 +259,7 @@ export function parseOrder(data: JsonObject): Order {
     marketId: (data.marketId as number) ?? 0,
     ownerTarget: (data.ownerTarget as string) ?? null,
     clientDescription: (data.clientDescription as string) ?? null,
+    ownerTargetId: (data.ownerTargetId as number | null) ?? null,
     createdDate: toInstant(data.createdDate as string),
     lastModifiedDate: toInstant(data.lastModifiedDate as string),
   };

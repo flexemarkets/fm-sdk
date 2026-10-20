@@ -260,6 +260,10 @@ class Order:
     market_id: int = 0
     owner_target: str | None = None
     client_description: str | None = None
+    # A private order's counterparty, by owner id: what a session's order
+    # history carries in place of owner_target. None for an untargeted order,
+    # and wherever the server does not send it.
+    owner_target_id: int | None = None
     created_date: "datetime | None" = None
     last_modified_date: "datetime | None" = None
 
