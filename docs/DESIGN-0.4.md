@@ -1,6 +1,6 @@
 # Public API changes under consideration for 0.4
 
-**Status (2026-10-19):** the SDK is at 0.6.0. Shipped: item 1 in 0.4.0
+**Status (2026-10-20):** the SDK is at ~~0.6.0~~ 0.7.0 (released 2026-10-20: an order carries its counterparty's id, `ownerTargetId`; nothing below). Shipped: item 1 in 0.4.0
 (d245f1c, 2026-10-08); item 2's Java `System.Logger` and item 4's SDK half in
 0.3.1 (9d43ad3, 2026-09-23). Not done and not rescheduled: item 2's TypeScript
 logger, both questions in item 3, and item 4's consumer side (fm-robots' Venture
