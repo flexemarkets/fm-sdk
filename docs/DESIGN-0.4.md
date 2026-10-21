@@ -1,4 +1,4 @@
-# Public API changes under consideration for 0.4
+# Public API changes proposed for 0.4, and where they stand
 
 **Status (2026-10-20):** the SDK is at ~~0.6.0~~ 0.7.0 (released 2026-10-20: an order carries its counterparty's id, `ownerTargetId`; nothing below). Shipped: item 1 in 0.4.0
 (d245f1c, 2026-10-08); item 2's Java `System.Logger` and item 4's SDK half in
@@ -11,7 +11,7 @@ routes** (fm-server `docs/API-V1.md` §4, decided 2026-10-07). That release and
 this one are the same release: item 1 lands on the model forms, not on today's
 V1 routes, so the SDK migrates once. The panel calls (`participants/me/panels`,
 the filtered `GET panels`, the `config/fm.view?dryRun=true` preview) were to
-arrive then too; none is in the SDK as of 0.6.0. Widgets and `uploadState` ship earlier, in 0.3.x, on routes 4.6 keeps
+arrive then too; none is in the SDK as of 0.7.0. Widgets and `uploadState` ship earlier, in 0.3.x, on routes 4.6 keeps
 as aliases.
 
 What 0.3.0 left on the table. Each item carries the reasoning that produced it,
