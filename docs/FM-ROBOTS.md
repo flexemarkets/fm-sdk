@@ -177,7 +177,9 @@ Generation specs, required keys in CAPS:
 --tape   COUNT[,units=1][,band=lo-hi]  (or a bare count: --tape 40)
 --wave   MID,AMP,PERIOD,DURATION[,fn=sine][,interval=1][,units=1][,fuzz=0]
          [,jitter=0][,phase=0][,aggressor=buy][,symbol=SYM]   (repeatable; fn is
-         sine|cosine|triangle|square|sawtooth; odd --users make, even take)
+         sine|cosine|triangle|square|sawtooth|step; odd --users make, even take)
+         fn=step is a random walk: no period or phase, but [,hold=5][,size=10][,up=0.5]
+         (hold seconds and size cents take lo-hi ranges; size ≤ amp)
 --churn  ARRIVALS,DURATION[,cancels=0][,cancel-delay=2][,side=both]
          [,band=lo-hi][,units=lo-hi]
 ```
