@@ -176,7 +176,7 @@ Generation specs, required keys in CAPS:
 --book   MID,SPREAD,LEVELS,DEPTH       (all required, > 0)
 --tape   COUNT[,units=1][,band=lo-hi]  (or a bare count: --tape 40)
 --wave   MID,AMP,PERIOD,DURATION[,fn=sine][,interval=1][,units=1][,fuzz=0]
-         [,phase=0][,aggressor=buy][,symbol=SYM]   (repeatable; fn is
+         [,jitter=0][,phase=0][,aggressor=buy][,symbol=SYM]   (repeatable; fn is
          sine|cosine|triangle|square|sawtooth; odd --users make, even take)
 --churn  ARRIVALS,DURATION[,cancels=0][,cancel-delay=2][,side=both]
          [,band=lo-hi][,units=lo-hi]
