@@ -149,7 +149,10 @@ fm -E 2540 submit orders.csv
 fm -E 2540 submit --symbol AAPL --book mid=100,spread=4,levels=5,depth=10
 
 # generate 40 executed trades of 1 unit between 98¢ and 102¢
-fm -E 2540 submit --symbol AAPL --trades count=40,units=1,band=98-102
+fm -E 2540 submit --symbol AAPL --tape count=40,units=1,band=98-102
+
+# a tape of trades tracing a sine wave around 500¢, ±100¢, fuzzed by up to ±8¢
+fm -E 2540 submit --symbol AAPL --wave fn=sine,mid=500,amp=100,period=60,duration=180,fuzz=8
 
 # overlay stochastic churn for 30s at 1 order/user/sec, 10% cancels
 fm -E 2540 submit --symbol AAPL --churn arrivals=1.0,duration=30,cancels=0.1
@@ -161,7 +164,7 @@ fm -E 2540 submit --symbol AAPL --churn arrivals=1.0,duration=30,cancels=0.1
 | `--users=list` | participants who own the generated orders |
 | `--provision` | fund `--users` for the generated orders and **(re)open the session** before submitting |
 | `--dry-run` | build and print the generated CSV without submitting or provisioning |
-| `--phased` | sequence file/book/trades/churn into disjoint windows instead of interleaving — guarantees exact trade counts |
+| `--phased` | sequence file/book/tape/waves/churn into disjoint windows instead of interleaving — guarantees exact trade counts |
 | `--seed=n` | RNG seed for reproducible generation (default `0`) |
 | `--timing=t` | `0` submits as fast as possible; `1.0` reproduces elapsed time |
 | `--continue-on-error` | keep going past a rejection and print a grouped summary at the end (default: stop at the first) |
@@ -171,7 +174,10 @@ Generation specs, required keys in CAPS:
 
 ```
 --book   MID,SPREAD,LEVELS,DEPTH       (all required, > 0)
---trades COUNT[,units=1][,band=lo-hi]  (or a bare count: --trades 40)
+--tape   COUNT[,units=1][,band=lo-hi]  (or a bare count: --tape 40)
+--wave   MID,AMP,PERIOD,DURATION[,fn=sine][,interval=1][,units=1][,fuzz=0]
+         [,phase=0][,aggressor=buy][,symbol=SYM]   (repeatable; fn is
+         sine|cosine|triangle|square|sawtooth; odd --users make, even take)
 --churn  ARRIVALS,DURATION[,cancels=0][,cancel-delay=2][,side=both]
          [,band=lo-hi][,units=lo-hi]
 ```
