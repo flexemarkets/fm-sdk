@@ -68,6 +68,7 @@ import java.util.Properties;
 import java.util.concurrent.BlockingQueue;
 
 import javax.net.ssl.SSLException;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 import tools.jackson.core.JacksonException;
@@ -107,8 +108,8 @@ public class HttpFlexemarkets implements Flexemarkets {
      * should be able to say is "make me one from these". Properties are its own
      * business.
      *
-     * @param credential         a password, a token, or a path to a credential
-     *                           file holding one
+     * @param credential         a password, a token, {@code refresh:} and a refresh
+     *                           token, or a path to a credential file holding one
      * @param endpoint           the endpoint to connect to
      * @param clientDescription  how this client identifies itself
      * @param capture            whether to write each request and response to
@@ -177,6 +178,14 @@ public class HttpFlexemarkets implements Flexemarkets {
         .build();
 
     private static final TypeReference<Token>               TOKEN_TYPE        = new TypeReference<>() {};
+    private static final TypeReference<Renewed>             RENEWAL_TYPE      = new TypeReference<>() {};
+
+    /**
+     * Where a credential carries a refresh token: a {@code refresh-token=} line
+     * in a credential file, or the credential {@code refresh:<token>}.
+     */
+    static final String REFRESH_TOKEN_PROPERTY = "refresh-token";
+    private static final String REFRESH_TOKEN_PREFIX = "refresh:";
     private static final TypeReference<List<Marketplace>>    MARKETPLACES_TYPE = new TypeReference<>() {};
     private static final TypeReference<Marketplace>          MARKETPLACE_TYPE  = new TypeReference<>() {};
     private static final TypeReference<List<Market>>         MARKETS_TYPE      = new TypeReference<>() {};
@@ -314,8 +323,17 @@ public class HttpFlexemarkets implements Flexemarkets {
      * it, so {@link #token()} and every request agree on which token is current.
      */
     private volatile Token _token;
-    /** Whether this client holds credentials to sign in again with; a client given a token does not. */
+    /**
+     * Whether this client can sign in again: it holds a password, or a refresh
+     * token. A client given only an access token cannot.
+     */
     private final boolean _canRenew;
+    /**
+     * The refresh token the next renewal presents, replaced by the one each
+     * renewal hands back: fm-server takes each once, and one presented twice
+     * ends every token renewed from it. Null for a client that has none.
+     */
+    private volatile String _refreshToken;
     private final Object _renewLock = new Object();
     private final Account _account;
     private final Person _user;
@@ -349,10 +367,13 @@ public class HttpFlexemarkets implements Flexemarkets {
         this._impersonateAccount = impersonate == null || impersonate.isBlank() ? null : impersonate;
         this._capture = Boolean.parseBoolean(properties.getProperty("capture"));
 
-        this._canRenew = _isBlank(properties.getProperty("token"))
-                && !_isBlank(properties.getProperty("account"))
-                && !_isBlank(properties.getProperty("email"))
-                && !_isBlank(properties.getProperty("password"));
+        var refreshToken = properties.getProperty(REFRESH_TOKEN_PROPERTY);
+        this._refreshToken = _isBlank(refreshToken) ? null : refreshToken.trim();
+        this._canRenew = this._refreshToken != null
+                || (_isBlank(properties.getProperty("token"))
+                    && !_isBlank(properties.getProperty("account"))
+                    && !_isBlank(properties.getProperty("email"))
+                    && !_isBlank(properties.getProperty("password")));
         if (_impersonateAccount != null) {
             // Only a password gets an impersonation token. Refused here, at
             // connect, rather than as a 403 on the first call that names the
@@ -1362,7 +1383,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     private static boolean _isCredentialRoute(HttpRequest request) {
         var path = request.uri().getPath();
 
-        return path.endsWith("/tokens") || path.endsWith("/refresh") || path.contains("/otp")
+        return path.endsWith("/tokens") || path.endsWith("/refresh") || path.endsWith("/renew") || path.contains("/otp")
                 || path.endsWith("/impersonation");
     }
 
@@ -1583,6 +1604,9 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     private Token _signIn() {
         var endpoint = server(endpointUrl()) + "/tokens";
+        if (_refreshToken != null) {
+            return _renewWithRefreshToken(endpoint);
+        }
         var account = _properties.getProperty("account");
         var email = _properties.getProperty("email");
         var password = _properties.getProperty("password");
@@ -1627,6 +1651,37 @@ public class HttpFlexemarkets implements Flexemarkets {
         }
 
         return _credentialExchange(request, TOKEN_TYPE, "Sign-in");
+    }
+
+    /**
+     * Sign in with the refresh token in hand: fm-server takes it once, and
+     * answers with an access token and the refresh token to present next time.
+     *
+     * <p>This is how a robot fm-server launched outlives its access token. It
+     * is handed a refresh token of its own, not the participant's access token,
+     * which stops working after hours while the robot runs on.
+     */
+    private Token _renewWithRefreshToken(String endpoint) {
+        // A string in a map: there is nothing here Jackson cannot write.
+        var json = MAPPER.writeValueAsString(Map.of("refreshToken", _refreshToken));
+        var request = HttpRequest.newBuilder()
+            .timeout(DEFAULT_REQUEST_TIMEOUT)
+            .uri(URI.create(endpoint + "/renew"))
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json")
+            .header("User-Agent", FM_SDK_CLIENT)
+            .POST(HttpRequest.BodyPublishers.ofString(json))
+            .build();
+        var renewed = _credentialExchange(request, RENEWAL_TYPE, "Renewal");
+        if (!_isBlank(renewed.refreshToken())) {
+            _refreshToken = renewed.refreshToken();
+        }
+        return new Token(renewed.requestUrl(), renewed.person(), renewed.account(), renewed.token());
+    }
+
+    /** What {@code POST /tokens/renew} answers: a sign-in, and the next refresh token. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record Renewed(String requestUrl, Person person, Account account, String token, String refreshToken) {
     }
 
     /**
@@ -1937,8 +1992,8 @@ public class HttpFlexemarkets implements Flexemarkets {
      * The connection's properties, from defaults overlaid with the credential
      * file and the arguments.
      *
-     * @param credential        a password, a token, or a path to a credential
-     *                          file holding one
+     * @param credential        a password, a token, {@code refresh:} and a refresh
+     *                          token, or a path to a credential file holding one
      * @param endpoint          the endpoint to connect to
      * @param clientDescription how this client identifies itself
      * @return the resolved properties
@@ -2020,7 +2075,9 @@ public class HttpFlexemarkets implements Flexemarkets {
         properties.setProperty("email", "");
         properties.setProperty("password", "");
 
-        if (Files.isRegularFile(credentialPath)) {
+        if (credential.startsWith(REFRESH_TOKEN_PREFIX) && !_isBlank(credential.substring(REFRESH_TOKEN_PREFIX.length()))) {
+            properties.setProperty(REFRESH_TOKEN_PROPERTY, credential.substring(REFRESH_TOKEN_PREFIX.length()));
+        } else if (Files.isRegularFile(credentialPath)) {
             _loadConfiguration(properties, credentialPath);
         } else if (_isValidToken(credential)) {
             properties.setProperty("token", credential);

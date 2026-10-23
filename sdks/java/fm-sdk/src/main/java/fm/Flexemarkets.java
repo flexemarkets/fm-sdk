@@ -61,8 +61,8 @@ public interface Flexemarkets
      * use is unchanged -- including when a provider is present but does not
      * recognise the endpoint.
      *
-     * @param credential        a password, a token, or a path to a credential
-     *                          file holding one
+     * @param credential        a password, a token, {@code refresh:} and a refresh
+     *                          token, or a path to a credential file holding one
      * @param endpoint          a URL, a bare marketplace id, or a file holding
      *                          either; see {@link Endpoints#resolve}
      * @param clientDescription how this client identifies itself to the server,
@@ -100,8 +100,8 @@ public interface Flexemarkets
      * two are properties of the HTTP exchange, and a provider that does not
      * speak HTTP has nothing to apply them to.
      *
-     * @param credential         a password, a token, or a path to a credential
-     *                           file holding one
+     * @param credential         a password, a token, {@code refresh:} and a refresh
+     *                           token, or a path to a credential file holding one
      * @param endpoint           a URL, a bare marketplace id, or a file holding
      *                           either; see {@link Endpoints#resolve}
      * @param clientDescription  how this client identifies itself to the server
