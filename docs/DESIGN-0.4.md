@@ -3,8 +3,10 @@
 **Status (2026-10-20):** the SDK is at ~~0.6.0~~ 0.7.0 (released 2026-10-20: an order carries its counterparty's id, `ownerTargetId`; nothing below). Shipped: item 1 in 0.4.0
 (d245f1c, 2026-10-08); item 2's Java `System.Logger` and item 4's SDK half in
 0.3.1 (9d43ad3, 2026-09-23). Not done and not rescheduled: item 2's TypeScript
-logger, both questions in item 3, and item 4's consumer side (fm-robots' Venture
-still hand-rolls its `onRecovery` beside `StreamHealth`).
+logger and both questions in item 3. Item 4's consumer side is done in
+fm-robots (16a3de3de, 2026-10-23): Venture reports a stale book through
+`StreamHealth`, which can now write to a study's `RunLog`, because `fm-lib-robot`
+has reached `fm-lib-cli` since; the `System.Logger` turn below was not needed.
 
 **0.4.0 ships with fm-server 4.6 and moves straight onto its model-REST
 routes** (fm-server `docs/API-V1.md` §4, decided 2026-10-07). That release and
