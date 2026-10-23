@@ -100,6 +100,11 @@ def _read_version(version_file: Path = _VERSION_FILE, distribution: str = "fm-sd
 _FM_NETWORK_CLIENT = f"fm-sdk-python/{_read_version()}"
 _DEFAULT_ENDPOINT = "https://api.flexemarkets.com"
 
+# Where a credential carries a refresh token: a ``refresh-token=`` line in a
+# credential file, or the credential ``refresh:<token>``.
+_REFRESH_TOKEN_PROPERTY = "refresh-token"
+_REFRESH_TOKEN_PREFIX = "refresh:"
+
 log = logging.getLogger(__name__)
 
 _BCRYPT_RE = re.compile(r"^\$2[abxy]?\$\d{2}\$[./A-Za-z0-9]{53}$")
@@ -682,7 +687,9 @@ class Flexemarkets:
         config = _load_config()
 
         if credential is not None:
-            if _is_file(credential):
+            if credential.startswith(_REFRESH_TOKEN_PREFIX) and credential[len(_REFRESH_TOKEN_PREFIX):].strip():
+                config[_REFRESH_TOKEN_PROPERTY] = credential[len(_REFRESH_TOKEN_PREFIX):]
+            elif _is_file(credential):
                 config.update(_load_properties_file(Path(credential)))
             elif _is_valid_token(credential):
                 config["token"] = credential
@@ -724,6 +731,10 @@ class Flexemarkets:
                              and config.get("password") and not _is_valid_token(config.get("token", ""))
                              else None)
         self._renew_lock = threading.Lock()
+        # The refresh token the next renewal presents, replaced by the one each
+        # renewal hands back: fm-server takes each once, and one presented twice
+        # ends every token renewed from it. None for a client that has none.
+        self._refresh_token: str | None = (config.get(_REFRESH_TOKEN_PROPERTY) or "").strip() or None
 
         # Authenticate
         self._token_obj = self._sign_in(config)
@@ -822,13 +833,13 @@ class Flexemarkets:
         carried; if another caller has renewed since, the sign-in is skipped
         and the caller retries with the token now current.
         """
-        if self._credentials is None:
+        if self._credentials is None and self._refresh_token is None:
             return False
         with self._renew_lock:
             if presented != self._bearer_token():
                 return True
             try:
-                token = self._sign_in(self._credentials)
+                token = self._sign_in(self._credentials or {})
             except FlexemarketsError:
                 return False
             self._token_obj = token
@@ -917,7 +928,28 @@ class Flexemarkets:
 
     # -- authentication ----------------------------------------------------
 
+    def _renew_with_refresh_token(self) -> Token:
+        """Sign in with the refresh token in hand: fm-server takes it once, and
+        answers with an access token and the refresh token to present next time.
+
+        This is how a robot fm-server launched outlives its access token. It is
+        handed a refresh token of its own, not the participant's access token,
+        which stops working after hours while the robot runs on.
+        """
+        resp = self._http.post(
+            _server(self._endpoint) + "/tokens/renew",
+            json={"refreshToken": self._refresh_token},
+            headers={"Accept": "application/json"},
+        )
+        _check_response(resp)
+        data = _json(resp)
+        if data.get("refreshToken"):
+            self._refresh_token = data["refreshToken"]
+        return _parse_token(data)
+
     def _sign_in(self, config: dict[str, str]) -> Token:
+        if self._refresh_token is not None:
+            return self._renew_with_refresh_token()
         tok = config.get("token", "")
         if tok and _is_valid_token(tok):
             # A caller who already holds a token has no account/email/password
