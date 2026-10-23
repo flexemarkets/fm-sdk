@@ -1,0 +1,31 @@
+{
+  "type": "Person",
+  "why": "A user who has signed in carries when and how, so a client can tell who has not signed in this week without a database query. The time is a bare UTC timestamp, like every other on the wire.",
+  "source": {
+    "constructed": "the lastSignedIn and lastSignInMethod fields fm-server's Person serializes (wire-manifest.json), on the shape of person.json. The method is the SignInMethod enum's name."
+  },
+  "payload": {
+    "id": 7,
+    "accountId": 1,
+    "firstName": "Dev",
+    "lastName": "Eloper",
+    "email": "dev@dev",
+    "roles": [
+      "ROLE_USER",
+      "ROLE_MANAGER"
+    ],
+    "accountOwner": true,
+    "createdDate": "2026-01-04T11:00:00",
+    "lastModifiedDate": "2026-08-01T11:00:00",
+    "lastSignedIn": "2026-10-20T14:05:30",
+    "lastSignInMethod": "GOOGLE"
+  },
+  "expect": {
+    "id": 7,
+    "email": "dev@dev",
+    "lastSignedIn": {
+      "epochMilli": 1792505130000
+    },
+    "lastSignInMethod": "GOOGLE"
+  }
+}
