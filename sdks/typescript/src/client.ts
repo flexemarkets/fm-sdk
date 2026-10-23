@@ -171,6 +171,8 @@ export function parsePerson(data: JsonObject | null | undefined): Person | null 
     accountOwner: (data.accountOwner as boolean) ?? false,
     createdDate: toInstant(data.createdDate as string),
     lastModifiedDate: toInstant(data.lastModifiedDate as string),
+    lastSignedIn: toInstant(data.lastSignedIn as string),
+    lastSignInMethod: (data.lastSignInMethod as string) ?? null,
   };
 }
 

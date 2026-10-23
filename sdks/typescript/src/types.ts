@@ -10,6 +10,8 @@ export interface Person {
   accountOwner: boolean;
   createdDate: Date | null;
   lastModifiedDate: Date | null;
+  lastSignedIn: Date | null;
+  lastSignInMethod: string | null;
 }
 
 export interface Account {
