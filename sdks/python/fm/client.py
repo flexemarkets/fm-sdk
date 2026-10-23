@@ -128,6 +128,8 @@ def _parse_person(data: dict[str, Any] | None) -> Person | None:
         account_owner=data.get("accountOwner", False),
         created_date=_timestamp(data.get("createdDate")),
         last_modified_date=_timestamp(data.get("lastModifiedDate")),
+        last_signed_in=_timestamp(data.get("lastSignedIn")),
+        last_sign_in_method=data.get("lastSignInMethod"),
     )
 
 
