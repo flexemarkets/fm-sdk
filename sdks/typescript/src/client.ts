@@ -46,6 +46,13 @@ const FM_NETWORK_CLIENT = `fm-sdk-typescript/${readVersion()}`;
 export const DEFAULT_ENDPOINT = "https://api.flexemarkets.com";
 
 /**
+ * Where a credential carries a refresh token: a `refresh-token=` line in a
+ * credential file, or the credential `refresh:<token>`.
+ */
+const REFRESH_TOKEN_PROPERTY = "refresh-token";
+const REFRESH_TOKEN_PREFIX = "refresh:";
+
+/**
  * The most traded legs fm-server answers in one read. The route `trades`
  * replaced had no limit; asking for the ceiling keeps as much of that as the
  * server allows.
@@ -694,7 +701,11 @@ export class Flexemarkets {
    * so `token()` and every request agree on which token is current.
    */
   private _tokenObj: Token;
-  /** Kept only to sign in again when the token runs out; null for a client given a token. */
+  /**
+   * Kept only to sign in again when the token runs out: a password, or a
+   * refresh token, which each renewal replaces with the one it hands back.
+   * Null for a client given only an access token.
+   */
   private _credentials: Record<string, string> | null = null;
   private _renewing: Promise<boolean> | null = null;
   private _account!: Account;
@@ -723,7 +734,9 @@ export class Flexemarkets {
     const config = loadConfig();
 
     if (credential != null) {
-      if (existsSync(credential)) {
+      if (credential.startsWith(REFRESH_TOKEN_PREFIX) && credential.slice(REFRESH_TOKEN_PREFIX.length).trim()) {
+        config[REFRESH_TOKEN_PROPERTY] = credential.slice(REFRESH_TOKEN_PREFIX.length);
+      } else if (existsSync(credential)) {
         Object.assign(config, loadPropertiesFile(credential));
       } else if (isValidToken(credential)) {
         config.token = credential;
@@ -745,7 +758,11 @@ export class Flexemarkets {
     const tokenObj = await signIn(baseUrl, config, desc);
 
     const fm = new Flexemarkets(ep, baseUrl, tokenObj, desc);
-    if (config.account && config.email && config.password && !(config.token && isValidToken(config.token))) {
+    if (config[REFRESH_TOKEN_PROPERTY]?.trim()) {
+      // The same object, not a copy: each renewal writes the refresh token it
+      // was handed back into it, and the next presents that one.
+      fm._credentials = config as Record<string, string>;
+    } else if (config.account && config.email && config.password && !(config.token && isValidToken(config.token))) {
       fm._credentials = { ...config } as Record<string, string>;
     }
     fm._account = tokenObj.account!;
@@ -1871,11 +1888,43 @@ export class Flexemarkets {
 // Authentication
 // ---------------------------------------------------------------------------
 
+/**
+ * Sign in with the refresh token in `config`: fm-server takes it once, and
+ * answers with an access token and the refresh token to present next time,
+ * which is written back into `config` -- one presented twice ends every token
+ * renewed from it.
+ *
+ * This is how a robot fm-server launched outlives its access token. It is
+ * handed a refresh token of its own, not the participant's access token, which
+ * stops working after hours while the robot runs on.
+ */
+async function renewWithRefreshToken(baseUrl: string, config: Record<string, string>): Promise<Token> {
+  const resp = await fetch(`${baseUrl}/tokens/renew`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      "User-Agent": FM_NETWORK_CLIENT,
+    },
+    body: JSON.stringify({ refreshToken: config[REFRESH_TOKEN_PROPERTY]!.trim() }),
+  });
+  const body = await resp.text();
+  checkResponse(resp, body);
+  const data = readBody(body);
+  if (typeof data.refreshToken === "string" && data.refreshToken) {
+    config[REFRESH_TOKEN_PROPERTY] = data.refreshToken;
+  }
+  return parseToken(data);
+}
+
 async function signIn(
   baseUrl: string,
   config: Record<string, string>,
   clientDescription: string,
 ): Promise<Token> {
+  if (config[REFRESH_TOKEN_PROPERTY]?.trim()) {
+    return renewWithRefreshToken(baseUrl, config);
+  }
   const tok = config.token ?? "";
   if (tok && isValidToken(tok)) {
     // A caller who already holds a token has no account/email/password to
