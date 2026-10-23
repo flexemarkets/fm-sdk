@@ -20,10 +20,14 @@ import fm.manifest.ParameterSpec;
  * <p>A study's command line and the host produce the same plan from the
  * same parameters, because both call {@link #setup}. That is the point:
  * one implementation of the study, however it is driven.
+ *
+ * <p>A multi-period study whose next allotment comes from the last close --
+ * a dividend drawn and paid, shorts carried -- also overrides {@link #carry},
+ * and its {@link #settle} reads what the periods carried. Contract 0.1.
  */
 public interface StudyProvider {
     /** The contract's major.minor; a host rejects a provider whose major differs from its own. */
-    String STUDY_SPI_VERSION = "0.0";
+    String STUDY_SPI_VERSION = "0.1";
 
     /**
      * The study's id, as its page and its command line name it.
@@ -89,6 +93,57 @@ public interface StudyProvider {
      */
     default Settlement settle(Map<String, String> parameters, Rotation rotation, List<ParticipantHolding> holdings) {
         throw new UnsupportedOperationException(id() + " has no settlement of its own");
+    }
+
+    /**
+     * Settle one rotation, knowing what the periods before it carried.
+     *
+     * <p>What a host calls. A study whose payout depends on the path -- the
+     * dividends each period paid on what was held through it -- overrides
+     * this one; every other study leaves it, and it settles as
+     * {@link #settle(Map, Rotation, List)} does.
+     *
+     * @param parameters the answers the run was set up with
+     * @param rotation   the rotation that just ran
+     * @param holdings   every participant's holding at close
+     * @param carried    what the last {@link #carry} in this rotation's
+     *                   marketplace kept, or null when none ran
+     * @return each participant's payoff, and the report to show them
+     * @throws UnsupportedOperationException when the study has no settlement
+     * @throws IllegalArgumentException      for a holding the study cannot
+     *                                       settle, with the reason
+     */
+    default Settlement settle(Map<String, String> parameters, Rotation rotation, List<ParticipantHolding> holdings,
+            String carried) {
+        return settle(parameters, rotation, holdings);
+    }
+
+    /**
+     * Carry one period into the next: from what each participant held when
+     * the rotation's session closed, the allotment the next one opens with.
+     *
+     * <p>The step a multi-period study takes between sessions -- draw the
+     * period's dividend, pay it, carry the short allowance -- which cannot be
+     * planned at setup because it starts from the close. The host calls it
+     * once per closed period that has a next one in the same marketplace,
+     * stages the result in place of what the plan gave that rotation, and
+     * keeps {@link Carry#carried} for the next call and for {@code settle}.
+     * A study whose rotations are all known at setup leaves the default, and
+     * runs its plan as written.
+     *
+     * @param parameters the answers the run was set up with
+     * @param rotation   the rotation that just ran
+     * @param holdings   every participant's holding at close
+     * @param carried    what the last carry in this marketplace kept, or
+     *                   null before the first
+     * @return the next period's holdings and state, and what to keep
+     * @throws UnsupportedOperationException when the study does not carry
+     * @throws IllegalArgumentException      for a holding the study cannot
+     *                                       carry, with the reason
+     */
+    default Carry carry(Map<String, String> parameters, Rotation rotation, List<ParticipantHolding> holdings,
+            String carried) {
+        throw new UnsupportedOperationException(id() + " plans every period at setup and carries nothing");
     }
 
     /**

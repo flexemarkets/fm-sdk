@@ -1,8 +1,19 @@
 # Multi-period studies in the study SPI (SSW first)
 
 Written 2026-10-11 for Top-100 item 57 ("Set up SSW from the UI, then the
-other studies"). Status: **decision for the owner**, with a
-recommendation. Nothing is built.
+other studies"). Status (2026-10-23): **option A chosen and half built.**
+
+- **SPI** (fm-sdk, main, unreleased): `StudyProvider.carry(parameters,
+  rotation, holdings, carried)` returns `Carry(holdings, state, carried)`,
+  and a `settle` overload takes `carried`; both are defaults. Study
+  contract 0.1, fm-spi 0.0.15. The period is `rotation.index()`, so the
+  signature drops the separate `period` argument proposed below.
+- **Host** (fm-server, branch `feat/study-carry`, not merged until fm-spi
+  0.0.15 is on Central): `PATCH /api/v1/studies/runs/{id}/rotations/{n}
+  {"state":"CARRIED"}` once the period's session has closed, rather than
+  the `POST .../carry` proposed below; the carried state is on the run under
+  `carries` (migration `FM-4.0.0-1230`). A closed period carries once.
+- **Not built:** `SswStudy` in fm-robots, and the UI's carry step.
 
 ## Why SSW can't be a StudyProvider today
 
