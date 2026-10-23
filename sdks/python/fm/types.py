@@ -20,6 +20,8 @@ class Person:
     account_owner: bool = False
     created_date: "datetime | None" = None
     last_modified_date: "datetime | None" = None
+    last_signed_in: "datetime | None" = None
+    last_sign_in_method: str | None = None
 
     def display_name(self) -> "str | None":
         """The best human label this record carries: the trimmed full name, or

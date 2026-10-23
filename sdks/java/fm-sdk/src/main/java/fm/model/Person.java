@@ -21,6 +21,10 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * @param roles            the roles the server granted, spelled as it spells
  *                         them -- see {@link Identity#hasRole}
  * @param accountOwner     whether they own the account they belong to
+ * @param lastSignedIn     when they last signed in, or null if they never have
+ * @param lastSignInMethod how they last signed in, spelled as the server
+ *                         spells it ({@code PASSWORD}, {@code GOOGLE},
+ *                         {@code OTP}, ...), or null if they never have
  */
 
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -33,7 +37,9 @@ public record Person(
     String lastName,
     String email,
     String[] roles,
-    Boolean accountOwner) {
+    Boolean accountOwner,
+    Instant lastSignedIn,
+    String lastSignInMethod) {
 
     /**
      * The best human label this record carries: the trimmed full name, or the
@@ -79,6 +85,17 @@ public record Person(
     }
 
     /**
+     * A person with no sign-in recorded: the shape before {@code lastSignedIn}
+     * and {@code lastSignInMethod} were carried, kept so code built against it
+     * (fm-robots' tests construct people this way) still compiles.
+     */
+    public Person(Instant createdDate, Instant lastModifiedDate, Long id, Long accountId,
+            String firstName, String lastName, String email, String[] roles, Boolean accountOwner) {
+        this(createdDate, lastModifiedDate, id, accountId, firstName, lastName, email, roles,
+                accountOwner, null, null);
+    }
+
+    /**
      * Built from the wire, where a timestamp is a string in one of two shapes.
      *
      * <p>A {@code @JsonCreator} rather than a {@code @JsonDeserialize} on each
@@ -98,8 +115,11 @@ public record Person(
             @JsonProperty("lastName") String lastName,
             @JsonProperty("email") String email,
             @JsonProperty("roles") String[] roles,
-            @JsonProperty("accountOwner") Boolean accountOwner) {
+            @JsonProperty("accountOwner") Boolean accountOwner,
+            @JsonProperty("lastSignedIn") String lastSignedIn,
+            @JsonProperty("lastSignInMethod") String lastSignInMethod) {
         return new Person(Timestamps.parse(createdDate), Timestamps.parse(lastModifiedDate),
-                id, accountId, firstName, lastName, email, roles, accountOwner);
+                id, accountId, firstName, lastName, email, roles, accountOwner,
+                Timestamps.parse(lastSignedIn), lastSignInMethod);
     }
 }
