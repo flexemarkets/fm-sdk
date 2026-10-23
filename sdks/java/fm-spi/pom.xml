@@ -35,6 +35,9 @@
         0.0.14: CliBuilder refuses a launch value outside the robot's own hard
         bounds, on every host, and a float is decimal syntax: NaN, Infinity,
         1.5d and hex floats are refused rather than parsed as doubles.
+        0.0.15 adds carry() and study contract 0.1: a multi-period study
+        stages each period from the last one's close, and settles from what
+        the periods carried (docs/STUDY-SPI-PERIODS.md).
         Bump the patch for an additive change, and the major only alongside
         ServiceProvider.SPI_VERSION, since hosts reject a provider whose major
         differs from their own.
@@ -42,7 +45,7 @@
         Set with `make set-spi-version V=x.y.z`. `make set-version` moves the
         parent reference below but leaves this alone.
     -->
-    <version>0.0.14</version><!-- spi-version -->
+    <version>0.0.15</version><!-- spi-version -->
 
     <packaging>jar</packaging>
 
