@@ -24,10 +24,17 @@ import fm.manifest.ParameterSpec;
  * <p>A multi-period study whose next allotment comes from the last close --
  * a dividend drawn and paid, shorts carried -- also overrides {@link #carry},
  * and its {@link #settle} reads what the periods carried. Contract 0.1.
+ *
+ * <p>A host calls {@link #carry(Map, Rotation, Close, String)} and
+ * {@link #settle(Map, Rotation, Close, String)}, which hand over the
+ * session's orders beside its holdings; by default they answer as the
+ * holdings-only forms do, so a study that pays from holdings overrides those
+ * and is unchanged. A carry may also end the run before the plan's last
+ * period ({@link Carry.Next}). Contract 0.2.
  */
 public interface StudyProvider {
     /** The contract's major.minor; a host rejects a provider whose major differs from its own. */
-    String STUDY_SPI_VERSION = "0.1";
+    String STUDY_SPI_VERSION = "0.2";
 
     /**
      * The study's id, as its page and its command line name it.
@@ -144,6 +151,56 @@ public interface StudyProvider {
     default Carry carry(Map<String, String> parameters, Rotation rotation, List<ParticipantHolding> holdings,
             String carried) {
         throw new UnsupportedOperationException(id() + " plans every period at setup and carries nothing");
+    }
+
+    /**
+     * Settle one rotation from everything its session ended with: the
+     * holdings at close and the session's orders.
+     *
+     * <p>What a host calls, from contract 0.2. A study paid from what the
+     * orders say -- claims resting in a private market, each trade by who
+     * sold it -- overrides this one; every other study leaves it, and it
+     * settles from the holdings as {@link #settle(Map, Rotation, List, String)}
+     * does.
+     *
+     * @param parameters the answers the run was set up with
+     * @param rotation   the rotation that just ran
+     * @param close      the holdings at close and the session's orders
+     * @param carried    what the last {@link #carry} in this rotation's
+     *                   marketplace kept, or null when none ran
+     * @return each participant's payoff, and the report to show them
+     * @throws UnsupportedOperationException when the study has no settlement
+     * @throws IllegalArgumentException      for a close the study cannot
+     *                                       settle, with the reason
+     */
+    default Settlement settle(Map<String, String> parameters, Rotation rotation, Close close, String carried) {
+        return settle(parameters, rotation, close.holdings(), carried);
+    }
+
+    /**
+     * Carry one period into the next from everything its session ended with:
+     * the holdings at close and the session's orders.
+     *
+     * <p>What a host calls, from contract 0.2. A study whose next period
+     * depends on the orders overrides this one; every other study leaves it,
+     * and it carries from the holdings as
+     * {@link #carry(Map, Rotation, List, String)} does. Its {@link Carry#next}
+     * may end the run: the host then settles, and does not run the periods
+     * the plan had left.
+     *
+     * @param parameters the answers the run was set up with
+     * @param rotation   the rotation that just ran
+     * @param close      the holdings at close and the session's orders
+     * @param carried    what the last carry in this marketplace kept, or
+     *                   null before the first
+     * @return the next period's holdings and state, what to keep, and
+     *         whether the run goes on
+     * @throws UnsupportedOperationException when the study does not carry
+     * @throws IllegalArgumentException      for a close the study cannot
+     *                                       carry, with the reason
+     */
+    default Carry carry(Map<String, String> parameters, Rotation rotation, Close close, String carried) {
+        return carry(parameters, rotation, close.holdings(), carried);
     }
 
     /**
