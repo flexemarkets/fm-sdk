@@ -2,10 +2,12 @@
 
 Written 2026-10-24 for fm-robots#491 (Credit Bubble), #492 (Venture
 Capital) and the robot half of #476 (CAPM). Status: **recommendations
-accepted 2026-10-24; parts 1 and 2 being built for Credit Bubble**
-(fm-sdk `feat/study-spi-0.2`), with one addition found while building it:
-`setup` is told who is setting the run up (below). Part 3, robots, follows
-as its own contract minor if 0.2 ships first. Follows `STUDY-SPI-PERIODS.md`, which added `carry` (contract 0.1,
+accepted 2026-10-24. Parts 1 and 2 shipped as contract 0.2 (fm-spi
+0.0.16, with fm-sdk 0.9.0)**, with one addition found while building them:
+`setup` is told who is setting the run up (below). **Part 3, robots, is
+contract 0.3 (fm-spi 0.0.17)**, being built on `feat/study-spi-robots`;
+what changed from the proposal while building it is in "Part 3 as built",
+at the end. Follows `STUDY-SPI-PERIODS.md`, which added `carry` (contract 0.1,
 fm-spi 0.0.15).
 
 Five studies are hosted on contract 0.1: Smith 62, Simple Dividend, SSW,
@@ -100,12 +102,10 @@ public record Close(List<ParticipantHolding> holdings, List<SessionOrder> orders
  * the platform.
  *
  * @param owner        the owner's email
- * @param robot        the RobotSpec key when a study's own robot placed
- *                     it, else null
  * @param state        RESTING at close, TRADED or CANCELLED
  * @param counterparty the order it traded with, when TRADED
  */
-public record SessionOrder(long id, long ownerId, String owner, String robot,
+public record SessionOrder(long id, long ownerId, String owner,
         String symbol, Side side, long price, long units,
         State state, Long counterparty) {
     public enum Side { BUY, SELL }
@@ -309,3 +309,30 @@ apart, Credit Bubble first.
    half of part 1 or 2 is green against a snapshot, as 0.0.15 was.
 5. **Shipping in two parts.** Recommended: Credit Bubble (parts 1 and 2)
    first, then Venture and CAPM's robots (part 3).
+
+## Part 3 as built (contract 0.3)
+
+Three changes from the proposal, each smaller than what it replaces.
+
+- **Who a robot is, at close.** The proposal put a `robot` key on every
+  `SessionOrder` and marked robots' holdings. Instead `Close` gains
+  `robots`: the study's own robots' emails by key, with `isRobot(email)`.
+  Orders and holdings already carry the owner's email, so the study can
+  tell for itself, and `SessionOrder` (shipped in 0.2) is unchanged.
+  `Close`'s two-argument constructor stays.
+- **The setup overload** is `setup(parameters, participants, manager,
+  robots)`, extending 0.2's three-argument form rather than the
+  two-argument one, so a study is told both the manager and its robots.
+- **The entrepreneur robot lives in the Venture module**, not one of its
+  own. `fm-venture-entrepreneur` is a `ServiceProvider` and a manifest in
+  `applications/studies/venture-credit`, beside the CLI and the study. One
+  jar carries all three; a separate module would have been shaded into the
+  study's jar as well, registering the robot twice with any host that
+  loads both. The take rule is one class, `Entrepreneur`, that the CLI's
+  loop and the robot's both call.
+
+Every parameter of the entrepreneur robot is the manager's: an OWN robot is
+launched with the spec's parameters as the fixed values, and nobody
+supplies any at launch. OWN robots run in-process (`local:`) only: the
+server launches them with no request behind it, and the container host
+needs a caller's token.
