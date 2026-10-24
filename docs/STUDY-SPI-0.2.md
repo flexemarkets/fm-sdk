@@ -1,8 +1,11 @@
 # Study contract 0.2: the session's orders, early endings, and robots
 
 Written 2026-10-24 for fm-robots#491 (Credit Bubble), #492 (Venture
-Capital) and the robot half of #476 (CAPM). Status: **proposed, nothing
-built.** Follows `STUDY-SPI-PERIODS.md`, which added `carry` (contract 0.1,
+Capital) and the robot half of #476 (CAPM). Status: **recommendations
+accepted 2026-10-24; parts 1 and 2 being built for Credit Bubble**
+(fm-sdk `feat/study-spi-0.2`), with one addition found while building it:
+`setup` is told who is setting the run up (below). Part 3, robots, follows
+as its own contract minor if 0.2 ships first. Follows `STUDY-SPI-PERIODS.md`, which added `carry` (contract 0.1,
 fm-spi 0.0.15).
 
 Five studies are hosted on contract 0.1: Smith 62, Simple Dividend, SSW,
@@ -68,11 +71,18 @@ holdings CSV, which is keyed on email. `setup` is only given the
 participants, so it cannot write those rows. And at settlement, their
 holdings must not be paid as a participant's would be.
 
-**Not a gap: Credit Bubble's pool manager.** The CLI gives the pool manager
-a holding so that its screen shows the pool's cash and the remaining
-claims. Hosted, the pool's cash lives in `carried`, and the settlement
-report shows it. The manager is not in the plan's holdings, so fm-server
-015a772e6 already leaves them out of the close.
+### 5. Who the pool is (found while building)
+
+A claim is a private SELL addressed to the pool manager: in the claim
+market, the pool's allotment is the only one with a name ("CLAIM"), so it
+is the only counterparty a participant can address. The CLI allots it to
+whoever runs the study (`--pool-manager`, default self). `setup` is given
+only the participants, so a hosted plan had nobody to allot the pool to.
+
+**Added:** `setup(parameters, participants, manager)`, defaulting to the
+two-argument form. Credit Bubble allots the pool to the manager, as the
+CLI does, and pays them nothing; the pool's allotment shows its cash and
+the claims outstanding, as on the CLI.
 
 ## Proposal
 
