@@ -38,6 +38,10 @@
         0.0.15 adds carry() and study contract 0.1: a multi-period study
         stages each period from the last one's close, and settles from what
         the periods carried (docs/STUDY-SPI-PERIODS.md).
+        0.0.16 is study contract 0.2: carry and settle are handed the
+        session's orders beside its holdings, a carry can end the run
+        before the plan's last period, and setup is told who is setting the
+        run up (docs/STUDY-SPI-0.2.md).
         Bump the patch for an additive change, and the major only alongside
         ServiceProvider.SPI_VERSION, since hosts reject a provider whose major
         differs from their own.
@@ -45,7 +49,7 @@
         Set with `make set-spi-version V=x.y.z`. `make set-version` moves the
         parent reference below but leaves this alone.
     -->
-    <version>0.0.15</version><!-- spi-version -->
+    <version>0.0.16</version><!-- spi-version -->
 
     <packaging>jar</packaging>
 
