@@ -26,7 +26,7 @@ class StudyProviderCloseTest {
             State.RESTING, null);
 
     /** A 0.1 study: it carries and settles from holdings alone. */
-    private static final class Periodic implements StudyProvider {
+    private static class Periodic implements StudyProvider {
         List<ParticipantHolding> settled;
         List<ParticipantHolding> carriedFrom;
 
@@ -81,6 +81,18 @@ class StudyProviderCloseTest {
         };
         assertThatThrownBy(() -> planned.carry(Map.of(), ROTATION, Close.of(List.of(HOLDING)), null))
                 .isInstanceOf(UnsupportedOperationException.class).hasMessageContaining("planned");
+    }
+
+    @Test
+    void aStudyThatGivesTheManagerNoPartPlansWithoutThem() {
+        StudyPlan plan = new StudyPlan(List.of(new MarketplaceSpec("mp", "Market", null,
+                List.of(MarketSpec.of("STK", "Stock")), null)), List.of(ROTATION), null);
+        StudyProvider planned = new Periodic() {
+            @Override public StudyPlan setup(Map<String, String> parameters, List<Participant> participants) {
+                return plan;
+            }
+        };
+        assertThat(planned.setup(Map.of(), List.of(), new Participant(1, "manager@uni.edu", "", ""))).isSameAs(plan);
     }
 
     @Test
