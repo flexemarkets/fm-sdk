@@ -32,10 +32,17 @@ import fm.manifest.ParameterSpec;
  * and is unchanged. A carry may also end the run before the plan's last
  * period ({@link Carry.Next}), and a host says who is setting the run up
  * ({@link #setup(Map, List, Participant)}). Contract 0.2.
+ *
+ * <p>A study may need robots ({@link #robots}): its own traders, which the
+ * host gives people of their own and launches for each session, or robots
+ * it offers participants with parameters it fixes. A study with robots of
+ * its own plans with their people ({@link #setup(Map, List, Participant, Map)}),
+ * and is told at close which holdings and orders are theirs
+ * ({@link Close#robots}). Contract 0.3.
  */
 public interface StudyProvider {
     /** The contract's major.minor; a host rejects a provider whose major differs from its own. */
-    String STUDY_SPI_VERSION = "0.2";
+    String STUDY_SPI_VERSION = "0.3";
 
     /**
      * The study's id, as its page and its command line name it.
@@ -101,6 +108,49 @@ public interface StudyProvider {
      */
     default StudyPlan setup(Map<String, String> parameters, List<Participant> participants, Participant manager) {
         return setup(parameters, participants);
+    }
+
+    /**
+     * The robots a run needs, before it is planned: the host makes a person
+     * for each of the study's own ({@link RobotSpec.Mode#OWN}) and hands
+     * them to {@link #setup(Map, List, Participant, Map)}, which allots them.
+     *
+     * <p>From contract 0.3. A study without robots leaves the default.
+     *
+     * @param parameters the manager's answers by parameter name, as text;
+     *                   a missing name means the default
+     * @return the robots, each with a key of its own
+     * @throws IllegalArgumentException for a parameter the study refuses,
+     *                                  with the reason in the message
+     */
+    default List<RobotSpec> robots(Map<String, String> parameters) {
+        return List.of();
+    }
+
+    /**
+     * Plan a run of the study with its own robots' people.
+     *
+     * <p>What a host calls, from contract 0.3. A study whose robots trade
+     * from an allotment -- Venture's entrepreneurs hold the notes they sell
+     * -- overrides this one and writes their rows into the rotations'
+     * holdings as it writes anyone's; every other study leaves it, and plans
+     * as {@link #setup(Map, List, Participant)} does. A robot is neither a
+     * participant nor paid.
+     *
+     * @param parameters   the manager's answers by parameter name, as text;
+     *                     a missing name means the default
+     * @param participants the people taking part, in the order the manager
+     *                     gave them
+     * @param manager      the person setting the run up
+     * @param robots       a person for each of {@link #robots} whose mode is
+     *                     {@link RobotSpec.Mode#OWN}, by its key
+     * @return the marketplaces to create and the rotations to run in them
+     * @throws IllegalArgumentException for a parameter the study refuses,
+     *                                  with the reason in the message
+     */
+    default StudyPlan setup(Map<String, String> parameters, List<Participant> participants, Participant manager,
+            Map<String, Participant> robots) {
+        return setup(parameters, participants, manager);
     }
 
     /**
