@@ -47,6 +47,26 @@ class StudyRecordsTest {
     }
 
     @Test
+    void aMarketIsContinuousUnlessItIsMadeACallAuction() {
+        MarketSpec continuous = MarketSpec.of("STK", "Stock");
+        assertThat(continuous.mechanism()).isEqualTo(MarketSpec.CONTINUOUS);
+        assertThat(continuous.mechanism()).isNotEqualTo(MarketSpec.CALL);
+        assertThat(new MarketSpec("A", "A", false, 0, 100, 1, 1, 10, 1, null, null, true).mechanism())
+                .as("a market that does not say how it trades").isEqualTo(MarketSpec.CONTINUOUS);
+
+        MarketSpec batch = continuous.asCall(3, false);
+        assertThat(batch.mechanism()).isEqualTo(MarketSpec.CALL);
+        assertThat(batch.callIntervalSeconds()).isEqualTo(3);
+        assertThat(batch.callCarry()).isFalse();
+        assertThat(batch.symbol()).isEqualTo("STK");
+        assertThat(batch.priceMaximum()).isEqualTo(continuous.priceMaximum());
+
+        assertThat(batch.asPrivate().mechanism()).as("a private market is continuous; a call market cannot be private")
+                .isEqualTo(MarketSpec.CONTINUOUS);
+        assertThat(continuous.asCall(null, true).callIntervalSeconds()).as("calls only when a manager clears").isNull();
+    }
+
+    @Test
     void aHoldingKeepsItsOwnSecurities() {
         List<ParticipantHolding.Security> securities = new ArrayList<>(List.of(new ParticipantHolding.Security("STK", 10, 8)));
         ParticipantHolding holding = new ParticipantHolding(1, "a@uni.edu", "A", 1000, 900, securities);
