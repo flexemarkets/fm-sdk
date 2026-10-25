@@ -262,6 +262,9 @@ ARITY_EXEMPTIONS: dict[str, str] = {
     "createMarket":
         "The unit grid and privateMarket default in Python and TypeScript; "
         "Java has no default arguments and takes all six.",
+    "createCallMarket":
+        "The unit grid, interval and carry default in Python and TypeScript; "
+        "Java has no default arguments and takes all seven.",
 }
 
 
@@ -879,6 +882,10 @@ EXPORT_EXEMPTIONS: dict[str, str] = {
     "SESSION_STATE_OPEN":   "same",
     "SESSION_STATE_PAUSED": "same",
     "SESSION_STATE_CLOSED": "same",
+    "MARKET_MECHANISM_CONTINUOUS":  "Market.MECHANISM_CONTINUOUS in Java and Python, string constants in TypeScript",
+    "MARKET_MECHANISM_CALL":        "same",
+    "MARKET_CALL_TRIGGER_MANUAL":   "MarketCall.TRIGGER_MANUAL in Java and Python, string constants in TypeScript",
+    "MARKET_CALL_TRIGGER_INTERVAL": "same",
 
     # TypeScript's wire types are structural interfaces and cannot carry
     # methods, so behaviour Java hangs off a record has to be a free function.
@@ -890,6 +897,7 @@ EXPORT_EXEMPTIONS: dict[str, str] = {
     "holdingUnits":      "Holding.units() in Java",
     "priceRound":        "Market.priceRound() in Java",
     "unitRound":         "Market.unitRound() in Java",
+    "isCall":            "Market.isCall() in Java, Market.is_call() in Python",
     "unitGrid":          "Market.unitGrid() in Java",
     "tickRound":         "TickGrid arithmetic, package-private in Java",
     "gridRound":         "TickGrid arithmetic, package-private in Java",

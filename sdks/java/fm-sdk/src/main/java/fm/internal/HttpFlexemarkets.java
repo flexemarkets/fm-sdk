@@ -9,6 +9,7 @@ import fm.model.ConflictFailure;
 import fm.model.Holding;
 import fm.model.ManagerOtpBundle;
 import fm.model.Market;
+import fm.model.MarketCall;
 import fm.model.Marketplace;
 import fm.model.Order;
 import fm.model.ParticipantState;
@@ -190,6 +191,8 @@ public class HttpFlexemarkets implements Flexemarkets {
     private static final TypeReference<Marketplace>          MARKETPLACE_TYPE  = new TypeReference<>() {};
     private static final TypeReference<List<Market>>         MARKETS_TYPE      = new TypeReference<>() {};
     private static final TypeReference<Market>               MARKET_TYPE       = new TypeReference<>() {};
+    private static final TypeReference<MarketCall>           MARKET_CALL_TYPE  = new TypeReference<>() {};
+    private static final TypeReference<List<MarketCall>>     MARKET_CALLS_TYPE = new TypeReference<>() {};
     private static final TypeReference<List<Session>>        SESSIONS_TYPE     = new TypeReference<>() {};
     private static final TypeReference<Session>              SESSION_TYPE      = new TypeReference<>() {};
     private static final TypeReference<List<Order>>          ORDERS_TYPE       = new TypeReference<>() {};
@@ -721,7 +724,18 @@ public class HttpFlexemarkets implements Flexemarkets {
                     new CreateMarket(symbol, name,
                                      price.minimum(), price.maximum(), price.tick(),
                                      units.minimum(), units.maximum(), units.tick(),
-                                     privateMarket),
+                                     privateMarket, null, null, null),
+                    MARKET_TYPE);
+    }
+
+    @Override
+    public Market createCallMarket(long marketplaceId, String symbol, String name,
+                                   TickGrid price, TickGrid units, Integer intervalSeconds, boolean carry) {
+        return _post(_marketplace(marketplaceId) + "/markets",
+                    new CreateMarket(symbol, name,
+                                     price.minimum(), price.maximum(), price.tick(),
+                                     units.minimum(), units.maximum(), units.tick(),
+                                     false, Market.MECHANISM_CALL, intervalSeconds, carry),
                     MARKET_TYPE);
     }
 
@@ -750,10 +764,13 @@ public class HttpFlexemarkets implements Flexemarkets {
                               String lastName, String[] roles) {}
 
 
+    /** The call fields go only when set, so a continuous market's body is what it always was. */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     private record CreateMarket(String symbol, String name,
                                 long priceMinimum, long priceMaximum, long priceTick,
                                 long unitMinimum, long unitMaximum, long unitTick,
-                                boolean privateMarket) {}
+                                boolean privateMarket,
+                                String mechanism, Integer callIntervalSeconds, Boolean callCarry) {}
 
     private record ManagerOtpRequest(List<Long> userIds) {}
 
@@ -986,6 +1003,21 @@ public class HttpFlexemarkets implements Flexemarkets {
     @Override
     public List<Widget> allWidgets(long marketplaceId) {
         return List.copyOf(_get(_marketplace(marketplaceId) + "/widgets?participant=all", WIDGETS_TYPE));
+    }
+
+    @Override
+    public MarketCall clearNow(long marketplaceId, long marketId) {
+        return _post(_marketplace(marketplaceId) + "/markets/" + marketId + "/calls", null, MARKET_CALL_TYPE);
+    }
+
+    @Override
+    public List<MarketCall> calls(long marketplaceId) {
+        return List.copyOf(_get(_marketplace(marketplaceId) + "/calls", MARKET_CALLS_TYPE));
+    }
+
+    @Override
+    public List<MarketCall> calls(long marketplaceId, long sessionId) {
+        return List.copyOf(_get(_marketplace(marketplaceId) + "/calls?sessionId=" + sessionId, MARKET_CALLS_TYPE));
     }
 
     @Override

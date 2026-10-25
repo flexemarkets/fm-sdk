@@ -226,6 +226,27 @@ way the last one did:
 | `POST markets` | manager | add a market |
 | `DELETE markets/{marketId}` | manager | remove a market no order has used |
 | `GET participants` | user | the participants the caller may name in a private order: `{name}`, and `userId` for a manager |
+| `POST markets/{marketId}/calls` | manager | Clear now: call a call-auction market, while a session is open; answers the call |
+| `GET calls` | manager | every call the marketplace's call markets have made, oldest first; `?sessionId=` for one session's; `Accept: text/csv` for the same as CSV |
+
+A market's `mechanism` is `CONTINUOUS`, where an order trades the moment it
+crosses, or `CALL`, a call auction: orders collect, crossed or not, and a call
+clears them all at one price -- the most units traded, then the least
+imbalance, then the midpoint of that range. A call market has
+`callIntervalSeconds` (null for calls only by Clear now) and `callCarry`
+(whether what a call leaves unfilled waits for the next one), and cannot be
+private. Its book is sealed: a participant sees their own resting orders and
+the trades, not other resting orders. A market from a server without call
+auctions reads as continuous.
+
+| | add a call market | Clear now | the calls |
+|---|---|---|---|
+| Java | `createCallMarket(marketplaceId, symbol, name, price, units, Integer intervalSeconds, boolean carry)` | `MarketCall clearNow(marketplaceId, marketId)` | `List<MarketCall> calls(marketplaceId)`, and `(…, long sessionId)` |
+| Python | `create_call_market(marketplace_id, symbol, name, price, units=None, interval_seconds=None, carry=True)` | `clear_now(marketplace_id, market_id)` | `calls(marketplace_id, session_id=None)` |
+| TypeScript | `createCallMarket(marketplaceId, symbol, name, price, units?, intervalSeconds?, carry?)` | `clearNow(marketplaceId, marketId)` | `calls(marketplaceId, sessionId?)` |
+
+`Market.isCall()` (Java), `Market.is_call()` (Python) and `isCall(market)`
+(TypeScript) say whether a market is a call auction.
 
 ### Sessions
 
@@ -615,6 +636,7 @@ Every frame carries a `message-type` header naming the payload:
 | `PANELS-UPDATE` | the recipient's evaluated `score` panels, values only (user queue) |
 | `SERIES-UPDATE` | a market's sampled price series on one period grid: a snapshot in the subscribe burst, then one point per boundary (topic) |
 | `WIDGETS-UPDATE` | pushed widgets: a snapshot of what the recipient may see in the subscribe burst, then upserts and removals (topic for the marketplace's, user queue for their own) |
+| `CALL-UPDATE` | a call of a call-auction market, as `GET calls` answers each (topic); its trades come as an `ORDERS-UPDATE` |
 | `ERROR` | `{"error": "…"}`, e.g. the marketplace isn't available |
 
 Additional headers on every frame: `system-current-time-millis`,

@@ -177,6 +177,9 @@ class FakeFlexemarkets implements Flexemarkets {
     @Override public boolean removeWidget(long id, String key) { throw _no("removeWidget"); }
     @Override public boolean removeWidget(long id, String key, long userId) { throw _no("removeWidget"); }
     @Override public List<Widget> allWidgets(long id) { throw _no("allWidgets"); }
+    @Override public MarketCall clearNow(long id, long marketId) { throw _no("clearNow"); }
+    @Override public List<MarketCall> calls(long id) { throw _no("calls"); }
+    @Override public List<MarketCall> calls(long id, long sessionId) { throw _no("calls"); }
     @Override public List<MarketplaceRobot> marketplaceRobots(long id) { throw _no("marketplaceRobots"); }
     @Override public RobotParameterConfig configureRobotParameter(long id, String robotId, String paramName,
                                                                   String value, RobotParameterControl control) {
@@ -184,6 +187,7 @@ class FakeFlexemarkets implements Flexemarkets {
     }
 
     @Override public Token signup(String a, String e, String p) { throw _no("signup"); }
+    @Override public Market createCallMarket(long mp, String symbol, String name, TickGrid price, TickGrid units, Integer intervalSeconds, boolean carry) { throw _no("createCallMarket"); }
     @Override public Token signup(String a, String e, String p, String first, String last) { throw _no("signup"); }
     @Override public Person createUser(String e, String p, String first, String last, String... roles) { throw _no("createUser"); }
     @Override public Market createMarket(long mp, String symbol, String name, TickGrid price, TickGrid units, boolean privateMarket) { throw _no("createMarket"); }

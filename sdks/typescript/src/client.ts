@@ -7,7 +7,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { orderedSecurities, toOrderType, toSide, unitGrid } from "./types.js";
+import { MARKET_MECHANISM_CALL, MARKET_MECHANISM_CONTINUOUS, orderedSecurities, toOrderType, toSide, unitGrid } from "./types.js";
 import { toInstant } from "./timestamps.js";
 import type {
   Account,
@@ -17,6 +17,7 @@ import type {
   Holding,
   ManagerOtpBundle,
   Market,
+  MarketCall,
   Marketplace,
   Order,
   ParticipantState,
@@ -225,6 +226,27 @@ export function parseMarket(data: JsonObject): Market {
     unitMinimum: (data.unitMinimum as number) ?? 0,
     unitMaximum: (data.unitMaximum as number) ?? 0,
     unitTick: (data.unitTick as number) ?? 0,
+    mechanism: (data.mechanism as string) || MARKET_MECHANISM_CONTINUOUS,
+    callIntervalSeconds: (data.callIntervalSeconds as number) ?? null,
+    callCarry: data.callCarry !== false,
+  };
+}
+
+export function parseMarketCall(data: JsonObject): MarketCall {
+  return {
+    id: (data.id as number) ?? 0,
+    marketplaceId: (data.marketplaceId as number) ?? 0,
+    marketId: (data.marketId as number) ?? 0,
+    sessionId: (data.sessionId as number) ?? 0,
+    calledDate: toInstant(data.calledDate as string),
+    trigger: (data.trigger as string) ?? null,
+    price: (data.price as number) ?? null,
+    volume: (data.volume as number) ?? 0,
+    demand: (data.demand as number) ?? 0,
+    supply: (data.supply as number) ?? 0,
+    buyOrders: (data.buyOrders as number) ?? 0,
+    sellOrders: (data.sellOrders as number) ?? 0,
+    carry: (data.carry as boolean) ?? true,
   };
 }
 
@@ -1148,6 +1170,41 @@ export class Flexemarkets {
   }
 
   /**
+   * Add a call-auction market to a marketplace: orders collect, crossed or
+   * not, and a call clears them all at one price.
+   *
+   * Calls come from the market's schedule, every `intervalSeconds` while a
+   * session is open, or from a manager's {@link clearNow}; null leaves only
+   * the latter. `carry` is whether what a call leaves unfilled waits for the
+   * next one rather than being cancelled. A call market cannot be private, so
+   * there is no flag for it here; the server refuses the combination.
+   */
+  async createCallMarket(
+    marketplaceId: number,
+    symbol: string,
+    name: string,
+    price: TickGrid,
+    units: TickGrid = unitGrid(),
+    intervalSeconds: number | null = null,
+    carry = true,
+  ): Promise<Market> {
+    return parseMarket(await this._post(`${this._marketplace(marketplaceId)}/markets`, {
+      symbol,
+      name,
+      priceMinimum: price.minimum,
+      priceMaximum: price.maximum,
+      priceTick: price.tick,
+      unitMinimum: units.minimum,
+      unitMaximum: units.maximum,
+      unitTick: units.tick,
+      privateMarket: false,
+      mechanism: MARKET_MECHANISM_CALL,
+      callIntervalSeconds: intervalSeconds,
+      callCarry: carry,
+    }));
+  }
+
+  /**
    * Mint one-time passcodes for the given users.
    *
    * These are credentials: not to be logged, not to be persisted, and
@@ -1688,6 +1745,25 @@ export class Flexemarkets {
   async allWidgets(marketplaceId: number): Promise<Widget[]> {
     const data = await this._get(`${this._marketplace(marketplaceId)}/widgets?participant=all`);
     return (data as unknown as JsonObject[]).map(parseWidget);
+  }
+
+  /**
+   * Clear a call-auction market now: every crossing order trades at one
+   * price, the way the market's schedule would.
+   *
+   * Only while a session is open, and only in a call market; the server
+   * refuses either otherwise. The trades arrive as orders on the stream, as
+   * every trade does.
+   */
+  async clearNow(marketplaceId: number, marketId: number): Promise<MarketCall> {
+    return parseMarketCall(await this._post(`${this._marketplace(marketplaceId)}/markets/${marketId}/calls`, null));
+  }
+
+  /** Every call the marketplace's call markets have made, oldest first; one session's with `sessionId`. */
+  async calls(marketplaceId: number, sessionId?: number): Promise<MarketCall[]> {
+    const query = sessionId === undefined ? "" : `?sessionId=${sessionId}`;
+    const data = await this._get(`${this._marketplace(marketplaceId)}/calls${query}`);
+    return (data as unknown as JsonObject[]).map(parseMarketCall);
   }
 
   /**

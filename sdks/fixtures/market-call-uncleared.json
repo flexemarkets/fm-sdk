@@ -1,0 +1,39 @@
+{
+  "type": "MarketCall",
+  "why": "A call that cleared nothing has no price. Read as zero, a call that found no cross looks like one that traded at 0.00, and an analysis of clearing prices is dragged to the floor by every quiet call.",
+  "source": {
+    "constructed": "fm-server's MarketCall record as GET /marketplaces/{id}/calls answers each call: a manual call that found no cross, calledDate zone-less in UTC with milliseconds, as the server writes it."
+  },
+  "payload": {
+    "id": 92,
+    "marketplaceId": 3050,
+    "marketId": 12,
+    "sessionId": 77,
+    "calledDate": "2026-10-25T09:00:10.250",
+    "trigger": "MANUAL",
+    "price": null,
+    "volume": 0,
+    "demand": 1,
+    "supply": 4,
+    "buyOrders": 1,
+    "sellOrders": 2,
+    "carry": true
+  },
+  "expect": {
+    "id": 92,
+    "marketplaceId": 3050,
+    "marketId": 12,
+    "sessionId": 77,
+    "calledDate": {
+      "epochMilli": 1792918810250
+    },
+    "trigger": "MANUAL",
+    "price": null,
+    "volume": 0,
+    "demand": 1,
+    "supply": 4,
+    "buyOrders": 1,
+    "sellOrders": 2,
+    "carry": true
+  }
+}

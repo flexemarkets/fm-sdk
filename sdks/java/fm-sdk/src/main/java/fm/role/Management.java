@@ -2,6 +2,7 @@ package fm.role;
 
 import fm.model.Holding;
 import fm.model.ParticipantState;
+import fm.model.MarketCall;
 import fm.model.Marketplace;
 import fm.model.RobotParameterConfig;
 import fm.model.RobotParameterControl;
@@ -188,6 +189,37 @@ public interface Management {
      * @return the widgets, marketplace-scoped and user-scoped alike
      */
     List<Widget> allWidgets(long marketplaceId);
+
+    /**
+     * Clear a call-auction market now: every crossing order trades at one
+     * price, the way the market's schedule would.
+     *
+     * <p>Only while a session is open, and only in a call market; the server
+     * refuses either otherwise. The trades arrive as orders on the stream, as
+     * every trade does.
+     *
+     * @param marketplaceId the marketplace
+     * @param marketId      the call market to clear
+     * @return the call: its price, or none when the book did not cross, and what it traded
+     */
+    MarketCall clearNow(long marketplaceId, long marketId);
+
+    /**
+     * Every call the marketplace's call markets have made, oldest first.
+     *
+     * @param marketplaceId the marketplace to read
+     * @return the calls, every session's
+     */
+    List<MarketCall> calls(long marketplaceId);
+
+    /**
+     * One session's calls, oldest first.
+     *
+     * @param marketplaceId the marketplace to read
+     * @param sessionId     the session
+     * @return the calls made in that session
+     */
+    List<MarketCall> calls(long marketplaceId, long sessionId);
 
     /**
      * Set a robot parameter's value in a marketplace, and whether participants

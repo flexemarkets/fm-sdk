@@ -1,5 +1,6 @@
 package fm.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 /**
  * One market: what it is called, and what the server will accept in it.
@@ -23,6 +24,15 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
  * @param unitMinimum    the smallest legal size
  * @param unitMaximum    the largest legal size
  * @param unitTick       the size step, on the same terms as {@code priceTick}
+ * @param mechanism      how it trades: {@link #MECHANISM_CONTINUOUS}, an order
+ *                       trading the moment it crosses, or {@link #MECHANISM_CALL},
+ *                       a call auction -- orders collect, and a call clears them
+ *                       all at one price; continuous when the
+ *                       server does not say
+ * @param callIntervalSeconds for a call market, the seconds between calls while
+ *                       the session is open, or null when only a manager calls it
+ * @param callCarry      for a call market, whether what a call leaves unfilled
+ *                       waits for the next one; true when the server does not say
  */
 
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -38,7 +48,62 @@ public record Market(
     long priceTick,
     long unitMinimum,
     long unitMaximum,
-    long unitTick) {
+    long unitTick,
+    String mechanism,
+    Integer callIntervalSeconds,
+    Boolean callCarry) {
+
+    /** The market trades continuously: an order trades when it crosses. */
+    public static final String MECHANISM_CONTINUOUS = "CONTINUOUS";
+
+    /** The market is a call auction: orders collect, and a call clears them together. */
+    public static final String MECHANISM_CALL = "CALL";
+
+    /**
+     * The server's defaults, settled here once: a market from a server older
+     * than call auctions, or one that leaves the fields out, is continuous,
+     * and a call market that does not say carries.
+     */
+    public Market {
+        mechanism = null == mechanism ? MECHANISM_CONTINUOUS : mechanism;
+        callCarry = null == callCarry || callCarry;
+    }
+
+    /**
+     * A continuous market: the shape before call auctions, kept so code
+     * built against it (fm-robots constructs markets this way) still compiles.
+     *
+     * @param id            the market's id
+     * @param marketplaceId the marketplace it belongs to
+     * @param name          its name
+     * @param description   its description
+     * @param symbol        its symbol
+     * @param privateMarket whether it is hidden from ordinary participants
+     * @param priceMinimum  the lowest legal price
+     * @param priceMaximum  the highest legal price
+     * @param priceTick     the price step
+     * @param unitMinimum   the smallest legal size
+     * @param unitMaximum   the largest legal size
+     * @param unitTick      the size step
+     */
+    public Market(long id, long marketplaceId, String name, String description, String symbol,
+            boolean privateMarket, long priceMinimum, long priceMaximum, long priceTick,
+            long unitMinimum, long unitMaximum, long unitTick) {
+        this(id, marketplaceId, name, description, symbol, privateMarket, priceMinimum, priceMaximum, priceTick,
+                unitMinimum, unitMaximum, unitTick, MECHANISM_CONTINUOUS, null, true);
+    }
+
+    /**
+     * Whether this is a call auction, where a crossing order rests until a
+     * call rather than trading, and a participant sees only their own resting
+     * orders.
+     *
+     * @return true for a call market
+     */
+    @JsonIgnore
+    public boolean isCall() {
+        return MECHANISM_CALL.equals(mechanism);
+    }
 
     /**
      * {@code price} moved down to the nearest price this market will accept.

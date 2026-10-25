@@ -208,7 +208,63 @@ export interface Market {
   unitMinimum: number;
   unitMaximum: number;
   unitTick: number;
+  /**
+   * How it trades: {@link MARKET_MECHANISM_CONTINUOUS}, an order trading the
+   * moment it crosses, or {@link MARKET_MECHANISM_CALL}, a call auction --
+   * orders collect, and a call clears them all at one price. Continuous when
+   * the server does not say.
+   */
+  mechanism: string;
+  /** For a call market, the seconds between calls while the session is open, or null when only a manager calls it. */
+  callIntervalSeconds: number | null;
+  /** For a call market, whether what a call leaves unfilled waits for the next one. True when the server does not say. */
+  callCarry: boolean;
 }
+
+export const MARKET_MECHANISM_CONTINUOUS = "CONTINUOUS";
+export const MARKET_MECHANISM_CALL = "CALL";
+
+/**
+ * Whether `market` is a call auction, where a crossing order rests until a
+ * call rather than trading, and a participant sees only their own resting
+ * orders.
+ */
+export function isCall(market: Market): boolean {
+  return market.mechanism === MARKET_MECHANISM_CALL;
+}
+
+/**
+ * One call of a call-auction market: when it was made, what made it, and
+ * what it cleared.
+ *
+ * A call trades every crossing order in the market at one price: the price at
+ * which the most units trade, then the one leaving the least imbalance, then
+ * the midpoint of the range those span. Its trades arrive as orders, as every
+ * trade does; this is the record of the call itself.
+ */
+export interface MarketCall {
+  id: number;
+  marketplaceId: number;
+  marketId: number;
+  sessionId: number;
+  calledDate: Date | null;
+  /** {@link MARKET_CALL_TRIGGER_MANUAL}, a manager's Clear now, or {@link MARKET_CALL_TRIGGER_INTERVAL}, the schedule. */
+  trigger: string | null;
+  /** The clearing price, or null when the book did not cross. */
+  price: number | null;
+  volume: number;
+  /** Units bid at or above the price; every bid when nothing cleared. */
+  demand: number;
+  /** Units offered at or below the price; every ask when nothing cleared. */
+  supply: number;
+  buyOrders: number;
+  sellOrders: number;
+  /** Whether what it left unfilled waits for the next call. */
+  carry: boolean;
+}
+
+export const MARKET_CALL_TRIGGER_MANUAL = "MANUAL";
+export const MARKET_CALL_TRIGGER_INTERVAL = "INTERVAL";
 
 /**
  * The legal values for one dimension of a market: a range, and a step.
