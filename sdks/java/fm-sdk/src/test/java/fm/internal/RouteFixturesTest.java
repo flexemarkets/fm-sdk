@@ -246,6 +246,12 @@ class RouteFixturesTest {
                     ? fm.removeWidget(mp, a.get("key").asString(), a.get("userId").asLong())
                     : fm.removeWidget(mp, a.get("key").asString());
             case "allWidgets" -> fm.allWidgets(mp);
+            case "createCallMarket" -> fm.createCallMarket(mp, a.get("symbol").asString(), a.get("name").asString(),
+                    _grid(a.get("price")), _grid(a.get("units")),
+                    a.get("intervalSeconds").isNull() ? null : a.get("intervalSeconds").asInt(),
+                    a.get("carry").asBoolean());
+            case "clearNow" -> fm.clearNow(mp, a.get("marketId").asLong());
+            case "calls" -> a.has("sessionId") ? fm.calls(mp, a.get("sessionId").asLong()) : fm.calls(mp);
             case "marketplaceRobots" -> fm.marketplaceRobots(mp);
             case "configureRobotParameter" -> fm.configureRobotParameter(mp, a.get("robotId").asString(),
                     a.get("paramName").asString(), a.get("value").asString(), _control(a.get("control")));

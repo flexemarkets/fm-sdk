@@ -1,0 +1,32 @@
+{
+  "type": "Market",
+  "why": "A call-auction market (fm-server#1036). Read without its mechanism, a call market looks continuous: a robot posts into it expecting crossing orders to trade, they rest instead, and it sees a crossed book it cannot explain.",
+  "source": {
+    "constructed": "the fields as fm-server's MarketplaceV1Controller answers them since call auctions (#1036) for a CALL market with an interval and no carry, so all three call fields differ from the defaults."
+  },
+  "payload": {
+    "id": 12,
+    "marketplaceId": 3050,
+    "name": "Batch",
+    "description": "called every 5 seconds",
+    "symbol": "BAT",
+    "privateMarket": false,
+    "priceMinimum": 0,
+    "priceMaximum": 10000,
+    "priceTick": 1,
+    "unitMinimum": 1,
+    "unitMaximum": 100,
+    "unitTick": 1,
+    "mechanism": "CALL",
+    "callIntervalSeconds": 5,
+    "callCarry": false
+  },
+  "expect": {
+    "id": 12,
+    "symbol": "BAT",
+    "privateMarket": false,
+    "mechanism": "CALL",
+    "callIntervalSeconds": 5,
+    "callCarry": false
+  }
+}

@@ -66,6 +66,10 @@ CALLS: dict[str, Callable[[Flexemarkets, dict[str, Any], Path], Any]] = {
     "createMarket": lambda fm, a, _: fm.create_market(
         a["marketplaceId"], a["symbol"], a["name"], _grid(a["price"]), _grid(a["units"]),
         a["privateMarket"]),
+    "createCallMarket": lambda fm, a, _: fm.create_call_market(
+        a["marketplaceId"], a["symbol"], a["name"], _grid(a["price"]), _grid(a["units"]),
+        a["intervalSeconds"], a["carry"]),
+    "calls": lambda fm, a, _: fm.calls(a["marketplaceId"], a.get("sessionId")),
     "createUser": lambda fm, a, _: fm.create_user(
         a["email"], a["password"], a["firstName"], a["lastName"], *a["roles"]),
     "allocate": lambda fm, a, _: fm.allocate(

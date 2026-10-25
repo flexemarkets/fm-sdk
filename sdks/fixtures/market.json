@@ -1,6 +1,6 @@
 {
   "type": "Market",
-  "why": "Both tick grids. Transposing a price bound and a unit bound produces a market that posts cleanly and cannot be traded in.",
+  "why": "Both tick grids. Transposing a price bound and a unit bound produces a market that posts cleanly and cannot be traded in. It predates call auctions and carries none of their fields, so it is also what a market from an older server reads as: continuous, carrying.",
   "source": {
     "constructed": "both tick grids populated and a transposition visible. Live markets in a dev marketplace do not reliably carry all four bounds, and a capture that found a market without them would quietly weaken the case."
   },
@@ -30,6 +30,9 @@
     "priceTick": 25,
     "unitMinimum": 1,
     "unitMaximum": 100,
-    "unitTick": 1
+    "unitTick": 1,
+    "mechanism": "CONTINUOUS",
+    "callIntervalSeconds": null,
+    "callCarry": true
   }
 }

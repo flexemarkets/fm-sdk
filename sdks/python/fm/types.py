@@ -204,6 +204,25 @@ class Market:
     unit_minimum: int = 0
     unit_maximum: int = 0
     unit_tick: int = 0
+    # How it trades: MECHANISM_CONTINUOUS, an order trading the moment it
+    # crosses, or MECHANISM_CALL, a call auction -- orders collect, and a call
+    # clears them all at one price. Continuous when the server does not say.
+    mechanism: str = "CONTINUOUS"
+    # For a call market, the seconds between calls while the session is open,
+    # or None when only a manager calls it.
+    call_interval_seconds: int | None = None
+    # For a call market, whether what a call leaves unfilled waits for the next
+    # one. True when the server does not say.
+    call_carry: bool = True
+
+    MECHANISM_CONTINUOUS = "CONTINUOUS"
+    MECHANISM_CALL = "CALL"
+
+    def is_call(self) -> bool:
+        """Whether this is a call auction, where a crossing order rests until a
+        call rather than trading, and a participant sees only their own resting
+        orders."""
+        return self.mechanism == Market.MECHANISM_CALL
 
     def price_round(self, price: int) -> int:
         """*price* moved down to the nearest price this market will accept."""
@@ -217,6 +236,39 @@ class Market:
         "units is not on a tic".
         """
         return tick_round(units, self.unit_minimum, self.unit_maximum, self.unit_tick)
+
+
+@dataclass
+class MarketCall:
+    """One call of a call-auction market: when it was made, what made it, and
+    what it cleared.
+
+    A call trades every crossing order in the market at one price: the price at
+    which the most units trade, then the one leaving the least imbalance, then
+    the midpoint of the range those span. Its trades arrive as orders, as every
+    trade does; this is the record of the call itself.
+    """
+    id: int = 0
+    marketplace_id: int = 0
+    market_id: int = 0
+    session_id: int = 0
+    called_date: "datetime | None" = None
+    # TRIGGER_MANUAL, a manager's Clear now, or TRIGGER_INTERVAL, the schedule.
+    trigger: str | None = None
+    # The clearing price, or None when the book did not cross.
+    price: int | None = None
+    volume: int = 0
+    # Units bid at or above the price, and offered at or below it; every bid
+    # and every ask when nothing cleared.
+    demand: int = 0
+    supply: int = 0
+    buy_orders: int = 0
+    sell_orders: int = 0
+    # Whether what it left unfilled waits for the next call.
+    carry: bool = True
+
+    TRIGGER_MANUAL = "MANUAL"
+    TRIGGER_INTERVAL = "INTERVAL"
 
 
 @dataclass

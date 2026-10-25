@@ -1655,6 +1655,163 @@
           }
         }
       ]
+    },
+    {
+      "call": "createCallMarket",
+      "args": {
+        "marketplaceId": 1,
+        "symbol": "BAT",
+        "name": "Batch",
+        "price": {
+          "minimum": 0,
+          "maximum": 10000,
+          "tick": 1
+        },
+        "units": {
+          "minimum": 1,
+          "maximum": 100,
+          "tick": 1
+        },
+        "intervalSeconds": 5,
+        "carry": true
+      },
+      "why": "A call market is the same POST as any market, with the mechanism and its schedule in the body; left out, the server makes a continuous market and nothing says so.",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/api/v1/marketplaces/1/markets",
+          "body": {
+            "symbol": "BAT",
+            "name": "Batch",
+            "privateMarket": false,
+            "mechanism": "CALL",
+            "callIntervalSeconds": 5,
+            "callCarry": true
+          },
+          "contentType": "application/json",
+          "response": {
+            "status": 200,
+            "body": {
+              "id": 12,
+              "marketplaceId": 1,
+              "symbol": "BAT",
+              "name": "Batch",
+              "priceMinimum": 0,
+              "priceMaximum": 10000,
+              "priceTick": 1,
+              "unitMinimum": 1,
+              "unitMaximum": 100,
+              "unitTick": 1,
+              "privateMarket": false,
+              "mechanism": "CALL",
+              "callIntervalSeconds": 5,
+              "callCarry": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "call": "clearNow",
+      "args": {
+        "marketplaceId": 1,
+        "marketId": 12
+      },
+      "why": "Clear now is a POST to the market's calls: a new call. A GET there would read nothing, since the history is the marketplace's.",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/api/v1/marketplaces/1/markets/12/calls",
+          "response": {
+            "status": 200,
+            "body": {
+              "id": 91,
+              "marketplaceId": 1,
+              "marketId": 12,
+              "sessionId": 77,
+              "calledDate": "2026-10-25T09:00:05",
+              "trigger": "MANUAL",
+              "price": 550,
+              "volume": 2,
+              "demand": 3,
+              "supply": 2,
+              "buyOrders": 2,
+              "sellOrders": 1,
+              "carry": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "call": "calls",
+      "args": {
+        "marketplaceId": 1
+      },
+      "why": "The history is the marketplace's, across its call markets: GET calls under the marketplace, not under a market.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/calls",
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "id": 91,
+                "marketplaceId": 1,
+                "marketId": 12,
+                "sessionId": 77,
+                "calledDate": "2026-10-25T09:00:05",
+                "trigger": "MANUAL",
+                "price": 550,
+                "volume": 2,
+                "demand": 3,
+                "supply": 2,
+                "buyOrders": 2,
+                "sellOrders": 1,
+                "carry": true
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "call": "calls",
+      "args": {
+        "marketplaceId": 1,
+        "sessionId": 77
+      },
+      "why": "One session's calls are a filter, so a query parameter (rule 5), sessionId as the server names it.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/calls",
+          "query": {
+            "sessionId": "77"
+          },
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "id": 91,
+                "marketplaceId": 1,
+                "marketId": 12,
+                "sessionId": 77,
+                "calledDate": "2026-10-25T09:00:05",
+                "trigger": "MANUAL",
+                "price": 550,
+                "volume": 2,
+                "demand": 3,
+                "supply": 2,
+                "buyOrders": 2,
+                "sellOrders": 1,
+                "carry": true
+              }
+            ]
+          }
+        }
+      ]
     }
   ]
 }

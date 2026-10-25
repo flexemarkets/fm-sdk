@@ -171,6 +171,29 @@ public interface Administration {
                         TickGrid price, TickGrid units, boolean privateMarket);
 
     /**
+     * Add a call-auction market to a marketplace: orders collect, crossed or
+     * not, and a call clears them all at one price.
+     *
+     * <p>Calls come from the market's schedule, every {@code intervalSeconds}
+     * while a session is open, or from a manager's {@link Management#clearNow}.
+     * A call market cannot be private, so there is no flag for it here; the
+     * server refuses the combination.
+     *
+     * @param marketplaceId   the marketplace to add the market to
+     * @param symbol          the market's ticker symbol, unique within the marketplace
+     * @param name            the market's display name
+     * @param price           the legal prices: bounds and tick
+     * @param units           the legal order sizes; {@link TickGrid#units()} for the usual 1/100/1
+     * @param intervalSeconds the seconds between calls while a session is open,
+     *                        or null for calls only when a manager clears
+     * @param carry           whether what a call leaves unfilled waits for the
+     *                        next one, rather than being cancelled
+     * @return the market as created, with its server-assigned id
+     */
+    Market createCallMarket(long marketplaceId, String symbol, String name,
+                            TickGrid price, TickGrid units, Integer intervalSeconds, boolean carry);
+
+    /**
      * Mint one-time passcodes for the given users.
      *
      * <p>These are credentials. They are how a classroom signs in without

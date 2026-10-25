@@ -57,6 +57,7 @@ from .types import (
     ManagerOtpBundle,
     ManagerOtpEntry,
     Market,
+    MarketCall,
     Marketplace,
     Order,
     ParticipantState,
@@ -183,6 +184,27 @@ def _parse_market(data: dict[str, Any]) -> Market:
         unit_minimum=data.get("unitMinimum", 0),
         unit_maximum=data.get("unitMaximum", 0),
         unit_tick=data.get("unitTick", 0),
+        mechanism=data.get("mechanism") or Market.MECHANISM_CONTINUOUS,
+        call_interval_seconds=data.get("callIntervalSeconds"),
+        call_carry=data.get("callCarry") is not False,
+    )
+
+
+def _parse_market_call(data: dict[str, Any]) -> MarketCall:
+    return MarketCall(
+        id=data.get("id", 0),
+        marketplace_id=data.get("marketplaceId", 0),
+        market_id=data.get("marketId", 0),
+        session_id=data.get("sessionId", 0),
+        called_date=_timestamp(data.get("calledDate")),
+        trigger=data.get("trigger"),
+        price=data.get("price"),
+        volume=data.get("volume", 0),
+        demand=data.get("demand", 0),
+        supply=data.get("supply", 0),
+        buy_orders=data.get("buyOrders", 0),
+        sell_orders=data.get("sellOrders", 0),
+        carry=data.get("carry", True),
     )
 
 
@@ -1185,6 +1207,44 @@ class Flexemarkets:
         })
         return _parse_market(_json(resp))
 
+    def create_call_market(
+        self,
+        marketplace_id: int,
+        symbol: str,
+        name: str,
+        price: TickGrid,
+        units: TickGrid | None = None,
+        interval_seconds: int | None = None,
+        carry: bool = True,
+    ) -> Market:
+        """Add a call-auction market to a marketplace: orders collect, crossed
+        or not, and a call clears them all at one price.
+
+        Calls come from the market's schedule, every *interval_seconds* while a
+        session is open, or from a manager's :meth:`clear_now`; None leaves
+        only the latter. *carry* is whether what a call leaves unfilled waits
+        for the next one rather than being cancelled. A call market cannot be
+        private, so there is no flag for it here; the server refuses the
+        combination.
+        """
+        units = units if units is not None else TickGrid.units()
+        url = _marketplace(self._endpoint, marketplace_id) + "/markets"
+        resp = self._post(url, {
+            "symbol": symbol,
+            "name": name,
+            "priceMinimum": price.minimum,
+            "priceMaximum": price.maximum,
+            "priceTick": price.tick,
+            "unitMinimum": units.minimum,
+            "unitMaximum": units.maximum,
+            "unitTick": units.tick,
+            "privateMarket": False,
+            "mechanism": Market.MECHANISM_CALL,
+            "callIntervalSeconds": interval_seconds,
+            "callCarry": carry,
+        })
+        return _parse_market(_json(resp))
+
     # -- sessions ----------------------------------------------------------
 
     def sessions(self, marketplace_id: int) -> list[Session]:
@@ -1559,6 +1619,25 @@ class Flexemarkets:
         participant -- what a manager reads to check on a robot."""
         url = _marketplace(self._endpoint, marketplace_id) + "/widgets?participant=all"
         return [_parse_widget(w) for w in _json(self._get(url))]
+
+    def clear_now(self, marketplace_id: int, market_id: int) -> MarketCall:
+        """Clear a call-auction market now: every crossing order trades at one
+        price, the way the market's schedule would.
+
+        Only while a session is open, and only in a call market; the server
+        refuses either otherwise. The trades arrive as orders on the stream, as
+        every trade does.
+        """
+        url = _marketplace(self._endpoint, marketplace_id) + f"/markets/{market_id}/calls"
+        return _parse_market_call(_json(self._post(url, None)))
+
+    def calls(self, marketplace_id: int, session_id: int | None = None) -> list[MarketCall]:
+        """Every call the marketplace's call markets have made, oldest first;
+        one session's with *session_id*."""
+        url = _marketplace(self._endpoint, marketplace_id) + "/calls"
+        if session_id is not None:
+            url += f"?sessionId={session_id}"
+        return [_parse_market_call(c) for c in _json(self._get(url))]
 
     def marketplace_robots(self, marketplace_id: int) -> list[MarketplaceRobot]:
         """Every robot the marketplace's robot host offers, with whether it is
