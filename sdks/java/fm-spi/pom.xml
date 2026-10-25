@@ -46,6 +46,9 @@
         its own traders, which the host gives people and launches, or robots
         it offers participants with fixed parameters. It is told at close
         which holdings and orders are its robots' (docs/STUDY-SPI-0.2.md §3).
+        0.0.18 is study contract 0.4: a market may be a call auction
+        (MarketSpec.asCall), cleared on a schedule or by a manager, as a
+        frequent batch auction is (fm-server#1036).
         Bump the patch for an additive change, and the major only alongside
         ServiceProvider.SPI_VERSION, since hosts reject a provider whose major
         differs from their own.
@@ -53,7 +56,7 @@
         Set with `make set-spi-version V=x.y.z`. `make set-version` moves the
         parent reference below but leaves this alone.
     -->
-    <version>0.0.17</version><!-- spi-version -->
+    <version>0.0.18</version><!-- spi-version -->
 
     <packaging>jar</packaging>
 

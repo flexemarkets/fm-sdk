@@ -39,10 +39,15 @@ import fm.manifest.ParameterSpec;
  * its own plans with their people ({@link #setup(Map, List, Participant, Map)}),
  * and is told at close which holdings and orders are theirs
  * ({@link Close#robots}). Contract 0.3.
+ *
+ * <p>A study's markets may be call auctions ({@link MarketSpec#asCall}):
+ * orders collect, and a call clears them all at one price, on a schedule or
+ * when a manager clears -- a frequent batch auction beside, or instead of, a
+ * continuous one. Contract 0.4.
  */
 public interface StudyProvider {
     /** The contract's major.minor; a host rejects a provider whose major differs from its own. */
-    String STUDY_SPI_VERSION = "0.3";
+    String STUDY_SPI_VERSION = "0.4";
 
     /**
      * The study's id, as its page and its command line name it.
