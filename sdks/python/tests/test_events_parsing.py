@@ -19,7 +19,7 @@ from fm.events import (
     _parse_event,
     _resolve_api_version_prefix,
 )
-from fm.types import Session, Version
+from fm.types import MarketCall, Session, Version
 
 
 def _frame(msg_type: str | None, body: str = "", **headers: str) -> StompFrame:
@@ -84,6 +84,13 @@ class TestParseEvent:
 
         assert isinstance(parsed, Session)
         assert (parsed.id, parsed.marketplace_id, parsed.state) == (30, 7, "CLOSED")
+
+    def test_a_call_update_is_the_call(self):
+        parsed = _parse_event(_frame("CALL-UPDATE", '{"id":91,"marketplaceId":7,"marketId":12,"sessionId":30,"calledDate":"2026-10-25T09:00:05","trigger":"INTERVAL","price":null,"volume":0,"demand":1,"supply":2,"buyOrders":1,"sellOrders":1,"carry":true}'))
+
+        assert isinstance(parsed, MarketCall)
+        assert (parsed.id, parsed.market_id, parsed.trigger, parsed.price) == (91, 12, "INTERVAL", None)
+        assert parsed.called_date is not None
 
     def test_an_orders_update_without_a_seq_header_has_no_seq(self):
         parsed = _parse_event(_frame("ORDERS-UPDATE", "[]"))

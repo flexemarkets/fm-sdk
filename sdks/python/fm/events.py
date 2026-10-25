@@ -17,7 +17,7 @@ from typing import Any, Callable
 
 import websockets.sync.client as ws_sync
 
-from .types import Holding, Order, Session, Version
+from .types import Holding, MarketCall, Order, Session, Version
 
 log = logging.getLogger(__name__)
 
@@ -210,6 +210,10 @@ def _parse_event(frame: StompFrame) -> object | None:
                 orders=_parse_orders(data),
                 seq=_parse_seq(frame.headers.get(_SEQ_HEADER)),
             )
+        case "CALL-UPDATE":
+            # A call of a call-auction market; its trades come as an
+            # ORDERS-UPDATE of their own.
+            return _parse_market_call(data)
         case _:
             log.warning("Unknown message-type: %s", msg_type)
             return None
@@ -247,6 +251,11 @@ def _parse_session_list(data: Any) -> list[Session]:
 def _parse_holding(data: dict[str, Any]) -> Holding:
     from .client import _parse_holding as _client_parse_holding
     return _client_parse_holding(data)
+
+
+def _parse_market_call(data: dict[str, Any]) -> MarketCall:
+    from .client import _parse_market_call as _client_parse_market_call
+    return _client_parse_market_call(data)
 
 
 def _parse_order(data: dict[str, Any]) -> Order:

@@ -15,7 +15,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { EventListener } from "../src/stomp.ts";
 import type { FmEvent, OrdersUpdate } from "../src/stomp.ts";
 import { Flexemarkets, parseHolding, parseOrder } from "../src/client.ts";
-import type { Holding, Session, Version } from "../src/types.ts";
+import type { Holding, MarketCall, Session, Version } from "../src/types.ts";
 import type { FrameUnreadable, StreamDropped } from "../src/stomp.ts";
 import { HEARTBEAT_INTERVAL_MS } from "../src/stomp.ts";
 
@@ -195,6 +195,19 @@ test("version and session-list frames arrive parsed", async () => {
     assert.deepEqual((events[2] as Session[]).map((x) => [x.id, x.state, x.name]), [[300, "OPEN", null]],
                      "each session parsed, a missing name read as null");
     assert.deepEqual(events[3], [], "a session list that is not a list is an empty one");
+  } finally { await done(); }
+});
+
+test("a call frame arrives as the call", async () => {
+  const { s, events, done } = await listening();
+  try {
+    s.sockets[0].send(message("CALL-UPDATE", '{"id":91,"marketplaceId":7,"marketId":12,"sessionId":30,"calledDate":"2026-10-25T09:00:05","trigger":"INTERVAL","price":null,"volume":0,"demand":1,"supply":2,"buyOrders":1,"sellOrders":1,"carry":true}'));
+    await until("the call", () => events.length >= 1);
+    const call = events[0] as MarketCall;
+    assert.equal(call.id, 91);
+    assert.equal(call.marketId, 12);
+    assert.equal(call.price, null, "nothing crossed");
+    assert.equal(call.calledDate?.toISOString(), "2026-10-25T09:00:05.000Z");
   } finally { await done(); }
 });
 

@@ -7,7 +7,7 @@
 
 import WebSocket from "ws";
 import { toInstant } from "./timestamps.js";
-import type { Holding, Order, Session, Version } from "./types.js";
+import type { Holding, MarketCall, Order, Session, Version } from "./types.js";
 
 const HEARTBEAT_MS = 30_000;
 
@@ -152,6 +152,7 @@ export type FmEvent =
   | Session[]
   | Holding
   | OrdersUpdate
+  | MarketCall
   | StreamDropped
   | StreamReconnected
   | FrameUnreadable;
@@ -193,6 +194,9 @@ function parseEvent(
       const seq = _parseSeq(frame.headers[SEQ_HEADER]);
       return { kind: "orders-update", orders: parseOrders(data, parseOrder), seq };
     }
+    // A call of a call-auction market; its trades come as an ORDERS-UPDATE of their own.
+    case "CALL-UPDATE":
+      return parseMarketCall(data as Record<string, unknown>);
     default:
       return null;
   }
@@ -224,6 +228,24 @@ export function parseSession(data: Record<string, unknown>): Session {
     description: (data.description as string) ?? null,
     openDate: toInstant(data.openDate as string),
     closeDate: toInstant(data.closeDate as string),
+  };
+}
+
+export function parseMarketCall(data: Record<string, unknown>): MarketCall {
+  return {
+    id: (data.id as number) ?? 0,
+    marketplaceId: (data.marketplaceId as number) ?? 0,
+    marketId: (data.marketId as number) ?? 0,
+    sessionId: (data.sessionId as number) ?? 0,
+    calledDate: toInstant(data.calledDate as string),
+    trigger: (data.trigger as string) ?? null,
+    price: (data.price as number) ?? null,
+    volume: (data.volume as number) ?? 0,
+    demand: (data.demand as number) ?? 0,
+    supply: (data.supply as number) ?? 0,
+    buyOrders: (data.buyOrders as number) ?? 0,
+    sellOrders: (data.sellOrders as number) ?? 0,
+    carry: (data.carry as boolean) ?? true,
   };
 }
 

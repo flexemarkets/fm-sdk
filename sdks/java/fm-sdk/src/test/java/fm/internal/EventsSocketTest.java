@@ -259,6 +259,22 @@ class EventsSocketTest {
         assertThat(((fm.model.Session) next()).state()).isEqualTo(fm.model.Session.STATE_PAUSED);
     }
 
+    /** A call of a call-auction market arrives as the call, its trades being an ORDERS-UPDATE of their own. */
+    @Test
+    @Timeout(20)
+    void aCallArrivesAsTheCall() throws Exception {
+        connected();
+        _Connection socket = server.connection(0);
+
+        socket.send(message("CALL-UPDATE", null, "{\"id\":91,\"marketplaceId\":7,\"marketId\":12,\"sessionId\":30,\"calledDate\":\"2026-10-25T09:00:05\",\"trigger\":\"INTERVAL\",\"price\":null,\"volume\":0,\"demand\":1,\"supply\":2,\"buyOrders\":1,\"sellOrders\":1,\"carry\":true}"));
+
+        var call = (fm.model.MarketCall) next();
+        assertThat(call.id()).isEqualTo(91L);
+        assertThat(call.marketId()).isEqualTo(12L);
+        assertThat(call.price()).as("nothing crossed").isNull();
+        assertThat(call.calledDate()).isEqualTo(java.time.Instant.parse("2026-10-25T09:00:05Z"));
+    }
+
     /**
      * What this client does not read is skipped, not queued: a frame that is
      * not a MESSAGE, even one carrying a message-type, and a MESSAGE of a type
