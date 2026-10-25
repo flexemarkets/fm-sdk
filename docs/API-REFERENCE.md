@@ -636,7 +636,7 @@ Every frame carries a `message-type` header naming the payload:
 | `PANELS-UPDATE` | the recipient's evaluated `score` panels, values only (user queue) |
 | `SERIES-UPDATE` | a market's sampled price series on one period grid: a snapshot in the subscribe burst, then one point per boundary (topic) |
 | `WIDGETS-UPDATE` | pushed widgets: a snapshot of what the recipient may see in the subscribe burst, then upserts and removals (topic for the marketplace's, user queue for their own) |
-| `CALL-UPDATE` | a call of a call-auction market, as `GET calls` answers each (topic); its trades come as an `ORDERS-UPDATE` |
+| `CALL-UPDATE` | a call of a call-auction market, as `GET calls` answers each (topic); its trades come as an `ORDERS-UPDATE`. The stream delivers it as a `MarketCall` |
 | `ERROR` | `{"error": "…"}`, e.g. the marketplace isn't available |
 
 Additional headers on every frame: `system-current-time-millis`,
