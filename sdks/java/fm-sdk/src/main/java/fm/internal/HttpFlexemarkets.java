@@ -1115,9 +1115,18 @@ public class HttpFlexemarkets implements Flexemarkets {
         return _connectEvents(marketplaceId, queue);
     }
 
+    @Override
+    public Subscription subscribe(long marketplaceId, BlockingQueue<Object> queue, boolean history) {
+        return _connectEvents(marketplaceId, queue, history);
+    }
+
     Events _connectEvents(long marketplaceId, BlockingQueue<Object> queue) {
+        return _connectEvents(marketplaceId, queue, false);
+    }
+
+    Events _connectEvents(long marketplaceId, BlockingQueue<Object> queue, boolean history) {
         var ev = new Events(_wsUrl(), this::_bearer, marketplaceId, _clientDescription(), MAPPER, queue,
-            this::_renewToken);
+            this::_renewToken, history);
         ev.connect();
         return ev;
     }

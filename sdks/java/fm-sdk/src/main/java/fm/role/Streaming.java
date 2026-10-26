@@ -49,6 +49,27 @@ public interface Streaming {
     Subscription subscribe(long marketplaceId, BlockingQueue<Object> queue);
 
     /**
+     * {@link #subscribe(long, BlockingQueue)}, asking for the session's history.
+     *
+     * <p>With {@code history}, the first {@code OrdersUpdate} is every order of
+     * the current session as this caller may see it -- cancelled and split ones
+     * included, a counterparty's private order named from the caller's side --
+     * stamped with the {@code seq} it was read at, and each reconnect delivers
+     * it again. That is fm-server's original subscribe, and the only whole
+     * history a participant can read: the REST history is a manager's. Without
+     * it the first update is empty and the book comes from
+     * {@code activeOrders}. A history is one frame, so on a session with a very
+     * long one it is a large frame -- fm-server's V1 subscribe exists to avoid
+     * exactly that.
+     *
+     * @param marketplaceId the marketplace to stream
+     * @param queue         where events are delivered
+     * @param history       whether the first orders update is the session's history
+     * @return the subscription, which stops delivery when closed
+     */
+    Subscription subscribe(long marketplaceId, BlockingQueue<Object> queue, boolean history);
+
+    /**
      * A maintained view of the order books, kept current from the event
      * stream, that refuses locally what fm-server would refuse
      * ({@link Desk.OrderChecks#LOCAL}).

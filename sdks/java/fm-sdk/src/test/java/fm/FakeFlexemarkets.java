@@ -109,6 +109,10 @@ class FakeFlexemarkets implements Flexemarkets {
         return () -> _queue.set(null);
     }
 
+    @Override public Subscription subscribe(long marketplaceId, BlockingQueue<Object> queue, boolean history) {
+        return subscribe(marketplaceId, queue);
+    }
+
     private final List<String> _submitted = new java.util.concurrent.CopyOnWriteArrayList<>();
 
     /** What the desk sent on, each as {@code marketplace/market what}. */
