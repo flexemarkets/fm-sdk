@@ -653,23 +653,41 @@ def _token_expired(response: httpx.Response) -> bool:
 _SERVER_TIMING_ST = re.compile(r"st=(\d+)")
 
 
+def _reason(body: str) -> str | None:
+    """The ``error`` a failure body names, or None when it names none."""
+    try:
+        parsed = json.loads(body) if body and body.strip() else None
+    except ValueError:
+        return None
+    error = parsed.get("error") if isinstance(parsed, dict) else None
+    return error if isinstance(error, str) and error else None
+
+
+def _answered(error: FlexemarketsError, response: httpx.Response) -> FlexemarketsError:
+    """*error*, carrying the answer it came from."""
+    error.status_code = response.status_code
+    error.body = response.text
+    error.reason = _reason(response.text)
+    return error
+
+
 def _check_response(response: httpx.Response) -> None:
     status = response.status_code
     if 200 <= status < 300:
         return
     if status == 400:
-        raise InvalidArgumentError("Invalid request: " + _detail(response.text))
+        raise _answered(InvalidArgumentError("Invalid request: " + _detail(response.text)), response)
     if status == 401:
-        raise AuthenticationError("Authentication failed: " + _detail(response.text))
+        raise _answered(AuthenticationError("Authentication failed: " + _detail(response.text)), response)
     if status == 403:
-        raise AuthorizationError("Not permitted: " + _detail(response.text))
+        raise _answered(AuthorizationError("Not permitted: " + _detail(response.text)), response)
     if status == 409:
-        raise ConflictError(response.text)
+        raise _answered(ConflictError(response.text), response)
     if status >= 500:
-        raise ConnectionFailedError(response.text)
+        raise _answered(ConnectionFailedError(response.text), response)
     # Anything else, typed rather than left to httpx: a caller catching
     # FlexemarketsError should not have httpx.HTTPStatusError escape past it.
-    raise HttpError(status, response.text)
+    raise _answered(HttpError(status, response.text), response)
 
 
 def _check_conflict_account(response: httpx.Response, account_name: str) -> None:
@@ -680,17 +698,17 @@ def _check_conflict_account(response: httpx.Response, account_name: str) -> None
             suggested = body.get("suggestedName")
         except Exception:
             pass
-        raise AccountNameConflictError(
+        raise _answered(AccountNameConflictError(
             f"Account name '{account_name}' is already taken.", suggested
-        )
+        ), response)
     _check_response(response)
 
 
 def _check_conflict_user(response: httpx.Response, user_id: int) -> None:
     if response.status_code == 409:
-        raise PersonHasMarketplaceDataError(
+        raise _answered(PersonHasMarketplaceDataError(
             f"User {user_id} has marketplace data and cannot be deleted."
-        )
+        ), response)
     _check_response(response)
 
 
