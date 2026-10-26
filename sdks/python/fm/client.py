@@ -1616,9 +1616,15 @@ class Flexemarkets:
 
     def all_widgets(self, marketplace_id: int) -> list[Widget]:
         """Every widget pushed to the marketplace and still standing, for every
-        participant -- what a manager reads to check on a robot."""
+        participant -- what a manager reads to check on a robot.
+
+        The answer is the frame every widgets read answers, ``{marketplaceId,
+        snapshot, widgets, removed}``; a bare list, which ``widgets/all``
+        answered and 0.4.0 to 0.11.0 expected here, is read too."""
         url = _marketplace(self._endpoint, marketplace_id) + "/widgets?participant=all"
-        return [_parse_widget(w) for w in _json(self._get(url))]
+        body = _json(self._get(url))
+        widgets = body if isinstance(body, list) else body.get("widgets") or []
+        return [_parse_widget(w) for w in widgets]
 
     def clear_now(self, marketplace_id: int, market_id: int) -> MarketCall:
         """Clear a call-auction market now: every crossing order trades at one
