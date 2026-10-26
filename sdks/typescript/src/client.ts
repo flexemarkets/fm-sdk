@@ -209,6 +209,7 @@ export function parseSecurity(data: JsonObject): Security {
     shortUnits: (data.shortUnits as number) ?? (data.initialShortUnits as number) ?? 0,
     canBuy: (data.canBuy as boolean) ?? false,
     canSell: (data.canSell as boolean) ?? false,
+    initialUnits: (data.initialUnits as number | null) ?? null,
   };
 }
 
@@ -270,6 +271,8 @@ export function parseSession(data: JsonObject): Session {
     description: (data.description as string) ?? null,
     openDate: toInstant(data.openDate as string),
     closeDate: toInstant(data.closeDate as string),
+    createdDate: toInstant(data.createdDate as string),
+    lastModifiedDate: toInstant(data.lastModifiedDate as string),
   };
 }
 
@@ -293,6 +296,8 @@ export function parseOrder(data: JsonObject): Order {
     ownerTargetId: (data.ownerTargetId as number | null) ?? null,
     createdDate: toInstant(data.createdDate as string),
     lastModifiedDate: toInstant(data.lastModifiedDate as string),
+    mine: (data.mine as boolean | null) ?? null,
+    originalSessionId: (data.originalSessionId as number | null) ?? null,
   };
 }
 
@@ -461,6 +466,8 @@ function allotmentsToHoldings(allotments: Allotment[]): Holding[] {
       cash,
       availableCash: cash,
       securities: a.assets?.securities ?? [],
+      // As in Java and Python: a holding built from an allotment does not carry the opening value.
+      initialCash: null,
     };
   });
 }
@@ -477,6 +484,7 @@ export function parseHolding(data: JsonObject): Holding {
     cash: (data.cash as number) ?? 0,
     availableCash: (data.availableCash as number) ?? 0,
     securities: orderedSecurities(securitiesRaw.map(parseSecurity)),
+    initialCash: (data.initialCash as number | null) ?? null,
   };
 }
 

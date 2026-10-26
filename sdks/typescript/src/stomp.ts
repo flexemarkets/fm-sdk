@@ -228,6 +228,8 @@ export function parseSession(data: Record<string, unknown>): Session {
     description: (data.description as string) ?? null,
     openDate: toInstant(data.openDate as string),
     closeDate: toInstant(data.closeDate as string),
+    createdDate: toInstant(data.createdDate as string),
+    lastModifiedDate: toInstant(data.lastModifiedDate as string),
   };
 }
 

@@ -48,6 +48,8 @@ export interface Security {
   shortUnits: number;
   canBuy: boolean;
   canSell: boolean;
+  /** The units the session opened with; null when the response did not say. Never sent. */
+  initialUnits: number | null;
 }
 
 /** The capital half of an allotment: opening cash and opening positions. */
@@ -156,6 +158,8 @@ export interface Holding {
   cash: number;
   availableCash: number;
   securities: Security[];
+  /** The cash the session opened with; null when the response did not say (fm-robots#472). */
+  initialCash: number | null;
 }
 
 /**
@@ -353,6 +357,8 @@ export interface Session {
   description: string | null;
   openDate: Date | null;
   closeDate: Date | null;
+  createdDate: Date | null;
+  lastModifiedDate: Date | null;
 }
 
 /**
@@ -432,6 +438,14 @@ export interface Order {
   ownerTargetId: number | null;
   createdDate: Date | null;
   lastModifiedDate: Date | null;
+  /**
+   * Whether the order is the reader's own, as the server judged it for this
+   * connection -- not derivable from ownerId when a manager views as a
+   * participant. Null when the response did not say.
+   */
+  mine: boolean | null;
+  /** The session the order was first placed in, when carried into a later one; null when not said. */
+  originalSessionId: number | null;
 }
 
 /**
