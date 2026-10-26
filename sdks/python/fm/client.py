@@ -943,6 +943,10 @@ class Flexemarkets:
         """
         with open(filename, "rb") as f:
             content = f.read()
+        return self._send_csv_content(method, url, content)
+
+    def _send_csv_content(self, method: str, url: str, content: bytes) -> httpx.Response:
+        """CSV bytes as the request body, declared text/csv; see :meth:`_send_csv`."""
         resp = self._http.request(
             method, url, content=content,
             headers={
@@ -1614,6 +1618,21 @@ class Flexemarkets:
         """
         url = _marketplace(self._endpoint, marketplace_id) + "/allocations"
         resp = self._send_csv("POST", url, filename)
+        allotments = [_parse_allotment(a) for a in _json(resp)]
+        return _allotments_to_holdings(allotments)
+
+    def upload_holdings_csv(self, marketplace_id: int, csv: str) -> list[Holding]:
+        """Stage an allocation from holdings CSV text, as :meth:`upload_holdings`
+        does from a file.
+
+        For a program that builds the CSV rather than reading one -- an admin
+        robot writing back the holdings it downloaded and changed -- which
+        otherwise writes a file only to have it read again. The text is sent as
+        it is; a ``# holdings -- begin`` / ``-- end`` frame around it is
+        accepted, as in a downloaded file.
+        """
+        url = _marketplace(self._endpoint, marketplace_id) + "/allocations"
+        resp = self._send_csv_content("POST", url, csv.encode("utf-8"))
         allotments = [_parse_allotment(a) for a in _json(resp)]
         return _allotments_to_holdings(allotments)
 
