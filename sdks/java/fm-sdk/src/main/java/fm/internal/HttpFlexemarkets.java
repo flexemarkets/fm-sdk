@@ -790,6 +790,14 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     public Order submitLimit(long marketplaceId, long marketId, OrderSide side, long units, long price,
                              Long ownerTargetId) {
+        return submitLimit(marketplaceId, marketId, side, units, price, null, ownerTargetId, null);
+    }
+
+    public Order submitLimit(long marketplaceId, long marketId, OrderSide side, long units, long price,
+                             String ownerTarget, Long ownerTargetId, String clientDescription) {
+        if (null != ownerTarget && null != ownerTargetId) {
+            throw new InvalidArgumentException("Name the counterparty by ownerTarget or ownerTargetId, not both");
+        }
         // A LinkedHashMap rather than Map.of: the target is absent for an
         // ordinary order, and Map.of rejects a null value rather than omitting
         // the key. Omitting it is the point -- an order carrying
@@ -802,7 +810,11 @@ public class HttpFlexemarkets implements Flexemarkets {
         order.put("side",          side);
         order.put("units",         units);
         order.put("price",         price);
-        order.put("clientDescription", _clientDescription());
+        order.put("clientDescription", null != clientDescription && !clientDescription.isEmpty()
+                ? clientDescription : _clientDescription());
+        if (null != ownerTarget) {
+            order.put("ownerTarget", ownerTarget);
+        }
         if (null != ownerTargetId) {
             order.put("ownerTargetId", ownerTargetId);
         }

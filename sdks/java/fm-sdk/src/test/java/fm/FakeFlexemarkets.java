@@ -164,6 +164,8 @@ class FakeFlexemarkets implements Flexemarkets {
     @Override public List<ClientConnection> connections(long id) { throw _no("connections"); }
 
     @Override public Order submitLimit(long mp, long marketId, OrderSide side, long units, long price, Long ownerTargetId) { throw _no("submitLimit"); }
+    @Override public Order submitLimit(long mp, long marketId, OrderSide side, long units, long price,
+                                       String ownerTarget, Long ownerTargetId, String clientDescription) { throw _no("submitLimit"); }
     @Override public Order submitMarket(long mp, long marketId, OrderSide side, long units) { throw _no("submitMarket"); }
 
     @Override public Session openSession(long id) { throw _no("openSession"); }
