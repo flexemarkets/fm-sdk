@@ -289,8 +289,12 @@ class EventListener:
         event_queue: queue.Queue[object],
         client_description: str = "Unspecified client",
         renew: Callable[[str], bool] | None = None,
+        history: bool = False,
     ):
         self._ws_url = ws_url
+        # The V0 subscribe, whose first ORDERS-UPDATE is the session's whole
+        # history; see Flexemarkets.subscribe.
+        self._app_prefix = "" if history else _API_VERSION_PREFIX
         # A callable reads the client's current token on every connect, so a
         # reconnect after the client renewed its sign-in presents the new one.
         self._bearer_token = bearer_token
@@ -515,7 +519,7 @@ class EventListener:
         for dest in (
             f"/user/queue{resource}",
             f"/topic{resource}",
-            f"/app{_API_VERSION_PREFIX}{resource}",
+            f"/app{self._app_prefix}{resource}",
         ):
             frame = StompFrame(
                 command="SUBSCRIBE",

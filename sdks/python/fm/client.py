@@ -1823,7 +1823,7 @@ class Flexemarkets:
         self._event_listener = self._connect_events(marketplace_id, event_queue)
 
     def subscribe(
-        self, marketplace_id: int, event_queue: queue.Queue[object]
+        self, marketplace_id: int, event_queue: queue.Queue[object], *, history: bool = False,
     ) -> Callable[[], None]:
         """Open an *independent* event subscription, delivering onto
         *event_queue* until the returned unsubscribe callable is invoked.
@@ -1838,12 +1838,23 @@ class Flexemarkets:
         Returns a callable rather than an object with ``close()``, matching
         what ``Desk``'s ``on_*`` handlers already return here. Java
         returns a ``Subscription``; both names describe the same lifetime.
+
+        With *history*, the first :class:`~fm.events.OrdersUpdate` is every
+        order of the current session as this caller may see it -- cancelled
+        and split ones included, a counterparty's private order named from the
+        caller's side -- stamped with the ``seq`` it was read at, and each
+        reconnect delivers it again. That is fm-server's original subscribe,
+        and the only whole history a participant can read: the REST history is
+        a manager's. Without it the first update is empty and the book comes
+        from :meth:`active_orders`. A history is one frame, so on a session
+        with a very long one it is a large frame -- fm-server's V1 subscribe
+        exists to avoid exactly that.
         """
-        listener = self._connect_events(marketplace_id, event_queue)
+        listener = self._connect_events(marketplace_id, event_queue, history=history)
         return listener.close
 
     def _connect_events(
-        self, marketplace_id: int, event_queue: queue.Queue[object]
+        self, marketplace_id: int, event_queue: queue.Queue[object], history: bool = False,
     ) -> "EventListener":
         """Internal helper used by :class:`~fm.desk.Desk`
         (Phase 2d) to own its own subscription rather than clobbering
@@ -1862,6 +1873,7 @@ class Flexemarkets:
             event_queue=event_queue,
             client_description=self._client_description,
             renew=self._renew_token,
+            history=history,
         )
         ev.start()
         return ev

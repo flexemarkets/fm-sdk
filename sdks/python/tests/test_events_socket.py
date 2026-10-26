@@ -145,6 +145,36 @@ def test_connecting_presents_the_token_and_subscribes_to_the_marketplace(server,
     assert "destination:/app/v1/marketplaces/7" in subscribes[2]
 
 
+def test_a_history_subscribe_asks_for_the_session_s_orders(server, events):
+    """fm-server's original subscribe: its first ORDERS-UPDATE is the whole session.
+
+    The participant's only route to the history -- the REST read is a manager's --
+    so the destination must be the V0 one, whatever FM_WS_API_VERSION says.
+    """
+    l = EventListener(server.url, "Bearer the-token", MP, events, "fm-sdk-test", history=True)
+    l.start()
+    try:
+        _await("CONNECT and three SUBSCRIBEs", lambda: len(server.received[0]) >= 4)
+        assert "destination:/app/marketplaces/7" in server.received[0][3]
+    finally:
+        l.close()
+
+
+def test_the_history_arrives_as_an_orders_update_with_its_sequence_number(server, events):
+    l = EventListener(server.url, "Bearer the-token", MP, events, "fm-sdk-test", history=True)
+    l.start()
+    try:
+        server.connection(0).send(_message(
+            "ORDERS-UPDATE",
+            '[{"id":5,"consumer":0,"mine":true},{"id":6,"consumer":7},{"id":7,"type":"CANCEL","consumer":6}]',
+            "seq:8"))
+        update = _next(events)
+        assert isinstance(update, OrdersUpdate) and update.seq == 8
+        assert [o.id for o in update.orders] == [5, 6, 7]
+    finally:
+        l.close()
+
+
 def test_an_orders_update_arrives_with_its_sequence_number(server, events, listener):
     listener()
     server.connection(0).send(_message(
