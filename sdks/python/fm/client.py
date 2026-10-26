@@ -1317,18 +1317,44 @@ class Flexemarkets:
         side: str,
         units: int,
         price: int,
+        *,
+        owner_target: str | None = None,
+        owner_target_id: int | None = None,
+        client_description: str | None = None,
     ) -> Order:
-        url = _marketplace(self._endpoint, marketplace_id) + "/orders"
-        resp = self._post(url, {
+        """Place a limit order.
+
+        A private market matches an order only with one aimed back at its
+        owner, so an order there names its counterparty: by *owner_target_id*
+        when the caller knows it, or by *owner_target*, the allotment name. The
+        id is the unambiguous one, but only a manager can learn ids -- a
+        participant's ``identifiers()`` are names -- so a participant has the
+        name and nothing else. Name one or the other, not both.
+
+        *client_description* is this order's own reference, as the server keeps
+        it on the order; it defaults to the description this client connected
+        with.
+        """
+        if owner_target is not None and owner_target_id is not None:
+            raise InvalidArgumentError(
+                "Name the counterparty by owner_target or owner_target_id, not both")
+        order: dict[str, Any] = {
             "marketplaceId": marketplace_id,
             "marketId": market_id,
             "type": OrderType.LIMIT,
             "side": side,
             "units": units,
             "price": price,
-            "clientDescription": self._client_description,
-        })
-        return _parse_order(_json(resp))
+            "clientDescription": client_description or self._client_description,
+        }
+        # Left out rather than sent as null: a target of null is a private order
+        # aimed at nobody, which the server refuses.
+        if owner_target is not None:
+            order["ownerTarget"] = owner_target
+        if owner_target_id is not None:
+            order["ownerTargetId"] = owner_target_id
+        url = _marketplace(self._endpoint, marketplace_id) + "/orders"
+        return _parse_order(_json(self._post(url, order)))
 
     def submit_market(
         self, marketplace_id: int, market_id: int, side: str, units: int,
