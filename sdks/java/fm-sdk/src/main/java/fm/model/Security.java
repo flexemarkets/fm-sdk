@@ -4,6 +4,7 @@ import java.util.Objects;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 /**
  * A position in one market, and how far short the holder may go.
@@ -33,6 +34,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
  *                       below {@code -shortUnits}
  * @param canBuy         whether the holder may buy in this market
  * @param canSell        whether the holder may sell in this market
+ * @param initialUnits   the units the session opened with, or null when the
+ *                       response did not say
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record Security(
@@ -41,7 +44,8 @@ public record Security(
     Long availableUnits,
     @JsonAlias("initialShortUnits") Long shortUnits,
     Boolean canBuy,
-    Boolean canSell) {
+    Boolean canSell,
+    @JsonInclude(JsonInclude.Include.NON_NULL) Long initialUnits) {
 
     /**
      * Substitutes zero for every absent number and false for every absent
@@ -56,5 +60,27 @@ public record Security(
         shortUnits     = Objects.requireNonNullElse(shortUnits, 0L);
         canBuy         = Objects.requireNonNullElse(canBuy, Boolean.FALSE);
         canSell        = Objects.requireNonNullElse(canSell, Boolean.FALSE);
+    }
+
+    /**
+     * A position whose starting units are not known.
+     *
+     * <p>Unlike the other numbers, {@code initialUnits} is not defaulted to
+     * zero: "opened with none" and "nobody said" are different answers, and a
+     * holdings export has to tell them apart (fm-robots#472). It is also left
+     * out of the JSON when null, because this record is what
+     * {@link Assets} posts to {@code /allocations} as {@code grants}, and a
+     * request has no business carrying it.
+     *
+     * @param marketId       the market this position is in
+     * @param units          settled units held
+     * @param availableUnits units free to sell
+     * @param shortUnits     the absolute short cap
+     * @param canBuy         whether the holder may buy in this market
+     * @param canSell        whether the holder may sell in this market
+     */
+    public Security(Long marketId, Long units, Long availableUnits, Long shortUnits,
+                    Boolean canBuy, Boolean canSell) {
+        this(marketId, units, availableUnits, shortUnits, canBuy, canSell, null);
     }
 }
