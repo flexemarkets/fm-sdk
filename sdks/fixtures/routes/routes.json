@@ -1225,6 +1225,43 @@
       ]
     },
     {
+      "call": "uploadHoldingsCsv",
+      "args": {
+        "marketplaceId": 1,
+        "csv": "# holdings -- begin\nemail,name,cash__initial\nb01@lab,B01,1000\n# holdings -- end"
+      },
+      "why": "Holdings CSV text a program built, staged exactly as a file is: the same POST allocations, text/csv, the text as the body, verbatim. An admin robot writing back the holdings it downloaded and changed has text, not a file.",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/api/v1/marketplaces/1/allocations",
+          "body": "# holdings -- begin\nemail,name,cash__initial\nb01@lab,B01,1000\n# holdings -- end",
+          "contentType": "text/csv",
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "id": 5,
+                "allocationId": 12,
+                "marketplaceId": 1,
+                "ownerId": 7,
+                "name": "B01",
+                "assets": {
+                  "cash": 1000,
+                  "grants": [
+                    {
+                      "marketId": 11,
+                      "units": 5
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
       "call": "uploadState",
       "args": {
         "marketplaceId": 1,
