@@ -1998,9 +1998,23 @@ export class Flexemarkets {
    * Returns an unsubscribe function rather than an object with `close()`,
    * matching what Desk's `on*` handlers already return here. Java
    * returns a `Subscription`; both names describe the same lifetime.
+   *
+   * With `history`, the first orders update is every order of the current
+   * session as this caller may see it -- cancelled and split ones included, a
+   * counterparty's private order named from the caller's side -- stamped with
+   * the `seq` it was read at, and each reconnect delivers it again. That is
+   * fm-server's original subscribe, and the only whole history a participant
+   * can read: the REST history is a manager's. Without it the first update is
+   * empty and the book comes from `activeOrders`. A history is one frame, so on
+   * a session with a very long one it is a large frame -- fm-server's V1
+   * subscribe exists to avoid exactly that.
    */
-  async subscribe(marketplaceId: number, callback: EventCallback): Promise<Subscription> {
-    const listener = await this._connectEvents(marketplaceId, callback);
+  async subscribe(
+    marketplaceId: number,
+    callback: EventCallback,
+    options: { history?: boolean } = {},
+  ): Promise<Subscription> {
+    const listener = await this._connectEvents(marketplaceId, callback, options.history ?? false);
     return () => {
       void listener.close();
     };
@@ -2012,7 +2026,7 @@ export class Flexemarkets {
    * the singleton {@link #_eventListener}. Lets multiple
    * desk(marketplaceId) calls coexist within one Flexemarkets.
    */
-  async _connectEvents(marketplaceId: number, callback: EventCallback): Promise<EventListener> {
+  async _connectEvents(marketplaceId: number, callback: EventCallback, history = false): Promise<EventListener> {
     const wsUrl =
       server(this._endpoint)
         .replace("https://", "wss://")
@@ -2026,6 +2040,7 @@ export class Flexemarkets {
       parseHolding,
       parseOrder,
       (presented) => this._renewToken(presented),
+      history,
     );
     await events.start();
     return events;

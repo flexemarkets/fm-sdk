@@ -59,15 +59,16 @@ after(() => server.close());
 /** A listener that records nothing but whether it was closed. */
 class FakeListener {
   closed = false;
+  constructor(readonly history: boolean) {}
   async close(): Promise<void> { this.closed = true; }
 }
 
 /** Replaces _connectEvents, collecting every listener it hands out. */
 function stubConnectEvents(fm: Flexemarkets): FakeListener[] {
   const opened: FakeListener[] = [];
-  (fm as unknown as { _connectEvents: () => Promise<FakeListener> })._connectEvents =
-    async () => {
-      const listener = new FakeListener();
+  (fm as unknown as { _connectEvents: (mp: number, cb: unknown, history?: boolean) => Promise<FakeListener> })
+    ._connectEvents = async (_mp, _cb, history = false) => {
+      const listener = new FakeListener(history);
       opened.push(listener);
       return listener;
     };
@@ -85,7 +86,8 @@ test("subscriptions coexist rather than replacing each other", async () => {
     const opened = stubConnectEvents(fm);
 
     const first = await fm.subscribe(1, () => {});
-    const second = await fm.subscribe(1, () => {});
+    const second = await fm.subscribe(1, () => {}, { history: true });
+    assert.deepEqual(opened.map((l) => l.history), [false, true], "history reaches the stream it was asked of");
 
     assert.equal(opened.length, 2, "each subscribe opens its own stream");
     assert.notEqual(first, second);
