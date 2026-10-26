@@ -241,6 +241,7 @@ class RouteFixturesTest {
                     _grid(a.get("price")), _grid(a.get("units")), a.get("privateMarket").asBoolean());
             case "allocate" -> fm.allocate(mp, _holdings(a.get("holdings")));
             case "uploadHoldings" -> fm.uploadHoldings(mp, _csv(a));
+            case "uploadHoldingsCsv" -> fm.uploadHoldingsCsv(mp, a.get("csv").asString());
             case "uploadState" -> fm.uploadState(mp, _csv(a));
             case "removeWidget" -> a.has("userId")
                     ? fm.removeWidget(mp, a.get("key").asString(), a.get("userId").asLong())

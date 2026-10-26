@@ -174,6 +174,7 @@ class FakeFlexemarkets implements Flexemarkets {
     @Override public Marketplace createMarketplaceFromJson(String json) { throw _no("createMarketplaceFromJson"); }
     @Override public List<Holding> allocate(long id, List<Holding> holdings) { throw _no("allocate"); }
     @Override public List<Holding> uploadHoldings(long id, Path csv) { throw _no("uploadHoldings"); }
+    @Override public List<Holding> uploadHoldingsCsv(long id, String csv) { throw _no("uploadHoldingsCsv"); }
     @Override public List<ParticipantState> uploadState(long id, Path csv) { throw _no("uploadState"); }
     @Override public List<Widget> pushWidgets(long id, List<WidgetPush> widgets) { throw _no("pushWidgets"); }
     @Override public boolean removeWidget(long id, String key) { throw _no("removeWidget"); }

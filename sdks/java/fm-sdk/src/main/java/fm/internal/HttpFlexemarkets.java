@@ -969,6 +969,12 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     @Override
+    public List<Holding> uploadHoldingsCsv(long marketplaceId, String csv) {
+        return _toHoldings(_sendCsv("POST", _marketplace(marketplaceId) + "/allocations",
+                csv.getBytes(StandardCharsets.UTF_8), ALLOTMENTS_TYPE));
+    }
+
+    @Override
     public List<ParticipantState> uploadState(long marketplaceId, Path csv) {
         return List.copyOf(_sendCsv("PUT", _marketplace(marketplaceId) + "/state", csv, PARTICIPANT_STATES_TYPE));
     }
@@ -1584,6 +1590,11 @@ public class HttpFlexemarkets implements Flexemarkets {
         } catch (IOException e) {
             throw new ApiException("Failed to read " + file, e);
         }
+        return _sendCsv(method, url, content, type);
+    }
+
+    /** CSV bytes as the body, {@code Content-Type: text/csv}; see the file form above. */
+    private <T> T _sendCsv(String method, String url, byte[] content, TypeReference<T> type) {
         var request = _request(url, "application/json")
             .header("Content-Type", "text/csv")
             .method(method, HttpRequest.BodyPublishers.ofByteArray(content))
