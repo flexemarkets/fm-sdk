@@ -98,6 +98,10 @@ class Security:
     short_units: int = 0
     can_buy: bool = False
     can_sell: bool = False
+    # The units the session opened with. None when the response did not say:
+    # "opened with none" and "nobody said" are different answers, and a
+    # holdings export has to tell them apart (fm-robots#472). Never sent.
+    initial_units: int | None = None
 
 
 @dataclass
@@ -110,6 +114,9 @@ class Holding:
     cash: int = 0
     available_cash: int = 0
     securities: list[Security] = field(default_factory=list)
+    # The cash the session opened with, or None when the response did not say;
+    # see Security.initial_units.
+    initial_cash: int | None = None
 
     def __post_init__(self) -> None:
         """Positions are never None and always in market order.
@@ -290,6 +297,8 @@ class Session:
     description: str | None = None
     open_date: "datetime | None" = None
     close_date: "datetime | None" = None
+    created_date: "datetime | None" = None
+    last_modified_date: "datetime | None" = None
 
     STATE_INIT = "INIT"
     STATE_OPEN = "OPEN"
@@ -320,6 +329,14 @@ class Order:
     owner_target_id: int | None = None
     created_date: "datetime | None" = None
     last_modified_date: "datetime | None" = None
+    # Whether the order is the reader's own, as the server judged it for the
+    # connection that read it. Not derivable from owner_id: a manager viewing
+    # as a participant sees that participant's orders as mine. None when the
+    # response did not say.
+    mine: bool | None = None
+    # The session the order was first placed in, when it was carried into a
+    # later one; None when the response did not say.
+    original_session_id: int | None = None
 
 
 

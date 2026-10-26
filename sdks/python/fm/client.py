@@ -167,6 +167,7 @@ def _parse_security(data: dict[str, Any]) -> Security:
         short_units=data.get("shortUnits", data.get("initialShortUnits", 0)) or 0,
         can_buy=data.get("canBuy", False),
         can_sell=data.get("canSell", False),
+        initial_units=data.get("initialUnits"),
     )
 
 
@@ -228,6 +229,8 @@ def _parse_session(data: dict[str, Any]) -> Session:
         description=data.get("description"),
         open_date=_timestamp(data.get("openDate")),
         close_date=_timestamp(data.get("closeDate")),
+        created_date=_timestamp(data.get("createdDate")),
+        last_modified_date=_timestamp(data.get("lastModifiedDate")),
     )
 
 
@@ -251,6 +254,8 @@ def _parse_order(data: dict[str, Any]) -> Order:
         owner_target_id=data.get("ownerTargetId"),
         created_date=_timestamp(data.get("createdDate")),
         last_modified_date=_timestamp(data.get("lastModifiedDate")),
+        mine=data.get("mine"),
+        original_session_id=data.get("originalSessionId"),
     )
 
 
@@ -265,6 +270,7 @@ def _parse_holding(data: dict[str, Any]) -> Holding:
         cash=data.get("cash", 0),
         available_cash=data.get("availableCash", 0),
         securities=[_parse_security(s) for s in securities_raw],
+        initial_cash=data.get("initialCash"),
     )
 
 
