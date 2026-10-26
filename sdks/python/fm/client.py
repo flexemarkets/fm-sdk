@@ -728,11 +728,26 @@ class Flexemarkets:
         account: str | None = None,
         email: str | None = None,
         token: str | None = None,
+        password: str | None = None,
     ):
+        """Connect and sign in.
+
+        An identity named here -- *account*, *email*, *password* -- replaces
+        the one in ``~/.fm/credential`` rather than overlaying it. Overlaying
+        signed a program in as someone else: a token in the file outranks a
+        password, so naming an account and email beside it was silently
+        ignored, and a robot meant for one participant traded as whoever owned
+        that machine's credential file. A part not named here is missing, not
+        borrowed from the file. ``~/.fm/endpoint`` and ``FM_API_URL`` still
+        supply the endpoint when *endpoint* is not given.
+        """
         self._client_description = client_description or "Unspecified client"
 
         # Build config from defaults then override with explicit args
         config = _load_config()
+        if any(v is not None for v in (account, email, password)):
+            for key in ("account", "email", "password", "token", _REFRESH_TOKEN_PROPERTY):
+                config.pop(key, None)
 
         if credential is not None:
             if credential.startswith(_REFRESH_TOKEN_PREFIX) and credential[len(_REFRESH_TOKEN_PREFIX):].strip():
@@ -755,6 +770,8 @@ class Flexemarkets:
             config["email"] = email
         if token is not None:
             config["token"] = token
+        if password is not None:
+            config["password"] = password
 
         self._endpoint = config.get("endpoint", _DEFAULT_ENDPOINT)
 
