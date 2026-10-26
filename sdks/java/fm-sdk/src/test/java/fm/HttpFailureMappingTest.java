@@ -184,4 +184,48 @@ class HttpFailureMappingTest {
             .withMessage("Conflict: <html>Conflict</html>");
     }
 
+
+    private static final String REFUSED =
+            "{\"error\":\"SESSION_CLOSED\",\"message\":\"Closed session.\",\"status\":\"BAD_REQUEST\"}";
+
+    /** The exception the call raised, for its answer to be read. */
+    private FlexemarketsException _raised(int status, String body) {
+        try {
+            _call(status, body);
+        } catch (FlexemarketsException e) {
+            return e;
+        } catch (Exception e) {
+            throw new AssertionError(e);
+        }
+        throw new AssertionError("no exception for " + status);
+    }
+
+    /**
+     * A refusal carries the server's answer, not only a sentence about it: a
+     * caller telling a closed session from a bad price branches on the body's
+     * error, and a transport handing the refusal on needs the body and status.
+     */
+    @Test
+    void everyRefusalCarriesItsStatusReasonAndBody() {
+        for (int status : new int[] {400, 401, 403, 409, 418, 503}) {
+            var e = _raised(status, REFUSED);
+            assertThat(e.statusCode()).as("status of a %d", status).isEqualTo(status);
+            assertThat(e.reason()).as("reason of a %d", status).isEqualTo("SESSION_CLOSED");
+            assertThat(e.body()).as("body of a %d", status).isEqualTo(REFUSED);
+        }
+    }
+
+    @Test
+    void aBodyThatNamesNoErrorLeavesTheReasonUnknown() {
+        assertThat(_raised(400, "{\"message\":\"no code\"}").reason()).isNull();
+        assertThat(_raised(400, "<html>bad gateway</html>").reason()).isNull();
+    }
+
+    @Test
+    void anExceptionTheSdkRaisedItselfCarriesNoAnswer() {
+        var e = new InvalidArgumentException("raised locally");
+        assertThat(e.statusCode()).isNull();
+        assertThat(e.reason()).isNull();
+        assertThat(e.body()).isNull();
+    }
 }

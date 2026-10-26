@@ -1984,6 +1984,11 @@ public class HttpFlexemarkets implements Flexemarkets {
      * left is HttpException, carrying the status so a caller can still ask.
      */
     private static FlexemarketsException _failureFor(int statusCode, String body) {
+        return _bare(statusCode, body).withResponse(statusCode, _reason(body), body);
+    }
+
+    /** {@link #_failureFor}, before the answer is attached. */
+    private static FlexemarketsException _bare(int statusCode, String body) {
         return switch (statusCode) {
             case 400 -> new InvalidArgumentException("Invalid request: " + _detail(body));
             case 401 -> new AuthenticationException("Authentication failed: " + _detail(body));
@@ -2019,6 +2024,19 @@ public class HttpFlexemarkets implements Flexemarkets {
                     : body;
         } catch (Exception e) {
             return body;
+        }
+    }
+
+    /** The {@code error} a failure body names, or null when it names none. */
+    private static String _reason(String body) {
+        if (body == null || body.isBlank()) {
+            return null;
+        }
+        try {
+            var error = MAPPER.readTree(body).get("error");
+            return error != null && error.isString() && !error.asString().isEmpty() ? error.asString() : null;
+        } catch (Exception e) {
+            return null;
         }
     }
 
