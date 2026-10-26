@@ -1741,10 +1741,15 @@ export class Flexemarkets {
   /**
    * Every widget pushed to the marketplace and still standing, for every
    * participant -- what a manager reads to check on a robot.
+   *
+   * The answer is the frame every widgets read answers, `{marketplaceId,
+   * snapshot, widgets, removed}`; a bare list, which `widgets/all` answered
+   * and 0.4.0 to 0.11.0 expected here, is read too.
    */
   async allWidgets(marketplaceId: number): Promise<Widget[]> {
-    const data = await this._get(`${this._marketplace(marketplaceId)}/widgets?participant=all`);
-    return (data as unknown as JsonObject[]).map(parseWidget);
+    const data: unknown = await this._get(`${this._marketplace(marketplaceId)}/widgets?participant=all`);
+    const widgets = Array.isArray(data) ? data : ((data as JsonObject).widgets ?? []);
+    return (widgets as JsonObject[]).map(parseWidget);
   }
 
   /**
