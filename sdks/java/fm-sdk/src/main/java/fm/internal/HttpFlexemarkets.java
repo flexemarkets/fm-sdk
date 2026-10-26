@@ -1000,9 +1000,17 @@ public class HttpFlexemarkets implements Flexemarkets {
         return java.net.URLEncoder.encode(key, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
+    /**
+     * The widgets of the frame every widgets read answers, {@code {marketplaceId,
+     * snapshot, widgets, removed}}. A bare list is read too: {@code widgets/all},
+     * which this read replaced, answered one, and 0.4.0 to 0.11.0 expected it
+     * here, failing on every call.
+     */
     @Override
     public List<Widget> allWidgets(long marketplaceId) {
-        return List.copyOf(_get(_marketplace(marketplaceId) + "/widgets?participant=all", WIDGETS_TYPE));
+        JsonNode body = _get(_marketplace(marketplaceId) + "/widgets?participant=all", SNAPSHOT_TYPE);
+        JsonNode widgets = body.isArray() ? body : body.path("widgets");
+        return widgets.isArray() ? List.of(MAPPER.treeToValue(widgets, Widget[].class)) : List.of();
     }
 
     @Override
