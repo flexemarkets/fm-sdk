@@ -1366,22 +1366,45 @@ export class Flexemarkets {
 
   // -- orders ----------------------------------------------------------------
 
+  /**
+   * Place a limit order.
+   *
+   * A private market matches an order only with one aimed back at its owner, so
+   * an order there names its counterparty: by `ownerTargetId` when the caller
+   * knows it, or by `ownerTarget`, the allotment name. The id is the
+   * unambiguous one, but only a manager can learn ids -- a participant's
+   * `identifiers()` are names -- so a participant has the name and nothing
+   * else. Name one or the other, not both.
+   *
+   * `clientDescription` is this order's own reference, as the server keeps it
+   * on the order; it defaults to the description this client connected with.
+   */
   async submitLimit(
     marketplaceId: number,
     marketId: number,
     side: string,
     units: number,
     price: number,
+    options: { ownerTarget?: string; ownerTargetId?: number; clientDescription?: string } = {},
   ): Promise<Order> {
-    const data = await this._post(`${this._marketplace(marketplaceId)}/orders`, {
+    const { ownerTarget, ownerTargetId, clientDescription } = options;
+    if (ownerTarget !== undefined && ownerTargetId !== undefined) {
+      throw new InvalidArgumentError("Name the counterparty by ownerTarget or ownerTargetId, not both");
+    }
+    const order: JsonObject = {
       marketplaceId,
       marketId,
       type: "LIMIT",
       side,
       units,
       price,
-      clientDescription: this._clientDescription,
-    });
+      clientDescription: clientDescription || this._clientDescription,
+    };
+    // Left out rather than sent as null: a target of null is a private order
+    // aimed at nobody, which the server refuses.
+    if (ownerTarget !== undefined) order.ownerTarget = ownerTarget;
+    if (ownerTargetId !== undefined) order.ownerTargetId = ownerTargetId;
+    const data = await this._post(`${this._marketplace(marketplaceId)}/orders`, order);
     return parseOrder(data);
   }
 
