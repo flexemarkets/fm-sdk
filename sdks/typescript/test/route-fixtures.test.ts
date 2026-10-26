@@ -119,6 +119,7 @@ const RUNNERS: Record<string, (fm: Flexemarkets, a: Args) => Promise<unknown>> =
   allocate: (fm, a) =>
     fm.allocate(a.marketplaceId, a.holdings.map((h: Args) => holding(a.marketplaceId, h))),
   uploadHoldings: (fm, a) => fm.uploadHoldings(a.marketplaceId, csvFile(a.csv)),
+  uploadHoldingsCsv: (fm, a) => fm.uploadHoldingsCsv(a.marketplaceId, a.csv),
   uploadState: (fm, a) => fm.uploadState(a.marketplaceId, csvFile(a.csv)),
   removeWidget: (fm, a) => fm.removeWidget(a.marketplaceId, a.key, a.userId),
   allWidgets: (fm, a) => fm.allWidgets(a.marketplaceId),

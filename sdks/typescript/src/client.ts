@@ -1301,6 +1301,11 @@ export class Flexemarkets {
    * segment. Bytes, not a string, so the file's own encoding survives.
    */
   private async _sendCsv(method: string, url: string, filename: string): Promise<unknown> {
+    return this._sendCsvContent(method, url, readFileSync(filename));
+  }
+
+  /** CSV as the request body, declared text/csv; see {@link _sendCsv}. */
+  private async _sendCsvContent(method: string, url: string, content: RequestInit["body"]): Promise<unknown> {
     const resp = await this._fetch(url, {
       method,
       headers: {
@@ -1309,7 +1314,7 @@ export class Flexemarkets {
         Accept: "application/json",
         "User-Agent": FM_NETWORK_CLIENT,
       },
-      body: readFileSync(filename),
+      body: content,
     });
     const body = await resp.text();
     checkResponse(resp, body);
@@ -1740,6 +1745,22 @@ export class Flexemarkets {
   async uploadHoldings(marketplaceId: number, filename: string): Promise<Holding[]> {
     const url = `${this._marketplace(marketplaceId)}/allocations`;
     const data = (await this._sendCsv("POST", url, filename)) as JsonObject[];
+    return allotmentsToHoldings(data.map(parseAllotment));
+  }
+
+  /**
+   * Stage an allocation from holdings CSV text, as {@link uploadHoldings} does
+   * from a file.
+   *
+   * For a program that builds the CSV rather than reading one -- an admin
+   * robot writing back the holdings it downloaded and changed -- which
+   * otherwise writes a file only to have it read again. The text is sent as it
+   * is; a `# holdings -- begin` / `-- end` frame around it is accepted, as in a
+   * downloaded file.
+   */
+  async uploadHoldingsCsv(marketplaceId: number, csv: string): Promise<Holding[]> {
+    const url = `${this._marketplace(marketplaceId)}/allocations`;
+    const data = (await this._sendCsvContent("POST", url, csv)) as JsonObject[];
     return allotmentsToHoldings(data.map(parseAllotment));
   }
 
