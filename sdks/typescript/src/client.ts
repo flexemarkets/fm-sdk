@@ -67,7 +67,20 @@ const JWT_RE = /^[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+$/;
 // Errors
 // ---------------------------------------------------------------------------
 
-export class FlexemarketsError extends Error {}
+/**
+ * Base of every Flexemarkets error.
+ *
+ * An error that is the server's answer carries it: `statusCode`, the `body` as
+ * sent, and `reason`, the body's `error` -- `SESSION_CLOSED`, `ORDER_INVALID`,
+ * `ACCOUNT_TOKEN_EXPIRED` -- which is what a caller branches on, where the
+ * message is for people. All three are null for an error the SDK raised
+ * itself, and `reason` is null when the body named no error.
+ */
+export class FlexemarketsError extends Error {
+  statusCode: number | null = null;
+  reason: string | null = null;
+  body: string | null = null;
+}
 export class AuthenticationError extends FlexemarketsError {}
 export class AuthorizationError extends FlexemarketsError {}
 export class InvalidArgumentError extends FlexemarketsError {}
@@ -687,15 +700,42 @@ function readBody(body: string): any {
   }
 }
 
+/** The `error` a failure body names, or null when it names none. */
+function reasonIn(body: string): string | null {
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    const error = typeof parsed === "object" && parsed !== null ? (parsed as { error?: unknown }).error : null;
+    return typeof error === "string" && error !== "" ? error : null;
+  } catch {
+    return null;
+  }
+}
+
+/** `error`, carrying the answer it came from. */
+function answered<E extends FlexemarketsError>(error: E, statusCode: number, body: string): E {
+  error.statusCode = statusCode;
+  error.body = body;
+  error.reason = reasonIn(body);
+  return error;
+}
+
+/** `error`, carrying the answer `from` carried. */
+function answeredAs<E extends FlexemarketsError>(error: E, from: FlexemarketsError): E {
+  error.statusCode = from.statusCode;
+  error.body = from.body;
+  error.reason = from.reason;
+  return error;
+}
+
 function checkResponse(response: Response, body: string): void {
   const status = response.status;
   if (status >= 200 && status < 300) return;
-  if (status === 400) throw new InvalidArgumentError("Invalid request: " + detail(body));
-  if (status === 401) throw new AuthenticationError("Authentication failed: " + detail(body));
-  if (status === 403) throw new AuthorizationError("Not permitted: " + detail(body));
-  if (status === 409) throw new ConflictError(body);
-  if (status >= 500) throw new ConnectionFailedError(body);
-  throw new HttpError(status, body);
+  if (status === 400) throw answered(new InvalidArgumentError("Invalid request: " + detail(body)), status, body);
+  if (status === 401) throw answered(new AuthenticationError("Authentication failed: " + detail(body)), status, body);
+  if (status === 403) throw answered(new AuthorizationError("Not permitted: " + detail(body)), status, body);
+  if (status === 409) throw answered(new ConflictError(body), status, body);
+  if (status >= 500) throw answered(new ConnectionFailedError(body), status, body);
+  throw answered(new HttpError(status, body), status, body);
 }
 
 /** The server's proposed alternative name, when a 409 body carries one. */
@@ -1050,12 +1090,12 @@ export class Flexemarkets {
       // back out of a generic conflict.
       if (e instanceof ConflictError) {
         const suggested = suggestedNameIn(e.message);
-        throw new AccountNameConflictError(
+        throw answeredAs(new AccountNameConflictError(
           `Account name '${accountName}' is taken` +
             (suggested === null ? "" : `; server suggests '${suggested}'`),
           accountName,
           suggested,
-        );
+        ), e);
       }
       throw e;
     }
@@ -1132,10 +1172,10 @@ export class Flexemarkets {
       // it, so the server refuses and the caller has to decide what happens to
       // the data first.
       if (e instanceof ConflictError) {
-        throw new PersonHasMarketplaceDataError(
+        throw answeredAs(new PersonHasMarketplaceDataError(
           `User ${userId} has marketplace data and cannot be deleted.`,
           userId,
-        );
+        ), e);
       }
       throw e;
     }
