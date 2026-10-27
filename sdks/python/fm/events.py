@@ -507,6 +507,13 @@ class EventListener:
         return self._presented
 
     def _connect(self) -> ws_sync.ClientConnection:
+        # Entered, not used as returned. websockets 17.1 deprecated using
+        # connect()'s return value directly -- it still connects, but warns on
+        # the first send -- and its future default returns a connector that
+        # has not connected at all. Entering it connects on every version this
+        # SDK accepts (>=13: there connect() returns the connection, whose
+        # __enter__ is itself). The connection is closed by _disconnect, as
+        # before, rather than by a with-block: it outlives this call.
         return ws_sync.connect(
             self._ws_url,
             additional_headers={
@@ -514,7 +521,7 @@ class EventListener:
             },
             subprotocols=["v12.stomp", "v11.stomp", "v10.stomp"],
             max_size=_INBOUND_MESSAGE_SIZE,
-        )
+        ).__enter__()
 
     def _disconnect(self) -> None:
         # Detached before it is closed, so the receive loop reading it -- which
