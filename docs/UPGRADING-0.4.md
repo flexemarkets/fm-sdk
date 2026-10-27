@@ -144,6 +144,6 @@ already holds, matched on its resting and aggressor order ids.
 
 ## What is not in 0.4.0
 
-The other items in [DESIGN-0.4.md](DESIGN-0.4.md) — a TypeScript logger,
+The other items in [DESIGN-NEXT.md](DESIGN-NEXT.md) — a TypeScript logger,
 all-markets subscriptions, diagnostics through `System.Logger` — are open and
 not in this release.

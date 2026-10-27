@@ -29,11 +29,27 @@ Client SDKs for the [Flexemarkets](https://api.flexemarkets.com) trading API —
 | Document | Covers |
 |----------|--------|
 | [docs/API-REFERENCE.md](docs/API-REFERENCE.md) | The REST and WebSocket (STOMP) surface the SDKs wrap — auth, OTP, error bodies, endpoints, the snapshot/sequence contract |
+| [docs/FIRST-ROBOT.md](docs/FIRST-ROBOT.md) | Your first trading robot: the smallest one that trades well, in Python and TypeScript |
+| [docs/ORDER-MODEL.md](docs/ORDER-MODEL.md) | The order model from the SDK side — fills, partial fills and cancellations as orders referring to orders |
 | [docs/FM-ROBOTS.md](docs/FM-ROBOTS.md) | The `fm-manager` CLI, the robot agents, and the `fm-spi` plugin contract |
+| [docs/STUDY-SPI-0.2.md](docs/STUDY-SPI-0.2.md) | Study contract 0.2: the session's orders, early endings, and robots |
+| [docs/STUDY-SPI-PERIODS.md](docs/STUDY-SPI-PERIODS.md) | Multi-period studies in the study SPI (SSW first) |
+| [docs/DESIGN-NEXT.md](docs/DESIGN-NEXT.md) | Public API changes under consideration for the next releases, and the ones already rejected |
+
+### Upgrade notes
+
+One per release that changed something a consumer may have to act on. Read
+each between the version you are on and the one you are moving to, in order.
+
+| Document | Covers |
+|----------|--------|
 | [docs/UPGRADING-0.1.md](docs/UPGRADING-0.1.md) | Migrating a codebase from 0.0.x to 0.1.x, in all three languages |
 | [docs/UPGRADING-0.2.md](docs/UPGRADING-0.2.md) | Migrating a codebase from 0.1.x to 0.2.x — the package moves, the renames, and the five changes that are not renames |
 | [docs/UPGRADING-0.3.md](docs/UPGRADING-0.3.md) | Moving from 0.2.x to 0.3.x — which is additive, and says so |
-| [docs/DESIGN-0.4.md](docs/DESIGN-0.4.md) | Public API changes under consideration for 0.4, and the ones already rejected |
+| [docs/UPGRADING-0.4.md](docs/UPGRADING-0.4.md) | Moving from 0.3.x to 0.4.x — no signature changes, but calls move to fm-server's model routes and a few answer differently |
+| [docs/UPGRADING-0.5.md](docs/UPGRADING-0.5.md) | Moving from 0.4.x to 0.5.x — per-market shortcuts removed from the book and tape indexes, and what to call instead |
+| [docs/UPGRADING-0.6.md](docs/UPGRADING-0.6.md) | Moving from 0.5.x to 0.6.x — nothing removed; acting as another account in Java and `CliBuilder` bounds answer differently |
+| [docs/UPGRADING-0.7.md](docs/UPGRADING-0.7.md) | Moving from 0.6.x to 0.7.x — `Order` gains `ownerTargetId`, which code that builds an `Order` itself must pass |
 
 Per-language quickstarts are in each SDK's README, linked from [Usage](#usage)
 below.

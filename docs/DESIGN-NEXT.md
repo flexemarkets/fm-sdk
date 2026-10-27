@@ -1,4 +1,4 @@
-# Public API changes proposed for 0.4, and where they stand
+# Public API changes under consideration, and where they stand
 
 **Status (2026-10-20):** the SDK is at ~~0.6.0~~ 0.7.0 (released 2026-10-20: an order carries its counterparty's id, `ownerTargetId`; nothing below). Shipped: item 1 in 0.4.0
 (d245f1c, 2026-10-08); item 2's Java `System.Logger` and item 4's SDK half in
