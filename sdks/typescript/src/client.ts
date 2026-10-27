@@ -766,11 +766,29 @@ async function tokenExpired(resp: Response): Promise<boolean> {
 
 /**
  * Whether a request failed with no answer from the server: the connection
- * refused, reset or closed before or while the response came. fetch says so
- * with a TypeError of these two messages, and with nothing more specific.
+ * refused, reset or closed before or while the response came, which fetch
+ * says with a TypeError of these two messages and nothing more specific, or
+ * no answer within {@link REQUEST_TIMEOUT_MS}.
  */
 function answerLost(e: unknown): boolean {
-  return e instanceof TypeError && (e.message === "fetch failed" || e.message === "terminated");
+  return (e instanceof TypeError && (e.message === "fetch failed" || e.message === "terminated"))
+    || (e instanceof Error && e.name === "TimeoutError");
+}
+
+/** How long a request may take, start to finish, before it is given up. */
+export const REQUEST_TIMEOUT_MS = 30_000;
+
+/** The timeout in force: {@link REQUEST_TIMEOUT_MS}, unless a test has shortened it. */
+export const requestTimeout = { ms: REQUEST_TIMEOUT_MS };
+
+/**
+ * fetch, given up after {@link REQUEST_TIMEOUT_MS} unless the caller passed a
+ * signal of its own. fetch has no timeout: a request whose answer never came
+ * waited for ever, where the Python and Java SDKs give up at 30 s -- and a
+ * robot stalled on one order stopped trading without a word.
+ */
+function fetchWithin(url: string, init: RequestInit): Promise<Response> {
+  return fetch(url, { ...init, signal: init.signal ?? AbortSignal.timeout(requestTimeout.ms) });
 }
 
 export class Flexemarkets {
@@ -906,7 +924,7 @@ export class Flexemarkets {
     this._lastTiming = null;
     if (timing !== null) headers.set("Client-Timing", timing);
     const started = process.hrtime.bigint();
-    const resp = await fetch(url, { ...init, headers });
+    const resp = await fetchWithin(url, { ...init, headers });
     const rtt = process.hrtime.bigint() - started;
     const served = /st=(\d+)/.exec(resp.headers.get("Server-Timing") ?? "");
     this._lastTiming = served
@@ -2112,7 +2130,7 @@ export class Flexemarkets {
  * stops working after hours while the robot runs on.
  */
 async function renewWithRefreshToken(baseUrl: string, config: Record<string, string>): Promise<Token> {
-  const resp = await fetch(`${baseUrl}/v1/tokens/renew`, {
+  const resp = await fetchWithin(`${baseUrl}/v1/tokens/renew`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -2151,7 +2169,7 @@ async function signIn(
     // Python one never had it, so token auth returned 400 in both from the day
     // it was written.
     // POST, as minting a token is (fm-server 4.6).
-    const resp = await fetch(`${baseUrl}/v1/tokens/refresh`, {
+    const resp = await fetchWithin(`${baseUrl}/v1/tokens/refresh`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${tok}`,
@@ -2173,7 +2191,7 @@ async function signIn(
   if (!password) throw new ConfigurationError("Missing 'password' in configuration.");
 
   const authUrl = `${baseUrl}/v1/tokens`;
-  const resp = await fetch(authUrl, {
+  const resp = await fetchWithin(authUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
