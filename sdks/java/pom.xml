@@ -353,6 +353,10 @@
                                      carrying it would be refused whole. The sdk publish of
                                      fm-release takes it off this list when its code changes. -->
                                 <excludeArtifact>fm-expr</excludeArtifact>
+                                <!-- fm-spi is on Central and has not moved since, so a bundle
+                                     carrying it would be refused whole. The sdk publish of
+                                     fm-release takes it off this list when its code changes. -->
+                                <excludeArtifact>fm-spi</excludeArtifact>
                             </excludeArtifacts>
                         </configuration>
                     </plugin>
