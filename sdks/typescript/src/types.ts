@@ -1,5 +1,7 @@
 /** Flexemarkets domain models. */
 
+import { Decimals } from "./decimals.js";
+
 export interface Person {
   id: number;
   accountId: number;
@@ -300,9 +302,25 @@ export interface TickGrid {
   tick: number;
 }
 
-/** The usual unit dimension: whole units, one to a hundred. */
-export function unitGrid(): TickGrid {
-  return { minimum: 1, maximum: 100, tick: 1 };
+/**
+ * The usual unit dimension: whole units, one to a hundred, counted in steps of
+ * `10^-unitDecimals`.
+ *
+ * Whole units, not smallest steps: at three unit decimals this is 1000 to
+ * 100000 by 1000 -- the one to a hundred units a person means -- rather than
+ * 0.001 to 0.100. At the default of 0 it is 1 to 100 by 1, what `createMarket`
+ * used before it took a unit grid. Throws a `RangeError` for negative
+ * `unitDecimals`, or one whose grid is beyond a safe integer.
+ */
+export function unitGrid(unitDecimals: number = Decimals.DEFAULT_UNIT_DECIMALS): TickGrid {
+  if (!Number.isInteger(unitDecimals) || unitDecimals < 0) {
+    throw new RangeError(`unitDecimals must be a non-negative integer, got ${unitDecimals}`);
+  }
+  const whole = 10 ** unitDecimals;
+  if (!Number.isSafeInteger(whole * 100)) {
+    throw new RangeError(`unitDecimals is too large: ${unitDecimals}`);
+  }
+  return { minimum: whole, maximum: whole * 100, tick: whole };
 }
 
 /** `value` moved down onto `grid`, clamped to it. */

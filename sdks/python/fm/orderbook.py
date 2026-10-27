@@ -189,12 +189,13 @@ class Book:
         best_sell = self.best_sell_price()
         best_buy = self.best_buy_price()
 
-        # Today's fixed scales, until markets carry their own.
+        # At the market's own scales, which are cents and whole units when
+        # the server does not say.
         def price_text(price: int) -> str:
-            return Decimals.format(price, Decimals.DEFAULT_PRICE_DECIMALS).rjust(6)
+            return Decimals.format(price, self._market.price_decimals).rjust(6)
 
         def units_text(units: int) -> str:
-            return Decimals.format(units, Decimals.DEFAULT_UNIT_DECIMALS).rjust(3)
+            return Decimals.format(units, self._market.unit_decimals).rjust(3)
 
         lines = ["-----BOOK-----"]
         if not sell_levels:

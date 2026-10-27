@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { Decimals } from "../src/index.ts";
+import { Decimals, unitGrid } from "../src/index.ts";
 
 const FIXTURES = join(
   fileURLToPath(new URL(".", import.meta.url)),
@@ -87,4 +87,28 @@ test("agrees with the cents display it replaced", () => {
     const now = Decimals.format(cents, Decimals.DEFAULT_PRICE_DECIMALS).padStart(5);
     if (old !== now) assert.equal(now, old, `at ${cents}`);
   }
+});
+
+const UNIT_GRID = JSON.parse(readFileSync(join(FIXTURES, "unit-grid.json"), "utf8")) as {
+  cases: Array<{ unitDecimals: number; minimum: number; maximum: number; tick: number }>;
+  refused: number[];
+};
+
+for (const c of UNIT_GRID.cases) {
+  test(`unit grid: whole units at ${c.unitDecimals} decimals`, () => {
+    assert.deepEqual(unitGrid(c.unitDecimals), { minimum: c.minimum, maximum: c.maximum, tick: c.tick });
+  });
+}
+
+for (const d of UNIT_GRID.refused) {
+  test(`unit grid: ${d} decimals is refused`, () => {
+    assert.throws(() => unitGrid(d), RangeError);
+  });
+}
+
+test("the unit grid defaults to whole units, one to a hundred, and stops at a safe integer", () => {
+  assert.deepEqual(unitGrid(), { minimum: 1, maximum: 100, tick: 1 });
+  assert.equal(unitGrid(13).maximum, 10 ** 15);
+  assert.throws(() => unitGrid(14), /too large/);
+  assert.throws(() => unitGrid(1.5), RangeError);
 });

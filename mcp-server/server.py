@@ -7,7 +7,7 @@ import sys
 
 from mcp.server.fastmcp import FastMCP
 
-from fm import Decimals, Flexemarkets, Order, Session
+from fm import Decimals, Flexemarkets, Market, Marketplace, Order, Session
 from fm.order_utils import is_buy, is_consumed, is_limit
 
 mcp = FastMCP("Flexemarkets")
@@ -33,29 +33,45 @@ def _get_fm() -> Flexemarkets:
 # ---------------------------------------------------------------------------
 
 
-# Today's fixed scales, until markets and marketplaces carry their own. Every
-# amount shown goes through Decimals, so none of them divides by hand.
-PRICE_DECIMALS = Decimals.DEFAULT_PRICE_DECIMALS
-UNIT_DECIMALS = Decimals.DEFAULT_UNIT_DECIMALS
-CASH_DECIMALS = Decimals.DEFAULT_CASH_DECIMALS
+# Every amount is shown at its own scale -- a price at its market's
+# priceDecimals, units at its unitDecimals, cash at the marketplace's
+# cashDecimals -- and goes through Decimals, so none of them divides by hand.
+# A market the marketplace does not list is shown at the server's defaults.
+_DEFAULT_MARKET = Market()
 
 
-def _price(price: int) -> str:
-    return Decimals.format(price, PRICE_DECIMALS)
+class _Scales:
+    """The scales of one marketplace, read once per tool call."""
+
+    def __init__(self, marketplace: Marketplace):
+        self.cash_decimals = marketplace.cash_decimals
+        self._markets = {m.id: m for m in marketplace.markets}
+
+    def market(self, market_id: int) -> Market:
+        return self._markets.get(market_id, _DEFAULT_MARKET)
 
 
-def _cash(cash: int) -> str:
-    return Decimals.format(cash, CASH_DECIMALS)
+def _scales(fm: Flexemarkets, marketplace_id: int) -> _Scales:
+    return _Scales(fm.marketplace(marketplace_id))
 
 
-def _units(units: int) -> str:
-    return Decimals.format(units, UNIT_DECIMALS)
+def _price(price: int, market: Market) -> str:
+    return Decimals.format(price, market.price_decimals)
 
 
-def _format_order(o: Order) -> str:
+def _units(units: int, market: Market) -> str:
+    return Decimals.format(units, market.unit_decimals)
+
+
+def _cash(cash: int, scales: _Scales) -> str:
+    return Decimals.format(cash, scales.cash_decimals)
+
+
+def _format_order(o: Order, scales: _Scales) -> str:
     side = o.side or "?"
+    market = scales.market(o.market_id)
     return (
-        f"  {o.type} {side} {_units(o.units)}u @ {_price(o.price)}"
+        f"  {o.type} {side} {_units(o.units, market)}u @ {_price(o.price, market)}"
         f"  (id={o.id}, symbol={o.symbol or '?'})"
     )
 
@@ -108,14 +124,18 @@ def get_marketplace(marketplace_id: int) -> str:
     lines = [
         f"{mp.name} (id={mp.id})",
         f"Description: {mp.description or '(none)'}",
+        f"Cash decimals: {mp.cash_decimals}",
         "",
         "Markets:",
     ]
     for m in mp.markets:
         lines.append(
             f"  • {m.symbol} — {m.name} (id={m.id})"
-            f"  price: {_price(m.price_minimum)}–{_price(m.price_maximum)}"
-            f"  tick: {_price(m.price_tick)}"
+            f"  price: {_price(m.price_minimum, m)}–{_price(m.price_maximum, m)}"
+            f"  tick: {_price(m.price_tick, m)}"
+            f"  units: {_units(m.unit_minimum, m)}–{_units(m.unit_maximum, m)}"
+            f"  tick: {_units(m.unit_tick, m)}"
+            f"  (priceDecimals={m.price_decimals}, unitDecimals={m.unit_decimals})"
         )
     return "\n".join(lines)
 
@@ -141,16 +161,18 @@ def get_holding(marketplace_id: int) -> str:
     """
     fm = _get_fm()
     h = fm.holding(marketplace_id, fm.user_id)
+    scales = _scales(fm, marketplace_id)
     lines = [
         f"Holding for {h.name or 'user'} in marketplace {h.marketplace_id}",
-        f"  Cash: {_cash(h.cash)}  (available: {_cash(h.available_cash)})",
+        f"  Cash: {_cash(h.cash, scales)}  (available: {_cash(h.available_cash, scales)})",
         "",
         "  Securities:",
     ]
     for s in sorted(h.securities, key=lambda s: s.market_id):
+        market = scales.market(s.market_id)
         lines.append(
-            f"    Market {s.market_id}: {_units(s.units)} units"
-            f" (available: {_units(s.available_units)})"
+            f"    Market {s.market_id}: {_units(s.units, market)} units"
+            f" (available: {_units(s.available_units, market)})"
             f"  buy={'yes' if s.can_buy else 'no'}"
             f"  sell={'yes' if s.can_sell else 'no'}"
         )
@@ -169,9 +191,10 @@ def list_orders(marketplace_id: int, symbol: str | None = None) -> str:
     orders = fm.orders(marketplace_id, symbol=symbol)
     if not orders:
         return "No orders found."
+    scales = _scales(fm, marketplace_id)
     lines = [f"Orders in marketplace {marketplace_id}:"]
     for o in orders:
-        lines.append(_format_order(o))
+        lines.append(_format_order(o, scales))
     return "\n".join(lines)
 
 
@@ -188,6 +211,7 @@ def get_trades(marketplace_id: int, symbol: str) -> str:
     if not orders:
         return f"No trades found for {symbol}."
 
+    scales = _scales(fm, marketplace_id)
     # Pair consumed orders into trades
     trades: list[str] = []
     consumers: dict[int, Order] = {}
@@ -199,8 +223,9 @@ def get_trades(marketplace_id: int, symbol: str) -> str:
                 resting = o if o.original < pair.original else pair
                 aggressor = pair if resting is o else o
                 buyer = resting if is_buy(resting.side or "") else aggressor
+                market = scales.market(resting.market_id)
                 trades.append(
-                    f"  {_price(resting.price)}  {_units(resting.units)}u"
+                    f"  {_price(resting.price, market)}  {_units(resting.units, market)}u"
                     f"  (buyer={buyer.owner_id})"
                 )
 
@@ -230,15 +255,19 @@ def submit_limit_order(
         marketplace_id: The marketplace ID.
         market_id: The market ID.
         side: Order side — "BUY" or "SELL".
-        units: Number of units to trade.
-        price: Price in cents (e.g. 5000 = 50.00).
+        units: Units to trade, as an integer count of the market's smallest
+            unit step: at unitDecimals 0 (the default) a count of whole units.
+        price: The limit price, as an integer count of the market's smallest
+            price step: at priceDecimals 2 (the default) 5000 is 50.00.
+            get_marketplace shows each market's priceDecimals and unitDecimals.
     """
     fm = _get_fm()
     order = fm.submit_limit(marketplace_id, market_id, side.upper(), units, price)
+    market = _scales(fm, marketplace_id).market(order.market_id)
     return (
         f"Order submitted successfully.\n"
         f"  ID: {order.id}\n"
-        f"  {order.type} {order.side} {_units(order.units)}u @ {_price(order.price)}\n"
+        f"  {order.type} {order.side} {_units(order.units, market)}u @ {_price(order.price, market)}\n"
         f"  Symbol: {order.symbol or '?'}, Market: {order.market_id}"
     )
 

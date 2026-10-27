@@ -189,9 +189,23 @@ class TickGrid:
     tick: int = 0
 
     @staticmethod
-    def units() -> "TickGrid":
-        """The usual unit dimension: whole units, one to a hundred."""
-        return TickGrid(1, 100, 1)
+    def units(unit_decimals: int = Decimals.DEFAULT_UNIT_DECIMALS) -> "TickGrid":
+        """The usual unit dimension: whole units, one to a hundred, counted in
+        steps of ``10**-unit_decimals``.
+
+        Whole units, not smallest steps: at three unit decimals this is 1000 to
+        100000 by 1000 -- the one to a hundred units a person means -- rather
+        than 0.001 to 0.100. At the default of 0 it is 1 to 100 by 1, what
+        ``create_market`` used before it took a unit grid. Raises
+        ``ValueError`` for negative ``unit_decimals``, or one whose grid would
+        not fit a signed 64-bit integer, as Java refuses it.
+        """
+        if unit_decimals < 0:
+            raise ValueError(f"unit_decimals must not be negative: {unit_decimals}")
+        whole = 10 ** unit_decimals
+        if whole * 100 > 2 ** 63 - 1:
+            raise ValueError(f"unit_decimals is too large: {unit_decimals}")
+        return TickGrid(whole, whole * 100, whole)
 
     def round(self, value: int) -> int:
         """*value* moved down onto this grid, clamped to it."""

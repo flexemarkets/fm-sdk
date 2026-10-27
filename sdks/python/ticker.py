@@ -14,25 +14,24 @@ from fm import (
 
 TRADE_DISPLAY_COUNT = 5
 
-# Prices at today's fixed scale, until markets carry their own.
-PRICE_DECIMALS = Decimals.DEFAULT_PRICE_DECIMALS
+# Every price is shown at its own market's priceDecimals.
 
 
-def _price(value: int) -> str:
+def _price(value: int, decimals: int) -> str:
     if value < 0:
         return "     -"
-    return f"{Decimals.format(value, PRICE_DECIMALS):>6}"
+    return f"{Decimals.format(value, decimals):>6}"
 
 
-def _spread(bid: int, ask: int) -> str:
+def _spread(bid: int, ask: int, decimals: int) -> str:
     if bid < 0 or ask < 0:
         return "     -"
-    return f"{Decimals.format(ask - bid, PRICE_DECIMALS):>6}"
+    return f"{Decimals.format(ask - bid, decimals):>6}"
 
 
-def _trade_prices(prices: list[int], count: int) -> str:
+def _trade_prices(prices: list[int], count: int, decimals: int) -> str:
     recent = prices[-count:] if len(prices) > count else prices
-    return "  ".join(Decimals.format(p, PRICE_DECIMALS) for p in reversed(recent))
+    return "  ".join(Decimals.format(p, decimals) for p in reversed(recent))
 
 
 def display(desk: Desk, session: Session | None, endpoint_url: str = "") -> None:
@@ -51,9 +50,11 @@ def display(desk: Desk, session: Session | None, endpoint_url: str = "") -> None
         ask = book.best_sell_price()
         symbol = book.symbol or "?"
         recent = desk.tape(book.market_id).most_recent_prices()
+        decimals = book.market.price_decimals
         lines.append(
-            f"  {symbol:>6}  {_price(bid)}  {_price(ask)}  {_spread(bid, ask)}"
-            f"   {_trade_prices(recent, TRADE_DISPLAY_COUNT)}"
+            f"  {symbol:>6}  {_price(bid, decimals)}  {_price(ask, decimals)}"
+            f"  {_spread(bid, ask, decimals)}"
+            f"   {_trade_prices(recent, TRADE_DISPLAY_COUNT, decimals)}"
         )
 
     lines.append("")
