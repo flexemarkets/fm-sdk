@@ -138,7 +138,8 @@ public class Events implements Subscription {
     long connectedTimeoutMillis = CONNECTED_TIMEOUT_MS;
     long heartbeatIntervalMillis = TimeUnit.SECONDS.toMillis(HEARTBEAT_INTERVAL_SECONDS);
 
-    private volatile WebSocket _webSocket;
+    /** The socket in use; package-private so a test can stand one in. */
+    volatile WebSocket _webSocket;
     private volatile boolean _closed;
 
     /**
