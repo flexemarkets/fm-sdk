@@ -83,7 +83,7 @@ class GzipResponseTest {
 
     private static List<Holding> _holdings(HttpHandler holdingsRoute, List<String> asked) throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        server.createContext("/api/tokens", exchange -> _respond(exchange, """
+        server.createContext("/api/v1/tokens", exchange -> _respond(exchange, """
                 {"token":"%s",
                  "person":{"id":7,"accountId":1,"email":"dev@dev","roles":["ROLE_USER"]},
                  "account":{"id":1,"name":"dev"}}

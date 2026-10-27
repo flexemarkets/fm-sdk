@@ -741,7 +741,7 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     @Override
     public ManagerOtpBundle managerOtpBundle(List<Long> userIds) {
-        return _post(server(endpointUrl()) + "/otp/manager",
+        return _post(_v1("/otp/manager"),
                     new ManagerOtpRequest(userIds), OTP_BUNDLE_TYPE);
     }
 
@@ -1635,7 +1635,9 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     private Token _signIn() {
-        var endpoint = server(endpointUrl()) + "/tokens";
+        // /api/v1/tokens, as every route the SDK calls is V1 (fm-server
+        // 4.16.0); /api/tokens answers the same for older clients.
+        var endpoint = _v1("/tokens");
         if (_refreshToken != null) {
             return _renewWithRefreshToken(endpoint);
         }
@@ -1807,7 +1809,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     private String _wsUrl() {
-        return server(endpointUrl()).replaceFirst("http", "ws") + "/events";
+        return _v1("/events").replaceFirst("http", "ws");
     }
 
     // --- V1 routes ---

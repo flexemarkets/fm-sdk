@@ -49,7 +49,7 @@ class SnapshotShapeTest {
     @BeforeEach
     void startServer() throws IOException {
         _server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        _server.createContext("/api/tokens/refresh", exchange -> _respond(exchange, """
+        _server.createContext("/api/v1/tokens/refresh", exchange -> _respond(exchange, """
             {"token":"%s","person":{"id":7,"accountId":1,"email":"dev@dev"},
              "account":{"id":1,"name":"dev"}}
             """.formatted(TOKEN)));

@@ -48,7 +48,7 @@ class SubmitTargetedTest {
     void startServer() throws IOException {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 
-        server.createContext("/api/tokens", exchange -> respond(exchange, 200, """
+        server.createContext("/api/v1/tokens", exchange -> respond(exchange, 200, """
             {"token":"%s",
              "person":{"id":7,"accountId":1,"email":"dev@dev"},
              "account":{"id":1,"name":"dev"}}
