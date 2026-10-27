@@ -1,6 +1,6 @@
 {
   "type": "Marketplace",
-  "why": "Nested markets, which is where a list parser is easiest to get wrong: an absent list must be empty, not null.",
+  "why": "Nested markets, which is where a list parser is easiest to get wrong: an absent list must be empty, not null. Captured before the server sent any decimals, so it also pins their defaults: cash and prices in cents, whole units.",
   "source": {
     "captured": {
       "path": "/v1/marketplaces",
@@ -30,11 +30,14 @@
     "id": 3050,
     "name": "Dev",
     "description": "developer marketplace",
+    "cashDecimals": 2,
     "markets": [
       {
         "id": 11,
         "symbol": "STK",
-        "priceTick": 25
+        "priceTick": 25,
+        "priceDecimals": 2,
+        "unitDecimals": 0
       }
     ]
   }
