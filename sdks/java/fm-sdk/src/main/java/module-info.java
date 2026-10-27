@@ -9,8 +9,8 @@
  * <ul>
  *   <li>{@code fm} -- what you hold and call: {@link fm.Flexemarkets},
  *       {@link fm.Desk}, {@link fm.Book}, {@link fm.Tape},
- *       {@link fm.Subscription}, {@link fm.Snapshot}, {@link fm.Orders} and
- *       {@link fm.Endpoints}.
+ *       {@link fm.Subscription}, {@link fm.Snapshot}, {@link fm.Orders},
+ *       {@link fm.Decimals} and {@link fm.Endpoints}.
  *   <li>{@code fm.model} -- what the server sends and what you hand back: the
  *       wire records, plus {@link fm.model.OrderSide}, {@link fm.model.OrderType}
  *       and {@link fm.model.TickGrid}.
