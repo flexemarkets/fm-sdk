@@ -29,7 +29,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
  *                          this version does not know
  * @param side              which way round it goes, or null for a cancel
  * @param units             how many units
- * @param price             the price, in the cents the exchange counts in
+ * @param price             the price, an integer at the market's
+ *                          {@link Market#priceDecimals}
  * @param mine              whether it is the caller's own, as the server judged it for
  *                          this connection; read from the wire, never sent
  * @param ownerId           who submitted it

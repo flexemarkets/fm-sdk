@@ -31,7 +31,8 @@ public interface Writing {
      * @param marketId      the market within it
      * @param side          which way round the order goes
      * @param units         how many units to trade
-     * @param price         the limit price, in the cents the exchange counts in
+     * @param price         the limit price, an integer at the market's
+     *                      {@link fm.model.Market#priceDecimals}
      * @return the order as the server recorded it, carrying the id it assigned
      */
     Order submitLimit(long marketplaceId, long marketId, OrderSide side, long units, long price);
@@ -56,7 +57,8 @@ public interface Writing {
      * @param marketId      the market within it
      * @param side          which way round the order goes
      * @param units         how many units to trade
-     * @param price         the limit price, in the cents the exchange counts in
+     * @param price         the limit price, an integer at the market's
+     *                      {@link fm.model.Market#priceDecimals}
      * @param ownerTargetId the counterparty this order is for; null for an
      *                      ordinary untargeted order in a public market
      * @return the order as the server recorded it, carrying the id it assigned
@@ -80,7 +82,8 @@ public interface Writing {
      * @param marketId          the market within it
      * @param side              which way round the order goes
      * @param units             how many units to trade
-     * @param price             the limit price, in the cents the exchange counts in
+     * @param price             the limit price, an integer at the market's
+     *                      {@link fm.model.Market#priceDecimals}
      * @param ownerTarget       the counterparty this order is for, by allotment name;
      *                          null when it names none or names it by id
      * @param ownerTargetId     the counterparty this order is for, by owner id; null

@@ -32,7 +32,8 @@ import com.fasterxml.jackson.annotation.JsonInclude;
  * @param allocationId  the allocation it started from
  * @param ownerId       the participant it belongs to
  * @param name          the participant's display name
- * @param cash          settled cash, in the cents the exchange counts in
+ * @param cash          settled cash, an integer at the marketplace's
+ *                      {@link Marketplace#cashDecimals}
  * @param availableCash cash free to spend, which excludes any committed to a
  *                      resting buy
  * @param securities    the position in each market; never null, always in
