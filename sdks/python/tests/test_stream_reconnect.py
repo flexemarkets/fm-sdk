@@ -47,6 +47,9 @@ class _Listener(EventListener):
         #: Fires when a reconnect has reached the gate and is parked there.
         #: Lets a test wait for the window to be open instead of assuming it.
         self.reached_gate = threading.Event()
+        #: Drops the socket just opened from inside _subscribe(), this many
+        #: times: after the reconnect has it, before the reconnect lets go.
+        self.drops_on_subscribe = 0
 
     def _connect(self):  # type: ignore[override]
         self.connects += 1
@@ -62,7 +65,9 @@ class _Listener(EventListener):
         pass
 
     def _subscribe(self) -> None:  # type: ignore[override]
-        pass
+        if self.drops_on_subscribe:
+            self.drops_on_subscribe -= 1
+            self._on_stream_dropped(OSError("closed"))
 
     def _receive_loop(self) -> None:  # type: ignore[override]
         pass
@@ -346,3 +351,31 @@ def test_heartbeats_stop_once_there_is_no_socket_to_write_to(monkeypatch) -> Non
     beating.join(timeout=2.0)
 
     assert not beating.is_alive()
+
+
+def test_a_drop_of_the_new_socket_before_the_reconnect_lets_go_is_restored_too(monkeypatch) -> None:
+    """The socket a reconnect has just opened can fall before that reconnect
+    lets go. Its drop was taken as part of the reconnect finishing and started
+    nothing, and the stream stayed down with nothing to say so."""
+    from fm import events as fm_events
+
+    pauses = _paced(monkeypatch)
+    q: queue.Queue[object] = queue.Queue()
+    listener = _Listener(q)
+    listener.start()
+    listener._connected_at -= fm_events._STABLE_CONNECTION_SECONDS + 1
+    listener.drops_on_subscribe = 1
+
+    listener._on_stream_dropped(OSError("closed"))
+
+    reconnected = 0
+    while reconnected < 2:
+        try:
+            event = q.get(timeout=5.0)
+        except queue.Empty:
+            break
+        reconnected += isinstance(event, StreamReconnected)
+    assert reconnected == 2, "the second drop was never restored"
+    assert listener.connects == 3
+    assert pauses == [2], "a socket that fell at once is a failure, and waits"
+    listener.close()
