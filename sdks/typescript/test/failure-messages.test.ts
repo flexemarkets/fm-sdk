@@ -64,8 +64,8 @@ after(() => { server.close(); });
 
 beforeEach(() => {
   answers.clear();
-  answers.set("/api/tokens", [200, SIGNED_IN, null]);
-  answers.set("/api/tokens/refresh", [200, SIGNED_IN, null]);
+  answers.set("/api/v1/tokens", [200, SIGNED_IN, null]);
+  answers.set("/api/v1/tokens/refresh", [200, SIGNED_IN, null]);
   fallback = [404, ""];
 });
 
@@ -124,7 +124,7 @@ test("anything else is a typed HTTP error carrying its status", async () => {
 // --- sign-in and snapshots, as Java's SignInAndSnapshotFailureTest ----------
 
 test("a refused password is an authentication failure carrying the server's sentence", async () => {
-  answers.set("/api/tokens", [401, refusal("ACCOUNT_INVALID_CREDENTIALS", "Wrong password.", 401), null]);
+  answers.set("/api/v1/tokens", [401, refusal("ACCOUNT_INVALID_CREDENTIALS", "Wrong password.", 401), null]);
   const credential = join(mkdtempSync(join(tmpdir(), "fm-sdk-cred-")), "credential");
   writeFileSync(credential, "account=dev\nemail=dev@dev\npassword=nope\n");
 
@@ -133,7 +133,7 @@ test("a refused password is an authentication failure carrying the server's sent
 });
 
 test("a refused token fails at connect saying why", async () => {
-  answers.set("/api/tokens/refresh", [401, refusal("TOKEN_EXPIRED", "Token expired.", 401), null]);
+  answers.set("/api/v1/tokens/refresh", [401, refusal("TOKEN_EXPIRED", "Token expired.", 401), null]);
 
   await assert.rejects(connect(),
     (e: unknown) => e instanceof AuthenticationError && e.message === "Authentication failed: Token expired.");

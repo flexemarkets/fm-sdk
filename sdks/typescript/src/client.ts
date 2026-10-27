@@ -1212,7 +1212,7 @@ export class Flexemarkets {
    */
   async managerOtpBundle(userIds: number[]): Promise<ManagerOtpBundle> {
     // Unversioned: fm-server has no V1 route for passcodes.
-    const url = `${this._baseUrl}/otp/manager`;
+    const url = this._v1("/otp/manager");
     const data = await this._post(url, { userIds });
     return {
       expiresAt: toInstant(data.expiresAt as string),
@@ -1924,7 +1924,7 @@ export class Flexemarkets {
     const wsUrl =
       server(this._endpoint)
         .replace("https://", "wss://")
-        .replace("http://", "ws://") + "/events";
+        .replace("http://", "ws://") + "/v1/events";
     const events = new EventListener(
       wsUrl,
       () => this._bearerToken,
@@ -1977,7 +1977,7 @@ export class Flexemarkets {
  * stops working after hours while the robot runs on.
  */
 async function renewWithRefreshToken(baseUrl: string, config: Record<string, string>): Promise<Token> {
-  const resp = await fetch(`${baseUrl}/tokens/renew`, {
+  const resp = await fetch(`${baseUrl}/v1/tokens/renew`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -2016,7 +2016,7 @@ async function signIn(
     // Python one never had it, so token auth returned 400 in both from the day
     // it was written.
     // POST, as minting a token is (fm-server 4.6).
-    const resp = await fetch(`${baseUrl}/tokens/refresh`, {
+    const resp = await fetch(`${baseUrl}/v1/tokens/refresh`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${tok}`,
@@ -2037,7 +2037,7 @@ async function signIn(
   if (!email) throw new ConfigurationError("Missing 'email' in configuration.");
   if (!password) throw new ConfigurationError("Missing 'password' in configuration.");
 
-  const authUrl = `${baseUrl}/tokens`;
+  const authUrl = `${baseUrl}/v1/tokens`;
   const resp = await fetch(authUrl, {
     method: "POST",
     headers: {

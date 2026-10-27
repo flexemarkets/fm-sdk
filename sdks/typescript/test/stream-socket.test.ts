@@ -47,7 +47,7 @@ function server() {
       if (text.startsWith("CONNECT\n")) socket.send("CONNECTED\nversion:1.2\nheart-beat:0,0\n\n\0");
     });
   });
-  const url = () => `ws://127.0.0.1:${(wss.address() as AddressInfo).port}/api/events`;
+  const url = () => `ws://127.0.0.1:${(wss.address() as AddressInfo).port}/api/v1/events`;
   return { wss, sockets, received, heartbeats, url };
 }
 
@@ -164,7 +164,7 @@ test("a connection dials its endpoint's events socket with its own token", async
     assert.equal(upgrades.length, 0);
 
     await fm.listen(MP, (e) => void events.push(e));
-    assert.equal(upgrades[0]!.url, "/api/events");
+    assert.equal(upgrades[0]!.url, "/api/v1/events");
     assert.equal(upgrades[0]!.headers.authorization, `Bearer ${token}`);
 
     // Sent as "assets", which only the SDK's holding parser reads as securities.
@@ -266,7 +266,7 @@ async function refusing(status: number) {
     verifyClient: (_info, cb) => { attempts++; cb(false, status); },
   });
   await new Promise<void>((resolve) => wss.on("listening", () => resolve()));
-  const url = `ws://127.0.0.1:${(wss.address() as AddressInfo).port}/api/events`;
+  const url = `ws://127.0.0.1:${(wss.address() as AddressInfo).port}/api/v1/events`;
   return { url, attempts: () => attempts, close: () => new Promise<void>((r) => wss.close(() => r())) };
 }
 
@@ -312,7 +312,7 @@ test("a refused reconnect renews the token once and the stream comes back", asyn
     if (raw.toString().startsWith("CONNECT\n")) socket.send("CONNECTED\nversion:1.2\nheart-beat:0,0\n\n\0");
   }));
   await new Promise<void>((resolve) => wss.on("listening", () => resolve()));
-  const url = `ws://127.0.0.1:${(wss.address() as AddressInfo).port}/api/events`;
+  const url = `ws://127.0.0.1:${(wss.address() as AddressInfo).port}/api/v1/events`;
   let token = "Bearer expired";
   const refusedWith: string[] = [];
   const events: FmEvent[] = [];

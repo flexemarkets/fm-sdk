@@ -3,7 +3,7 @@
  *
  * See `sdks/fixtures/routes/README.md`. Each case names a call, its arguments,
  * and the requests it must send, in order. The call runs against a loopback
- * server that answers `/api/tokens*` and, for the rest, exactly the requests
+ * server that answers `/api/v1/tokens*` and, for the rest, exactly the requests
  * the case lists -- anything else fails the case, `GET /api` above all: 0.4
  * reads no HAL root, and this is what keeps it from drifting back.
  *
@@ -232,7 +232,7 @@ async function run(c: Case): Promise<void> {
     req.on("data", (chunk) => chunks.push(chunk as Buffer));
     req.on("end", () => {
       const url = req.url ?? "";
-      if (url.startsWith("/api/tokens")) {
+      if (url.startsWith("/api/v1/tokens")) {
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({
           token: TOKEN,
