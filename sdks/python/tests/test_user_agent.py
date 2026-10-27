@@ -50,7 +50,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         agents.append(self.headers.get("User-Agent", ""))
-        if self.path == "/api/tokens/refresh":
+        if self.path == "/api/v1/tokens/refresh":
             payload = {
                 "token": TOKEN,
                 "person": {"id": 7, "accountId": 1, "email": "dev@dev"},

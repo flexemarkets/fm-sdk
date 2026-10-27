@@ -51,7 +51,7 @@ class RedirectFollowingTest {
     void startServers() throws IOException {
         _origin = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 
-        _origin.createContext("/api/tokens", exchange -> {
+        _origin.createContext("/api/v1/tokens", exchange -> {
             _originRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
             _respond(exchange, 200, """
                 {"token":"%s",

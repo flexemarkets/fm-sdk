@@ -47,7 +47,7 @@ test("the wire carries it", async () => {
   const server = http.createServer((req, res) => {
     agents.push(String(req.headers["user-agent"] ?? ""));
     res.writeHead(200, { "Content-Type": "application/json" });
-    if (req.url === "/api/tokens/refresh") {
+    if (req.url === "/api/v1/tokens/refresh") {
       res.end(JSON.stringify({
         token: TOKEN,
         person: { id: 7, accountId: 1, email: "dev@dev" },

@@ -47,7 +47,7 @@ class TokenRenewalTest {
     @BeforeEach
     void startServer() throws IOException {
         _server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        _server.createContext("/api/tokens", exchange -> {
+        _server.createContext("/api/v1/tokens", exchange -> {
             exchange.getRequestBody().readAllBytes();
             if (_signIns.get() >= _signInsBeforeFailing) {
                 _signIns.incrementAndGet();

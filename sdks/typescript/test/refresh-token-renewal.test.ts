@@ -37,7 +37,7 @@ async function withServer(run: (base: string, state: State) => Promise<void>) {
       res.writeHead(status, { "Content-Type": "application/json" });
       res.end(JSON.stringify(payload));
     };
-    if (req.url === "/api/tokens/renew") {
+    if (req.url === "/api/v1/tokens/renew") {
       let body = "";
       req.on("data", (chunk) => (body += chunk));
       req.on("end", () => {

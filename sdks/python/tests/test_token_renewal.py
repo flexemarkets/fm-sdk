@@ -50,7 +50,7 @@ def _handler(state: Server):
         def do_POST(self):
             length = int(self.headers.get("Content-Length") or 0)
             self.rfile.read(length)
-            if self.path in ("/api/tokens", "/api/tokens/refresh"):
+            if self.path in ("/api/v1/tokens", "/api/v1/tokens/refresh"):
                 state.sign_ins += 1
                 if state.sign_in_fails_after is not None and state.sign_ins > state.sign_in_fails_after:
                     self._send({"error": "SERVICE_UNAVAILABLE"}, status=503)

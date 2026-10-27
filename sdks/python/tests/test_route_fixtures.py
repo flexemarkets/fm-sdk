@@ -2,7 +2,7 @@
 
 See ``sdks/fixtures/routes/README.md``. Each case names a call, its arguments
 and the requests it must send, in order. The server here answers sign-in
-(``/api/tokens*``, any method) and, for the rest, exactly the requests the case
+(``/api/v1/tokens*``, any method) and, for the rest, exactly the requests the case
 lists -- in that order, with that case's response. Anything else fails the
 case, and the request that matters most is ``GET /api``: 0.4 reads no API
 root, and this is what keeps it from drifting back.
@@ -163,7 +163,7 @@ class _Loopback:
             def _answer(self) -> None:
                 length = int(self.headers.get("Content-Length") or 0)
                 body = self.rfile.read(length) if length else b""
-                if urlsplit(self.path).path.startswith("/api/tokens"):
+                if urlsplit(self.path).path.startswith("/api/v1/tokens"):
                     self._reply(200, SIGNED_IN, "application/json")
                     return
                 if loopback.served >= len(loopback.expected):

@@ -6,7 +6,7 @@
 
     <groupId>com.flexemarkets</groupId>
     <artifactId>fm-sdk-parent</artifactId>
-    <version>0.12.0-SNAPSHOT</version><!-- fm-version -->
+    <version>0.13.0-SNAPSHOT</version><!-- fm-version -->
     <packaging>pom</packaging>
 
     <name>Flexemarkets SDK Parent</name>
@@ -353,6 +353,10 @@
                                      carrying it would be refused whole. The sdk publish of
                                      fm-release takes it off this list when its code changes. -->
                                 <excludeArtifact>fm-expr</excludeArtifact>
+                                <!-- fm-spi is on Central and has not moved since, so a bundle
+                                     carrying it would be refused whole. The sdk publish of
+                                     fm-release takes it off this list when its code changes. -->
+                                <excludeArtifact>fm-spi</excludeArtifact>
                             </excludeArtifacts>
                         </configuration>
                     </plugin>

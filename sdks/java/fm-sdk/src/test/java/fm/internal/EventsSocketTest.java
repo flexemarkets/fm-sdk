@@ -409,7 +409,7 @@ class EventsSocketTest {
     private HttpFlexemarkets client() throws IOException {
         return new HttpFlexemarkets(HttpFlexemarkets.loadProperties(
             "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl",
-            server.url().replace("ws://", "http://").replace("/api/events", "/api/marketplaces/7"),
+            server.url().replace("ws://", "http://").replace("/api/v1/events", "/api/marketplaces/7"),
             "listen-test"));
     }
 
@@ -429,7 +429,7 @@ class EventsSocketTest {
         try (var fm = client()) {
             fm.listen(MP, queue);
             _Connection first = server.connection(0);
-            assertThat(first.headers.get(":request")).startsWith("GET /api/events ");
+            assertThat(first.headers.get(":request")).startsWith("GET /api/v1/events ");
             assertThat(first.received(0)).contains("marketplace-id:7").contains("agent-description:listen-test");
 
             first.send(message("ORDERS-UPDATE", "seq:3", "[]"));
@@ -551,7 +551,7 @@ class EventsSocketTest {
         }
 
         String url() {
-            return "ws://127.0.0.1:" + socket.getLocalPort() + "/api/events";
+            return "ws://127.0.0.1:" + socket.getLocalPort() + "/api/v1/events";
         }
 
         void refuseWith(int status) {

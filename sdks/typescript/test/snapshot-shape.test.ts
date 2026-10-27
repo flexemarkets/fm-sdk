@@ -34,7 +34,7 @@ async function withClient(snapshot: unknown, run: (fm: Flexemarkets) => Promise<
       res.writeHead(200, { "Content-Type": "application/json", "x-fm-as-of-seq": "7" });
       res.end(JSON.stringify(payload));
     };
-    if (req.url === "/api/tokens/refresh") {
+    if (req.url === "/api/v1/tokens/refresh") {
       send({ token: TOKEN, person: { id: 7, accountId: 1, email: "dev@dev" },
              account: { id: 1, name: "dev" } });
     } else if (req.url === "/api/v1/marketplaces/1/orders?state=ACTIVE"
