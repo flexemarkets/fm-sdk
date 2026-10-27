@@ -66,6 +66,7 @@ import java.util.function.Function;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
+import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 
 import javax.net.ssl.SSLException;
@@ -818,7 +819,21 @@ public class HttpFlexemarkets implements Flexemarkets {
         if (null != ownerTargetId) {
             order.put("ownerTargetId", ownerTargetId);
         }
-        return _post(_marketplace(marketplaceId) + "/orders", order, ORDER_TYPE);
+        // Named, so an order whose answer was lost can be sent again without
+        // trading twice: fm-server answers a submission it already holds with
+        // the order it made, not a second one. A send that timed out or lost
+        // its connection may or may not have landed; reporting it as refused
+        // invited the caller to place it again and double the position.
+        order.put("submissionId", UUID.randomUUID().toString());
+        var url = _marketplace(marketplaceId) + "/orders";
+        try {
+            return _post(url, order, ORDER_TYPE);
+        } catch (ApiException lost) {
+            if (!(lost.getCause() instanceof IOException)) {
+                throw lost;
+            }
+            return _post(url, order, ORDER_TYPE);
+        }
     }
 
     /**
