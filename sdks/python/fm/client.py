@@ -10,6 +10,7 @@ import queue
 import re
 import threading
 import time
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
@@ -1392,8 +1393,18 @@ class Flexemarkets:
             order["ownerTarget"] = owner_target
         if owner_target_id is not None:
             order["ownerTargetId"] = owner_target_id
+        # Named, so an order whose answer was lost can be sent again without
+        # trading twice: fm-server answers a submission it already holds with
+        # the order it made, not a second one. A send that timed out or lost
+        # its connection may or may not have landed; reporting it as refused
+        # invited the caller to place it again and double the position.
+        order["submissionId"] = str(uuid.uuid4())
         url = _marketplace(self._endpoint, marketplace_id) + "/orders"
-        return _parse_order(_json(self._post(url, order)))
+        try:
+            resp = self._post(url, order)
+        except httpx.TransportError:
+            resp = self._post(url, order)
+        return _parse_order(_json(resp))
 
     def submit_market(
         self, marketplace_id: int, market_id: int, side: str, units: int,
