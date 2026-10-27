@@ -178,12 +178,12 @@ public class Ticker {
 
     private static String _price(long price) {
         if (price < 0) return "     -";
-        return "$%5s".formatted(Decimals.format(price, PRICE_DECIMALS));
+        return "%6s".formatted(Decimals.format(price, PRICE_DECIMALS));
     }
 
     private static String _spread(long bid, long ask) {
         if (bid < 0 || ask < 0) return "     -";
-        return "$%5s".formatted(Decimals.format(ask - bid, PRICE_DECIMALS));
+        return "%6s".formatted(Decimals.format(ask - bid, PRICE_DECIMALS));
     }
 
     private static String _tradePrices(long[] prices, int count) {
@@ -191,7 +191,7 @@ public class Ticker {
         var sb = new StringBuilder();
         for (int i = prices.length - 1; i >= start; i--) {
             if (!sb.isEmpty()) sb.append("  ");
-            sb.append("$").append(Decimals.format(prices[i], PRICE_DECIMALS));
+            sb.append(Decimals.format(prices[i], PRICE_DECIMALS));
         }
         return sb.toString();
     }

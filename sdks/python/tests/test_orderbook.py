@@ -72,12 +72,12 @@ def test_a_book_prints_offers_above_bids_with_the_spread_between():
 
     assert repr(book) == "\n".join([
         "-----BOOK-----",
-        "S 12\t$13.00",
-        "S  3\t$12.50",
+        "S 12\t 13.00",
+        "S  3\t 12.50",
         "--------------",
-        "spread  $ 2.50",
+        "spread    2.50",
         "--------------",
-        "B  5\t$10.00",
+        "B  5\t 10.00",
         "--------------",
     ])
 
@@ -90,7 +90,7 @@ def test_a_one_sided_book_prints_no_spread():
 
     assert lines[1] == "      --      "
     assert lines[3] == "spread        "
-    assert lines[5] == "B  5\t$10.00"
+    assert lines[5] == "B  5\t 10.00"
 
 
 def test_the_index_answers_for_the_market_asked_about():

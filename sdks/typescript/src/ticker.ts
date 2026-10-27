@@ -18,19 +18,19 @@ const PRICE_DECIMALS = Decimals.DEFAULT_PRICE_DECIMALS;
 
 function price(value: number): string {
   if (value < 0) return "     -";
-  return `$${Decimals.format(value, PRICE_DECIMALS).padStart(5)}`;
+  return Decimals.format(value, PRICE_DECIMALS).padStart(6);
 }
 
 function spread(bid: number, ask: number): string {
   if (bid < 0 || ask < 0) return "     -";
-  return `$${Decimals.format(ask - bid, PRICE_DECIMALS).padStart(5)}`;
+  return Decimals.format(ask - bid, PRICE_DECIMALS).padStart(6);
 }
 
 function tradePrices(prices: number[], count: number): string {
   const recent = prices.length > count ? prices.slice(-count) : prices;
   return [...recent]
     .reverse()
-    .map((p) => `$${Decimals.format(p, PRICE_DECIMALS)}`)
+    .map((p) => Decimals.format(p, PRICE_DECIMALS))
     .join("  ");
 }
 

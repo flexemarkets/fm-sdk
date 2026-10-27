@@ -191,7 +191,7 @@ class Book:
 
         # Today's fixed scales, until markets carry their own.
         def price_text(price: int) -> str:
-            return Decimals.format(price, Decimals.DEFAULT_PRICE_DECIMALS).rjust(5)
+            return Decimals.format(price, Decimals.DEFAULT_PRICE_DECIMALS).rjust(6)
 
         def units_text(units: int) -> str:
             return Decimals.format(units, Decimals.DEFAULT_UNIT_DECIMALS).rjust(3)
@@ -200,17 +200,17 @@ class Book:
         if not sell_levels:
             lines.append("      --      ")
         for price, units in reversed(sell_levels):
-            lines.append(f"S{units_text(units)}\t${price_text(price)}")
+            lines.append(f"S{units_text(units)}\t{price_text(price)}")
         lines.append("--------------")
         if best_sell < 0 or best_buy < 0:
             lines.append("spread        ")
         else:
-            lines.append(f"spread  ${price_text(best_sell - best_buy)}")
+            lines.append(f"spread  {price_text(best_sell - best_buy)}")
         lines.append("--------------")
         if not buy_levels:
             lines.append("      --      ")
         for price, units in buy_levels:
-            lines.append(f"B{units_text(units)}\t${price_text(price)}")
+            lines.append(f"B{units_text(units)}\t{price_text(price)}")
         lines.append("--------------")
         return "\n".join(lines)
 

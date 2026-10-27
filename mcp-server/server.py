@@ -41,11 +41,11 @@ CASH_DECIMALS = Decimals.DEFAULT_CASH_DECIMALS
 
 
 def _price(price: int) -> str:
-    return f"${Decimals.format(price, PRICE_DECIMALS)}"
+    return Decimals.format(price, PRICE_DECIMALS)
 
 
 def _cash(cash: int) -> str:
-    return f"${Decimals.format(cash, CASH_DECIMALS)}"
+    return Decimals.format(cash, CASH_DECIMALS)
 
 
 def _units(units: int) -> str:
@@ -231,7 +231,7 @@ def submit_limit_order(
         market_id: The market ID.
         side: Order side — "BUY" or "SELL".
         units: Number of units to trade.
-        price: Price in cents (e.g. 5000 = $50.00).
+        price: Price in cents (e.g. 5000 = 50.00).
     """
     fm = _get_fm()
     order = fm.submit_limit(marketplace_id, market_id, side.upper(), units, price)

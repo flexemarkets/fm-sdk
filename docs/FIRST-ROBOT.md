@@ -71,7 +71,7 @@ them. The robot cancels its own before it exits.
 
 ## Where the prices come from
 
-All prices are integers in **cents**: `405` is $4.05. The robot reads the best
+All prices are integers in **cents**: `405` is 4.05. The robot reads the best
 bid and offer from the desk's book (`best_buy_price()` / `bestBuyPrice()`,
 `-1` when that side is empty), and moves them by the market's `price_tick`
 (`priceTick`). The desk keeps the book current from the marketplace's event

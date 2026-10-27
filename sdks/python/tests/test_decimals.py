@@ -92,16 +92,16 @@ def test_agrees_with_the_cents_display_it_replaced() -> None:
         assert Decimals.format(cents, Decimals.DEFAULT_PRICE_DECIMALS).rjust(5) == old, cents
 
 
-def test_the_ticker_prints_what_it_printed() -> None:
+def test_the_ticker_prints_plain_numbers_with_no_currency_symbol() -> None:
     spec = importlib.util.spec_from_file_location(
         "ticker", Path(__file__).resolve().parents[1] / "ticker.py")
     ticker = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
     spec.loader.exec_module(ticker)  # type: ignore[union-attr]
 
     assert ticker._price(-1) == "     -"
-    assert ticker._price(5) == "$ 0.05"
-    assert ticker._price(5000) == "$50.00"
-    assert ticker._price(123456) == "$1234.56"
+    assert ticker._price(5) == "  0.05"
+    assert ticker._price(5000) == " 50.00"
+    assert ticker._price(123456) == "1234.56"
     assert ticker._spread(-1, 100) == "     -"
-    assert ticker._spread(4950, 5000) == "$ 0.50"
-    assert ticker._trade_prices([100, 205, 5000], 2) == "$50.00  $2.05"
+    assert ticker._spread(4950, 5000) == "  0.50"
+    assert ticker._trade_prices([100, 205, 5000], 2) == "50.00  2.05"

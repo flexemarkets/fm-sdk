@@ -21,18 +21,18 @@ PRICE_DECIMALS = Decimals.DEFAULT_PRICE_DECIMALS
 def _price(value: int) -> str:
     if value < 0:
         return "     -"
-    return f"${Decimals.format(value, PRICE_DECIMALS):>5}"
+    return f"{Decimals.format(value, PRICE_DECIMALS):>6}"
 
 
 def _spread(bid: int, ask: int) -> str:
     if bid < 0 or ask < 0:
         return "     -"
-    return f"${Decimals.format(ask - bid, PRICE_DECIMALS):>5}"
+    return f"{Decimals.format(ask - bid, PRICE_DECIMALS):>6}"
 
 
 def _trade_prices(prices: list[int], count: int) -> str:
     recent = prices[-count:] if len(prices) > count else prices
-    return "  ".join(f"${Decimals.format(p, PRICE_DECIMALS)}" for p in reversed(recent))
+    return "  ".join(Decimals.format(p, PRICE_DECIMALS) for p in reversed(recent))
 
 
 def display(desk: Desk, session: Session | None, endpoint_url: str = "") -> None:

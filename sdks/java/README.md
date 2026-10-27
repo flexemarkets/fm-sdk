@@ -194,8 +194,8 @@ fm-ticker                                              OPEN
 
   Symbol     Bid     Ask  Spread   Last trades
   ------  ------  ------  ------   -----------
-    AAPL  $ 9.50  $10.50  $ 1.00   $9.50  $10.00
-     IBM  $ 4.00  $ 5.00  $ 1.00   $4.50
+    AAPL    9.50   10.50    1.00   9.50  10.00
+     IBM    4.00    5.00    1.00   4.50
 ```
 
 The display refreshes on each order book update. Press `Ctrl-C` to stop.
