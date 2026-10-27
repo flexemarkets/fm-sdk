@@ -20,7 +20,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { EventListener } from "../src/stomp.ts";
+import { EventListener, STABLE_CONNECTION_MS, reconnectPause } from "../src/stomp.ts";
 import type { FmEvent, StreamReconnected, StreamDropped } from "../src/stomp.ts";
 
 /** An EventListener with the socket stubbed out. */
@@ -55,6 +55,15 @@ class StubListener extends EventListener {
       (d) => d as never,
       (d) => d as never,
     );
+  }
+
+  /** The waits reconnect() asked for, when a test has chosen to record them. */
+  pauses: number[] | null = null;
+
+  protected override _sleep(ms: number): Promise<void> {
+    if (this.pauses === null) return super._sleep(ms);
+    this.pauses.push(ms);
+    return Promise.resolve();
   }
 
   override async start(): Promise<void> {
@@ -171,6 +180,93 @@ test("a reconnect that fails for any reason but the token waits, then tries agai
   await listener.reconnect();
 
   assert.equal(listener.connects - before, 2, "one refused, one that succeeded");
-  assert.ok(Date.now() - started >= 1900, "retried without waiting");
+  assert.ok(Date.now() - started >= 900, "retried without waiting");
   listener.close();
+});
+
+/** Each wait is in the upper half of the range that doubles from 2 s to a minute. */
+function assertPaced(pauses: number[], ceilings: number[]): void {
+  assert.equal(pauses.length, ceilings.length, `waits ${pauses.join(", ")}`);
+  pauses.forEach((ms, i) => assert.ok(ms >= ceilings[i] / 2 && ms <= ceilings[i], `wait ${i}: ${ms} ms`));
+}
+
+test("each wait is drawn from the upper half of a range that doubles to a minute", () => {
+  const ranges = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => reconnectPause(n, (lo, hi) => [lo, hi] as never));
+  assert.deepEqual(ranges, [[1000, 2000], [2000, 4000], [4000, 8000], [8000, 16000], [16000, 32000],
+                            [30000, 60000], [30000, 60000], [30000, 60000]]);
+  assert.equal(reconnectPause(10_000, (_lo, hi) => hi), 60_000, "no overflow, however long it has failed");
+});
+
+test("failed attempts wait longer and longer", async () => {
+  // Clients dropped together -- a classroom when fm-server restarts -- must
+  // not keep coming back in step every two seconds.
+  const listener = new StubListener(() => {});
+  await listener.start();
+  listener.pauses = [];
+  listener.failConnects = listener.connects + 3;
+
+  await listener.reconnect();
+
+  assertPaced(listener.pauses, [2000, 4000, 8000]);
+  listener.close();
+});
+
+/** Drop the stream and wait until it is restored. */
+async function dropped(listener: StubListener, events: FmEvent[]): Promise<void> {
+  const before = events.filter((e) => (e as StreamReconnected).kind === "reconnected").length;
+  listener._onStreamDropped(new Error("closed"));
+  await within(
+    (async () => {
+      while (events.filter((e) => (e as StreamReconnected).kind === "reconnected").length === before) await settle();
+    })(),
+    2000,
+    "the stream was not restored",
+  );
+}
+
+test("a stream that held is restored at once", async () => {
+  const { events, push } = collector();
+  const listener = new StubListener(push);
+  await listener.start();
+  listener.pauses = [];
+  listener._connectedAt = Date.now() - STABLE_CONNECTION_MS - 1;
+
+  await dropped(listener, events);
+
+  assert.deepEqual(listener.pauses, []);
+  listener.close();
+});
+
+test("a connection that falls straight away is a failure, and waits longer each time", async () => {
+  // fm-server closes a session whose history overflows its send buffer. The
+  // reconnect asks for the same history and is closed again; at once, every
+  // time, that was a loop.
+  const { events, push } = collector();
+  const listener = new StubListener(push);
+  await listener.start();
+  listener._connectedAt = Date.now();
+  listener.pauses = [];
+
+  await dropped(listener, events);
+  await dropped(listener, events);
+  await dropped(listener, events);
+
+  assertPaced(listener.pauses, [2000, 4000, 8000]);
+  listener.close();
+});
+
+test("a listener closed while waiting does not connect again", async () => {
+  const listener = new StubListener(() => {});
+  await listener.start();
+  listener._failures = 3;
+  listener.pauses = [];
+  const sleep = listener["_sleep"].bind(listener);
+  listener["_sleep"] = (ms: number) => {
+    listener.close();
+    return sleep(ms);
+  };
+
+  await listener.reconnect();
+
+  assert.equal(listener.connects, 1);
 });

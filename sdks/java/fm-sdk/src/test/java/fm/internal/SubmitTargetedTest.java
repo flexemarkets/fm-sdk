@@ -146,7 +146,9 @@ class SubmitTargetedTest {
             fm.submitLimit(1L, 11L, OrderSide.BUY, 2L, 700L, null);
         }
 
-        assertThat(submitted.get(0)).isEqualTo(submitted.get(1));
+        // Each names its own submission; everything else is the same.
+        var unnamed = "\"submissionId\":\"[^\"]+\"";
+        assertThat(submitted.get(0).replaceAll(unnamed, "")).isEqualTo(submitted.get(1).replaceAll(unnamed, ""));
     }
 
     /** A participant learns names, not ids, so a name must reach the server as one. */

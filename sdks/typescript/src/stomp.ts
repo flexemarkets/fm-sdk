@@ -25,6 +25,30 @@ export const HEARTBEAT_INTERVAL_MS = 25_000;
 export const HEROKU_IDLE_TIMEOUT_MS = 55_000;
 const NULL = "\x00";
 
+// Reconnecting after a drop. The first attempt is at once; each that fails
+// waits longer, doubling from 2 s to a minute, and each wait is drawn from the
+// upper half of its range, so clients dropped together -- every robot in a
+// classroom when fm-server restarts -- do not all come back in the same
+// instant. A fixed 2 s brought them back in step, every one asking for its
+// session's history at once.
+//
+// A connection that falls within a minute of opening counts as an attempt that
+// failed, not a recovery. fm-server closes a session whose history overflows
+// its send buffer; a client that reconnected at once, asked for the same
+// history and was closed again did so every 2 s for as long as it ran.
+export const RECONNECT_FIRST_PAUSE_MS = 2_000;
+export const RECONNECT_MAX_PAUSE_MS = 60_000;
+export const STABLE_CONNECTION_MS = 60_000;
+
+/** The wait before the next attempt, after `failures` in a row (one or more). */
+export function reconnectPause(
+  failures: number,
+  draw: (lo: number, hi: number) => number = (lo, hi) => lo + Math.random() * (hi - lo),
+): number {
+  const ceiling = Math.min(RECONNECT_MAX_PAUSE_MS, RECONNECT_FIRST_PAUSE_MS * 2 ** Math.min(failures - 1, 16));
+  return draw(ceiling / 2, ceiling);
+}
+
 /**
  * Prefix on the `/app` SUBSCRIBE destination selecting fm-server's WS
  * API version. Empty string → V0 (`/app/marketplaces/{id}`); `"/v1"` →
@@ -325,6 +349,10 @@ export class EventListener {
   private _heartbeat: NodeJS.Timeout | null = null;
   private _subscriptionCounter = 0;
   private _reconnecting = false;
+  /** Attempts that have failed in a row; with `_connectedAt`, paces reconnect(). */
+  _failures = 0;
+  /** When the socket last opened (Date.now()), or null before it ever has. */
+  _connectedAt: number | null = null;
 
   constructor(
     wsUrl: string,
@@ -366,6 +394,7 @@ export class EventListener {
         this._ws!.once("message", () => {
           this._subscribe();
           this._startHeartbeats();
+          this._connectedAt = Date.now();
           this._receiveLoop();
           resolve();
         });
@@ -393,6 +422,8 @@ export class EventListener {
     this._callback({ kind: "stream-dropped", exception });
     if (this._reconnecting) return;
     this._reconnecting = true;
+    const opened = this._connectedAt;
+    this._failures = opened !== null && Date.now() - opened < STABLE_CONNECTION_MS ? this._failures + 1 : 0;
 
     void (async () => {
       try {
@@ -406,12 +437,22 @@ export class EventListener {
     })();
   }
 
+  /**
+   * Reconnect after a transport error. Paced by the failures before it (see
+   * RECONNECT_FIRST_PAUSE_MS): at once after a stream that had held, later and
+   * later after attempts that failed or connections that fell straight away.
+   */
   async reconnect(): Promise<void> {
     let renewed = false;
     while (!this._closed) {
+      if (this._failures > 0) {
+        await this._sleep(reconnectPause(this._failures));
+        if (this._closed) return;
+      }
       try {
         this._disconnect();
         await this.start();
+        this._connectedAt = Date.now();
         return;
       } catch (exception) {
         // A REJECTED TOKEN IS NOT A BLIP, and retrying it is not patience --
@@ -443,9 +484,14 @@ export class EventListener {
           });
           return;
         }
-        await new Promise((r) => setTimeout(r, 2000));
+        this._failures += 1;
       }
     }
+  }
+
+  /** Wait between reconnect attempts; a test replaces it to record the waits. */
+  protected _sleep(ms: number): Promise<void> {
+    return new Promise((r) => setTimeout(r, ms));
   }
 
   close(): void {

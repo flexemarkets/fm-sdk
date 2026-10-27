@@ -2,6 +2,8 @@ package fm.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
@@ -45,6 +47,22 @@ class StreamReconnectTest {
         volatile CountDownLatch gate;
         /** Counts down once a reconnect has reached the gate and is parked. */
         final CountDownLatch reachedGate = new CountDownLatch(1);
+
+        /** The waits reconnect() asked for, when a test has chosen to record them. */
+        volatile List<Long> pauses;
+        /** Close this listener when reconnect() starts a wait. */
+        volatile boolean closeOnSleep;
+
+        @Override
+        void _sleep(long millis) throws InterruptedException {
+            if (closeOnSleep) {
+                close();
+            } else if (pauses == null) {
+                super._sleep(millis);
+            } else {
+                pauses.add(millis);
+            }
+        }
 
         _Listener(BlockingQueue<Object> queue) {
             super("ws://127.0.0.1:0/events", "t", MP, "fm-sdk-test",
@@ -160,5 +178,96 @@ class StreamReconnectTest {
         assertThat(queue.poll(250, TimeUnit.MILLISECONDS))
             .as("a burst of errors from one dying socket is one outage, not five")
             .isNull();
+    }
+
+    /** Each wait is in the upper half of the range that doubles from 2 s to a minute. */
+    private static void _assertPaced(List<Long> pauses, long... ceilings) {
+        assertThat(pauses).as("waits").hasSize(ceilings.length);
+        for (int i = 0; i < ceilings.length; i++) {
+            assertThat(pauses.get(i)).as("wait %d", i).isBetween(ceilings[i] / 2, ceilings[i]);
+        }
+    }
+
+    @Test
+    void eachWaitIsDrawnFromTheUpperHalfOfARangeThatDoublesToAMinute() {
+        var ranges = new ArrayList<String>();
+        for (int n = 1; n <= 8; n++) {
+            Events.reconnectPause(n, (lo, hi) -> {
+                ranges.add(lo + "-" + hi);
+                return hi;
+            });
+        }
+
+        assertThat(ranges).containsExactly("1000-2000", "2000-4000", "4000-8000", "8000-16000", "16000-32000",
+                                           "30000-60000", "30000-60000", "30000-60000");
+        assertThat(Events.reconnectPause(10_000, (lo, hi) -> hi)).as("no overflow, however long it has failed")
+            .isEqualTo(60_000L);
+    }
+
+    /**
+     * Clients dropped together -- a classroom when fm-server restarts -- must
+     * not keep coming back in step every two seconds.
+     */
+    @Test
+    @Timeout(20)
+    void failedAttemptsWaitLongerAndLonger() throws Exception {
+        var listener = new _Listener(new ArrayBlockingQueue<>(16));
+        listener.pauses = new ArrayList<>();
+        listener.failConnects = 3;
+
+        listener.reconnect();
+
+        assertThat(listener.connects).isEqualTo(4);
+        _assertPaced(listener.pauses, 2_000, 4_000, 8_000);
+    }
+
+    private static void _dropped(_Listener listener, BlockingQueue<Object> queue) throws InterruptedException {
+        listener.reconnectInBackground();
+        assertThat(_poll(queue)).isInstanceOf(StreamReconnected.class);
+    }
+
+    @Test
+    @Timeout(20)
+    void aStreamThatHeldIsRestoredAtOnce() throws Exception {
+        BlockingQueue<Object> queue = new ArrayBlockingQueue<>(16);
+        var listener = new _Listener(queue);
+        listener.pauses = new ArrayList<>();
+        listener._connectedAt = System.nanoTime() - TimeUnit.MILLISECONDS.toNanos(Events.STABLE_CONNECTION_MS + 1);
+
+        _dropped(listener, queue);
+
+        assertThat(listener.pauses).isEmpty();
+    }
+
+    /**
+     * fm-server closes a session whose history overflows its send buffer. The
+     * reconnect asks for the same history and is closed again; at once, every
+     * time, that was a loop.
+     */
+    @Test
+    @Timeout(20)
+    void aConnectionThatFallsStraightAwayIsAFailureAndWaitsLongerEachTime() throws Exception {
+        BlockingQueue<Object> queue = new ArrayBlockingQueue<>(16);
+        var listener = new _Listener(queue);
+        listener._connectedAt = System.nanoTime();
+        listener.pauses = new ArrayList<>();
+
+        _dropped(listener, queue);
+        _dropped(listener, queue);
+        _dropped(listener, queue);
+
+        _assertPaced(listener.pauses, 2_000, 4_000, 8_000);
+    }
+
+    @Test
+    @Timeout(20)
+    void aListenerClosedWhileWaitingDoesNotConnectAgain() throws Exception {
+        var listener = new _Listener(new ArrayBlockingQueue<>(16));
+        listener.closeOnSleep = true;
+        listener._failures = 3;
+
+        listener.reconnect();
+
+        assertThat(listener.connects).isZero();
     }
 }
