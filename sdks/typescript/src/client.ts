@@ -10,6 +10,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { MARKET_MECHANISM_CALL, MARKET_MECHANISM_CONTINUOUS, orderedSecurities, toOrderType, toSide, unitGrid } from "./types.js";
 import { toInstant } from "./timestamps.js";
+import { Decimals } from "./decimals.js";
 import type {
   Account,
   Allotment,
@@ -244,6 +245,8 @@ export function parseMarket(data: JsonObject): Market {
     mechanism: (data.mechanism as string) || MARKET_MECHANISM_CONTINUOUS,
     callIntervalSeconds: (data.callIntervalSeconds as number) ?? null,
     callCarry: data.callCarry !== false,
+    priceDecimals: (data.priceDecimals as number) ?? Decimals.DEFAULT_PRICE_DECIMALS,
+    unitDecimals: (data.unitDecimals as number) ?? Decimals.DEFAULT_UNIT_DECIMALS,
   };
 }
 
@@ -271,6 +274,7 @@ export function parseMarketplace(data: JsonObject): Marketplace {
     name: (data.name as string) ?? null,
     description: (data.description as string) ?? null,
     markets: ((data.markets as JsonObject[]) ?? []).map(parseMarket),
+    cashDecimals: (data.cashDecimals as number) ?? Decimals.DEFAULT_CASH_DECIMALS,
   };
 }
 
