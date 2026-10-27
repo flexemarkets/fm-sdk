@@ -179,8 +179,8 @@ fm-ticker  https://api.flexemarkets.com/api/marketplaces/123
 
   Symbol     Bid     Ask  Spread   Last trades
   ------  ------  ------  ------   -----------
-    AAPL  $ 9.50  $10.50  $ 1.00   $9.50  $10.00
-     IBM  $ 4.00  $ 5.00  $ 1.00   $4.50
+    AAPL    9.50   10.50    1.00   9.50  10.00
+     IBM    4.00    5.00    1.00   4.50
 ```
 
 ## MCP server

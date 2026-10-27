@@ -156,10 +156,11 @@ public class Ticker {
             var recentPrices = marketTrades != null ? marketTrades.mostRecentPrices() : new long[0];
 
             _putRight(g, 8,  row, symbol);
-            _putRight(g, 16, row, _price(bid));
-            _putRight(g, 24, row, _price(ask));
-            _putRight(g, 32, row, _spread(bid, ask));
-            g.putString(36, row, _tradePrices(recentPrices, TRADE_DISPLAY_COUNT));
+            int decimals = book.market().priceDecimals();
+            _putRight(g, 16, row, _price(bid, decimals));
+            _putRight(g, 24, row, _price(ask, decimals));
+            _putRight(g, 32, row, _spread(bid, ask, decimals));
+            g.putString(36, row, _tradePrices(recentPrices, TRADE_DISPLAY_COUNT, decimals));
 
             row++;
         }
@@ -173,25 +174,24 @@ public class Ticker {
 
     // -- formatting ----------------------------------------------------------
 
-    // Prices at today's fixed scale, until markets carry their own.
-    private static final int PRICE_DECIMALS = Decimals.DEFAULT_PRICE_DECIMALS;
+    // Every price is shown at its own market's priceDecimals.
 
-    private static String _price(long price) {
+    private static String _price(long price, int decimals) {
         if (price < 0) return "     -";
-        return "$%5s".formatted(Decimals.format(price, PRICE_DECIMALS));
+        return "%6s".formatted(Decimals.format(price, decimals));
     }
 
-    private static String _spread(long bid, long ask) {
+    private static String _spread(long bid, long ask, int decimals) {
         if (bid < 0 || ask < 0) return "     -";
-        return "$%5s".formatted(Decimals.format(ask - bid, PRICE_DECIMALS));
+        return "%6s".formatted(Decimals.format(ask - bid, decimals));
     }
 
-    private static String _tradePrices(long[] prices, int count) {
+    private static String _tradePrices(long[] prices, int count, int decimals) {
         int start = Math.max(0, prices.length - count);
         var sb = new StringBuilder();
         for (int i = prices.length - 1; i >= start; i--) {
             if (!sb.isEmpty()) sb.append("  ");
-            sb.append("$").append(Decimals.format(prices[i], PRICE_DECIMALS));
+            sb.append(Decimals.format(prices[i], decimals));
         }
         return sb.toString();
     }

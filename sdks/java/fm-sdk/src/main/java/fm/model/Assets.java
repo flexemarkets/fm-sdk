@@ -25,7 +25,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  *
  * @param id         the assets' own id
  * @param name       the holder's display name
- * @param cash       opening cash, in the cents the exchange counts in
+ * @param cash       opening cash, an integer at the marketplace's
+ *                   {@link Marketplace#cashDecimals}
  * @param securities the opening position in each market
  */
 @JsonIgnoreProperties(ignoreUnknown = true)

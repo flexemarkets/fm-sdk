@@ -316,7 +316,8 @@ The marketplace is the path's; a body that names a different one is refused.
 Cancel with `DELETE /api/v1/marketplaces/2540/orders/771002`, naming any order
 of the lineage — a split's remainder cancels the order it came from.
 
-**Prices are integer cents.** `950` is $9.50. Prices must land on the market's
+**Prices are integers at the market's `priceDecimals`**: at the default of 2,
+`950` is 9.50; at 4 it is 0.0950. Prices must land on the market's
 tick and inside its bounds, or the submit fails with `ORDER_INVALID`.
 `clientDescription` is free text that surfaces in manager exports and the
 connections view — set it to something you can grep for.

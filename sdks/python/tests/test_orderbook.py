@@ -72,12 +72,30 @@ def test_a_book_prints_offers_above_bids_with_the_spread_between():
 
     assert repr(book) == "\n".join([
         "-----BOOK-----",
-        "S 12\t$13.00",
-        "S  3\t$12.50",
+        "S 12\t 13.00",
+        "S  3\t 12.50",
         "--------------",
-        "spread  $ 2.50",
+        "spread    2.50",
         "--------------",
-        "B  5\t$10.00",
+        "B  5\t 10.00",
+        "--------------",
+    ])
+
+
+def test_a_book_prints_at_its_market_s_own_scale():
+    """Not at cents and whole units: 12345 at four price decimals is 1.2345,
+    and 2500 units at three unit decimals is 2.500."""
+    fine = Market(id=3, marketplace_id=7, symbol="FINE", price_decimals=4, unit_decimals=3)
+    book = Book(fine)
+    book.update([_resting(1, "BUY", 2500, 12345, fine), _resting(2, "SELL", 500, 12400, fine)])
+
+    assert repr(book) == "\n".join([
+        "-----BOOK-----",
+        "S0.500\t1.2400",
+        "--------------",
+        "spread  0.0055",
+        "--------------",
+        "B2.500\t1.2345",
         "--------------",
     ])
 
@@ -90,7 +108,7 @@ def test_a_one_sided_book_prints_no_spread():
 
     assert lines[1] == "      --      "
     assert lines[3] == "spread        "
-    assert lines[5] == "B  5\t$10.00"
+    assert lines[5] == "B  5\t 10.00"
 
 
 def test_the_index_answers_for_the_market_asked_about():

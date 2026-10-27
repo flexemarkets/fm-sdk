@@ -1,0 +1,10 @@
+{
+  "why": "the default unit grid a market is created with when the caller gives none: whole units, one to a hundred, at the market's unitDecimals. Without it one SDK creates a market of 0.01 to 1.00 units at two decimals while the others create 1 to 100.",
+  "cases": [
+    { "unitDecimals": 0, "minimum": 1, "maximum": 100, "tick": 1 },
+    { "unitDecimals": 1, "minimum": 10, "maximum": 1000, "tick": 10 },
+    { "unitDecimals": 3, "minimum": 1000, "maximum": 100000, "tick": 1000 },
+    { "unitDecimals": 8, "minimum": 100000000, "maximum": 10000000000, "tick": 100000000 }
+  ],
+  "refused": [-1]
+}

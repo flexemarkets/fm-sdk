@@ -28,7 +28,7 @@ import { getSecurity, priceRound, SESSION_STATE_CLOSED, SESSION_STATE_OPEN, type
 /** How often the robot looks at the book. Not faster: a robot acting every 0.2 s is most of a class's traffic. */
 export const INTERVAL_MS = 2000;
 
-/** The prices to quote one unit at, by side: one tick inside the spread, never crossing it. Cents. */
+/** The prices to quote one unit at, by side: one tick inside the spread, never crossing it. Integers at the market's `priceDecimals`, as the server takes them. */
 export function quotes(market: Market, bestBuy: number, bestSell: number,
                        canBuy: boolean, canSell: boolean): { BUY?: number; SELL?: number } {
   const tick = market.priceTick || 1;

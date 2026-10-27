@@ -13,24 +13,23 @@ import { Decimals } from "./decimals.js";
 
 const TRADE_DISPLAY_COUNT = 5;
 
-// Prices at today's fixed scale, until markets carry their own.
-const PRICE_DECIMALS = Decimals.DEFAULT_PRICE_DECIMALS;
+// Every price is shown at its own market's priceDecimals.
 
-function price(value: number): string {
+function price(value: number, decimals: number): string {
   if (value < 0) return "     -";
-  return `$${Decimals.format(value, PRICE_DECIMALS).padStart(5)}`;
+  return Decimals.format(value, decimals).padStart(6);
 }
 
-function spread(bid: number, ask: number): string {
+function spread(bid: number, ask: number, decimals: number): string {
   if (bid < 0 || ask < 0) return "     -";
-  return `$${Decimals.format(ask - bid, PRICE_DECIMALS).padStart(5)}`;
+  return Decimals.format(ask - bid, decimals).padStart(6);
 }
 
-function tradePrices(prices: number[], count: number): string {
+function tradePrices(prices: number[], count: number, decimals: number): string {
   const recent = prices.length > count ? prices.slice(-count) : prices;
   return [...recent]
     .reverse()
-    .map((p) => `$${Decimals.format(p, PRICE_DECIMALS)}`)
+    .map((p) => Decimals.format(p, decimals))
     .join("  ");
 }
 
@@ -59,8 +58,9 @@ function display(
     const ask = book.bestSellPrice();
     const symbol = book.symbol ?? "?";
     const recent = desk.tape(book.marketId)?.mostRecentPrices() ?? [];
+    const decimals = book.market.priceDecimals;
     lines.push(
-      `  ${symbol.padStart(6)}  ${price(bid)}  ${price(ask)}  ${spread(bid, ask)}   ${tradePrices(recent, TRADE_DISPLAY_COUNT)}`,
+      `  ${symbol.padStart(6)}  ${price(bid, decimals)}  ${price(ask, decimals)}  ${spread(bid, ask, decimals)}   ${tradePrices(recent, TRADE_DISPLAY_COUNT, decimals)}`,
     );
   }
 

@@ -11,8 +11,11 @@ import java.util.List;
 import java.util.Locale;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
+
+import fm.model.TickGrid;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -95,6 +98,47 @@ public class DecimalsTest {
             assertThat("%5s".formatted(Decimals.format(cents, Decimals.DEFAULT_PRICE_DECIMALS)))
                 .isEqualTo(String.format(Locale.ROOT, "%5.2f", cents / 100.0));
         }
+    }
+
+    @ParameterizedTest(name = "whole units at {0} decimals")
+    @MethodSource("unitGridCases")
+    public void theDefaultUnitGridIsWholeUnitsAtTheMarketsScale(int decimals, long minimum, long maximum, long tick) {
+        assertThat(TickGrid.units(decimals)).isEqualTo(new TickGrid(minimum, maximum, tick));
+    }
+
+    @ParameterizedTest(name = "{0} decimals")
+    @MethodSource("unitGridRefused")
+    public void aUnitGridAtAnImpossibleScaleIsRefused(int decimals) {
+        assertThatThrownBy(() -> TickGrid.units(decimals)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    public void theUnitGridDefaultsToWholeUnitsAndStopsAtALong() {
+        assertThat(TickGrid.units()).isEqualTo(new TickGrid(1, 100, 1));
+        assertThat(TickGrid.units(16).maximum()).isEqualTo(1_000_000_000_000_000_000L);
+        assertThatThrownBy(() -> TickGrid.units(17)).hasMessageContaining("too large");
+    }
+
+    static List<Arguments> unitGridCases() throws IOException {
+        List<Arguments> out = new ArrayList<>();
+        for (JsonNode c : unitGrid().get("cases")) {
+            out.add(Arguments.of(c.get("unitDecimals").asInt(), c.get("minimum").asLong(),
+                                 c.get("maximum").asLong(), c.get("tick").asLong()));
+        }
+        return out;
+    }
+
+    static List<Integer> unitGridRefused() throws IOException {
+        List<Integer> out = new ArrayList<>();
+        for (JsonNode d : unitGrid().get("refused")) {
+            out.add(d.asInt());
+        }
+        return out;
+    }
+
+    private static JsonNode unitGrid() throws IOException {
+        Path path = Path.of("..", "..", "fixtures", "decimals", "unit-grid.json").toAbsolutePath().normalize();
+        return JsonMapper.builder().build().readTree(Files.readString(path));
     }
 
     static List<Case> formatCases() throws IOException {

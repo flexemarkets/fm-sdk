@@ -717,7 +717,6 @@ public class HttpFlexemarkets implements Flexemarkets {
         _delete(_marketplace(marketplaceId));
     }
 
-    /** Unit bounds are fixed at 1/100/1, as fm-lib-net sends them. */
     @Override
     public Market createMarket(long marketplaceId, String symbol, String name,
                                TickGrid price, TickGrid units, boolean privateMarket) {

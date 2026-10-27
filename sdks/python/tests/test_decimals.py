@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from fm import Decimals
+from fm import Decimals, TickGrid
 
 FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "decimals"
 
@@ -92,16 +92,50 @@ def test_agrees_with_the_cents_display_it_replaced() -> None:
         assert Decimals.format(cents, Decimals.DEFAULT_PRICE_DECIMALS).rjust(5) == old, cents
 
 
-def test_the_ticker_prints_what_it_printed() -> None:
+def test_the_ticker_prints_plain_numbers_with_no_currency_symbol() -> None:
     spec = importlib.util.spec_from_file_location(
         "ticker", Path(__file__).resolve().parents[1] / "ticker.py")
     ticker = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
     spec.loader.exec_module(ticker)  # type: ignore[union-attr]
 
-    assert ticker._price(-1) == "     -"
-    assert ticker._price(5) == "$ 0.05"
-    assert ticker._price(5000) == "$50.00"
-    assert ticker._price(123456) == "$1234.56"
-    assert ticker._spread(-1, 100) == "     -"
-    assert ticker._spread(4950, 5000) == "$ 0.50"
-    assert ticker._trade_prices([100, 205, 5000], 2) == "$50.00  $2.05"
+    assert ticker._price(-1, 2) == "     -"
+    assert ticker._price(5, 2) == "  0.05"
+    assert ticker._price(5000, 2) == " 50.00"
+    assert ticker._price(123456, 2) == "1234.56"
+    assert ticker._spread(-1, 100, 2) == "     -"
+    assert ticker._spread(4950, 5000, 2) == "  0.50"
+    assert ticker._trade_prices([100, 205, 5000], 2, 2) == "50.00  2.05"
+
+
+def test_the_ticker_shows_each_price_at_its_market_s_scale() -> None:
+    spec = importlib.util.spec_from_file_location(
+        "ticker", Path(__file__).resolve().parents[1] / "ticker.py")
+    ticker = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+    spec.loader.exec_module(ticker)  # type: ignore[union-attr]
+
+    assert ticker._price(12345, 4) == "1.2345"
+    assert ticker._price(42, 0) == "    42"
+    assert ticker._spread(100, 150, 3) == " 0.050"
+    assert ticker._trade_prices([7, 12], 5, 1) == "1.2  0.7"
+
+
+_UNIT_GRID = json.loads((FIXTURES / "unit-grid.json").read_text())
+
+
+@pytest.mark.parametrize("case", _UNIT_GRID["cases"], ids=lambda c: f"d{c['unitDecimals']}")
+def test_the_default_unit_grid_is_whole_units_at_the_market_s_scale(case: dict) -> None:
+    grid = TickGrid.units(case["unitDecimals"])
+    assert (grid.minimum, grid.maximum, grid.tick) == (case["minimum"], case["maximum"], case["tick"])
+
+
+@pytest.mark.parametrize("decimals", _UNIT_GRID["refused"])
+def test_a_unit_grid_at_an_impossible_scale_is_refused(decimals: int) -> None:
+    with pytest.raises(ValueError):
+        TickGrid.units(decimals)
+
+
+def test_the_unit_grid_defaults_to_whole_units_one_to_a_hundred() -> None:
+    assert TickGrid.units() == TickGrid(1, 100, 1)
+    with pytest.raises(ValueError, match="too large"):
+        TickGrid.units(17)
+    assert TickGrid.units(16).maximum == 10 ** 18

@@ -39,7 +39,8 @@ def quotes(market: Market, best_buy: int, best_sell: int,
 
     A side is left out when the holding does not grant it, when the book is
     empty on that side, or when stepping inside would cross the other side.
-    Prices are in cents, as the server takes them.
+    Prices are integers at the market's ``price_decimals``, as the server
+    takes them; one tick is ``price_tick`` of them, whatever the scale.
     """
     tick = market.price_tick or 1
     wanted: dict[str, int] = {}

@@ -9,6 +9,7 @@ Python and TypeScript each run all of them.
 | `format.json` | `value`, `decimals`, `text` | `format(value, decimals)` is `text`, and `parse(text, decimals)` is `value` |
 | `parse.json` | `text`, `decimals`, `value` | `parse(text, decimals)` is `value` |
 | `refused.json` | `text`, `decimals`, `reason` | `parse(text, decimals)` raises the SDK's argument error |
+| `unit-grid.json` | `unitDecimals`, `minimum`, `maximum`, `tick`; `refused` | the default unit grid at that scale -- `TickGrid.units(d)` in Java and Python, `unitGrid(d)` in TypeScript -- is whole units, one to a hundred; each `refused` scale raises |
 
 Every `value` is within `Number.MAX_SAFE_INTEGER`, the narrowest of the three
 integer ranges (TypeScript's). Beyond it Java and Python read up to a signed

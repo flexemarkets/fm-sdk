@@ -1,5 +1,6 @@
 package fm.model;
 
+import fm.Decimals;
 import fm.role.Administration;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
@@ -26,7 +27,8 @@ public record TickGrid(long minimum, long maximum, long tick) {
 
 
     /**
-     * The usual unit dimension: whole units, one to a hundred.
+     * The usual unit dimension at the default scale, whole units: one to a
+     * hundred.
      *
      * <p>What {@code createMarket} hardcoded before it took a unit grid, so
      * this is the value that leaves an existing market unchanged.
@@ -34,7 +36,36 @@ public record TickGrid(long minimum, long maximum, long tick) {
      * @return a grid of 1 to 100, stepping by 1
      */
     public static TickGrid units() {
-        return new TickGrid(1, 100, 1);
+        return units(Decimals.DEFAULT_UNIT_DECIMALS);
+    }
+
+    /**
+     * The usual unit dimension at {@code unitDecimals}: whole units, one to a
+     * hundred, counted in steps of {@code 10^-unitDecimals}.
+     *
+     * <p>Whole units, not smallest steps: at three unit decimals this is
+     * 1000 to 100000 by 1000 -- the same one to a hundred units a person
+     * means -- rather than 0.001 to 0.100.
+     *
+     * @param unitDecimals the decimal places the market's units carry
+     * @return a grid of {@code 10^d} to {@code 100 * 10^d}, stepping by
+     *         {@code 10^d}
+     * @throws IllegalArgumentException if {@code unitDecimals} is negative or
+     *         the grid would not fit a {@code long}
+     */
+    public static TickGrid units(int unitDecimals) {
+        if (unitDecimals < 0) {
+            throw new IllegalArgumentException("unitDecimals must not be negative: " + unitDecimals);
+        }
+        try {
+            long whole = 1;
+            for (int i = 0; i < unitDecimals; i++) {
+                whole = Math.multiplyExact(whole, 10L);
+            }
+            return new TickGrid(whole, Math.multiplyExact(whole, 100L), whole);
+        } catch (ArithmeticException e) {
+            throw new IllegalArgumentException("unitDecimals is too large: " + unitDecimals);
+        }
     }
 
     /**
