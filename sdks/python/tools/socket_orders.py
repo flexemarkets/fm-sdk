@@ -194,6 +194,12 @@ class Socket:
                     self.unmatched_refusals += 1
                 else:
                     answer.settle(refused=json.loads(body) if body else {}, by_submission_id=True)
+            elif kind == "ORDER-ACCEPTED":
+                # A resent submission, answered with the order the first one
+                # made (fm-server 4.17+); older servers say nothing.
+                answer = self._take(headers.get("submission-id"))
+                if answer is not None:
+                    answer.settle(order=json.loads(body) if body else {}, by_submission_id=True)
             elif kind == "ORDERS-UPDATE":
                 for order in json.loads(body) if body else []:
                     if order.get("type") != "LIMIT" or order.get("original") != order.get("id"):
