@@ -227,6 +227,11 @@ class StreamReconnectTest {
     }
 
     private static void _dropped(_Listener listener, BlockingQueue<Object> queue) throws InterruptedException {
+        // The last reconnect announces itself before it lets go, and a drop
+        // that arrives in between is taken as part of it and starts nothing.
+        while (listener._reconnecting.get()) {
+            Thread.onSpinWait();
+        }
         listener.reconnectInBackground();
         assertThat(_poll(queue)).isInstanceOf(StreamReconnected.class);
     }
