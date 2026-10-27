@@ -7,7 +7,7 @@ import sys
 
 from mcp.server.fastmcp import FastMCP
 
-from fm import Flexemarkets, Order, Session
+from fm import Decimals, Flexemarkets, Order, Session
 from fm.order_utils import is_buy, is_consumed, is_limit
 
 mcp = FastMCP("Flexemarkets")
@@ -33,14 +33,29 @@ def _get_fm() -> Flexemarkets:
 # ---------------------------------------------------------------------------
 
 
-def _price(cents: int) -> str:
-    return f"${cents / 100:.2f}"
+# Today's fixed scales, until markets and marketplaces carry their own. Every
+# amount shown goes through Decimals, so none of them divides by hand.
+PRICE_DECIMALS = Decimals.DEFAULT_PRICE_DECIMALS
+UNIT_DECIMALS = Decimals.DEFAULT_UNIT_DECIMALS
+CASH_DECIMALS = Decimals.DEFAULT_CASH_DECIMALS
+
+
+def _price(price: int) -> str:
+    return f"${Decimals.format(price, PRICE_DECIMALS)}"
+
+
+def _cash(cash: int) -> str:
+    return f"${Decimals.format(cash, CASH_DECIMALS)}"
+
+
+def _units(units: int) -> str:
+    return Decimals.format(units, UNIT_DECIMALS)
 
 
 def _format_order(o: Order) -> str:
     side = o.side or "?"
     return (
-        f"  {o.type} {side} {o.units}u @ {_price(o.price)}"
+        f"  {o.type} {side} {_units(o.units)}u @ {_price(o.price)}"
         f"  (id={o.id}, symbol={o.symbol or '?'})"
     )
 
@@ -128,14 +143,14 @@ def get_holding(marketplace_id: int) -> str:
     h = fm.holding(marketplace_id, fm.user_id)
     lines = [
         f"Holding for {h.name or 'user'} in marketplace {h.marketplace_id}",
-        f"  Cash: {_price(h.cash)}  (available: {_price(h.available_cash)})",
+        f"  Cash: {_cash(h.cash)}  (available: {_cash(h.available_cash)})",
         "",
         "  Securities:",
     ]
     for s in sorted(h.securities, key=lambda s: s.market_id):
         lines.append(
-            f"    Market {s.market_id}: {s.units} units"
-            f" (available: {s.available_units})"
+            f"    Market {s.market_id}: {_units(s.units)} units"
+            f" (available: {_units(s.available_units)})"
             f"  buy={'yes' if s.can_buy else 'no'}"
             f"  sell={'yes' if s.can_sell else 'no'}"
         )
@@ -185,7 +200,7 @@ def get_trades(marketplace_id: int, symbol: str) -> str:
                 aggressor = pair if resting is o else o
                 buyer = resting if is_buy(resting.side or "") else aggressor
                 trades.append(
-                    f"  {_price(resting.price)}  {resting.units}u"
+                    f"  {_price(resting.price)}  {_units(resting.units)}u"
                     f"  (buyer={buyer.owner_id})"
                 )
 
@@ -223,7 +238,7 @@ def submit_limit_order(
     return (
         f"Order submitted successfully.\n"
         f"  ID: {order.id}\n"
-        f"  {order.type} {order.side} {order.units}u @ {_price(order.price)}\n"
+        f"  {order.type} {order.side} {_units(order.units)}u @ {_price(order.price)}\n"
         f"  Symbol: {order.symbol or '?'}, Market: {order.market_id}"
     )
 

@@ -6,6 +6,7 @@ import sys
 import threading
 
 from fm import (
+    Decimals,
     Flexemarkets,
     Desk,
     Session,
@@ -13,22 +14,25 @@ from fm import (
 
 TRADE_DISPLAY_COUNT = 5
 
+# Prices at today's fixed scale, until markets carry their own.
+PRICE_DECIMALS = Decimals.DEFAULT_PRICE_DECIMALS
+
 
 def _price(value: int) -> str:
     if value < 0:
         return "     -"
-    return f"${value / 100:5.2f}"
+    return f"${Decimals.format(value, PRICE_DECIMALS):>5}"
 
 
 def _spread(bid: int, ask: int) -> str:
     if bid < 0 or ask < 0:
         return "     -"
-    return f"${(ask - bid) / 100:5.2f}"
+    return f"${Decimals.format(ask - bid, PRICE_DECIMALS):>5}"
 
 
 def _trade_prices(prices: list[int], count: int) -> str:
     recent = prices[-count:] if len(prices) > count else prices
-    return "  ".join(f"${p / 100:.2f}" for p in reversed(recent))
+    return "  ".join(f"${Decimals.format(p, PRICE_DECIMALS)}" for p in reversed(recent))
 
 
 def display(desk: Desk, session: Session | None, endpoint_url: str = "") -> None:
