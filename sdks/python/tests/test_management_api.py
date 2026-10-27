@@ -91,7 +91,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         self._record()
-        if self.path.startswith("/api/tokens"):
+        if self.path.startswith("/api/v1/tokens"):
             self._send({
                 "token": TOKEN,
                 "person": {"id": 7, "accountId": 1, "email": "dev@dev"},
@@ -148,7 +148,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/v1/marketplaces":
             self._send({"id": 77, "name": "simple-dividend", "markets": []})
             return
-        if self.path == "/api/otp/manager":
+        if self.path == "/api/v1/otp/manager":
             self._send({
                 "expiresAt": "2026-08-15T18:00:00Z",
                 "otps": [{"userId": 1, "email": "alice@lab.edu", "otp": "123456"}],
@@ -156,7 +156,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         # Sign-in posts here too; answering it with an allotment list makes the
         # connection fail somewhere far from the cause.
-        if self.path.startswith("/api/tokens"):
+        if self.path.startswith("/api/v1/tokens"):
             self._send({
                 "token": TOKEN,
                 "person": {"id": 7, "accountId": 1, "email": "dev@dev"},
@@ -338,7 +338,7 @@ def test_manager_otp_bundles_are_minted_for_the_users_asked(fm):
     assert len(bundle.otps) == 1
     assert bundle.otps[0].user_id == 1
     assert bundle.otps[0].otp == "123456"
-    assert '"userIds":[1,2]' in bodies["POST /api/otp/manager"].replace(" ", "")
+    assert '"userIds":[1,2]' in bodies["POST /api/v1/otp/manager"].replace(" ", "")
 
 
 def test_the_token_is_the_one_signed_in_with(fm):
@@ -362,7 +362,7 @@ def test_push_widgets_posts_one_array(fm):
                    content={"kind": "kv", "items": [{"label": "value", "value": 120}]}),
     ])
 
-    assert [r for r in requests if r[0] == "POST" and not r[1].startswith("/api/tokens")] == [
+    assert [r for r in requests if r[0] == "POST" and not r[1].startswith("/api/v1/tokens")] == [
         ("POST", "/api/v1/marketplaces/1/widgets")]
     body = json.loads(bodies["POST /api/v1/marketplaces/1/widgets"])
     assert isinstance(body, list) and len(body) == 2

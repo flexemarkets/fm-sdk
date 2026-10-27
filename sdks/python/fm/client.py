@@ -961,7 +961,7 @@ class Flexemarkets:
         which stops working after hours while the robot runs on.
         """
         resp = self._http.post(
-            _server(self._endpoint) + "/tokens/renew",
+            _v1(self._endpoint, "/tokens/renew"),
             json={"refreshToken": self._refresh_token},
             headers={"Accept": "application/json"},
         )
@@ -988,7 +988,7 @@ class Flexemarkets:
             # SDK and the TypeScript one never had it, so token auth returned
             # 400 in both from the day it was written.
             resp = self._http.post(
-                _server(self._endpoint) + "/tokens/refresh",
+                _v1(self._endpoint, "/tokens/refresh"),
                 headers={
                     "Authorization": f"Bearer {tok}",
                     "Accept": "application/json",
@@ -1008,7 +1008,7 @@ class Flexemarkets:
         if not password:
             raise ConfigurationError("Missing 'password' in configuration.")
 
-        auth_url = _server(self._endpoint) + "/tokens"
+        auth_url = _v1(self._endpoint, "/tokens")
         resp = self._http.post(
             auth_url,
             json={"username": f"{acct}|{email}", "password": password},
@@ -1081,7 +1081,7 @@ class Flexemarkets:
         These are credentials: not to be logged, not to be persisted, and
         delivered to the person they belong to.
         """
-        url = _server(self._endpoint) + "/otp/manager"
+        url = _v1(self._endpoint, "/otp/manager")
         data = _json(self._post(url, {"userIds": user_ids}))
         return ManagerOtpBundle(
             expires_at=_timestamp(data.get("expiresAt")),
@@ -1768,7 +1768,7 @@ class Flexemarkets:
         """
         from .events import EventListener
 
-        ws_url = _server(self._endpoint).replace("https://", "wss://").replace("http://", "ws://") + "/events"
+        ws_url = _v1(self._endpoint, "/events").replace("https://", "wss://").replace("http://", "ws://")
         ev = EventListener(
             ws_url=ws_url,
             bearer_token=self._bearer_token,

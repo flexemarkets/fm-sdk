@@ -58,7 +58,7 @@ class _Server:
     @property
     def url(self) -> str:
         host, port = self._server.socket.getsockname()[:2]
-        return f"ws://{host}:{port}/api/events"
+        return f"ws://{host}:{port}/api/v1/events"
 
     def _process_request(self, connection: ServerConnection, request: Any) -> Any:
         self.handshakes += 1
