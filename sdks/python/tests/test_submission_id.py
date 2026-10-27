@@ -104,3 +104,10 @@ def test_an_order_lost_twice_is_reported_and_not_sent_a_third_time(client):
         client.submit_limit(1, 11, "BUY", 5, 135)
 
     assert len(submitted) == 2
+
+
+def test_a_connection_is_kept_a_minute_between_requests(client):
+    """httpx closes an idle connection after 5 s, so a robot quiet for longer
+    paid a new TCP and TLS handshake on its next order -- ~600 ms straight to
+    Heroku from Melbourne. A minute, under the 90 s Heroku's router holds one."""
+    assert client._http._transport._pool._keepalive_expiry == 60.0

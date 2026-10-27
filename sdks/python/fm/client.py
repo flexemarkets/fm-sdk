@@ -788,6 +788,11 @@ class Flexemarkets:
                 "User-Agent": _FM_NETWORK_CLIENT,
             },
             timeout=30.0,
+            # A connection kept a minute between requests, not httpx's 5 s: a
+            # robot quiet for longer paid a new TCP and TLS handshake on its
+            # next order, 20-30 ms to Cloudflare's edge and ~600 ms straight to
+            # Heroku from Melbourne. Under the 90 s Heroku's router holds one.
+            limits=httpx.Limits(keepalive_expiry=60.0),
             event_hooks={"request": [self._carry_timing], "response": [self._record_timing]},
         )
 
