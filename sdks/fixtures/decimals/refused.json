@@ -1,0 +1,21 @@
+{
+  "why": "text the exchange cannot hold at that scale, which every SDK must refuse rather than round; without it one SDK quietly moves 50.001 to 50.00 and sends an order its user did not type",
+  "cases": [
+    { "text": "50.001", "decimals": 2, "reason": "a non-zero digit beyond two decimals" },
+    { "text": "0.5", "decimals": 0, "reason": "a fraction of a whole unit" },
+    { "text": "1.10000000001", "decimals": 8, "reason": "a non-zero digit far beyond the scale" },
+    { "text": "", "decimals": 2, "reason": "empty" },
+    { "text": "-", "decimals": 2, "reason": "a sign and no digits" },
+    { "text": ".5", "decimals": 2, "reason": "no digit before the point" },
+    { "text": "5.", "decimals": 2, "reason": "no digit after the point" },
+    { "text": "+5", "decimals": 2, "reason": "a plus sign" },
+    { "text": " 5", "decimals": 2, "reason": "surrounding space" },
+    { "text": "1e2", "decimals": 2, "reason": "an exponent" },
+    { "text": "1,000", "decimals": 2, "reason": "grouping" },
+    { "text": "1,5", "decimals": 2, "reason": "a comma for a point" },
+    { "text": "$5", "decimals": 2, "reason": "a currency symbol" },
+    { "text": "NaN", "decimals": 2, "reason": "not a number" },
+    { "text": "5", "decimals": -1, "reason": "negative decimals" },
+    { "text": "99999999999999999999", "decimals": 0, "reason": "beyond every SDK's integer range" }
+  ]
+}

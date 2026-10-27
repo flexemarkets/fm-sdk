@@ -1,0 +1,17 @@
+{
+  "why": "the display every SDK prints for a price, cash or unit count; without it one SDK can pad, round or drop a sign differently and the three disagree about the same book",
+  "cases": [
+    { "value": 5000, "decimals": 2, "text": "50.00" },
+    { "value": 0, "decimals": 2, "text": "0.00" },
+    { "value": 5, "decimals": 2, "text": "0.05" },
+    { "value": -5, "decimals": 2, "text": "-0.05" },
+    { "value": -150, "decimals": 2, "text": "-1.50" },
+    { "value": 29, "decimals": 2, "text": "0.29" },
+    { "value": 100, "decimals": 0, "text": "100" },
+    { "value": -7, "decimals": 0, "text": "-7" },
+    { "value": 1, "decimals": 8, "text": "0.00000001" },
+    { "value": 123456789012, "decimals": 4, "text": "12345678.9012" },
+    { "value": 9007199254740991, "decimals": 2, "text": "90071992547409.91" },
+    { "value": -9007199254740991, "decimals": 12, "text": "-9007.199254740991" }
+  ]
+}
