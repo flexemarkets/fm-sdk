@@ -343,4 +343,31 @@ class StreamReconnectTest {
         assertThat(listener.connects).isEqualTo(2);
         assertThat(listener.pauses).as("a socket that fell at once is a failure, and waits").hasSize(1);
     }
+
+    /**
+     * onClose and onError of the socket being replaced can arrive while the
+     * reconnect is under way. They are the outage it is already restoring.
+     */
+    @Test
+    @Timeout(20)
+    void aBurstFromTheSocketBeingReplacedIsStillOneReconnect() throws Exception {
+        BlockingQueue<Object> queue = new ArrayBlockingQueue<>(16);
+        var listener = new _Listener(queue);
+        listener.pauses = new ArrayList<>();
+        var replaced = _socket();
+        listener._webSocket = replaced;
+        listener.opens = _socket();
+        listener.gate = new CountDownLatch(1);
+
+        listener.reconnectInBackground(replaced);
+        assertThat(listener.reachedGate.await(2, TimeUnit.SECONDS)).as("the reconnect is under way").isTrue();
+        for (int i = 0; i < 4; i++) {
+            listener.reconnectInBackground(replaced);
+        }
+        listener.gate.countDown();
+
+        assertThat(_poll(queue)).isInstanceOf(StreamReconnected.class);
+        assertThat(queue.poll(250, TimeUnit.MILLISECONDS)).as("one outage, one reconnect").isNull();
+        assertThat(listener.connects).isEqualTo(1);
+    }
 }
