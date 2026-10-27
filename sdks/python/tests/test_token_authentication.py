@@ -52,7 +52,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         requests.append(f"POST {self.path}")
-        if self.path == "/api/tokens/refresh":
+        if self.path == "/api/v1/tokens/refresh":
             self._send({
                 "token": TOKEN,
                 "person": {"id": 7, "accountId": 1, "email": "dev@dev"},
@@ -82,7 +82,7 @@ def test_a_token_connects_through_the_refresh_route(server):
     finally:
         client.close()
 
-    assert requests == ["POST /api/tokens/refresh"], "refresh, and nothing else -- no API root"
+    assert requests == ["POST /api/v1/tokens/refresh"], "refresh, and nothing else -- no API root"
 
 
 def test_a_real_length_token_is_not_probed_as_a_filename(server):
@@ -112,4 +112,4 @@ def test_a_token_never_posts_to_tokens(server):
     client = Flexemarkets.connect(TOKEN, f"{base}/marketplaces/1", "token-test")
     client.close()
 
-    assert "POST /api/tokens" not in requests, requests
+    assert "POST /api/v1/tokens" not in requests, requests

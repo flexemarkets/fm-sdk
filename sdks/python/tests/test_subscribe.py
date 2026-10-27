@@ -129,7 +129,7 @@ def test_a_stream_opens_on_the_servers_events_route_as_the_caller(client, monkey
 
     (listener,) = started.listeners
     port = client.endpoint_url.split(":")[2].split("/")[0]
-    assert listener._ws_url == f"ws://127.0.0.1:{port}/api/events"
+    assert listener._ws_url == f"ws://127.0.0.1:{port}/api/v1/events"
     assert listener._bearer_token() == f"Bearer {TOKEN}"
     assert listener._marketplace_id == 4
     assert listener._queue is q
@@ -142,7 +142,7 @@ def test_a_server_reached_over_tls_streams_over_tls(client, monkeypatch):
 
     client.subscribe(1, queue.Queue())
 
-    assert started.listeners[0]._ws_url == "wss://fm.example/api/events"
+    assert started.listeners[0]._ws_url == "wss://fm.example/api/v1/events"
 
 
 def test_reconnect_restores_the_stream_listen_opened(client, monkeypatch):

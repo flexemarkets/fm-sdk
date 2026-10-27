@@ -79,7 +79,7 @@ def test_a_password_signs_in_as_account_and_email_together(base: str, tmp_path: 
     credential = _credential(tmp_path, "account=dev\nemail=dev@dev\npassword=secret\n")
 
     with Flexemarkets(credential=credential, endpoint=f"{base}/marketplaces/12") as fm:
-        assert requests == ["POST /api/tokens"]
+        assert requests == ["POST /api/v1/tokens"]
         assert bodies == [{"username": "dev|dev@dev", "password": "secret"}]
         assert fm.token().token == TOKEN
         assert (fm.account_id, fm.account_name) == (3, "dev")
@@ -102,7 +102,7 @@ def test_an_endpoint_given_as_a_file_is_read_as_one(base: str, tmp_path: Path) -
 
     with Flexemarkets(token=TOKEN, endpoint=str(endpoint)) as fm:
         assert fm.endpoint_url == f"{base}/marketplaces/12"
-        assert requests == ["POST /api/tokens/refresh"]
+        assert requests == ["POST /api/v1/tokens/refresh"]
 
 
 @pytest.mark.parametrize("text, missing", [
@@ -133,7 +133,7 @@ def test_roles_come_from_the_person_signed_in(base: str) -> None:
 
 
 def test_a_person_without_roles_has_none(base: str) -> None:
-    answers["/api/tokens/refresh"] = (200, {**SIGNED_IN, "person": {"id": 7, "accountId": 3}})
+    answers["/api/v1/tokens/refresh"] = (200, {**SIGNED_IN, "person": {"id": 7, "accountId": 3}})
 
     with Flexemarkets(token=TOKEN, endpoint=f"{base}/marketplaces/12") as fm:
         assert fm.is_manager() is False
@@ -141,7 +141,7 @@ def test_a_person_without_roles_has_none(base: str) -> None:
 
 
 def test_a_sign_in_answered_without_an_account_has_none(base: str) -> None:
-    answers["/api/tokens/refresh"] = (200, {"token": TOKEN, "person": SIGNED_IN["person"]})
+    answers["/api/v1/tokens/refresh"] = (200, {"token": TOKEN, "person": SIGNED_IN["person"]})
 
     with Flexemarkets(token=TOKEN, endpoint=f"{base}/marketplaces/12") as fm:
         assert fm.account is None

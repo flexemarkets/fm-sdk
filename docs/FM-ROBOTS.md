@@ -248,10 +248,10 @@ order-phase histograms and queue-depth series and needs the manager to hold
 fm tokens issue p1@example.com p2@example.com 503
 ```
 
-Mints a single-use OTP per user via `POST /api/otp/manager` and prints the
+Mints a single-use OTP per user via `POST /api/v1/otp/manager` and prints the
 bundle as JSON. Every id or email must belong to your own account — one stray
 entry refuses the whole batch. OTPs expire after five minutes and are redeemed
-with `GET /api/otp?otp=…`.
+with `GET /api/v1/otp?otp=…`.
 
 See [Acting on behalf of participants](API-REFERENCE.md#acting-on-behalf-of-participants-otp)
 for the protocol, and the in-app `/documentation/AUTH-AND-OTP` guide for the

@@ -52,10 +52,10 @@ class SignInAndSnapshotFailureTest {
     @BeforeEach
     void startServer() throws IOException {
         _server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        _answers.put("/api/tokens", new Object[] {200, """
+        _answers.put("/api/v1/tokens", new Object[] {200, """
             {"token":"%s","person":{"id":7,"accountId":1,"email":"dev@dev"},"account":{"id":1,"name":"dev"}}
             """.formatted(TOKEN), null});
-        _answers.put("/api/tokens/refresh", _answers.get("/api/tokens"));
+        _answers.put("/api/v1/tokens/refresh", _answers.get("/api/v1/tokens"));
         _server.createContext("/", exchange -> {
             var uri = exchange.getRequestURI();
             Object[] answer = _answers.get(uri.getRawQuery() == null
@@ -91,14 +91,14 @@ class SignInAndSnapshotFailureTest {
 
     private static String _refusal(String error, String message, int status) {
         return """
-            {"error":"%s","message":"%s","path":"/api/tokens","shortDigest":"abc123","status":%d}
+            {"error":"%s","message":"%s","path":"/api/v1/tokens","shortDigest":"abc123","status":%d}
             """.formatted(error, message, status);
     }
 
     /** The sentence a student acts on, not the envelope: "Authentication failed: Wrong password." */
     @Test
     void aRefusedPasswordIsAnAuthenticationFailureCarryingTheServersSentence(@TempDir Path dir) throws IOException {
-        _answers.put("/api/tokens", new Object[] {401, _refusal("ACCOUNT_INVALID_CREDENTIALS", "Wrong password.", 401), null});
+        _answers.put("/api/v1/tokens", new Object[] {401, _refusal("ACCOUNT_INVALID_CREDENTIALS", "Wrong password.", 401), null});
         Path credential = Files.writeString(dir.resolve("credential"), "account=dev\nemail=dev@dev\npassword=nope\n");
 
         assertThatExceptionOfType(AuthenticationException.class)
@@ -110,7 +110,7 @@ class SignInAndSnapshotFailureTest {
     /** A token is checked by refreshing it, so an expired one fails at connect, saying why. */
     @Test
     void aRefusedTokenFailsAtConnectSayingWhy() {
-        _answers.put("/api/tokens/refresh", new Object[] {401, _refusal("TOKEN_EXPIRED", "Token expired.", 401), null});
+        _answers.put("/api/v1/tokens/refresh", new Object[] {401, _refusal("TOKEN_EXPIRED", "Token expired.", 401), null});
 
         assertThatExceptionOfType(AuthenticationException.class).isThrownBy(this::_connect)
                 .withMessage("Authentication failed: Token expired.");

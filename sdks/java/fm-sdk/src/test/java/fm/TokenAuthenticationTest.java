@@ -47,7 +47,7 @@ class TokenAuthenticationTest {
     void startServer() throws IOException {
         _server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 
-        _server.createContext("/api/tokens", exchange -> {
+        _server.createContext("/api/v1/tokens", exchange -> {
             _requests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath()
                          + " auth=" + exchange.getRequestHeaders().getFirst("Authorization"));
             // A sign-in attempt with no credentials is refused, exactly as the
@@ -105,7 +105,7 @@ class TokenAuthenticationTest {
 
         assertThat(_requests)
                 .as("a held token is refreshed, never exchanged for another")
-                .containsExactly("POST /api/tokens/refresh auth=Bearer " + TOKEN);
+                .containsExactly("POST /api/v1/tokens/refresh auth=Bearer " + TOKEN);
     }
 
     @Test
@@ -115,7 +115,7 @@ class TokenAuthenticationTest {
         }
 
         assertThat(_requests).anySatisfy(r -> {
-            assertThat(r).contains("/api/tokens/refresh");
+            assertThat(r).contains("/api/v1/tokens/refresh");
             assertThat(r).contains("auth=Bearer " + TOKEN);
         });
     }
@@ -132,7 +132,7 @@ class TokenAuthenticationTest {
         }
 
         assertThat(_requests)
-                .noneSatisfy(r -> assertThat(r).startsWith("POST /api/tokens auth"));
+                .noneSatisfy(r -> assertThat(r).startsWith("POST /api/v1/tokens auth"));
     }
 
     /** Who signed in, and where to: the account and the marketplace the endpoint names. */

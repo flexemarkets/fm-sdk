@@ -50,7 +50,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
-        if self.path == "/api/tokens/refresh":
+        if self.path == "/api/v1/tokens/refresh":
             self._send({"token": TOKEN,
                         "person": {"id": 7, "accountId": 1, "email": "dev@dev"},
                         "account": {"id": 1, "name": "dev"}})

@@ -1313,7 +1313,7 @@
       "args": {
         "marketplaceId": 1
       },
-      "why": "A segment is never a filter (rule 5): widgets/all is GET widgets?participant=all.",
+      "why": "A segment is never a filter (rule 5): widgets/all is GET widgets?participant=all. It answers the WidgetsFrame every widgets read answers (fm-server WidgetV1Controller), not widgets/all's bare list: 0.4.0 to 0.11.0 read a list here and failed on every call.",
       "requests": [
         {
           "method": "GET",
@@ -1323,21 +1323,26 @@
           },
           "response": {
             "status": 200,
-            "body": [
-              {
-                "id": 31,
-                "marketplaceId": 1,
-                "scope": "MARKETPLACE",
-                "key": "score",
-                "title": "Score",
-                "content": {
-                  "kind": "text",
-                  "lines": [
-                    "round 1"
-                  ]
+            "body": {
+              "marketplaceId": 1,
+              "snapshot": true,
+              "widgets": [
+                {
+                  "id": 31,
+                  "marketplaceId": 1,
+                  "scope": "MARKETPLACE",
+                  "key": "score",
+                  "title": "Score",
+                  "content": {
+                    "kind": "text",
+                    "lines": [
+                      "round 1"
+                    ]
+                  }
                 }
-              }
-            ]
+              ],
+              "removed": []
+            }
           }
         }
       ]
@@ -1640,7 +1645,7 @@
       "requests": [
         {
           "method": "POST",
-          "path": "/api/otp/manager",
+          "path": "/api/v1/otp/manager",
           "body": {
             "userIds": [
               7

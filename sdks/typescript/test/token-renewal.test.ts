@@ -30,7 +30,7 @@ async function withServer(options: Options, run: (base: string, state: { signIns
       res.writeHead(status, { "Content-Type": "application/json" });
       res.end(JSON.stringify(payload));
     };
-    if (req.url === "/api/tokens" || req.url === "/api/tokens/refresh") {
+    if (req.url === "/api/v1/tokens" || req.url === "/api/v1/tokens/refresh") {
       req.resume();
       if (state.signIns >= (options.signInsBeforeFailing ?? Infinity)) {
         state.signIns++;

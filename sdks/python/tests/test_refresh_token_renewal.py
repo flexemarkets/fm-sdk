@@ -48,7 +48,7 @@ def _handler(state: Server):
         def do_POST(self):
             length = int(self.headers.get("Content-Length") or 0)
             body = json.loads(self.rfile.read(length) or b"{}")
-            if self.path == "/api/tokens/renew":
+            if self.path == "/api/v1/tokens/renew":
                 presented = body.get("refreshToken", "")
                 state.renewals.append(presented)
                 traded = state.live.pop(presented, None)

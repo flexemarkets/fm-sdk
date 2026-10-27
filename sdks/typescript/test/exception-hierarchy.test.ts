@@ -32,7 +32,7 @@ const TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl";
  */
 function conflictingServer(status = 409): http.Server {
   return http.createServer((req, res) => {
-    if (req.method === "POST" && req.url === "/api/tokens") {
+    if (req.method === "POST" && req.url === "/api/v1/tokens") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         token: TOKEN,
@@ -41,7 +41,7 @@ function conflictingServer(status = 409): http.Server {
       }));
       return;
     }
-    if (req.method === "POST" && req.url === "/api/tokens/refresh") {
+    if (req.method === "POST" && req.url === "/api/v1/tokens/refresh") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         token: TOKEN,

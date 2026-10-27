@@ -39,7 +39,7 @@ before(async () => {
       res.end(JSON.stringify(payload));
     };
     const url = req.url ?? "";
-    if (url.startsWith("/api/tokens")) {
+    if (url.startsWith("/api/v1/tokens")) {
       send({
         token: TOKEN,
         person: { id: 7, accountId: 1, email: "dev@dev", roles: ["ROLE_MANAGER"] },
