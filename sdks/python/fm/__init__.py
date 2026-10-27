@@ -4,6 +4,7 @@ from .client import Flexemarkets
 from .enums import OrderType, OrderSide
 from .events import NO_SEQ, OrdersUpdate, FrameUnreadable, StreamReconnected, StreamDropped
 from .snapshot import Snapshot
+from .decimals import Decimals
 from .exceptions import (
     AccountNameConflictError,
     ApiError,
@@ -53,6 +54,8 @@ from .types import (
 
 __all__ = [
     "Flexemarkets",
+    # amounts as decimal text, exactly
+    "Decimals",
     # side and order type
     "OrderSide",
     "OrderType",

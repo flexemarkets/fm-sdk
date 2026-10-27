@@ -56,6 +56,7 @@ source = ["fm"]
 [tool.coverage.report]
 include = [
     "fm/client.py",
+    "fm/decimals.py",
     "fm/desk.py",
     "fm/events.py",
     "fm/order_utils.py",
