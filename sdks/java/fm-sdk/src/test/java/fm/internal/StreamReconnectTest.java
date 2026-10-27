@@ -52,6 +52,8 @@ class StreamReconnectTest {
         volatile List<Long> pauses;
         /** Close this listener when reconnect() starts a wait. */
         volatile boolean closeOnSleep;
+        /** Close this listener from inside an attempt that then fails. */
+        volatile boolean closeOnConnect;
 
         @Override
         void _sleep(long millis) throws InterruptedException {
@@ -85,6 +87,9 @@ class StreamReconnectTest {
                     Thread.currentThread().interrupt();
                     throw new AssertionError(e);
                 }
+            }
+            if (closeOnConnect) {
+                close();
             }
             if (connects <= failConnects) {
                 throw new ApiException("refused");
@@ -269,5 +274,24 @@ class StreamReconnectTest {
         listener.reconnect();
 
         assertThat(listener.connects).isZero();
+    }
+
+    /**
+     * close() lands while an attempt is failing -- the caller gave up on the
+     * stream as the server went away. Nothing is left to restore, so the loop
+     * ends there rather than waiting out a pause to find that out.
+     */
+    @Test
+    @Timeout(20)
+    void aListenerClosedDuringAFailedAttemptStopsWithoutWaiting() throws Exception {
+        var listener = new _Listener(new ArrayBlockingQueue<>(16));
+        listener.pauses = new ArrayList<>();
+        listener.closeOnConnect = true;
+        listener.failConnects = 1;
+
+        listener.reconnect();
+
+        assertThat(listener.connects).isEqualTo(1);
+        assertThat(listener.pauses).as("waits after the close").isEmpty();
     }
 }
