@@ -26,7 +26,7 @@ async function refusedWith(status: number, body: string): Promise<FlexemarketsEr
   const server = http.createServer((req, res) => {
     req.resume();
     req.on("end", () => {
-      if ((req.url ?? "").startsWith("/api/tokens")) {
+      if ((req.url ?? "").startsWith("/api/v1/tokens")) {
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ token: TOKEN, person: { id: 7, accountId: 1 }, account: { id: 1, name: "dev" } }));
         return;

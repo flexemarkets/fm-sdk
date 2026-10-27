@@ -203,7 +203,7 @@ def test_an_identity_named_in_code_signs_in_with_its_own_password(base: str) -> 
                       endpoint=f"{base}/marketplaces/12"):
         pass
 
-    assert requests[0] == "POST /api/tokens"
+    assert requests[0] == "POST /api/v1/tokens"
     assert bodies[0] == {"username": "lab|robot@lab", "password": "robot-secret"}
 
 
@@ -215,7 +215,7 @@ def test_an_identity_named_in_code_replaces_a_token_in_the_home_file(base: str) 
                       endpoint=f"{base}/marketplaces/12"):
         pass
 
-    assert requests[0] == "POST /api/tokens", "the home file's token was used"
+    assert requests[0] == "POST /api/v1/tokens", "the home file's token was used"
     assert bodies[0]["username"] == "lab|robot@lab"
 
 
