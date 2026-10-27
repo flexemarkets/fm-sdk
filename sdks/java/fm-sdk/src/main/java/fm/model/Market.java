@@ -1,5 +1,7 @@
 package fm.model;
 
+import fm.Decimals;
+
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 /**
@@ -33,6 +35,13 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
  *                       the session is open, or null when only a manager calls it
  * @param callCarry      for a call market, whether what a call leaves unfilled
  *                       waits for the next one; true when the server does not say
+ * @param priceDecimals  the decimal places a price, the price tick and the price
+ *                       bounds carry: at 2, a price of 5000 is 50.00; 2 when the
+ *                       server does not say. {@link Decimals} converts
+ * @param unitDecimals   the decimal places units, the unit tick and the unit
+ *                       bounds carry, and so the grants and holdings of this
+ *                       market's asset: at 0 units are whole; 0 when the server
+ *                       does not say
  */
 
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -51,7 +60,9 @@ public record Market(
     long unitTick,
     String mechanism,
     Integer callIntervalSeconds,
-    Boolean callCarry) {
+    Boolean callCarry,
+    Integer priceDecimals,
+    Integer unitDecimals) {
 
     /** The market trades continuously: an order trades when it crosses. */
     public static final String MECHANISM_CONTINUOUS = "CONTINUOUS";
@@ -62,11 +73,14 @@ public record Market(
     /**
      * The server's defaults, settled here once: a market from a server older
      * than call auctions, or one that leaves the fields out, is continuous,
-     * and a call market that does not say carries.
+     * and a call market that does not say carries. One from a server older
+     * than per-market decimals counts cents and whole units.
      */
     public Market {
         mechanism = null == mechanism ? MECHANISM_CONTINUOUS : mechanism;
         callCarry = null == callCarry || callCarry;
+        priceDecimals = null == priceDecimals ? Decimals.DEFAULT_PRICE_DECIMALS : priceDecimals;
+        unitDecimals = null == unitDecimals ? Decimals.DEFAULT_UNIT_DECIMALS : unitDecimals;
     }
 
     /**
@@ -91,6 +105,36 @@ public record Market(
             long unitMinimum, long unitMaximum, long unitTick) {
         this(id, marketplaceId, name, description, symbol, privateMarket, priceMinimum, priceMaximum, priceTick,
                 unitMinimum, unitMaximum, unitTick, MECHANISM_CONTINUOUS, null, true);
+    }
+
+    /**
+     * A market at the default scales, cents and whole units: the shape before
+     * per-market decimals, kept so code built against it (fm-robots copies a
+     * call market this way) still compiles.
+     *
+     * @param id                  the market's id
+     * @param marketplaceId       the marketplace it belongs to
+     * @param name                its name
+     * @param description         its description
+     * @param symbol              its symbol
+     * @param privateMarket       whether it is hidden from ordinary participants
+     * @param priceMinimum        the lowest legal price
+     * @param priceMaximum        the highest legal price
+     * @param priceTick           the price step
+     * @param unitMinimum         the smallest legal size
+     * @param unitMaximum         the largest legal size
+     * @param unitTick            the size step
+     * @param mechanism           how it trades; continuous when null
+     * @param callIntervalSeconds for a call market, the seconds between calls
+     * @param callCarry           for a call market, whether what a call leaves
+     *                            unfilled waits for the next one; true when null
+     */
+    public Market(long id, long marketplaceId, String name, String description, String symbol,
+            boolean privateMarket, long priceMinimum, long priceMaximum, long priceTick,
+            long unitMinimum, long unitMaximum, long unitTick, String mechanism,
+            Integer callIntervalSeconds, Boolean callCarry) {
+        this(id, marketplaceId, name, description, symbol, privateMarket, priceMinimum, priceMaximum, priceTick,
+                unitMinimum, unitMaximum, unitTick, mechanism, callIntervalSeconds, callCarry, null, null);
     }
 
     /**
