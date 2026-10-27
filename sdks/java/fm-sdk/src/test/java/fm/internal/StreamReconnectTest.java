@@ -2,6 +2,8 @@ package fm.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.lang.reflect.Proxy;
+import java.net.http.WebSocket;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -54,6 +56,8 @@ class StreamReconnectTest {
         volatile boolean closeOnSleep;
         /** Close this listener from inside an attempt that then fails. */
         volatile boolean closeOnConnect;
+        /** The socket connect() opens, when a test needs one to drop. */
+        volatile WebSocket opens;
 
         @Override
         void _sleep(long millis) throws InterruptedException {
@@ -74,6 +78,9 @@ class StreamReconnectTest {
         @Override
         void connect() {
             connects++;
+            if (opens != null) {
+                _webSocket = opens;
+            }
 
             CountDownLatch held = gate;
 
@@ -95,6 +102,17 @@ class StreamReconnectTest {
                 throw new ApiException("refused");
             }
         }
+    }
+
+    /** A socket that does nothing, for a drop to name. */
+    private static WebSocket _socket() {
+        return (WebSocket) Proxy.newProxyInstance(WebSocket.class.getClassLoader(),
+                new Class<?>[] {WebSocket.class}, (proxy, method, args) -> switch (method.getName()) {
+                    case "equals" -> proxy == args[0];
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "toString" -> "socket";
+                    default -> null;
+                });
     }
 
     private static Object _poll(BlockingQueue<Object> queue) throws InterruptedException {
@@ -298,5 +316,58 @@ class StreamReconnectTest {
 
         assertThat(listener.connects).isEqualTo(1);
         assertThat(listener.pauses).as("waits after the close").isEmpty();
+    }
+
+    /**
+     * The socket a reconnect has just opened can fall before that reconnect
+     * lets go -- it has announced itself, or not yet returned. Its drop was
+     * taken as part of the reconnect finishing and started nothing, and the
+     * stream stayed down with nothing to say so.
+     */
+    @Test
+    @Timeout(20)
+    void aDropOfTheNewSocketBeforeTheReconnectLetsGoIsRestoredToo() throws Exception {
+        BlockingQueue<Object> queue = new ArrayBlockingQueue<>(16);
+        var listener = new _Listener(queue);
+        listener.pauses = new ArrayList<>();
+        listener.opens = _socket();
+        listener.gate = new CountDownLatch(1);
+
+        listener.reconnectInBackground();
+        assertThat(listener.reachedGate.await(2, TimeUnit.SECONDS)).as("the reconnect is under way").isTrue();
+        listener.reconnectInBackground();
+        listener.gate.countDown();
+
+        assertThat(_poll(queue)).isInstanceOf(StreamReconnected.class);
+        assertThat(_poll(queue)).as("the second drop restored too").isInstanceOf(StreamReconnected.class);
+        assertThat(listener.connects).isEqualTo(2);
+        assertThat(listener.pauses).as("a socket that fell at once is a failure, and waits").hasSize(1);
+    }
+
+    /**
+     * onClose and onError of the socket being replaced can arrive while the
+     * reconnect is under way. They are the outage it is already restoring.
+     */
+    @Test
+    @Timeout(20)
+    void aBurstFromTheSocketBeingReplacedIsStillOneReconnect() throws Exception {
+        BlockingQueue<Object> queue = new ArrayBlockingQueue<>(16);
+        var listener = new _Listener(queue);
+        listener.pauses = new ArrayList<>();
+        var replaced = _socket();
+        listener._webSocket = replaced;
+        listener.opens = _socket();
+        listener.gate = new CountDownLatch(1);
+
+        listener.reconnectInBackground(replaced);
+        assertThat(listener.reachedGate.await(2, TimeUnit.SECONDS)).as("the reconnect is under way").isTrue();
+        for (int i = 0; i < 4; i++) {
+            listener.reconnectInBackground(replaced);
+        }
+        listener.gate.countDown();
+
+        assertThat(_poll(queue)).isInstanceOf(StreamReconnected.class);
+        assertThat(queue.poll(250, TimeUnit.MILLISECONDS)).as("one outage, one reconnect").isNull();
+        assertThat(listener.connects).isEqualTo(1);
     }
 }

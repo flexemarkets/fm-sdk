@@ -335,6 +335,12 @@ class EventListener:
         self._closed = False
         self._subscription_counter = 0
         self._reconnecting = threading.Lock()
+        # A socket that dropped while a reconnect held _reconnecting. If it is
+        # the one that reconnect opened, the drop is a new outage, restored
+        # once the reconnect lets go; if it is the one being replaced, it is
+        # the same outage and is let be. _late_drop makes taking it one step.
+        self._dropped_while_reconnecting: object | None = None
+        self._late_drop = threading.Lock()
         # Attempts that have failed in a row, and when the socket last opened:
         # together they pace reconnect().
         self._failures = 0
@@ -372,7 +378,7 @@ class EventListener:
         )
         self._thread.start()
 
-    def _on_stream_dropped(self, exc: BaseException) -> None:
+    def _on_stream_dropped(self, exc: BaseException, ws: object | None = None) -> None:
         """React to a dropped stream by restoring it, off the receive thread.
 
         The receive loop is dead by the time this runs and reconnect() sleeps
@@ -388,7 +394,14 @@ class EventListener:
         if self._closed:
             return
         self._queue.put(StreamDropped(exception=exc))
+        self._restore_in_background(ws if ws is not None else self._ws)
+
+    def _restore_in_background(self, dropped: object | None) -> None:
+        """The reconnect for a drop of ``dropped``, unless one is under way."""
         if not self._reconnecting.acquire(blocking=False):
+            self._dropped_while_reconnecting = dropped
+            # The reconnect may have let go, and looked, since the refusal.
+            self._take_up_late_drop()
             return
         opened = self._connected_at
         if opened is not None and time.monotonic() - opened < _STABLE_CONNECTION_SECONDS:
@@ -403,8 +416,24 @@ class EventListener:
                     self._queue.put(StreamReconnected(marketplace_id=self._marketplace_id))
             finally:
                 self._reconnecting.release()
+                # The socket this reconnect opened may already have fallen. A
+                # drop after the release starts its own reconnect; one before
+                # it was refused, and is taken up here.
+                self._take_up_late_drop()
 
         threading.Thread(target=_restore, name="fm-ws-reconnect", daemon=True).start()
+
+    def _take_up_late_drop(self) -> None:
+        """Restore a drop refused while a reconnect held the lock, once none
+        does -- if it was of the socket now in use. Both the reconnect letting
+        go and the refused drop call this, since either can be the last to
+        look; _late_drop leaves the drop to exactly one of them."""
+        if self._reconnecting.locked():
+            return
+        with self._late_drop:
+            late, self._dropped_while_reconnecting = self._dropped_while_reconnecting, None
+        if late is not None and late is self._ws:
+            self._restore_in_background(late)
 
     def reconnect(self) -> None:
         """Reconnect after a transport error.  Blocks until connected.
@@ -629,4 +658,4 @@ class EventListener:
 
         except Exception as exc:
             if ws is self._ws:
-                self._on_stream_dropped(exc)
+                self._on_stream_dropped(exc, ws)

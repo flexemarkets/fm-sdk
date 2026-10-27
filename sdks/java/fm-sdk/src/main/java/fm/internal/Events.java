@@ -138,7 +138,8 @@ public class Events implements Subscription {
     long connectedTimeoutMillis = CONNECTED_TIMEOUT_MS;
     long heartbeatIntervalMillis = TimeUnit.SECONDS.toMillis(HEARTBEAT_INTERVAL_SECONDS);
 
-    private volatile WebSocket _webSocket;
+    /** The socket in use; package-private so a test can stand one in. */
+    volatile WebSocket _webSocket;
     private volatile boolean _closed;
 
     /**
@@ -199,6 +200,14 @@ public class Events implements Subscription {
      */
     final java.util.concurrent.atomic.AtomicBoolean _reconnecting =
             new java.util.concurrent.atomic.AtomicBoolean();
+    /**
+     * A socket that dropped while a reconnect held {@link #_reconnecting}. If
+     * it is the one that reconnect opened, the drop is a new outage and is
+     * restored once the reconnect lets go; if it is the one being replaced,
+     * it is the same outage and is let be.
+     */
+    private final java.util.concurrent.atomic.AtomicReference<WebSocket> _droppedWhileReconnecting =
+            new java.util.concurrent.atomic.AtomicReference<>();
     private final AtomicInteger _subscriptionId = new AtomicInteger(0);
 
     /** {@code /v1} for fm-server's V1 subscribe, empty for the original one that carries the history. */
@@ -373,7 +382,20 @@ public class Events implements Subscription {
      * and TypeScript have covered all along.
      */
     void reconnectInBackground() {
-        if (_closed || !_reconnecting.compareAndSet(false, true)) {
+        reconnectInBackground(_webSocket);
+    }
+
+    /** {@link #reconnectInBackground()} for a drop of {@code dropped}. */
+    void reconnectInBackground(WebSocket dropped) {
+        if (_closed) {
+            return;
+        }
+        if (!_reconnecting.compareAndSet(false, true)) {
+            if (dropped != null) {
+                _droppedWhileReconnecting.set(dropped);
+                // The reconnect may have let go, and looked, since the refusal.
+                _takeUpLateDrop();
+            }
             return;
         }
         long opened = _connectedAt;
@@ -390,8 +412,28 @@ public class Events implements Subscription {
                 Thread.currentThread().interrupt();
             } finally {
                 _reconnecting.set(false);
+                // The socket this reconnect opened may already have fallen.
+                // A drop after the line above starts its own reconnect; one
+                // before it was refused, and is taken up here.
+                _takeUpLateDrop();
             }
         });
+    }
+
+    /**
+     * Restore a drop refused while a reconnect held the guard, once none does
+     * -- if it was of the socket now in use. Both the reconnect letting go and
+     * the refused drop call this, since either can be the last to look; the
+     * getAndSet leaves the drop to exactly one of them.
+     */
+    private void _takeUpLateDrop() {
+        if (_reconnecting.get()) {
+            return;
+        }
+        var late = _droppedWhileReconnecting.getAndSet(null);
+        if (late != null && late == _webSocket) {
+            reconnectInBackground(late);
+        }
     }
 
     @Override
@@ -608,7 +650,7 @@ public class Events implements Subscription {
             if (!_closed && webSocket == _webSocket) {
                 _queue.offer(new StreamDropped(
                     new Exception("WebSocket closed: %d %s".formatted(statusCode, reason))));
-                reconnectInBackground();
+                reconnectInBackground(webSocket);
             }
             return CompletableFuture.completedFuture(null);
         }
@@ -617,7 +659,7 @@ public class Events implements Subscription {
         public void onError(WebSocket webSocket, Throwable error) {
             if (webSocket != _webSocket) return; // one this client closed
             _queue.offer(new StreamDropped(error));
-            reconnectInBackground();
+            reconnectInBackground(webSocket);
         }
     }
 }
