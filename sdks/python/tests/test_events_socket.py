@@ -145,6 +145,21 @@ def test_connecting_presents_the_token_and_subscribes_to_the_marketplace(server,
     assert "destination:/app/v1/marketplaces/7" in subscribes[2]
 
 
+def test_connecting_raises_no_deprecation_warning(server, events, listener):
+    """websockets 17.1 deprecated using connect()'s return value directly: it
+    still connects, but warns on the first send, and its future default hands
+    back a connector that has not connected at all -- every stream this SDK
+    opens would then fail on its first frame. fm-sdk accepts websockets>=13,
+    so a fresh install meets that release the day it ships."""
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        listener()
+
+    _await("CONNECT", lambda: len(server.received[0]) >= 1)
+
+
 def test_a_history_subscribe_asks_for_the_session_s_orders(server, events):
     """fm-server's original subscribe: its first ORDERS-UPDATE is the whole session.
 
