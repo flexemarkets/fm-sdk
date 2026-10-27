@@ -193,8 +193,11 @@ public class Events implements Subscription {
     /** When the socket last opened ({@link System#nanoTime()}), or {@link Long#MIN_VALUE} before it ever has. */
     volatile long _connectedAt = Long.MIN_VALUE;
 
-    /** One reconnect at a time: onClose and onError can both fire for one drop. */
-    private final java.util.concurrent.atomic.AtomicBoolean _reconnecting =
+    /**
+     * One reconnect at a time: onClose and onError can both fire for one drop.
+     * Package-private so a test can wait for one to let go before the next drop.
+     */
+    final java.util.concurrent.atomic.AtomicBoolean _reconnecting =
             new java.util.concurrent.atomic.AtomicBoolean();
     private final AtomicInteger _subscriptionId = new AtomicInteger(0);
 
