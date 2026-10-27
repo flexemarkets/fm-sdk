@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import queue
+import random
 import threading
 import time
 from dataclasses import dataclass, field
@@ -31,6 +32,21 @@ _HEARTBEAT_MS = 30_000
 _HEARTBEAT_INTERVAL_SECONDS = 25.0
 _HEROKU_IDLE_TIMEOUT_MS = 55_000
 _INBOUND_MESSAGE_SIZE = 128 * 1024 * 1024  # 128 MB
+
+# Reconnecting after a drop. The first attempt is at once; each that fails
+# waits longer, doubling from 2 s to a minute, and each wait is drawn from the
+# upper half of its range, so clients dropped together -- every robot in a
+# classroom when fm-server restarts -- do not all come back in the same
+# instant. A fixed 2 s brought them back in step, every one asking for its
+# session's history at once.
+#
+# A connection that falls within a minute of opening counts as an attempt
+# that failed, not a recovery. fm-server closes a session whose history
+# overflows its send buffer; a client that reconnected at once, asked for the
+# same history and was closed again did so every 2 s for as long as it ran.
+_RECONNECT_FIRST_PAUSE_SECONDS = 2.0
+_RECONNECT_MAX_PAUSE_SECONDS = 60.0
+_STABLE_CONNECTION_SECONDS = 60.0
 _NULL = "\x00"
 
 
@@ -106,6 +122,13 @@ def _decode_frame(raw: str) -> StompFrame:
 # ---------------------------------------------------------------------------
 # Error / transport event types put onto the queue
 # ---------------------------------------------------------------------------
+
+def _reconnect_pause(failures: int, draw: Callable[[float, float], float] | None = None) -> float:
+    """The wait before the next attempt, after *failures* in a row (one or more)."""
+    ceiling = min(_RECONNECT_MAX_PAUSE_SECONDS,
+                  _RECONNECT_FIRST_PAUSE_SECONDS * 2 ** min(failures - 1, 16))
+    return (draw or random.uniform)(ceiling / 2, ceiling)
+
 
 def _is_auth_refusal(failure: BaseException) -> bool:
     """Whether the handshake was refused for who we are, not for what the
@@ -312,6 +335,10 @@ class EventListener:
         self._closed = False
         self._subscription_counter = 0
         self._reconnecting = threading.Lock()
+        # Attempts that have failed in a row, and when the socket last opened:
+        # together they pace reconnect().
+        self._failures = 0
+        self._connected_at: float | None = None
 
         # Sends the heartbeats this client promises.
         #
@@ -336,6 +363,7 @@ class EventListener:
         self._stomp_connect()
         self._subscribe()
         self._start_heartbeats()
+        self._connected_at = time.monotonic()
 
         self._thread = threading.Thread(
             target=self._receive_loop,
@@ -362,6 +390,11 @@ class EventListener:
         self._queue.put(StreamDropped(exception=exc))
         if not self._reconnecting.acquire(blocking=False):
             return
+        opened = self._connected_at
+        if opened is not None and time.monotonic() - opened < _STABLE_CONNECTION_SECONDS:
+            self._failures += 1
+        else:
+            self._failures = 0
 
         def _restore() -> None:
             try:
@@ -374,15 +407,25 @@ class EventListener:
         threading.Thread(target=_restore, name="fm-ws-reconnect", daemon=True).start()
 
     def reconnect(self) -> None:
-        """Reconnect after a transport error.  Blocks until connected."""
+        """Reconnect after a transport error.  Blocks until connected.
+
+        Paced by the failures before it (see _RECONNECT_FIRST_PAUSE_SECONDS):
+        at once after a stream that had held, later and later after attempts
+        that failed or connections that fell straight away.
+        """
         renewed = False
         while not self._closed:
+            if self._failures:
+                time.sleep(_reconnect_pause(self._failures))
+                if self._closed:
+                    return
             try:
                 self._disconnect()
                 self._ws = self._connect()
                 self._stomp_connect()
                 self._subscribe()
                 self._start_heartbeats()
+                self._connected_at = time.monotonic()
 
                 self._thread = threading.Thread(
                     target=self._receive_loop,
@@ -418,7 +461,7 @@ class EventListener:
                         "or was signed for another server; reconnecting cannot fix it."
                     )))
                     return
-                time.sleep(2)
+                self._failures += 1
 
     def close(self) -> None:
         """Disconnect and stop the background thread."""

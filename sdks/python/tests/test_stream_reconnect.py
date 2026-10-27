@@ -216,9 +216,94 @@ def test_a_failure_that_is_not_a_refusal_is_retried_after_a_pause(monkeypatch) -
     listener.reconnect()
 
     assert listener.connects == 3, "one failed attempt, then one that succeeded"
-    assert pauses == [2]
+    assert len(pauses) == 1 and 1 <= pauses[0] <= 2
     assert q.empty(), "a blip is not reported as a refusal"
     listener.close()
+
+
+def test_each_wait_is_drawn_from_the_upper_half_of_a_range_that_doubles_to_a_minute() -> None:
+    from fm.events import _reconnect_pause
+
+    ranges = [_reconnect_pause(n, lambda lo, hi: (lo, hi)) for n in range(1, 9)]
+
+    assert ranges == [(1, 2), (2, 4), (4, 8), (8, 16), (16, 32), (30, 60), (30, 60), (30, 60)]
+    assert _reconnect_pause(10_000, lambda lo, hi: hi) == 60, "no overflow, however long it has failed"
+
+
+def _paced(monkeypatch) -> list[float]:
+    """Each pause taken, at the top of its range."""
+    from fm import events as fm_events
+
+    pauses: list[float] = []
+    monkeypatch.setattr(fm_events.time, "sleep", pauses.append)
+    monkeypatch.setattr(fm_events.random, "uniform", lambda lo, hi: hi)
+    return pauses
+
+
+def test_failed_attempts_wait_longer_and_longer(monkeypatch) -> None:
+    """Clients dropped together -- a classroom when fm-server restarts -- must
+    not keep coming back in step every two seconds."""
+    pauses = _paced(monkeypatch)
+    listener = _Listener(queue.Queue())
+    listener.start()
+    listener.fail_connects = 4
+
+    listener.reconnect()
+
+    assert listener.connects == 5
+    assert pauses == [2, 4, 8]
+    listener.close()
+
+
+def _dropped(listener: _Listener, q: "queue.Queue[object]") -> None:
+    listener._on_stream_dropped(OSError("closed"))
+    while not isinstance(q.get(timeout=5.0), StreamReconnected):
+        pass
+
+
+def test_a_stream_that_held_is_restored_at_once(monkeypatch) -> None:
+    from fm import events as fm_events
+
+    pauses = _paced(monkeypatch)
+    q: queue.Queue[object] = queue.Queue()
+    listener = _Listener(q)
+    listener.start()
+    listener._connected_at -= fm_events._STABLE_CONNECTION_SECONDS + 1
+
+    _dropped(listener, q)
+
+    assert pauses == []
+    listener.close()
+
+
+def test_a_connection_that_falls_straight_away_is_a_failure_and_waits_longer_each_time(monkeypatch) -> None:
+    """fm-server closes a session whose history overflows its send buffer. The
+    reconnect asks for the same history and is closed again; at once, every
+    time, that was a loop."""
+    pauses = _paced(monkeypatch)
+    q: queue.Queue[object] = queue.Queue()
+    listener = _Listener(q)
+    listener.start()
+
+    _dropped(listener, q)
+    _dropped(listener, q)
+    _dropped(listener, q)
+
+    assert pauses == [2, 4, 8]
+    listener.close()
+
+
+def test_a_listener_closed_while_waiting_does_not_connect_again(monkeypatch) -> None:
+    from fm import events as fm_events
+
+    listener = _Listener(queue.Queue())
+    listener.start()
+    listener._failures = 3
+    monkeypatch.setattr(fm_events.time, "sleep", lambda _s: listener.close())
+
+    listener.reconnect()
+
+    assert listener.connects == 1
 
 
 def test_a_heartbeat_that_cannot_be_written_stops_the_beating(monkeypatch) -> None:
