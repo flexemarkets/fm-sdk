@@ -65,7 +65,7 @@ class AdminApiTest {
     void startServer() throws IOException {
         _server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 
-        _server.createContext("/api/tokens", exchange ->
+        _server.createContext("/api/v1/tokens", exchange ->
                 _respond(exchange, 200, """
                     {"token":"%s",
                      "person":{"id":7,"accountId":1,"email":"dev@dev","roles":%s},
@@ -138,7 +138,7 @@ class AdminApiTest {
             }
         });
 
-        _server.createContext("/api/otp/manager", exchange -> {
+        _server.createContext("/api/v1/otp/manager", exchange -> {
             _record(exchange);
             _respond(exchange, 200, """
                 {"expiresAt":"2026-08-15T18:00:00Z",
@@ -563,7 +563,7 @@ class AdminApiTest {
             assertThat(entry.userId()).isEqualTo(1L);
             assertThat(entry.otp()).isEqualTo("123456");
         });
-        assertThat(_bodyOf("POST /api/otp/manager")).contains("\"userIds\":[1,2]");
+        assertThat(_bodyOf("POST /api/v1/otp/manager")).contains("\"userIds\":[1,2]");
     }
 
     /**

@@ -72,8 +72,8 @@ class Handler(BaseHTTPRequestHandler):
 @pytest.fixture
 def base() -> str:
     answers.clear()
-    answers["/api/tokens"] = (200, SIGNED_IN, None)
-    answers["/api/tokens/refresh"] = (200, SIGNED_IN, None)
+    answers["/api/v1/tokens"] = (200, SIGNED_IN, None)
+    answers["/api/v1/tokens/refresh"] = (200, SIGNED_IN, None)
     ANSWER[0] = UNANSWERED
     httpd = HTTPServer(("127.0.0.1", 0), Handler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
@@ -147,7 +147,7 @@ def test_anything_else_is_a_typed_http_error_carrying_its_status(base: str) -> N
 # --- sign-in and snapshots, as Java's SignInAndSnapshotFailureTest ----------
 
 def test_a_refused_password_is_an_authentication_failure_carrying_the_servers_sentence(base: str, tmp_path: Path) -> None:
-    answers["/api/tokens"] = (401, _refusal("ACCOUNT_INVALID_CREDENTIALS", "Wrong password.", 401), None)
+    answers["/api/v1/tokens"] = (401, _refusal("ACCOUNT_INVALID_CREDENTIALS", "Wrong password.", 401), None)
     credential = tmp_path / "credential"
     credential.write_text("account=dev\nemail=dev@dev\npassword=nope\n")
 
@@ -157,7 +157,7 @@ def test_a_refused_password_is_an_authentication_failure_carrying_the_servers_se
 
 
 def test_a_refused_token_fails_at_connect_saying_why(base: str) -> None:
-    answers["/api/tokens/refresh"] = (401, _refusal("TOKEN_EXPIRED", "Token expired.", 401), None)
+    answers["/api/v1/tokens/refresh"] = (401, _refusal("TOKEN_EXPIRED", "Token expired.", 401), None)
 
     with pytest.raises(AuthenticationError) as e:
         _connect(base)

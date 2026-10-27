@@ -1006,7 +1006,7 @@ class Flexemarkets:
         which stops working after hours while the robot runs on.
         """
         resp = self._http.post(
-            _server(self._endpoint) + "/tokens/renew",
+            _v1(self._endpoint, "/tokens/renew"),
             json={"refreshToken": self._refresh_token},
             headers={"Accept": "application/json"},
         )
@@ -1033,7 +1033,7 @@ class Flexemarkets:
             # SDK and the TypeScript one never had it, so token auth returned
             # 400 in both from the day it was written.
             resp = self._http.post(
-                _server(self._endpoint) + "/tokens/refresh",
+                _v1(self._endpoint, "/tokens/refresh"),
                 headers={
                     "Authorization": f"Bearer {tok}",
                     "Accept": "application/json",
@@ -1053,7 +1053,7 @@ class Flexemarkets:
         if not password:
             raise ConfigurationError("Missing 'password' in configuration.")
 
-        auth_url = _server(self._endpoint) + "/tokens"
+        auth_url = _v1(self._endpoint, "/tokens")
         resp = self._http.post(
             auth_url,
             json={"username": f"{acct}|{email}", "password": password},
@@ -1126,7 +1126,7 @@ class Flexemarkets:
         These are credentials: not to be logged, not to be persisted, and
         delivered to the person they belong to.
         """
-        url = _server(self._endpoint) + "/otp/manager"
+        url = _v1(self._endpoint, "/otp/manager")
         data = _json(self._post(url, {"userIds": user_ids}))
         return ManagerOtpBundle(
             expires_at=_timestamp(data.get("expiresAt")),
@@ -1702,9 +1702,15 @@ class Flexemarkets:
 
     def all_widgets(self, marketplace_id: int) -> list[Widget]:
         """Every widget pushed to the marketplace and still standing, for every
-        participant -- what a manager reads to check on a robot."""
+        participant -- what a manager reads to check on a robot.
+
+        The answer is the frame every widgets read answers, ``{marketplaceId,
+        snapshot, widgets, removed}``; a bare list, which ``widgets/all``
+        answered and 0.4.0 to 0.11.0 expected here, is read too."""
         url = _marketplace(self._endpoint, marketplace_id) + "/widgets?participant=all"
-        return [_parse_widget(w) for w in _json(self._get(url))]
+        body = _json(self._get(url))
+        widgets = body if isinstance(body, list) else body.get("widgets") or []
+        return [_parse_widget(w) for w in widgets]
 
     def clear_now(self, marketplace_id: int, market_id: int) -> MarketCall:
         """Clear a call-auction market now: every crossing order trades at one
@@ -1865,7 +1871,7 @@ class Flexemarkets:
         """
         from .events import EventListener
 
-        ws_url = _server(self._endpoint).replace("https://", "wss://").replace("http://", "ws://") + "/events"
+        ws_url = _v1(self._endpoint, "/events").replace("https://", "wss://").replace("http://", "ws://")
         ev = EventListener(
             ws_url=ws_url,
             bearer_token=self._bearer_token,

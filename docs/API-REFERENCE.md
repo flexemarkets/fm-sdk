@@ -45,8 +45,12 @@ Authorization: Bearer <token>
 
 ### Exchange credentials for a token
 
+Every route here is under `/api/v1`, as every route the SDKs call is (fm-server
+4.16.0 and later). The same routes still answer without the `/v1` -- at
+`/api/tokens`, `/api/otp` -- for clients written before it.
+
 ```http
-POST /api/tokens
+POST /api/v1/tokens
 Content-Type: application/json
 
 {"username": "<account>|<email>", "password": "<password>"}
@@ -57,7 +61,7 @@ the token in an `Authorization` response header:
 
 ```json
 {
-  "requestUrl": "https://api.flexemarkets.com/api/tokens",
+  "requestUrl": "https://api.flexemarkets.com/api/v1/tokens",
   "token": "eyJhbGciOiJIUzUxMiJ9…",
   "person": { "id": 123, "email": "user@example.com", … },
   "account": { "id": 45, "name": "myaccount", … }
@@ -69,11 +73,11 @@ roles without a second round trip.
 
 | Endpoint | Purpose |
 |----------|---------|
-| `POST /api/tokens` | credential body (above) → token |
-| `POST /api/tokens/basic` | same result from an HTTP Basic header, `account\|email:password` |
-| `POST /api/tokens/refresh` | re-issue a token for the current session; `401` once the user or account is gone (`GET` also answers, for older clients) |
+| `POST /api/v1/tokens` | credential body (above) → token |
+| `POST /api/v1/tokens/basic` | same result from an HTTP Basic header, `account\|email:password` |
+| `POST /api/v1/tokens/refresh` | re-issue a token for the current session; `401` once the user or account is gone (`GET` also answers, for older clients) |
 
-Already holding a bearer token? `POST /api/tokens` with the token in the
+Already holding a bearer token? `POST /api/v1/tokens` with the token in the
 `Authorization` header and an empty password exchanges it for the full
 `TokenResult` above — this is what the SDKs do when `~/.fm/credential` contains
 a `token=` line instead of a password.
@@ -87,10 +91,10 @@ To drive many participants at once — running robots, replaying a session — a
 **manager** mints short-lived one-time passwords instead of collecting each
 participant's password.
 
-**1. Mint (manager only).** `POST /api/otp/manager` requires `ROLE_MANAGER`:
+**1. Mint (manager only).** `POST /api/v1/otp/manager` requires `ROLE_MANAGER`:
 
 ```http
-POST /api/otp/manager
+POST /api/v1/otp/manager
 Authorization: Bearer <manager token>
 Content-Type: application/json
 
@@ -111,10 +115,10 @@ Every id must belong to the manager's own account. A single unknown or
 cross-account id refuses the **whole batch** with `403 ACCESS_DENIED` — mint per
 batch, not per stray id. Bundle OTPs live for **five minutes**.
 
-**2. Redeem.** `GET /api/otp?otp=<otp>` returns a `TokenResult` for that user.
+**2. Redeem.** `GET /api/v1/otp?otp=<otp>` returns a `TokenResult` for that user.
 Each OTP is single-use.
 
-`POST /api/otp` is the *other* direction — it mints a single OTP from a
+`POST /api/v1/otp` is the *other* direction — it mints a single OTP from a
 credential body, for handing a signed-in session to another process. It does not
 redeem.
 
@@ -572,7 +576,7 @@ right against a server on either side of that change.
 STOMP 1.2 over a raw WebSocket. No SockJS fallback.
 
 ```
-wss://api.flexemarkets.com/api/events
+wss://api.flexemarkets.com/api/v1/events
 ```
 
 The same bearer token authenticates the connection, by either route:

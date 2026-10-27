@@ -77,7 +77,7 @@ class RouteFixturesTest {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/", exchange -> {
             String path = exchange.getRequestURI().getRawPath();
-            if (path.startsWith("/api/tokens")) {
+            if (path.startsWith("/api/v1/tokens")) {
                 _respond(exchange, 200, "application/json", """
                     {"token":"%s","person":{"id":7,"accountId":1,"email":"dev@dev","roles":["ROLE_USER"]},
                      "account":{"id":1,"name":"dev"}}""".formatted(TOKEN));

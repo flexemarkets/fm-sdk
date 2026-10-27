@@ -27,7 +27,7 @@ before(async () => {
     req.resume();
     req.on("end", () => {
       const path = (req.url ?? "").split("?")[0];
-      const signIn = path.startsWith("/api/tokens");
+      const signIn = path.startsWith("/api/v1/tokens");
       if (!signIn) timings.push((req.headers["client-timing"] as string | undefined) ?? null);
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (serverTiming !== null) headers["Server-Timing"] = serverTiming;

@@ -56,7 +56,7 @@ class UserAgentTest {
     void theWireCarriesIt() throws Exception {
         List<String> agents = new CopyOnWriteArrayList<>();
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        server.createContext("/api/tokens", exchange -> {
+        server.createContext("/api/v1/tokens", exchange -> {
             agents.add(String.valueOf(exchange.getRequestHeaders().getFirst("User-Agent")));
             _respond(exchange, """
                 {"token":"%s",

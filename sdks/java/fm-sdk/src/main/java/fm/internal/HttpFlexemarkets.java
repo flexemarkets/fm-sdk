@@ -741,7 +741,7 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     @Override
     public ManagerOtpBundle managerOtpBundle(List<Long> userIds) {
-        return _post(server(endpointUrl()) + "/otp/manager",
+        return _post(_v1("/otp/manager"),
                     new ManagerOtpRequest(userIds), OTP_BUNDLE_TYPE);
     }
 
@@ -1018,9 +1018,17 @@ public class HttpFlexemarkets implements Flexemarkets {
         return java.net.URLEncoder.encode(key, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
+    /**
+     * The widgets of the frame every widgets read answers, {@code {marketplaceId,
+     * snapshot, widgets, removed}}. A bare list is read too: {@code widgets/all},
+     * which this read replaced, answered one, and 0.4.0 to 0.11.0 expected it
+     * here, failing on every call.
+     */
     @Override
     public List<Widget> allWidgets(long marketplaceId) {
-        return List.copyOf(_get(_marketplace(marketplaceId) + "/widgets?participant=all", WIDGETS_TYPE));
+        JsonNode body = _get(_marketplace(marketplaceId) + "/widgets?participant=all", SNAPSHOT_TYPE);
+        JsonNode widgets = body.isArray() ? body : body.path("widgets");
+        return widgets.isArray() ? List.of(MAPPER.treeToValue(widgets, Widget[].class)) : List.of();
     }
 
     @Override
@@ -1667,7 +1675,9 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     private Token _signIn() {
-        var endpoint = server(endpointUrl()) + "/tokens";
+        // /api/v1/tokens, as every route the SDK calls is V1 (fm-server
+        // 4.16.0); /api/tokens answers the same for older clients.
+        var endpoint = _v1("/tokens");
         if (_refreshToken != null) {
             return _renewWithRefreshToken(endpoint);
         }
@@ -1839,7 +1849,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     private String _wsUrl() {
-        return server(endpointUrl()).replaceFirst("http", "ws") + "/events";
+        return _v1("/events").replaceFirst("http", "ws");
     }
 
     // --- V1 routes ---

@@ -36,7 +36,7 @@ async function withServer(
   const server = http.createServer((req, res) => {
     requests.push(`${req.method} ${req.url}`);
 
-    if (req.method === "POST" && req.url === "/api/tokens/refresh") {
+    if (req.method === "POST" && req.url === "/api/v1/tokens/refresh") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         token: TOKEN,
@@ -75,7 +75,7 @@ test("a token connects through the refresh route", async () => {
     }
 
     // The refresh is the whole of connecting: 0.4 reads no API root.
-    assert.deepEqual(requests, ["POST /api/tokens/refresh"]);
+    assert.deepEqual(requests, ["POST /api/v1/tokens/refresh"]);
   });
 });
 
@@ -86,7 +86,7 @@ test("a token never posts to /tokens", async () => {
     await fm.close();
 
     assert.ok(
-      !requests.includes("POST /api/tokens"),
+      !requests.includes("POST /api/v1/tokens"),
       requests.join(", "),
     );
   });

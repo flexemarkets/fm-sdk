@@ -97,7 +97,7 @@ before(async () => {
 
       const url = req.url ?? "";
       const mp = "/api/v1/marketplaces/1";
-      if (url.startsWith("/api/tokens")) {
+      if (url.startsWith("/api/v1/tokens")) {
         send({
           token: TOKEN,
           person: { id: 7, accountId: 1, email: "dev@dev", roles: ["ROLE_MANAGER"] },
@@ -141,7 +141,7 @@ before(async () => {
       } else if (url === "/api/v1/accounts/2/approvals" && req.method === "POST") {
         res.writeHead(201, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ account: { id: 2, name: "acme", approval: true }, approve: true }));
-      } else if (url === "/api/otp/manager" && req.method === "POST") {
+      } else if (url === "/api/v1/otp/manager" && req.method === "POST") {
         send({
           expiresAt: "2026-08-15T18:00:00Z",
           otps: [{ userId: 1, email: "alice@lab.edu", otp: "123456" }],
@@ -595,7 +595,7 @@ test("otp bundles are minted for the users asked", async () => {
     fm.close();
   }
 
-  assert.ok(bodies.get("POST /api/otp/manager")!.includes('"userIds":[1,2]'));
+  assert.ok(bodies.get("POST /api/v1/otp/manager")!.includes('"userIds":[1,2]'));
 });
 
 test("isAdmin reads the roles on the token", async () => {
