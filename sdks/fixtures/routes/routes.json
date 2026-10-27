@@ -1640,7 +1640,7 @@
       "requests": [
         {
           "method": "POST",
-          "path": "/api/otp/manager",
+          "path": "/api/v1/otp/manager",
           "body": {
             "userIds": [
               7
