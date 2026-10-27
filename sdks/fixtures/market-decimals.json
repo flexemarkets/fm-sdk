@@ -1,0 +1,29 @@
+{
+  "type": "Market",
+  "why": "A market that says its own scale (fm-server#1059). Read without priceDecimals and unitDecimals, every SDK assumes cents and whole units and shows 1.2345 as $123.45. priceDecimals is 0 on purpose: a parser that defaults on a falsey value rather than an absent one reads it as 2.",
+  "source": {
+    "constructed": "fm-server does not send priceDecimals or unitDecimals yet (fm-server#1060); this is the shape docs/PRICE-SCALE.md section 3.1 gives them, with values that differ from both defaults."
+  },
+  "payload": {
+    "id": 13,
+    "marketplaceId": 3050,
+    "name": "Grain",
+    "description": "whole dollars, thousandths of a tonne",
+    "symbol": "GRN",
+    "privateMarket": false,
+    "priceMinimum": 1,
+    "priceMaximum": 500,
+    "priceTick": 1,
+    "unitMinimum": 1,
+    "unitMaximum": 100000,
+    "unitTick": 1,
+    "priceDecimals": 0,
+    "unitDecimals": 3
+  },
+  "expect": {
+    "id": 13,
+    "symbol": "GRN",
+    "priceDecimals": 0,
+    "unitDecimals": 3
+  }
+}

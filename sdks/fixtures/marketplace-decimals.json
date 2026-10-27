@@ -1,0 +1,49 @@
+{
+  "type": "Marketplace",
+  "why": "A marketplace that says its cash scale, holding one market that says its scales and one that sends them as null (fm-server#1059). Without it cash is read as cents whatever the server says, and a null decimal count comes through as null or zero rather than the default.",
+  "source": {
+    "constructed": "fm-server does not send cashDecimals, priceDecimals or unitDecimals yet (fm-server#1060); this is the shape docs/PRICE-SCALE.md section 3.1 gives them, with cashDecimals = priceDecimals + unitDecimals for the first market."
+  },
+  "payload": {
+    "id": 3051,
+    "name": "Fine",
+    "description": "prices to the hundredth of a cent",
+    "cashDecimals": 5,
+    "markets": [
+      {
+        "id": 21,
+        "marketplaceId": 3051,
+        "symbol": "FX",
+        "priceMinimum": 1,
+        "priceMaximum": 1000000,
+        "priceTick": 1,
+        "unitMinimum": 1,
+        "unitMaximum": 1000,
+        "unitTick": 1,
+        "priceDecimals": 4,
+        "unitDecimals": 1
+      },
+      {
+        "id": 22,
+        "marketplaceId": 3051,
+        "symbol": "OLD",
+        "priceMinimum": 1,
+        "priceMaximum": 10000,
+        "priceTick": 1,
+        "unitMinimum": 1,
+        "unitMaximum": 100,
+        "unitTick": 1,
+        "priceDecimals": null,
+        "unitDecimals": null
+      }
+    ]
+  },
+  "expect": {
+    "id": 3051,
+    "cashDecimals": 5,
+    "markets": [
+      { "id": 21, "priceDecimals": 4, "unitDecimals": 1 },
+      { "id": 22, "priceDecimals": 2, "unitDecimals": 0 }
+    ]
+  }
+}

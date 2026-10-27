@@ -243,6 +243,16 @@ private. Its book is sealed: a participant sees their own resting orders and
 the trades, not other resting orders. A market from a server without call
 auctions reads as continuous.
 
+Every price, unit and cash amount is an integer counting the smallest step of
+its scale, and the scale is on the wire: a market's `priceDecimals` (prices,
+the price tick and bounds) and `unitDecimals` (units, the unit tick and
+bounds, grants and holdings of its asset), and a marketplace's `cashDecimals`
+(cash, available cash, starting capital, payoffs). At `priceDecimals` 2 a price
+of 5000 is 50.00. A server that does not send them means 2, 0 and 2 -- cents
+and whole units -- and every SDK reads them so: `price_decimals` and so on in
+Python. `Decimals.format` and `Decimals.parse` convert exactly, and `parse`
+refuses text with more decimal places than the scale rather than rounding it.
+
 | | add a call market | Clear now | the calls |
 |---|---|---|---|
 | Java | `createCallMarket(marketplaceId, symbol, name, price, units, Integer intervalSeconds, boolean carry)` | `MarketCall clearNow(marketplaceId, marketId)` | `List<MarketCall> calls(marketplaceId)`, and `(…, long sessionId)` |

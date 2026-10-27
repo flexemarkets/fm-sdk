@@ -999,6 +999,74 @@ def check_exports(verbose: bool) -> list[str]:
     return problems
 
 
+# --- static surface ---------------------------------------------------------
+#
+# The read-side check drops statics on purpose: there they are construction
+# idiom. A holder of static functions is the opposite case -- its statics are
+# all it has -- so it is read here instead. Decimals is the one place each SDK
+# turns an integer amount into decimal text and back; a format() or a default
+# scale present in one SDK and missing in another is a display or a parser that
+# one set of callers writes by hand, which is what the module exists to stop.
+STATIC_SURFACE = {
+    "Decimals": ("Decimals.java", ("decimals.py", "Decimals"), ("decimals.ts", "Decimals")),
+}
+
+
+def _java_statics(path: Path) -> set[str]:
+    source = re.sub(r"/\*.*?\*/", " ", path.read_text(), flags=re.S)
+    members = set(re.findall(r"^    public static (?:final )?[\w<>\[\]]+ (\w+)\s*[(=]",
+                             source, re.M))
+    return members
+
+
+def _python_statics(path: Path, name: str) -> set[str]:
+    source = path.read_text()
+    start = re.search(rf"^class {name}\b", source, re.M)
+    if not start:
+        return set()
+    body = source[start.start():]
+    following = re.search(r"\n(?:class|def) ", body)
+    if following:
+        body = body[: following.start()]
+    methods = re.findall(r"^    @staticmethod\n    def ([a-z]\w*)\(", body, re.M)
+    constants = re.findall(r"^    ([A-Z][A-Z0-9_]*)\s*=", body, re.M)
+    return {camel(m) for m in methods} | set(constants)
+
+
+def _typescript_statics(path: Path, name: str) -> set[str]:
+    source = path.read_text()
+    start = re.search(rf"class {name}\b", source)
+    if not start:
+        return set()
+    body = source[start.start():]
+    following = re.search(r"\n}\n", body)
+    if following:
+        body = body[: following.start()]
+    return set(re.findall(r"^  static (?:readonly )?(\w+)\s*[(=:<]", body, re.M))
+
+
+def check_statics(verbose: bool) -> list[str]:
+    problems: list[str] = []
+    for name, (java_file, (py_module, py_class), (ts_module, ts_class)) in \
+            sorted(STATIC_SURFACE.items()):
+        sides = (("java", _java_statics(JAVA / java_file)),
+                 ("python", _python_statics(PYTHON_PKG / py_module, py_class)),
+                 ("typescript", _typescript_statics(TYPESCRIPT_SRC / ts_module, ts_class)))
+        if not all(members for _, members in sides):
+            return [f"{name}: a reader found no statics; it is broken, not the SDKs"]
+        every = set().union(*(members for _, members in sides))
+        for member in sorted(every):
+            missing = [lang for lang, members in sides if member not in members]
+            if missing:
+                present = [lang for lang, members in sides if member in members]
+                problems.append(f"{name}.{member} is on {', '.join(present)} but not "
+                                f"{', '.join(missing)}")
+        if verbose:
+            print(f"  {name:20s} " + ", ".join(f"{lang} {len(m)}" for lang, m in sides)
+                  + " static members")
+    return problems
+
+
 def main() -> int:
     verbose = "--verbose" in sys.argv
 
@@ -1154,8 +1222,21 @@ def main() -> int:
         )
         return 1
 
+    static_problems = check_statics(verbose)
+    if static_problems:
+        print(f"\nparity: the SDKs disagree about {len(static_problems)} static member(s):\n",
+              file=sys.stderr)
+        for problem in static_problems:
+            print(f"  - {problem}", file=sys.stderr)
+        print(
+            "\nA conversion one SDK offers and another does not is arithmetic that "
+            "callers of the other write by hand, and Decimals exists so that nobody does.",
+            file=sys.stderr,
+        )
+        return 1
+
     print(f"parity ok: {len(shared)} shared types agree on their wire fields, "
-          f"the client and read-side surfaces agree, the same failures are "
+          f"the client, read-side and static surfaces agree, the same failures are "
           f"catchable in each, and the three export the same names")
     return 0
 

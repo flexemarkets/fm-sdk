@@ -76,6 +76,9 @@ export {
 
 export { toInstant } from "./timestamps.js";
 
+// Amounts as decimal text, exactly -- the one place a power of ten is applied.
+export { Decimals } from "./decimals.js";
+
 // Order utils -- what can only be worked out from a set of orders together.
 //
 // isBuy, isSell, isCancel and isLimit are deliberately not here. They became

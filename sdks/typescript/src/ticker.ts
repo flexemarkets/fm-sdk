@@ -9,24 +9,28 @@ import { Flexemarkets } from "./client.js";
 import type { Desk } from "./desk.js";
 import type { Session } from "./types.js";
 import { SESSION_STATE_CLOSED } from "./types.js";
+import { Decimals } from "./decimals.js";
 
 const TRADE_DISPLAY_COUNT = 5;
 
+// Prices at today's fixed scale, until markets carry their own.
+const PRICE_DECIMALS = Decimals.DEFAULT_PRICE_DECIMALS;
+
 function price(value: number): string {
   if (value < 0) return "     -";
-  return `$${(value / 100).toFixed(2).padStart(5)}`;
+  return `$${Decimals.format(value, PRICE_DECIMALS).padStart(5)}`;
 }
 
 function spread(bid: number, ask: number): string {
   if (bid < 0 || ask < 0) return "     -";
-  return `$${((ask - bid) / 100).toFixed(2).padStart(5)}`;
+  return `$${Decimals.format(ask - bid, PRICE_DECIMALS).padStart(5)}`;
 }
 
 function tradePrices(prices: number[], count: number): string {
   const recent = prices.length > count ? prices.slice(-count) : prices;
   return [...recent]
     .reverse()
-    .map((p) => `$${(p / 100).toFixed(2)}`)
+    .map((p) => `$${Decimals.format(p, PRICE_DECIMALS)}`)
     .join("  ");
 }
 

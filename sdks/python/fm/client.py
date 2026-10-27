@@ -17,6 +17,7 @@ from urllib.parse import quote
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Optional
 
+from .decimals import Decimals
 from .snapshot import NO_SEQ, Snapshot
 from .timestamps import parse as _timestamp
 
@@ -189,7 +190,18 @@ def _parse_market(data: dict[str, Any]) -> Market:
         mechanism=data.get("mechanism") or Market.MECHANISM_CONTINUOUS,
         call_interval_seconds=data.get("callIntervalSeconds"),
         call_carry=data.get("callCarry") is not False,
+        price_decimals=_or_default(data.get("priceDecimals"), Decimals.DEFAULT_PRICE_DECIMALS),
+        unit_decimals=_or_default(data.get("unitDecimals"), Decimals.DEFAULT_UNIT_DECIMALS),
     )
+
+
+def _or_default(value: Any, default: int) -> int:
+    """*value*, or *default* when the server left it out or sent null.
+
+    Not ``value or default``: zero decimals is a scale, not an absence, and
+    reading it as the default shows whole dollars as cents.
+    """
+    return default if value is None else value
 
 
 def _parse_market_call(data: dict[str, Any]) -> MarketCall:
@@ -216,6 +228,7 @@ def _parse_marketplace(data: dict[str, Any]) -> Marketplace:
         name=data.get("name"),
         description=data.get("description"),
         markets=[_parse_market(m) for m in (data.get("markets") or [])],
+        cash_decimals=_or_default(data.get("cashDecimals"), Decimals.DEFAULT_CASH_DECIMALS),
     )
 
 

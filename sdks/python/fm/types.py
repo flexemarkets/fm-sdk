@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from .decimals import Decimals
 from .enums import OrderType, OrderSide
 
 from dataclasses import dataclass, field
@@ -221,6 +222,14 @@ class Market:
     # For a call market, whether what a call leaves unfilled waits for the next
     # one. True when the server does not say.
     call_carry: bool = True
+    # The decimal places a price, the price tick and the price bounds carry: at
+    # 2, a price of 5000 is 50.00. 2 when the server does not say; Decimals
+    # converts.
+    price_decimals: int = Decimals.DEFAULT_PRICE_DECIMALS
+    # The decimal places units, the unit tick and the unit bounds carry, and so
+    # the grants and holdings of this market's asset: at 0 units are whole. 0
+    # when the server does not say.
+    unit_decimals: int = Decimals.DEFAULT_UNIT_DECIMALS
 
     MECHANISM_CONTINUOUS = "CONTINUOUS"
     MECHANISM_CALL = "CALL"
@@ -284,6 +293,9 @@ class Marketplace:
     name: str | None = None
     description: str | None = None
     markets: list[Market] = field(default_factory=list)
+    # The decimal places cash, available cash, starting capital and payoffs
+    # carry: at 2, cash of 5000 is 50.00. 2 when the server does not say.
+    cash_decimals: int = Decimals.DEFAULT_CASH_DECIMALS
 
 
 @dataclass

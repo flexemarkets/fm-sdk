@@ -13,6 +13,7 @@ import com.googlecode.lanterna.screen.TerminalScreen;
 import com.googlecode.lanterna.terminal.DefaultTerminalFactory;
 import com.googlecode.lanterna.terminal.Terminal;
 
+import fm.Decimals;
 import fm.Flexemarkets;
 import fm.Book;
 import fm.Desk;
@@ -172,14 +173,17 @@ public class Ticker {
 
     // -- formatting ----------------------------------------------------------
 
-    private static String _price(long cents) {
-        if (cents < 0) return "     -";
-        return "$%5.2f".formatted(cents / 100.0);
+    // Prices at today's fixed scale, until markets carry their own.
+    private static final int PRICE_DECIMALS = Decimals.DEFAULT_PRICE_DECIMALS;
+
+    private static String _price(long price) {
+        if (price < 0) return "     -";
+        return "$%5s".formatted(Decimals.format(price, PRICE_DECIMALS));
     }
 
     private static String _spread(long bid, long ask) {
         if (bid < 0 || ask < 0) return "     -";
-        return "$%5.2f".formatted((ask - bid) / 100.0);
+        return "$%5s".formatted(Decimals.format(ask - bid, PRICE_DECIMALS));
     }
 
     private static String _tradePrices(long[] prices, int count) {
@@ -187,7 +191,7 @@ public class Ticker {
         var sb = new StringBuilder();
         for (int i = prices.length - 1; i >= start; i--) {
             if (!sb.isEmpty()) sb.append("  ");
-            sb.append("$%.2f".formatted(prices[i] / 100.0));
+            sb.append("$").append(Decimals.format(prices[i], PRICE_DECIMALS));
         }
         return sb.toString();
     }

@@ -1,0 +1,35 @@
+{
+  "type": "Marketplace",
+  "why": "A marketplace counting cash in whole dollars (fm-server#1059). cashDecimals is 0, which a parser defaulting on a falsey value rather than an absent one reads as 2, and every holding then shows a hundredth of what it holds.",
+  "source": {
+    "constructed": "fm-server does not send cashDecimals yet (fm-server#1060); this is the shape docs/PRICE-SCALE.md section 3.1 gives it. Its one market counts whole dollars and whole units, so cashDecimals = priceDecimals + unitDecimals = 0."
+  },
+  "payload": {
+    "id": 3052,
+    "name": "Whole",
+    "description": "whole dollars",
+    "cashDecimals": 0,
+    "markets": [
+      {
+        "id": 31,
+        "marketplaceId": 3052,
+        "symbol": "WD",
+        "priceMinimum": 1,
+        "priceMaximum": 100,
+        "priceTick": 1,
+        "unitMinimum": 1,
+        "unitMaximum": 100,
+        "unitTick": 1,
+        "priceDecimals": 0,
+        "unitDecimals": 0
+      }
+    ]
+  },
+  "expect": {
+    "id": 3052,
+    "cashDecimals": 0,
+    "markets": [
+      { "id": 31, "priceDecimals": 0, "unitDecimals": 0 }
+    ]
+  }
+}

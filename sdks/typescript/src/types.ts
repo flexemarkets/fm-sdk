@@ -223,6 +223,18 @@ export interface Market {
   callIntervalSeconds: number | null;
   /** For a call market, whether what a call leaves unfilled waits for the next one. True when the server does not say. */
   callCarry: boolean;
+  /**
+   * The decimal places a price, the price tick and the price bounds carry: at
+   * 2, a price of 5000 is 50.00. 2 when the server does not say;
+   * `Decimals` converts.
+   */
+  priceDecimals: number;
+  /**
+   * The decimal places units, the unit tick and the unit bounds carry, and so
+   * the grants and holdings of this market's asset: at 0 units are whole. 0
+   * when the server does not say.
+   */
+  unitDecimals: number;
 }
 
 export const MARKET_MECHANISM_CONTINUOUS = "CONTINUOUS";
@@ -340,6 +352,11 @@ export interface Marketplace {
   name: string | null;
   description: string | null;
   markets: Market[];
+  /**
+   * The decimal places cash, available cash, starting capital and payoffs
+   * carry: at 2, cash of 5000 is 50.00. 2 when the server does not say.
+   */
+  cashDecimals: number;
 }
 
 export const SESSION_STATE_INIT = "INIT";

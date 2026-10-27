@@ -45,6 +45,7 @@ dirty build and `mvn -q` both report a false zero.
 | read-side surface | the same members on `Desk`, `Book`, `Tape` and their containers |
 | documentation | a ratchet: a method documented in one SDK and not the others |
 | failure types | the same exceptions catchable in each |
+| static surface | the same functions and constants on `Decimals`, the one place an amount becomes decimal text and back |
 
 It cannot tell you the three are *right* — only that they say the same thing.
 Being wrong together is this repo's most expensive failure mode and no
@@ -56,6 +57,8 @@ cross-SDK comparison can see it. That is what the fixtures are for.
   values every SDK must read out of it.
 - `sdks/fixtures/behaviour/*.json` — **behaviour** fixtures. A sequence of
   updates and what `Book` or `Tape` must hold afterwards.
+- `sdks/fixtures/decimals/*.json` — **decimal** fixtures. An integer amount, a
+  number of decimal places, and the text `Decimals` must format it as or refuse.
 
 Adding a fixture requires no code change in any SDK. Prefer one over three
 hand-written tests: a fixture cannot be right in one language and wrong in
