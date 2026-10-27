@@ -4,6 +4,7 @@
  * Port of fm.client (Python) / fm.Flexemarkets (Java).
  */
 
+import { randomUUID } from "node:crypto";
 import { readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -763,6 +764,15 @@ async function tokenExpired(resp: Response): Promise<boolean> {
   }
 }
 
+/**
+ * Whether a request failed with no answer from the server: the connection
+ * refused, reset or closed before or while the response came. fetch says so
+ * with a TypeError of these two messages, and with nothing more specific.
+ */
+function answerLost(e: unknown): boolean {
+  return e instanceof TypeError && (e.message === "fetch failed" || e.message === "terminated");
+}
+
 export class Flexemarkets {
   private readonly _clientDescription: string;
   private readonly _endpoint: string;
@@ -1449,7 +1459,20 @@ export class Flexemarkets {
     // aimed at nobody, which the server refuses.
     if (ownerTarget !== undefined) order.ownerTarget = ownerTarget;
     if (ownerTargetId !== undefined) order.ownerTargetId = ownerTargetId;
-    const data = await this._post(`${this._marketplace(marketplaceId)}/orders`, order);
+    // Named, so an order whose answer was lost can be sent again without
+    // trading twice: fm-server answers a submission it already holds with the
+    // order it made, not a second one. A send that lost its connection may or
+    // may not have landed; reporting it as refused invited the caller to place
+    // it again and double the position.
+    order.submissionId = randomUUID();
+    const url = `${this._marketplace(marketplaceId)}/orders`;
+    let data: JsonObject;
+    try {
+      data = await this._post(url, order);
+    } catch (e) {
+      if (!answerLost(e)) throw e;
+      data = await this._post(url, order);
+    }
     return parseOrder(data);
   }
 
