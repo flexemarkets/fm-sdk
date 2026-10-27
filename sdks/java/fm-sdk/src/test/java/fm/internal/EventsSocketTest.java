@@ -385,6 +385,9 @@ class EventsSocketTest {
     @Timeout(30)
     void aReconnectThatCannotReachTheServerWaitsAndTriesAgain() throws Exception {
         connected();
+        // A stream that had held, so the first attempt is at once and the one
+        // wait is the failed attempt's (1-2 s), not a short-lived connection's.
+        events._connectedAt -= TimeUnit.MILLISECONDS.toNanos(Events.STABLE_CONNECTION_MS + 1);
         server.dropHandshakes(2);
 
         long dropped = System.nanoTime();
@@ -393,7 +396,7 @@ class EventsSocketTest {
         assertThat(next()).isInstanceOf(StreamDropped.class);
         assertThat(next()).isEqualTo(new StreamReconnected(MP));
         assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - dropped)).as("waited before retrying")
-            .isGreaterThanOrEqualTo(1_500L);
+            .isGreaterThanOrEqualTo(Events.RECONNECT_FIRST_PAUSE_MS / 2);
     }
 
     /**

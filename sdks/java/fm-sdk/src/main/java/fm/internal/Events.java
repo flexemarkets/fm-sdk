@@ -29,8 +29,10 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.LongBinaryOperator;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -158,6 +160,39 @@ public class Events implements Subscription {
             });
     private volatile ScheduledFuture<?> _heartbeat;
 
+    /*
+     * Reconnecting after a drop. The first attempt is at once; each that fails
+     * waits longer, doubling from 2 s to a minute, and each wait is drawn from
+     * the upper half of its range, so clients dropped together -- every robot
+     * in a classroom when fm-server restarts -- do not all come back in the
+     * same instant. A fixed 2 s brought them back in step, every one asking for
+     * its session's history at once.
+     *
+     * A connection that falls within a minute of opening counts as an attempt
+     * that failed, not a recovery. fm-server closes a session whose history
+     * overflows its send buffer; a client that reconnected at once, asked for
+     * the same history and was closed again did so every 2 s for as long as it
+     * ran.
+     */
+    static final long RECONNECT_FIRST_PAUSE_MS = 2_000;
+    static final long RECONNECT_MAX_PAUSE_MS = 60_000;
+    static final long STABLE_CONNECTION_MS = 60_000;
+
+    /** The wait before the next attempt, after {@code failures} in a row (one or more). */
+    static long reconnectPause(int failures, LongBinaryOperator draw) {
+        long ceiling = Math.min(RECONNECT_MAX_PAUSE_MS, RECONNECT_FIRST_PAUSE_MS << Math.min(failures - 1, 16));
+        return draw.applyAsLong(ceiling / 2, ceiling);
+    }
+
+    static long reconnectPause(int failures) {
+        return reconnectPause(failures, (lo, hi) -> ThreadLocalRandom.current().nextLong(lo, hi + 1));
+    }
+
+    /** Attempts that have failed in a row; with {@link #_connectedAt}, paces {@link #reconnect()}. */
+    volatile int _failures;
+    /** When the socket last opened ({@link System#nanoTime()}), or {@link Long#MIN_VALUE} before it ever has. */
+    volatile long _connectedAt = Long.MIN_VALUE;
+
     /** One reconnect at a time: onClose and onError can both fire for one drop. */
     private final java.util.concurrent.atomic.AtomicBoolean _reconnecting =
             new java.util.concurrent.atomic.AtomicBoolean();
@@ -226,6 +261,7 @@ public class Events implements Subscription {
             _subscribe("/app" + _appPrefix + "/marketplaces/" + _marketplaceId);
 
             _startHeartbeats();
+            _connectedAt = System.nanoTime();
         } catch (FlexemarketsException e) {
             throw e;
         } catch (Exception e) {
@@ -248,9 +284,19 @@ public class Events implements Subscription {
     void reconnect() throws InterruptedException {
         boolean renewed = false;
         while (!_closed) {
+            // Paced by the failures before it: at once after a stream that had
+            // held, later and later after attempts that failed or connections
+            // that fell straight away (RECONNECT_FIRST_PAUSE_MS).
+            if (_failures > 0) {
+                _sleep(reconnectPause(_failures));
+                if (_closed) {
+                    return;
+                }
+            }
             try {
                 _closeWebSocket();
                 connect();
+                _connectedAt = System.nanoTime();
                 return;
             } catch (Exception e) {
                 // A REJECTED TOKEN IS NOT A BLIP, and retrying it is not
@@ -280,9 +326,14 @@ public class Events implements Subscription {
                         + "signed for another server; reconnecting cannot fix it.", e)));
                     return;
                 }
-                TimeUnit.SECONDS.sleep(2);
+                _failures++;
             }
         }
+    }
+
+    /** Wait between reconnect attempts; a test replaces it to record the waits. */
+    void _sleep(long millis) throws InterruptedException {
+        TimeUnit.MILLISECONDS.sleep(millis);
     }
 
     /**
@@ -322,6 +373,10 @@ public class Events implements Subscription {
         if (_closed || !_reconnecting.compareAndSet(false, true)) {
             return;
         }
+        long opened = _connectedAt;
+        _failures = opened != Long.MIN_VALUE
+                && System.nanoTime() - opened < TimeUnit.MILLISECONDS.toNanos(STABLE_CONNECTION_MS)
+            ? _failures + 1 : 0;
         Thread.startVirtualThread(() -> {
             try {
                 reconnect();
