@@ -1,0 +1,37 @@
+{
+  "type": "Session",
+  "why": "A session says when it was created and last changed. FMClientLibrary's Session reads both (date_created, date_last_modified); without them a transport on the SDK hands robots a session missing two of its dates.",
+  "source": {
+    "captured": {
+      "path": "/v1/marketplaces/{marketplaceId}/sessions/current",
+      "server": "4.13.0",
+      "on": "2026-10-26"
+    }
+  },
+  "payload": {
+    "CLOSED": false,
+    "OPEN": true,
+    "PAUSED": false,
+    "allocationId": 78689,
+    "closeDate": null,
+    "createdDate": "2026-10-26T15:55:24.629019918",
+    "description": null,
+    "durationSeconds": null,
+    "id": 185765,
+    "lastModifiedDate": "2026-10-26T15:55:24.629019918",
+    "marketplaceId": 6421,
+    "name": null,
+    "openDate": "2026-10-26T15:55:24.626380334",
+    "original": 185765,
+    "state": "OPEN"
+  },
+  "expect": {
+    "id": 185765,
+    "createdDate": {
+      "epochMilli": 1793030124629
+    },
+    "lastModifiedDate": {
+      "epochMilli": 1793030124629
+    }
+  }
+}

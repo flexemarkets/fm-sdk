@@ -197,5 +197,7 @@ export function limit(
     ownerTargetId: null,
     createdDate: null,
     lastModifiedDate: null,
+    mine: null,
+    originalSessionId: null,
   };
 }

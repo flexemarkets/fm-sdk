@@ -61,19 +61,21 @@ def test_subscriptions_coexist_rather_than_replacing_each_other(client, monkeypa
     opened = []
 
     class FakeListener:
-        def __init__(self):
+        def __init__(self, history):
             self.closed = False
+            self.history = history
             opened.append(self)
 
         def close(self):
             self.closed = True
 
     monkeypatch.setattr(
-        Flexemarkets, "_connect_events", lambda self, mpid, q: FakeListener()
+        Flexemarkets, "_connect_events", lambda self, mpid, q, history=False: FakeListener(history)
     )
 
     first = client.subscribe(1, queue.Queue())
-    second = client.subscribe(1, queue.Queue())
+    second = client.subscribe(1, queue.Queue(), history=True)
+    assert [l.history for l in opened] == [False, True], "history reaches the stream it was asked of"
 
     assert len(opened) == 2, "each subscribe opens its own stream"
     assert first is not second

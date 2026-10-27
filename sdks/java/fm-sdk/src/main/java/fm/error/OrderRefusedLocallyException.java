@@ -32,6 +32,7 @@ public final class OrderRefusedLocallyException extends InvalidArgumentException
      *
      * @return {@code SESSION_CLOSED} or {@code ORDER_NOT_ALLOWED}
      */
+    @Override
     public String reason() {
         return _reason;
     }

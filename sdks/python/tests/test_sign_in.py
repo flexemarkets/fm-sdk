@@ -189,3 +189,49 @@ def test_a_user_with_marketplace_data_cannot_be_deleted(base: str) -> None:
         with pytest.raises(PersonHasMarketplaceDataError,
                            match="User 44 has marketplace data and cannot be deleted."):
             fm.delete_user(44)
+
+
+def _home_credential(text: str) -> None:
+    """A credential file in the home directory, as a machine already set up for someone has."""
+    fm_dir = Path.home() / ".fm"
+    fm_dir.mkdir(exist_ok=True)
+    (fm_dir / "credential").write_text(text)
+
+
+def test_an_identity_named_in_code_signs_in_with_its_own_password(base: str) -> None:
+    with Flexemarkets(account="lab", email="robot@lab", password="robot-secret",
+                      endpoint=f"{base}/marketplaces/12"):
+        pass
+
+    assert requests[0] == "POST /api/v1/tokens"
+    assert bodies[0] == {"username": "lab|robot@lab", "password": "robot-secret"}
+
+
+def test_an_identity_named_in_code_replaces_a_token_in_the_home_file(base: str) -> None:
+    """The home token outranks a password, so overlaying signed in as its owner instead."""
+    _home_credential(f"account=dev\nemail=dev@dev\ntoken={TOKEN}\n")
+
+    with Flexemarkets(account="lab", email="robot@lab", password="robot-secret",
+                      endpoint=f"{base}/marketplaces/12"):
+        pass
+
+    assert requests[0] == "POST /api/v1/tokens", "the home file's token was used"
+    assert bodies[0]["username"] == "lab|robot@lab"
+
+
+def test_a_part_of_an_identity_not_named_in_code_is_not_borrowed_from_home(base: str) -> None:
+    _home_credential("account=dev\nemail=dev@dev\npassword=home-secret\n")
+
+    with pytest.raises(ConfigurationError, match="password"):
+        Flexemarkets(account="lab", email="robot@lab", endpoint=f"{base}/marketplaces/12")
+
+    assert requests == []
+
+
+def test_without_a_named_identity_the_home_file_still_signs_in(base: str) -> None:
+    _home_credential("account=dev\nemail=dev@dev\npassword=home-secret\n")
+
+    with Flexemarkets(endpoint=f"{base}/marketplaces/12"):
+        pass
+
+    assert bodies[0] == {"username": "dev|dev@dev", "password": "home-secret"}

@@ -163,6 +163,9 @@ public class Events implements Subscription {
             new java.util.concurrent.atomic.AtomicBoolean();
     private final AtomicInteger _subscriptionId = new AtomicInteger(0);
 
+    /** {@code /v1} for fm-server's V1 subscribe, empty for the original one that carries the history. */
+    private final String _appPrefix;
+
     Events(String wsUrl, String bearerToken, long marketplaceId, String clientDescription,
            ObjectMapper mapper, BlockingQueue<Object> queue) {
         this(wsUrl, () -> bearerToken, marketplaceId, clientDescription, mapper, queue, presented -> false);
@@ -170,7 +173,15 @@ public class Events implements Subscription {
 
     Events(String wsUrl, Supplier<String> bearerToken, long marketplaceId, String clientDescription,
            ObjectMapper mapper, BlockingQueue<Object> queue, Predicate<String> renew) {
+        this(wsUrl, bearerToken, marketplaceId, clientDescription, mapper, queue, renew, false);
+    }
+
+    Events(String wsUrl, Supplier<String> bearerToken, long marketplaceId, String clientDescription,
+           ObjectMapper mapper, BlockingQueue<Object> queue, Predicate<String> renew, boolean history) {
         this._wsUrl = wsUrl;
+        // The V0 subscribe, whose first ORDERS-UPDATE is the session's whole
+        // history; see Streaming.subscribe.
+        this._appPrefix = history ? "" : API_VERSION_PREFIX;
         this._bearerToken = bearerToken;
         this._renew = renew;
         this._marketplaceId = marketplaceId;
@@ -212,7 +223,7 @@ public class Events implements Subscription {
             // EventParser pattern.
             _subscribe("/user/queue/marketplaces/" + _marketplaceId);
             _subscribe("/topic/marketplaces/" + _marketplaceId);
-            _subscribe("/app" + API_VERSION_PREFIX + "/marketplaces/" + _marketplaceId);
+            _subscribe("/app" + _appPrefix + "/marketplaces/" + _marketplaceId);
 
             _startHeartbeats();
         } catch (FlexemarketsException e) {

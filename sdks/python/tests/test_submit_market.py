@@ -170,3 +170,32 @@ def test_a_sideless_market_order_is_refused_rather_than_priced_as_a_sell():
     """A market order that names no side used to price at the bottom of the range -- the most aggressive sell the market accepts -- because the branch was the complement of buy rather than a test for sell. submitMarket takes the side straight from its caller, so a missing argument crossed the wrong side of the book at the worst price rather than failing."""
     with pytest.raises(ValueError, match="must name its side"):
         _marketable_limit(_market(100, 200, 25), None)
+
+
+def test_an_ordinary_limit_order_names_no_counterparty(client):
+    """A target of null is a private order aimed at nobody, which the server refuses."""
+    client.submit_limit(1, 11, "BUY", 5, 135)
+
+    assert "ownerTarget" not in submitted[0] and "ownerTargetId" not in submitted[0]
+    assert submitted[0]["clientDescription"] == "submit-market-test"
+
+
+def test_a_private_order_names_its_counterparty_by_name_or_by_id(client):
+    client.submit_limit(1, 11, "SELL", 5, 135, owner_target="T2")
+    client.submit_limit(1, 11, "SELL", 5, 135, owner_target_id=8)
+
+    assert submitted[0]["ownerTarget"] == "T2" and "ownerTargetId" not in submitted[0]
+    assert submitted[1]["ownerTargetId"] == 8 and "ownerTarget" not in submitted[1]
+
+
+def test_naming_the_counterparty_both_ways_is_refused_before_sending(client):
+    with pytest.raises(InvalidArgumentError):
+        client.submit_limit(1, 11, "SELL", 5, 135, owner_target="T2", owner_target_id=8)
+
+    assert submitted == []
+
+
+def test_an_order_carries_its_own_reference(client):
+    client.submit_limit(1, 11, "BUY", 5, 135, client_description="r1")
+
+    assert submitted[0]["clientDescription"] == "r1"

@@ -659,7 +659,7 @@ def check_surface(verbose: bool) -> list[str]:
 # newly documented in one SDK and not the others pushes it up and fails, and
 # closing one pushes it down and fails until the number is lowered to match.
 # Both directions are a one-line edit someone makes on purpose.
-DOC_DEBT = 30
+DOC_DEBT = 29
 
 _PY_DOCSTRING_OPENERS = ('"""', "'''", 'r"""')
 

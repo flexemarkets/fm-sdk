@@ -3,7 +3,10 @@ package fm.internal;
 import fm.Flexemarkets;
 import fm.model.OrderSide;
 
+import fm.error.InvalidArgumentException;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -144,5 +147,37 @@ class SubmitTargetedTest {
         }
 
         assertThat(submitted.get(0)).isEqualTo(submitted.get(1));
+    }
+
+    /** A participant learns names, not ids, so a name must reach the server as one. */
+    @Test
+    void aParticipantNamesItsCounterpartyByAllotmentName() throws Exception {
+        try (Flexemarkets fm = connect()) {
+            fm.submitLimit(1L, 11L, OrderSide.SELL, 1L, 900L, "T2", null, null);
+        }
+
+        assertThat(submitted.get(0)).contains("\"ownerTarget\":\"T2\"").doesNotContain("ownerTargetId");
+    }
+
+    @Test
+    void namingTheCounterpartyBothWaysIsRefusedBeforeSending() throws Exception {
+        try (Flexemarkets fm = connect()) {
+            assertThatThrownBy(() -> fm.submitLimit(1L, 11L, OrderSide.SELL, 1L, 900L, "T2", 106771L, null))
+                    .isInstanceOf(InvalidArgumentException.class);
+        }
+
+        assertThat(submitted).isEmpty();
+    }
+
+    /** The order's own reference replaces the client's, which is what it falls back to. */
+    @Test
+    void anOrderCarriesItsOwnReference() throws Exception {
+        try (Flexemarkets fm = connect()) {
+            fm.submitLimit(1L, 11L, OrderSide.BUY, 1L, 850L, null, null, "r1");
+            fm.submitLimit(1L, 11L, OrderSide.BUY, 1L, 850L);
+        }
+
+        assertThat(submitted.get(0)).contains("\"clientDescription\":\"r1\"");
+        assertThat(submitted.get(1)).contains("\"clientDescription\":\"submit-targeted-test\"");
     }
 }

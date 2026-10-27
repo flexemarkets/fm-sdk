@@ -67,7 +67,20 @@ const JWT_RE = /^[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+$/;
 // Errors
 // ---------------------------------------------------------------------------
 
-export class FlexemarketsError extends Error {}
+/**
+ * Base of every Flexemarkets error.
+ *
+ * An error that is the server's answer carries it: `statusCode`, the `body` as
+ * sent, and `reason`, the body's `error` -- `SESSION_CLOSED`, `ORDER_INVALID`,
+ * `ACCOUNT_TOKEN_EXPIRED` -- which is what a caller branches on, where the
+ * message is for people. All three are null for an error the SDK raised
+ * itself, and `reason` is null when the body named no error.
+ */
+export class FlexemarketsError extends Error {
+  statusCode: number | null = null;
+  reason: string | null = null;
+  body: string | null = null;
+}
 export class AuthenticationError extends FlexemarketsError {}
 export class AuthorizationError extends FlexemarketsError {}
 export class InvalidArgumentError extends FlexemarketsError {}
@@ -209,6 +222,7 @@ export function parseSecurity(data: JsonObject): Security {
     shortUnits: (data.shortUnits as number) ?? (data.initialShortUnits as number) ?? 0,
     canBuy: (data.canBuy as boolean) ?? false,
     canSell: (data.canSell as boolean) ?? false,
+    initialUnits: (data.initialUnits as number | null) ?? null,
   };
 }
 
@@ -270,6 +284,8 @@ export function parseSession(data: JsonObject): Session {
     description: (data.description as string) ?? null,
     openDate: toInstant(data.openDate as string),
     closeDate: toInstant(data.closeDate as string),
+    createdDate: toInstant(data.createdDate as string),
+    lastModifiedDate: toInstant(data.lastModifiedDate as string),
   };
 }
 
@@ -293,6 +309,8 @@ export function parseOrder(data: JsonObject): Order {
     ownerTargetId: (data.ownerTargetId as number | null) ?? null,
     createdDate: toInstant(data.createdDate as string),
     lastModifiedDate: toInstant(data.lastModifiedDate as string),
+    mine: (data.mine as boolean | null) ?? null,
+    originalSessionId: (data.originalSessionId as number | null) ?? null,
   };
 }
 
@@ -461,6 +479,8 @@ function allotmentsToHoldings(allotments: Allotment[]): Holding[] {
       cash,
       availableCash: cash,
       securities: a.assets?.securities ?? [],
+      // As in Java and Python: a holding built from an allotment does not carry the opening value.
+      initialCash: null,
     };
   });
 }
@@ -477,6 +497,7 @@ export function parseHolding(data: JsonObject): Holding {
     cash: (data.cash as number) ?? 0,
     availableCash: (data.availableCash as number) ?? 0,
     securities: orderedSecurities(securitiesRaw.map(parseSecurity)),
+    initialCash: (data.initialCash as number | null) ?? null,
   };
 }
 
@@ -679,15 +700,42 @@ function readBody(body: string): any {
   }
 }
 
+/** The `error` a failure body names, or null when it names none. */
+function reasonIn(body: string): string | null {
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    const error = typeof parsed === "object" && parsed !== null ? (parsed as { error?: unknown }).error : null;
+    return typeof error === "string" && error !== "" ? error : null;
+  } catch {
+    return null;
+  }
+}
+
+/** `error`, carrying the answer it came from. */
+function answered<E extends FlexemarketsError>(error: E, statusCode: number, body: string): E {
+  error.statusCode = statusCode;
+  error.body = body;
+  error.reason = reasonIn(body);
+  return error;
+}
+
+/** `error`, carrying the answer `from` carried. */
+function answeredAs<E extends FlexemarketsError>(error: E, from: FlexemarketsError): E {
+  error.statusCode = from.statusCode;
+  error.body = from.body;
+  error.reason = from.reason;
+  return error;
+}
+
 function checkResponse(response: Response, body: string): void {
   const status = response.status;
   if (status >= 200 && status < 300) return;
-  if (status === 400) throw new InvalidArgumentError("Invalid request: " + detail(body));
-  if (status === 401) throw new AuthenticationError("Authentication failed: " + detail(body));
-  if (status === 403) throw new AuthorizationError("Not permitted: " + detail(body));
-  if (status === 409) throw new ConflictError(body);
-  if (status >= 500) throw new ConnectionFailedError(body);
-  throw new HttpError(status, body);
+  if (status === 400) throw answered(new InvalidArgumentError("Invalid request: " + detail(body)), status, body);
+  if (status === 401) throw answered(new AuthenticationError("Authentication failed: " + detail(body)), status, body);
+  if (status === 403) throw answered(new AuthorizationError("Not permitted: " + detail(body)), status, body);
+  if (status === 409) throw answered(new ConflictError(body), status, body);
+  if (status >= 500) throw answered(new ConnectionFailedError(body), status, body);
+  throw answered(new HttpError(status, body), status, body);
 }
 
 /** The server's proposed alternative name, when a 409 body carries one. */
@@ -1042,12 +1090,12 @@ export class Flexemarkets {
       // back out of a generic conflict.
       if (e instanceof ConflictError) {
         const suggested = suggestedNameIn(e.message);
-        throw new AccountNameConflictError(
+        throw answeredAs(new AccountNameConflictError(
           `Account name '${accountName}' is taken` +
             (suggested === null ? "" : `; server suggests '${suggested}'`),
           accountName,
           suggested,
-        );
+        ), e);
       }
       throw e;
     }
@@ -1124,10 +1172,10 @@ export class Flexemarkets {
       // it, so the server refuses and the caller has to decide what happens to
       // the data first.
       if (e instanceof ConflictError) {
-        throw new PersonHasMarketplaceDataError(
+        throw answeredAs(new PersonHasMarketplaceDataError(
           `User ${userId} has marketplace data and cannot be deleted.`,
           userId,
-        );
+        ), e);
       }
       throw e;
     }
@@ -1253,6 +1301,11 @@ export class Flexemarkets {
    * segment. Bytes, not a string, so the file's own encoding survives.
    */
   private async _sendCsv(method: string, url: string, filename: string): Promise<unknown> {
+    return this._sendCsvContent(method, url, readFileSync(filename));
+  }
+
+  /** CSV as the request body, declared text/csv; see {@link _sendCsv}. */
+  private async _sendCsvContent(method: string, url: string, content: RequestInit["body"]): Promise<unknown> {
     const resp = await this._fetch(url, {
       method,
       headers: {
@@ -1261,7 +1314,7 @@ export class Flexemarkets {
         Accept: "application/json",
         "User-Agent": FM_NETWORK_CLIENT,
       },
-      body: readFileSync(filename),
+      body: content,
     });
     const body = await resp.text();
     checkResponse(resp, body);
@@ -1358,22 +1411,45 @@ export class Flexemarkets {
 
   // -- orders ----------------------------------------------------------------
 
+  /**
+   * Place a limit order.
+   *
+   * A private market matches an order only with one aimed back at its owner, so
+   * an order there names its counterparty: by `ownerTargetId` when the caller
+   * knows it, or by `ownerTarget`, the allotment name. The id is the
+   * unambiguous one, but only a manager can learn ids -- a participant's
+   * `identifiers()` are names -- so a participant has the name and nothing
+   * else. Name one or the other, not both.
+   *
+   * `clientDescription` is this order's own reference, as the server keeps it
+   * on the order; it defaults to the description this client connected with.
+   */
   async submitLimit(
     marketplaceId: number,
     marketId: number,
     side: string,
     units: number,
     price: number,
+    options: { ownerTarget?: string; ownerTargetId?: number; clientDescription?: string } = {},
   ): Promise<Order> {
-    const data = await this._post(`${this._marketplace(marketplaceId)}/orders`, {
+    const { ownerTarget, ownerTargetId, clientDescription } = options;
+    if (ownerTarget !== undefined && ownerTargetId !== undefined) {
+      throw new InvalidArgumentError("Name the counterparty by ownerTarget or ownerTargetId, not both");
+    }
+    const order: JsonObject = {
       marketplaceId,
       marketId,
       type: "LIMIT",
       side,
       units,
       price,
-      clientDescription: this._clientDescription,
-    });
+      clientDescription: clientDescription || this._clientDescription,
+    };
+    // Left out rather than sent as null: a target of null is a private order
+    // aimed at nobody, which the server refuses.
+    if (ownerTarget !== undefined) order.ownerTarget = ownerTarget;
+    if (ownerTargetId !== undefined) order.ownerTargetId = ownerTargetId;
+    const data = await this._post(`${this._marketplace(marketplaceId)}/orders`, order);
     return parseOrder(data);
   }
 
@@ -1673,6 +1749,22 @@ export class Flexemarkets {
   }
 
   /**
+   * Stage an allocation from holdings CSV text, as {@link uploadHoldings} does
+   * from a file.
+   *
+   * For a program that builds the CSV rather than reading one -- an admin
+   * robot writing back the holdings it downloaded and changed -- which
+   * otherwise writes a file only to have it read again. The text is sent as it
+   * is; a `# holdings -- begin` / `-- end` frame around it is accepted, as in a
+   * downloaded file.
+   */
+  async uploadHoldingsCsv(marketplaceId: number, csv: string): Promise<Holding[]> {
+    const url = `${this._marketplace(marketplaceId)}/allocations`;
+    const data = (await this._sendCsvContent("POST", url, csv)) as JsonObject[];
+    return allotmentsToHoldings(data.map(parseAllotment));
+  }
+
+  /**
    * Load per-participant private state from a CSV, returning what was stored.
    *
    * Staged on the same terms as {@link uploadHoldings}, against the allocation
@@ -1911,9 +2003,23 @@ export class Flexemarkets {
    * Returns an unsubscribe function rather than an object with `close()`,
    * matching what Desk's `on*` handlers already return here. Java
    * returns a `Subscription`; both names describe the same lifetime.
+   *
+   * With `history`, the first orders update is every order of the current
+   * session as this caller may see it -- cancelled and split ones included, a
+   * counterparty's private order named from the caller's side -- stamped with
+   * the `seq` it was read at, and each reconnect delivers it again. That is
+   * fm-server's original subscribe, and the only whole history a participant
+   * can read: the REST history is a manager's. Without it the first update is
+   * empty and the book comes from `activeOrders`. A history is one frame, so on
+   * a session with a very long one it is a large frame -- fm-server's V1
+   * subscribe exists to avoid exactly that.
    */
-  async subscribe(marketplaceId: number, callback: EventCallback): Promise<Subscription> {
-    const listener = await this._connectEvents(marketplaceId, callback);
+  async subscribe(
+    marketplaceId: number,
+    callback: EventCallback,
+    options: { history?: boolean } = {},
+  ): Promise<Subscription> {
+    const listener = await this._connectEvents(marketplaceId, callback, options.history ?? false);
     return () => {
       void listener.close();
     };
@@ -1925,7 +2031,7 @@ export class Flexemarkets {
    * the singleton {@link #_eventListener}. Lets multiple
    * desk(marketplaceId) calls coexist within one Flexemarkets.
    */
-  async _connectEvents(marketplaceId: number, callback: EventCallback): Promise<EventListener> {
+  async _connectEvents(marketplaceId: number, callback: EventCallback, history = false): Promise<EventListener> {
     const wsUrl =
       server(this._endpoint)
         .replace("https://", "wss://")
@@ -1939,6 +2045,7 @@ export class Flexemarkets {
       parseHolding,
       parseOrder,
       (presented) => this._renewToken(presented),
+      history,
     );
     await events.start();
     return events;

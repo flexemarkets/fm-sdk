@@ -790,6 +790,14 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     public Order submitLimit(long marketplaceId, long marketId, OrderSide side, long units, long price,
                              Long ownerTargetId) {
+        return submitLimit(marketplaceId, marketId, side, units, price, null, ownerTargetId, null);
+    }
+
+    public Order submitLimit(long marketplaceId, long marketId, OrderSide side, long units, long price,
+                             String ownerTarget, Long ownerTargetId, String clientDescription) {
+        if (null != ownerTarget && null != ownerTargetId) {
+            throw new InvalidArgumentException("Name the counterparty by ownerTarget or ownerTargetId, not both");
+        }
         // A LinkedHashMap rather than Map.of: the target is absent for an
         // ordinary order, and Map.of rejects a null value rather than omitting
         // the key. Omitting it is the point -- an order carrying
@@ -802,7 +810,11 @@ public class HttpFlexemarkets implements Flexemarkets {
         order.put("side",          side);
         order.put("units",         units);
         order.put("price",         price);
-        order.put("clientDescription", _clientDescription());
+        order.put("clientDescription", null != clientDescription && !clientDescription.isEmpty()
+                ? clientDescription : _clientDescription());
+        if (null != ownerTarget) {
+            order.put("ownerTarget", ownerTarget);
+        }
         if (null != ownerTargetId) {
             order.put("ownerTargetId", ownerTargetId);
         }
@@ -957,6 +969,12 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     @Override
+    public List<Holding> uploadHoldingsCsv(long marketplaceId, String csv) {
+        return _toHoldings(_sendCsv("POST", _marketplace(marketplaceId) + "/allocations",
+                csv.getBytes(StandardCharsets.UTF_8), ALLOTMENTS_TYPE));
+    }
+
+    @Override
     public List<ParticipantState> uploadState(long marketplaceId, Path csv) {
         return List.copyOf(_sendCsv("PUT", _marketplace(marketplaceId) + "/state", csv, PARTICIPANT_STATES_TYPE));
     }
@@ -1105,9 +1123,18 @@ public class HttpFlexemarkets implements Flexemarkets {
         return _connectEvents(marketplaceId, queue);
     }
 
+    @Override
+    public Subscription subscribe(long marketplaceId, BlockingQueue<Object> queue, boolean history) {
+        return _connectEvents(marketplaceId, queue, history);
+    }
+
     Events _connectEvents(long marketplaceId, BlockingQueue<Object> queue) {
+        return _connectEvents(marketplaceId, queue, false);
+    }
+
+    Events _connectEvents(long marketplaceId, BlockingQueue<Object> queue, boolean history) {
         var ev = new Events(_wsUrl(), this::_bearer, marketplaceId, _clientDescription(), MAPPER, queue,
-            this::_renewToken);
+            this::_renewToken, history);
         ev.connect();
         return ev;
     }
@@ -1580,6 +1607,11 @@ public class HttpFlexemarkets implements Flexemarkets {
         } catch (IOException e) {
             throw new ApiException("Failed to read " + file, e);
         }
+        return _sendCsv(method, url, content, type);
+    }
+
+    /** CSV bytes as the body, {@code Content-Type: text/csv}; see the file form above. */
+    private <T> T _sendCsv(String method, String url, byte[] content, TypeReference<T> type) {
         var request = _request(url, "application/json")
             .header("Content-Type", "text/csv")
             .method(method, HttpRequest.BodyPublishers.ofByteArray(content))
@@ -1982,6 +2014,11 @@ public class HttpFlexemarkets implements Flexemarkets {
      * left is HttpException, carrying the status so a caller can still ask.
      */
     private static FlexemarketsException _failureFor(int statusCode, String body) {
+        return _bare(statusCode, body).withResponse(statusCode, _reason(body), body);
+    }
+
+    /** {@link #_failureFor}, before the answer is attached. */
+    private static FlexemarketsException _bare(int statusCode, String body) {
         return switch (statusCode) {
             case 400 -> new InvalidArgumentException("Invalid request: " + _detail(body));
             case 401 -> new AuthenticationException("Authentication failed: " + _detail(body));
@@ -2017,6 +2054,19 @@ public class HttpFlexemarkets implements Flexemarkets {
                     : body;
         } catch (Exception e) {
             return body;
+        }
+    }
+
+    /** The {@code error} a failure body names, or null when it names none. */
+    private static String _reason(String body) {
+        if (body == null || body.isBlank()) {
+            return null;
+        }
+        try {
+            var error = MAPPER.readTree(body).get("error");
+            return error != null && error.isString() && !error.asString().isEmpty() ? error.asString() : null;
+        } catch (Exception e) {
+            return null;
         }
     }
 

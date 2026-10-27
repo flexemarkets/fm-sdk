@@ -100,6 +100,21 @@ class EventsSocketTest {
         assertThat(socket.received(3)).contains("destination:/app/v1/marketplaces/7");
     }
 
+    /**
+     * fm-server's original subscribe: its first ORDERS-UPDATE is the whole
+     * session, and it is the participant's only route to the history -- the REST
+     * read is a manager's -- so the destination must be the V0 one.
+     */
+    @Test
+    @Timeout(20)
+    void aHistorySubscribeAsksForTheSessionsOrders() throws Exception {
+        try (var fm = client(); fm.Subscription subscription = fm.subscribe(MP, queue, true)) {
+            _Connection socket = server.connection(0);
+            assertThat(socket.awaitReceived(4)).as("CONNECT then three SUBSCRIBEs").isTrue();
+            assertThat(socket.received(3)).contains("destination:/app/marketplaces/7\n");
+        }
+    }
+
     @Test
     @Timeout(20)
     void anOrdersUpdateArrivesWithItsSequenceNumber() throws Exception {

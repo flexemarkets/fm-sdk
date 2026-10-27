@@ -1,0 +1,44 @@
+{
+  "type": "Order",
+  "why": "Whether an order is the reader's own is the server's judgement, sent as mine: a manager viewing as a participant sees that participant's orders as theirs, which ownerId cannot say -- and ownerId is null on everyone else's order anyway. FMClientLibrary's Order.my_current() and most robots depend on it. A counterparty's private order also names the counterparty in ownerTarget, from the reader's side.",
+  "source": {
+    "captured": {
+      "path": "/v1/marketplaces/{marketplaceId}/orders?state=ACTIVE",
+      "select": {
+        "type": "LIMIT",
+        "mine": false
+      },
+      "server": "4.13.0",
+      "on": "2026-10-26"
+    }
+  },
+  "payload": {
+    "createdDate": "2026-10-26T16:05:36.468848",
+    "lastModifiedDate": "2026-10-26T16:05:36.469725",
+    "id": 85720658,
+    "original": 85720658,
+    "supplier": 85720658,
+    "consumer": null,
+    "type": "LIMIT",
+    "side": "SELL",
+    "symbol": "P",
+    "units": 1,
+    "price": 300,
+    "mine": false,
+    "ownerTarget": "T2",
+    "ownerId": null,
+    "accountId": 51,
+    "marketplaceId": 6421,
+    "marketId": 11009,
+    "sessionId": 185765,
+    "clientDescription": null,
+    "submissionId": null
+  },
+  "expect": {
+    "id": 85720658,
+    "mine": false,
+    "ownerId": null,
+    "ownerTarget": "T2",
+    "originalSessionId": null
+  }
+}

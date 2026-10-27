@@ -228,6 +228,8 @@ export function parseSession(data: Record<string, unknown>): Session {
     description: (data.description as string) ?? null,
     openDate: toInstant(data.openDate as string),
     closeDate: toInstant(data.closeDate as string),
+    createdDate: toInstant(data.createdDate as string),
+    lastModifiedDate: toInstant(data.lastModifiedDate as string),
   };
 }
 
@@ -299,6 +301,7 @@ export class EventListener {
   /** The Authorization header the last connect presented. */
   private _presented = "";
   private readonly _marketplaceId: number;
+  private readonly _appPrefix: string;
   private readonly _callback: EventCallback;
   private readonly _clientDescription: string;
   private readonly _parseHolding: (data: Record<string, unknown>) => Holding;
@@ -332,8 +335,12 @@ export class EventListener {
     parseHolding: (data: Record<string, unknown>) => Holding,
     parseOrder: (data: Record<string, unknown>) => Order,
     renew: (presented: string) => Promise<boolean> = async () => false,
+    history = false,
   ) {
     this._wsUrl = wsUrl;
+    // The V0 subscribe, whose first ORDERS-UPDATE is the session's whole
+    // history; see Flexemarkets.subscribe.
+    this._appPrefix = history ? "" : API_VERSION_PREFIX;
     this._bearerToken = typeof bearerToken === "function" ? bearerToken : () => bearerToken;
     this._renew = renew;
     this._marketplaceId = marketplaceId;
@@ -535,7 +542,7 @@ export class EventListener {
     for (const dest of [
       `/user/queue${resource}`,
       `/topic${resource}`,
-      `/app${API_VERSION_PREFIX}${resource}`,
+      `/app${this._appPrefix}${resource}`,
     ]) {
       const frame: StompFrame = {
         command: "SUBSCRIBE",

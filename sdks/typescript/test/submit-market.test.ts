@@ -178,3 +178,37 @@ test("a sideless market order is refused rather than priced as a sell", () => {
   assert.throws(() => marketableLimit(market(100, 200, 25), null as unknown as string),
                 /must name its side/);
 });
+
+test("an ordinary limit order names no counterparty", async () => {
+  await withClient(async (fm, sent) => {
+    await fm.submitLimit(1, 11, "BUY", 5, 135);
+    const body = posted(sent)[0];
+    assert.ok(!("ownerTarget" in body) && !("ownerTargetId" in body), "a null target is refused by the server");
+    assert.equal(body.clientDescription, "submit-market-test");
+  });
+});
+
+test("a private order names its counterparty by name or by id", async () => {
+  await withClient(async (fm, sent) => {
+    await fm.submitLimit(1, 11, "SELL", 5, 135, { ownerTarget: "T2" });
+    await fm.submitLimit(1, 11, "SELL", 5, 135, { ownerTargetId: 8 });
+    const [byName, byId] = posted(sent);
+    assert.ok(byName.ownerTarget === "T2" && !("ownerTargetId" in byName));
+    assert.ok(byId.ownerTargetId === 8 && !("ownerTarget" in byId));
+  });
+});
+
+test("naming the counterparty both ways is refused before sending", async () => {
+  await withClient(async (fm, sent) => {
+    await assert.rejects(fm.submitLimit(1, 11, "SELL", 5, 135, { ownerTarget: "T2", ownerTargetId: 8 }),
+      InvalidArgumentError);
+    assert.equal(posted(sent).length, 0);
+  });
+});
+
+test("an order carries its own reference", async () => {
+  await withClient(async (fm, sent) => {
+    await fm.submitLimit(1, 11, "BUY", 5, 135, { clientDescription: "r1" });
+    assert.equal(posted(sent)[0].clientDescription, "r1");
+  });
+});

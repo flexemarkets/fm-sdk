@@ -60,12 +60,13 @@ async function until(what: string, condition: () => boolean): Promise<void> {
   throw new Error(`timed out waiting for: ${what}`);
 }
 
-async function listening() {
+async function listening(history = false) {
   const s = server();
   await new Promise<void>((resolve) => s.wss.on("listening", () => resolve()));
   const events: FmEvent[] = [];
   const listener = new EventListener(s.url(), "Bearer the-token", MP, (e) => void events.push(e),
-                                     "fm-sdk-test", parseHolding as never, parseOrder as never);
+                                     "fm-sdk-test", parseHolding as never, parseOrder as never,
+                                     async () => false, history);
   await listener.start();
   const done = async () => {
     listener.close();
@@ -85,6 +86,16 @@ test("connecting subscribes to the marketplace", async () => {
     assert.match(subscribes[0], /destination:\/user\/queue\/marketplaces\/7/);
     assert.match(subscribes[1], /destination:\/topic\/marketplaces\/7/);
     assert.match(subscribes[2], /destination:\/app\/v1\/marketplaces\/7/);
+  } finally { await done(); }
+});
+
+test("a history subscribe asks for the session's orders", async () => {
+  // fm-server's original subscribe: the participant's only route to the
+  // history, so the V0 destination whatever FM_WS_API_VERSION says.
+  const { s, done } = await listening(true);
+  try {
+    await until("CONNECT and three SUBSCRIBEs", () => s.received[0]?.length >= 4);
+    assert.match(s.received[0][3], /destination:\/app\/marketplaces\/7\n/);
   } finally { await done(); }
 });
 

@@ -16,6 +16,15 @@ public sealed class FlexemarketsException extends RuntimeException
             ConnectionFailedException, ConfigurationException,
             HttpException, ConflictException, ApiException {
 
+    /** The status the server answered, or null when no server answered. */
+    private Integer _statusCode;
+
+    /** The {@code error} the answer named, or null. */
+    private String _reason;
+
+    /** The answer's body, verbatim, or null. */
+    private String _body;
+
     /**
      * With a message and no underlying cause.
      *
@@ -34,4 +43,44 @@ public sealed class FlexemarketsException extends RuntimeException
     protected FlexemarketsException(String message, Throwable cause) {
         super(message, cause);
     }
+
+    /**
+     * Attach the server's answer this exception reports. Set by the SDK where it
+     * raises an exception for a response, much as {@link #initCause} is; a
+     * caller has no reason to.
+     *
+     * @param statusCode the HTTP status the server answered
+     * @param reason     the {@code error} the body named, or null when it named none
+     * @param body       the body, verbatim
+     * @return this exception, for {@code throw e.withResponse(...)}
+     */
+    public FlexemarketsException withResponse(int statusCode, String reason, String body) {
+        this._statusCode = statusCode;
+        this._reason = reason;
+        this._body = body;
+        return this;
+    }
+
+    /**
+     * The status the server answered, when this exception is its answer.
+     *
+     * @return the HTTP status, or null for an exception the SDK raised itself
+     */
+    public Integer statusCode() { return _statusCode; }
+
+    /**
+     * What the server said went wrong: the body's {@code error} --
+     * {@code SESSION_CLOSED}, {@code ORDER_INVALID}, {@code ACCOUNT_TOKEN_EXPIRED}.
+     * This is what a caller branches on; the message is for people.
+     *
+     * @return the error code, or null when there was no answer or it named none
+     */
+    public String reason() { return _reason; }
+
+    /**
+     * The answer's body as the server sent it.
+     *
+     * @return the body, unparsed, or null for an exception the SDK raised itself
+     */
+    public String body() { return _body; }
 }

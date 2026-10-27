@@ -114,6 +114,22 @@ public interface Management {
     List<Holding> uploadHoldings(long marketplaceId, Path csv);
 
     /**
+     * Load opening positions from holdings CSV text, as {@link #uploadHoldings}
+     * does from a file.
+     *
+     * <p>For a program that builds the CSV rather than reading one -- an admin
+     * robot writing back the holdings it downloaded and changed -- which would
+     * otherwise write a file only to have it read again. The text is sent as it
+     * is; a {@code # holdings -- begin} / {@code -- end} frame around it is
+     * accepted, as in a downloaded file.
+     *
+     * @param marketplaceId the marketplace to allocate in
+     * @param csv           the holdings CSV
+     * @return the positions as staged, read back from the server
+     */
+    List<Holding> uploadHoldingsCsv(long marketplaceId, String csv);
+
+    /**
      * Load per-participant private state from a CSV, returning what was
      * stored.
      *

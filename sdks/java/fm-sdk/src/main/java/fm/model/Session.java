@@ -23,6 +23,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
  * @param description   the session's description
  * @param openDate      when it opened, or null before it has
  * @param closeDate     when it closed, or null while it is still running
+ * @param createdDate   when it was created, or null when the response did not say
+ * @param lastModifiedDate when it last changed, or null when the response did not say
  */
 
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -35,7 +37,9 @@ public record Session(
     String name,
     String description,
     Instant openDate,
-    Instant closeDate) {
+    Instant closeDate,
+    Instant createdDate,
+    Instant lastModifiedDate) {
 
     public static final String STATE_INIT   = "INIT";
     public static final String STATE_OPEN   = "OPEN";
@@ -57,8 +61,31 @@ public record Session(
             @JsonProperty("name") String name,
             @JsonProperty("description") String description,
             @JsonProperty("openDate") String openDate,
-            @JsonProperty("closeDate") String closeDate) {
-        return new Session(marketplaceId, allocationId, id, original, state, name, description, Timestamps.parse(openDate), Timestamps.parse(closeDate));
+            @JsonProperty("closeDate") String closeDate,
+            @JsonProperty("createdDate") String createdDate,
+            @JsonProperty("lastModifiedDate") String lastModifiedDate) {
+        return new Session(marketplaceId, allocationId, id, original, state, name, description, Timestamps.parse(openDate),
+                Timestamps.parse(closeDate), Timestamps.parse(createdDate), Timestamps.parse(lastModifiedDate));
+    }
+
+    /**
+     * A session whose created and modified dates are not known, as every caller
+     * that builds one by hand -- tests, fakes, the robots -- did before they
+     * were parsed.
+     *
+     * @param marketplaceId the marketplace this session belongs to
+     * @param allocationId  the allocation its holdings started from
+     * @param id            the session's id
+     * @param original      the first session of this line
+     * @param state         INIT, OPEN, PAUSED or CLOSED
+     * @param name          the session's name
+     * @param description   the session's description
+     * @param openDate      when it opened, or null before it has
+     * @param closeDate     when it closed, or null while it is still running
+     */
+    public Session(long marketplaceId, long allocationId, long id, long original, String state, String name,
+                   String description, Instant openDate, Instant closeDate) {
+        this(marketplaceId, allocationId, id, original, state, name, description, openDate, closeDate, null, null);
     }
 
 }

@@ -1,0 +1,55 @@
+{
+  "type": "Holding",
+  "why": "A live holding says what the session opened with -- initialCash, and initialUnits per position -- and FMClientLibrary's robots read both (Holding.cash_initial, Asset.units_initial); an admin writing holdings back writes them. An SDK that drops them leaves a transport nothing to hand on, and an export that cannot tell them reads zero (fm-robots#472).",
+  "source": {
+    "captured": {
+      "path": "/v1/marketplaces/{marketplaceId}/participants/me/holding",
+      "server": "4.13.0",
+      "on": "2026-10-26"
+    }
+  },
+  "payload": {
+    "allocationId": 78689,
+    "assets": [
+      {
+        "availableUnits": 50,
+        "canBuy": true,
+        "canSell": true,
+        "initialShortUnits": 0,
+        "initialUnits": 50,
+        "marketId": 11008,
+        "units": 50
+      },
+      {
+        "availableUnits": 50,
+        "canBuy": true,
+        "canSell": true,
+        "initialShortUnits": 0,
+        "initialUnits": 50,
+        "marketId": 11009,
+        "units": 50
+      }
+    ],
+    "availableCash": 100000,
+    "cash": 100000,
+    "initialCash": 100000,
+    "marketplaceId": 6421,
+    "name": "T1",
+    "ownerId": 151527,
+    "sessionId": 185765
+  },
+  "expect": {
+    "initialCash": 100000,
+    "cash": 100000,
+    "securities": [
+      {
+        "marketId": 11008,
+        "initialUnits": 50
+      },
+      {
+        "marketId": 11009,
+        "initialUnits": 50
+      }
+    ]
+  }
+}

@@ -167,6 +167,7 @@ def _parse_security(data: dict[str, Any]) -> Security:
         short_units=data.get("shortUnits", data.get("initialShortUnits", 0)) or 0,
         can_buy=data.get("canBuy", False),
         can_sell=data.get("canSell", False),
+        initial_units=data.get("initialUnits"),
     )
 
 
@@ -228,6 +229,8 @@ def _parse_session(data: dict[str, Any]) -> Session:
         description=data.get("description"),
         open_date=_timestamp(data.get("openDate")),
         close_date=_timestamp(data.get("closeDate")),
+        created_date=_timestamp(data.get("createdDate")),
+        last_modified_date=_timestamp(data.get("lastModifiedDate")),
     )
 
 
@@ -251,6 +254,8 @@ def _parse_order(data: dict[str, Any]) -> Order:
         owner_target_id=data.get("ownerTargetId"),
         created_date=_timestamp(data.get("createdDate")),
         last_modified_date=_timestamp(data.get("lastModifiedDate")),
+        mine=data.get("mine"),
+        original_session_id=data.get("originalSessionId"),
     )
 
 
@@ -265,6 +270,7 @@ def _parse_holding(data: dict[str, Any]) -> Holding:
         cash=data.get("cash", 0),
         available_cash=data.get("availableCash", 0),
         securities=[_parse_security(s) for s in securities_raw],
+        initial_cash=data.get("initialCash"),
     )
 
 
@@ -647,23 +653,41 @@ def _token_expired(response: httpx.Response) -> bool:
 _SERVER_TIMING_ST = re.compile(r"st=(\d+)")
 
 
+def _reason(body: str) -> str | None:
+    """The ``error`` a failure body names, or None when it names none."""
+    try:
+        parsed = json.loads(body) if body and body.strip() else None
+    except ValueError:
+        return None
+    error = parsed.get("error") if isinstance(parsed, dict) else None
+    return error if isinstance(error, str) and error else None
+
+
+def _answered(error: FlexemarketsError, response: httpx.Response) -> FlexemarketsError:
+    """*error*, carrying the answer it came from."""
+    error.status_code = response.status_code
+    error.body = response.text
+    error.reason = _reason(response.text)
+    return error
+
+
 def _check_response(response: httpx.Response) -> None:
     status = response.status_code
     if 200 <= status < 300:
         return
     if status == 400:
-        raise InvalidArgumentError("Invalid request: " + _detail(response.text))
+        raise _answered(InvalidArgumentError("Invalid request: " + _detail(response.text)), response)
     if status == 401:
-        raise AuthenticationError("Authentication failed: " + _detail(response.text))
+        raise _answered(AuthenticationError("Authentication failed: " + _detail(response.text)), response)
     if status == 403:
-        raise AuthorizationError("Not permitted: " + _detail(response.text))
+        raise _answered(AuthorizationError("Not permitted: " + _detail(response.text)), response)
     if status == 409:
-        raise ConflictError(response.text)
+        raise _answered(ConflictError(response.text), response)
     if status >= 500:
-        raise ConnectionFailedError(response.text)
+        raise _answered(ConnectionFailedError(response.text), response)
     # Anything else, typed rather than left to httpx: a caller catching
     # FlexemarketsError should not have httpx.HTTPStatusError escape past it.
-    raise HttpError(status, response.text)
+    raise _answered(HttpError(status, response.text), response)
 
 
 def _check_conflict_account(response: httpx.Response, account_name: str) -> None:
@@ -674,17 +698,17 @@ def _check_conflict_account(response: httpx.Response, account_name: str) -> None
             suggested = body.get("suggestedName")
         except Exception:
             pass
-        raise AccountNameConflictError(
+        raise _answered(AccountNameConflictError(
             f"Account name '{account_name}' is already taken.", suggested
-        )
+        ), response)
     _check_response(response)
 
 
 def _check_conflict_user(response: httpx.Response, user_id: int) -> None:
     if response.status_code == 409:
-        raise PersonHasMarketplaceDataError(
+        raise _answered(PersonHasMarketplaceDataError(
             f"User {user_id} has marketplace data and cannot be deleted."
-        )
+        ), response)
     _check_response(response)
 
 
@@ -704,11 +728,26 @@ class Flexemarkets:
         account: str | None = None,
         email: str | None = None,
         token: str | None = None,
+        password: str | None = None,
     ):
+        """Connect and sign in.
+
+        An identity named here -- *account*, *email*, *password* -- replaces
+        the one in ``~/.fm/credential`` rather than overlaying it. Overlaying
+        signed a program in as someone else: a token in the file outranks a
+        password, so naming an account and email beside it was silently
+        ignored, and a robot meant for one participant traded as whoever owned
+        that machine's credential file. A part not named here is missing, not
+        borrowed from the file. ``~/.fm/endpoint`` and ``FM_API_URL`` still
+        supply the endpoint when *endpoint* is not given.
+        """
         self._client_description = client_description or "Unspecified client"
 
         # Build config from defaults then override with explicit args
         config = _load_config()
+        if any(v is not None for v in (account, email, password)):
+            for key in ("account", "email", "password", "token", _REFRESH_TOKEN_PROPERTY):
+                config.pop(key, None)
 
         if credential is not None:
             if credential.startswith(_REFRESH_TOKEN_PREFIX) and credential[len(_REFRESH_TOKEN_PREFIX):].strip():
@@ -731,6 +770,8 @@ class Flexemarkets:
             config["email"] = email
         if token is not None:
             config["token"] = token
+        if password is not None:
+            config["password"] = password
 
         self._endpoint = config.get("endpoint", _DEFAULT_ENDPOINT)
 
@@ -902,6 +943,10 @@ class Flexemarkets:
         """
         with open(filename, "rb") as f:
             content = f.read()
+        return self._send_csv_content(method, url, content)
+
+    def _send_csv_content(self, method: str, url: str, content: bytes) -> httpx.Response:
+        """CSV bytes as the request body, declared text/csv; see :meth:`_send_csv`."""
         resp = self._http.request(
             method, url, content=content,
             headers={
@@ -1311,18 +1356,44 @@ class Flexemarkets:
         side: str,
         units: int,
         price: int,
+        *,
+        owner_target: str | None = None,
+        owner_target_id: int | None = None,
+        client_description: str | None = None,
     ) -> Order:
-        url = _marketplace(self._endpoint, marketplace_id) + "/orders"
-        resp = self._post(url, {
+        """Place a limit order.
+
+        A private market matches an order only with one aimed back at its
+        owner, so an order there names its counterparty: by *owner_target_id*
+        when the caller knows it, or by *owner_target*, the allotment name. The
+        id is the unambiguous one, but only a manager can learn ids -- a
+        participant's ``identifiers()`` are names -- so a participant has the
+        name and nothing else. Name one or the other, not both.
+
+        *client_description* is this order's own reference, as the server keeps
+        it on the order; it defaults to the description this client connected
+        with.
+        """
+        if owner_target is not None and owner_target_id is not None:
+            raise InvalidArgumentError(
+                "Name the counterparty by owner_target or owner_target_id, not both")
+        order: dict[str, Any] = {
             "marketplaceId": marketplace_id,
             "marketId": market_id,
             "type": OrderType.LIMIT,
             "side": side,
             "units": units,
             "price": price,
-            "clientDescription": self._client_description,
-        })
-        return _parse_order(_json(resp))
+            "clientDescription": client_description or self._client_description,
+        }
+        # Left out rather than sent as null: a target of null is a private order
+        # aimed at nobody, which the server refuses.
+        if owner_target is not None:
+            order["ownerTarget"] = owner_target
+        if owner_target_id is not None:
+            order["ownerTargetId"] = owner_target_id
+        url = _marketplace(self._endpoint, marketplace_id) + "/orders"
+        return _parse_order(_json(self._post(url, order)))
 
     def submit_market(
         self, marketplace_id: int, market_id: int, side: str, units: int,
@@ -1550,6 +1621,21 @@ class Flexemarkets:
         allotments = [_parse_allotment(a) for a in _json(resp)]
         return _allotments_to_holdings(allotments)
 
+    def upload_holdings_csv(self, marketplace_id: int, csv: str) -> list[Holding]:
+        """Stage an allocation from holdings CSV text, as :meth:`upload_holdings`
+        does from a file.
+
+        For a program that builds the CSV rather than reading one -- an admin
+        robot writing back the holdings it downloaded and changed -- which
+        otherwise writes a file only to have it read again. The text is sent as
+        it is; a ``# holdings -- begin`` / ``-- end`` frame around it is
+        accepted, as in a downloaded file.
+        """
+        url = _marketplace(self._endpoint, marketplace_id) + "/allocations"
+        resp = self._send_csv_content("POST", url, csv.encode("utf-8"))
+        allotments = [_parse_allotment(a) for a in _json(resp)]
+        return _allotments_to_holdings(allotments)
+
     def upload_state(self, marketplace_id: int, filename: str) -> list[ParticipantState]:
         """Load per-participant private state from a CSV, returning what was stored.
 
@@ -1743,7 +1829,7 @@ class Flexemarkets:
         self._event_listener = self._connect_events(marketplace_id, event_queue)
 
     def subscribe(
-        self, marketplace_id: int, event_queue: queue.Queue[object]
+        self, marketplace_id: int, event_queue: queue.Queue[object], *, history: bool = False,
     ) -> Callable[[], None]:
         """Open an *independent* event subscription, delivering onto
         *event_queue* until the returned unsubscribe callable is invoked.
@@ -1758,12 +1844,23 @@ class Flexemarkets:
         Returns a callable rather than an object with ``close()``, matching
         what ``Desk``'s ``on_*`` handlers already return here. Java
         returns a ``Subscription``; both names describe the same lifetime.
+
+        With *history*, the first :class:`~fm.events.OrdersUpdate` is every
+        order of the current session as this caller may see it -- cancelled
+        and split ones included, a counterparty's private order named from the
+        caller's side -- stamped with the ``seq`` it was read at, and each
+        reconnect delivers it again. That is fm-server's original subscribe,
+        and the only whole history a participant can read: the REST history is
+        a manager's. Without it the first update is empty and the book comes
+        from :meth:`active_orders`. A history is one frame, so on a session
+        with a very long one it is a large frame -- fm-server's V1 subscribe
+        exists to avoid exactly that.
         """
-        listener = self._connect_events(marketplace_id, event_queue)
+        listener = self._connect_events(marketplace_id, event_queue, history=history)
         return listener.close
 
     def _connect_events(
-        self, marketplace_id: int, event_queue: queue.Queue[object]
+        self, marketplace_id: int, event_queue: queue.Queue[object], history: bool = False,
     ) -> "EventListener":
         """Internal helper used by :class:`~fm.desk.Desk`
         (Phase 2d) to own its own subscription rather than clobbering
@@ -1782,6 +1879,7 @@ class Flexemarkets:
             event_queue=event_queue,
             client_description=self._client_description,
             renew=self._renew_token,
+            history=history,
         )
         ev.start()
         return ev

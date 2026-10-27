@@ -2,7 +2,19 @@
 
 
 class FlexemarketsError(Exception):
-    """Base exception for all Flexemarkets errors."""
+    """Base exception for all Flexemarkets errors.
+
+    An error that is the server's answer carries it: ``status_code``, the
+    ``body`` as sent, and ``reason``, the body's ``error`` -- ``SESSION_CLOSED``,
+    ``ORDER_INVALID``, ``ACCOUNT_TOKEN_EXPIRED`` -- which is what a caller
+    branches on, where the message is for people. All three are None for an
+    error the SDK raised itself, and ``reason`` is None when the body named no
+    error.
+    """
+
+    status_code: int | None = None
+    reason: str | None = None
+    body: str | None = None
 
 
 class AuthenticationError(FlexemarketsError):

@@ -65,6 +65,34 @@ public interface Writing {
                       Long ownerTargetId);
 
     /**
+     * Place a limit order naming its counterparty either way, with its own reference.
+     *
+     * <p>The id is the unambiguous target, but only a manager can learn ids: a
+     * participant's {@code identifiers} are names. So a participant trading in a
+     * private market has the allotment name and nothing else, and passes it as
+     * {@code ownerTarget}. Name one or the other, not both.
+     *
+     * <p>{@code clientDescription} is this order's own reference, as the server
+     * keeps it on the order; null takes the description this client connected
+     * with.
+     *
+     * @param marketplaceId     the marketplace to trade in
+     * @param marketId          the market within it
+     * @param side              which way round the order goes
+     * @param units             how many units to trade
+     * @param price             the limit price, in the cents the exchange counts in
+     * @param ownerTarget       the counterparty this order is for, by allotment name;
+     *                          null when it names none or names it by id
+     * @param ownerTargetId     the counterparty this order is for, by owner id; null
+     *                          when it names none or names it by name
+     * @param clientDescription this order's reference; null for the client's own
+     * @return the order as the server recorded it, carrying the id it assigned
+     * @throws fm.error.InvalidArgumentException when both targets are given
+     */
+    Order submitLimit(long marketplaceId, long marketId, OrderSide side, long units, long price,
+                      String ownerTarget, Long ownerTargetId, String clientDescription);
+
+    /**
      * Cancel a resting order.
      *
      * <p>The exchange expresses a cancel as an order of its own, naming the one

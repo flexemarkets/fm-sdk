@@ -30,6 +30,8 @@
     "openDate": {
       "epochMilli": 1787302800000
     },
-    "closeDate": null
+    "closeDate": null,
+    "createdDate": null,
+    "lastModifiedDate": null
   }
 }
