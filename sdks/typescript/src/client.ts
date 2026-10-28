@@ -333,6 +333,7 @@ export function parseOrder(data: JsonObject): Order {
     lastModifiedDate: toInstant(data.lastModifiedDate as string),
     mine: (data.mine as boolean | null) ?? null,
     originalSessionId: (data.originalSessionId as number | null) ?? null,
+    submissionId: (data.submissionId as string | null) ?? null,
   };
 }
 
