@@ -75,7 +75,7 @@ class EventsSocketTest {
         return event;
     }
 
-    private static String message(String type, String extraHeader, String body) {
+    static String message(String type, String extraHeader, String body) {
         return "MESSAGE\ndestination:/user/queue/marketplaces/7\nmessage-type:" + type + "\n"
                 + (extraHeader == null ? "" : extraHeader + "\n") + "\n" + body + "\0";
     }
@@ -574,7 +574,7 @@ class EventsSocketTest {
 
     // --- the least of a WebSocket server a STOMP client needs ---
 
-    private static final class _Server implements AutoCloseable {
+    static final class _Server implements AutoCloseable {
         private static final String GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
         private final ServerSocket socket = new ServerSocket(0, 50, InetAddress.getLoopbackAddress());
@@ -701,7 +701,7 @@ class EventsSocketTest {
         }
     }
 
-    private static final class _Connection {
+    static final class _Connection {
         final Map<String, String> headers;
         private final Socket socket;
         private final List<String> received = new CopyOnWriteArrayList<>();
@@ -715,6 +715,11 @@ class EventsSocketTest {
             this.socket = socket;
             this.headers = headers;
             this.answerConnect = answerConnect;
+        }
+
+        /** Everything the client has sent on this connection so far, in order. */
+        List<String> received() {
+            return List.copyOf(received);
         }
 
         String received(int index) throws InterruptedException {

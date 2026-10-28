@@ -1,6 +1,8 @@
 package fm.internal;
 
 import fm.event.FrameUnreadable;
+import fm.event.OrderAccepted;
+import fm.event.OrderRejected;
 import fm.event.OrdersUpdate;
 import fm.event.StreamReconnected;
 import fm.event.StreamDropped;
@@ -15,6 +17,7 @@ import fm.Snapshot;
 import fm.Subscription;
 import fm.error.ApiException;
 import fm.error.AuthenticationException;
+import fm.error.ConnectionFailedException;
 import fm.error.FlexemarketsException;
 
 import java.net.URI;
@@ -48,7 +51,7 @@ import tools.jackson.databind.ObjectMapper;
  * {@code listen}, {@code subscribe} or {@code desk}, and holds the
  * {@link Subscription} rather than this type.
  */
-public class Events implements Subscription {
+public class Events implements Subscription, OrderStream.Listener {
 
     /**
      * Prefix on the {@code /app} SUBSCRIBE destination selecting fm-server's
@@ -76,6 +79,8 @@ public class Events implements Subscription {
 
     private static final String MESSAGE_TYPE = "message-type";
     private static final String SEQ          = "seq";
+    /** fm-server's name for the submission an ORDER-ACCEPTED or ORDER-REJECTED answers. */
+    private static final String SUBMISSION_ID = "submission-id";
 
     private static final String MESSAGE_TYPE_VERSION        = "VERSION";
     private static final String MESSAGE_TYPE_SESSION_LIST   = "SESSION-LIST";
@@ -88,6 +93,23 @@ public class Events implements Subscription {
     // What an indicative call market would clear at now, on the marketplace's
     // topic; delivered as sent, so a caller keeps the highest seq it has seen.
     private static final String MESSAGE_TYPE_CALL_INDICATIVE = "CALL-INDICATIVE";
+    // What fm-server answers to the socket that sent an order: refused, or, for
+    // a resend of one it already holds, accepted with the order it made then.
+    private static final String MESSAGE_TYPE_ORDER_ACCEPTED = "ORDER-ACCEPTED";
+    private static final String MESSAGE_TYPE_ORDER_REJECTED = "ORDER-REJECTED";
+
+    /**
+     * HTTP status codes by the names fm-server spells them in a socket failure
+     * body: Spring's HttpStatus names, for the statuses a refused order comes
+     * back with. A name not here is read as a bad request, which is what a
+     * refused order is.
+     */
+    private static final java.util.Map<String, Integer> STATUS_BY_NAME = java.util.Map.ofEntries(
+            java.util.Map.entry("BAD_REQUEST", 400), java.util.Map.entry("UNAUTHORIZED", 401),
+            java.util.Map.entry("FORBIDDEN", 403), java.util.Map.entry("NOT_FOUND", 404),
+            java.util.Map.entry("CONFLICT", 409), java.util.Map.entry("PAYLOAD_TOO_LARGE", 413),
+            java.util.Map.entry("UNPROCESSABLE_ENTITY", 422), java.util.Map.entry("TOO_MANY_REQUESTS", 429),
+            java.util.Map.entry("INTERNAL_SERVER_ERROR", 500), java.util.Map.entry("SERVICE_UNAVAILABLE", 503));
 
     private static final TypeReference<Version>    VERSION_TYPE  = new TypeReference<>() {};
     private static final TypeReference<Session[]>  SESSIONS_TYPE = new TypeReference<>() {};
@@ -96,6 +118,7 @@ public class Events implements Subscription {
     private static final TypeReference<fm.model.MarketCall> MARKET_CALL_TYPE = new TypeReference<>() {};
     private static final TypeReference<fm.model.CallIndicative> INDICATIVE_TYPE = new TypeReference<>() {};
     private static final TypeReference<Order[]>    ORDERS_TYPE   = new TypeReference<>() {};
+    private static final TypeReference<Order>      ORDER_TYPE    = new TypeReference<>() {};
 
     private final String _wsUrl;
     /** Read on every connect, so a reconnect after the client renewed its sign-in presents the new token. */
@@ -449,6 +472,55 @@ public class Events implements Subscription {
     }
 
     /**
+     * Whether this stream has stopped for good: closed by its owner, or given
+     * up after its token was refused twice. A drop it will recover from is not.
+     *
+     * @return true once it will deliver nothing more
+     */
+    @Override
+    public boolean isClosed() {
+        return _closed;
+    }
+
+    /**
+     * Send {@code body}, JSON, to an {@code /app} {@code destination} on this
+     * connection, from any thread.
+     *
+     * @param destination where on the server it goes
+     * @param body        the JSON it carries
+     * @throws ConnectionFailedException while there is no connection to send on
+     *         -- before {@link #connect}, after {@link #close}, or between a drop
+     *         and the reconnect -- and when the send itself fails
+     */
+    @Override
+    public void send(String destination, String body) {
+        var socket = _webSocket;
+        if (_closed || socket == null) {
+            throw new ConnectionFailedException("The event stream is not connected.");
+        }
+        var frame = "SEND\ndestination:" + destination + "\ncontent-type:application/json\ncontent-length:"
+                + body.getBytes(java.nio.charset.StandardCharsets.UTF_8).length + "\n\n" + body + "\0";
+        try {
+            _write(socket, frame);
+        } catch (RuntimeException e) {
+            var failed = new ConnectionFailedException("The event stream could not send: " + e.getMessage());
+            failed.initCause(e);
+            throw failed;
+        }
+    }
+
+    /**
+     * Write one whole message and wait until it has gone.
+     *
+     * <p>The JDK's WebSocket allows one send at a time and throws on a second
+     * while the first is outstanding, so every write -- an order, a heartbeat --
+     * goes through here, one after another.
+     */
+    private synchronized void _write(WebSocket socket, String text) {
+        socket.sendText(text, true).join();
+    }
+
+    /**
      * Close the current socket, detaching it first.
      *
      * <p>Detached so that its own onClose -- which arrives when the server
@@ -486,7 +558,7 @@ public class Events implements Subscription {
             var socket = _webSocket;
             if (_closed || socket == null) return;
             try {
-                socket.sendText("\n", true);
+                _write(socket, "\n");
             } catch (Exception ignored) {}
         }, heartbeatIntervalMillis, heartbeatIntervalMillis, TimeUnit.MILLISECONDS);
     }
@@ -551,6 +623,7 @@ public class Events implements Subscription {
         }
 
         String messageType = null;
+        String submissionId = null;
         long seq = Snapshot.NO_SEQ;
         int bodyStart = -1;
 
@@ -562,6 +635,8 @@ public class Events implements Subscription {
             }
             if (line.startsWith(MESSAGE_TYPE + ":")) {
                 messageType = line.substring(MESSAGE_TYPE.length() + 1).trim();
+            } else if (line.startsWith(SUBMISSION_ID + ":")) {
+                submissionId = line.substring(SUBMISSION_ID.length() + 1).trim();
             } else if (line.startsWith(SEQ + ":")) {
                 // Per-marketplace ORDERS-UPDATE sequence number stamped
                 // by fm-server (commit c6eea6eca). Used by Desk /
@@ -600,6 +675,8 @@ public class Events implements Subscription {
                 case MESSAGE_TYPE_ORDERS_UPDATE  -> new OrdersUpdate(_mapper.readValue(body, ORDERS_TYPE), seq);
                 case MESSAGE_TYPE_CALL_UPDATE    -> _mapper.readValue(body, MARKET_CALL_TYPE);
                 case MESSAGE_TYPE_CALL_INDICATIVE -> _mapper.readValue(body, INDICATIVE_TYPE);
+                case MESSAGE_TYPE_ORDER_ACCEPTED -> new OrderAccepted(submissionId, _mapper.readValue(body, ORDER_TYPE));
+                case MESSAGE_TYPE_ORDER_REJECTED -> new OrderRejected(submissionId, _refusal(body));
                 default -> null;
             };
             if (event != null) {
@@ -608,6 +685,23 @@ public class Events implements Subscription {
         } catch (Exception e) {
             _queue.offer(new FrameUnreadable("Failed to parse STOMP message: " + messageType, e));
         }
+    }
+
+    /**
+     * What REST throws for this socket failure body. The body names its status
+     * as an HTTP status name where REST has the code on the response.
+     */
+    private FlexemarketsException _refusal(String body) {
+        int status = 400;
+        try {
+            var name = _mapper.readTree(body).path("status");
+            if (name.isString()) {
+                status = STATUS_BY_NAME.getOrDefault(name.asString(), 400);
+            }
+        } catch (Exception unreadable) {
+            // A body that is not JSON is still a refusal; its text says what it can.
+        }
+        return HttpFlexemarkets._failureFor(status, body);
     }
 
     // --- WebSocket.Listener ---

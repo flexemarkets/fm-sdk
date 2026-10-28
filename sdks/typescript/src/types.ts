@@ -525,6 +525,12 @@ export interface Order {
   mine: boolean | null;
   /** The session the order was first placed in, when carried into a later one; null when not said. */
   originalSessionId: number | null;
+  /**
+   * The id the submitting client named the order with, as fm-server keeps it
+   * on the order: what ties an order arriving on the stream to the one a
+   * client sent over the socket. Null for an order sent without one.
+   */
+  submissionId: string | null;
 }
 
 /**

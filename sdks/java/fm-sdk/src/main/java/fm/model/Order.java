@@ -48,6 +48,10 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
  * @param originalSessionId the session the order was first placed in, when it was
  *                          carried into a later one; null when the response did
  *                          not say
+ * @param submissionId      the id the submitting client named the order with, as
+ *                          fm-server keeps it: what ties an order arriving on the
+ *                          stream to the one a client sent over the socket; null
+ *                          for an order sent without one
  */
 
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -72,7 +76,8 @@ public record Order(
     String ownerTarget,
     String clientDescription,
     Long ownerTargetId,
-    Long originalSessionId) {
+    Long originalSessionId,
+    String submissionId) {
 
 
     /**
@@ -101,8 +106,43 @@ public record Order(
             @JsonProperty("ownerTarget") String ownerTarget,
             @JsonProperty("clientDescription") String clientDescription,
             @JsonProperty("ownerTargetId") Long ownerTargetId,
-            @JsonProperty("originalSessionId") Long originalSessionId) {
-        return new Order(Timestamps.parse(createdDate), Timestamps.parse(lastModifiedDate), id, original, supplier, consumer, type, side, units, price, mine, ownerId, marketplaceId, sessionId, symbol, marketId, ownerTarget, clientDescription, ownerTargetId, originalSessionId);
+            @JsonProperty("originalSessionId") Long originalSessionId,
+            @JsonProperty("submissionId") String submissionId) {
+        return new Order(Timestamps.parse(createdDate), Timestamps.parse(lastModifiedDate), id, original, supplier, consumer, type, side, units, price, mine, ownerId, marketplaceId, sessionId, symbol, marketId, ownerTarget, clientDescription, ownerTargetId, originalSessionId, submissionId);
+    }
+
+    /**
+     * An order sent without a submission id, as every caller that builds one
+     * by hand did before that was parsed.
+     *
+     * @param createdDate       when it was submitted
+     * @param lastModifiedDate  when it last changed
+     * @param id                the order's id
+     * @param original          the order it was split from, or its own id
+     * @param supplier          the order whose units it took
+     * @param consumer          the order that consumed it, 0 for a split, null while it stands
+     * @param type              LIMIT or CANCEL
+     * @param side              BUY or SELL
+     * @param units             how many units
+     * @param price             the price
+     * @param mine              whether it is the caller's own
+     * @param ownerId           who submitted it
+     * @param marketplaceId     the marketplace it was submitted to
+     * @param sessionId         the session it belongs to
+     * @param symbol            the market's symbol
+     * @param marketId          the market's id
+     * @param ownerTarget       the named counterparty
+     * @param clientDescription how the submitting client identified itself
+     * @param ownerTargetId     the counterparty of a private order, by owner id
+     * @param originalSessionId the session it was first placed in, or null
+     */
+    public Order(Instant createdDate, Instant lastModifiedDate, long id, long original, long supplier, Long consumer,
+                 OrderType type, OrderSide side, long units, long price, Boolean mine, Long ownerId,
+                 long marketplaceId, long sessionId, String symbol, long marketId, String ownerTarget,
+                 String clientDescription, Long ownerTargetId, Long originalSessionId) {
+        this(createdDate, lastModifiedDate, id, original, supplier, consumer, type, side, units, price, mine, ownerId,
+             marketplaceId, sessionId, symbol, marketId, ownerTarget, clientDescription, ownerTargetId,
+             originalSessionId, null);
     }
 
     /**
@@ -134,7 +174,7 @@ public record Order(
                  long marketplaceId, long sessionId, String symbol, long marketId, String ownerTarget,
                  String clientDescription, Long ownerTargetId) {
         this(createdDate, lastModifiedDate, id, original, supplier, consumer, type, side, units, price, mine, ownerId,
-             marketplaceId, sessionId, symbol, marketId, ownerTarget, clientDescription, ownerTargetId, null);
+             marketplaceId, sessionId, symbol, marketId, ownerTarget, clientDescription, ownerTargetId, null, null);
     }
 
 }

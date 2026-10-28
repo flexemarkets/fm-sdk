@@ -334,3 +334,47 @@ def test_a_reconnect_the_caller_asks_for_replaces_the_socket_once(server, events
         events.get(timeout=1.5)
     time.sleep(0.5)
     assert len(server.connections) == 2, "one replacement"
+
+
+class TestSend:
+    """An order frame goes out on the connection the subscription holds."""
+
+    def test_a_send_is_one_stomp_frame_to_the_destination(self, server, listener):
+        l = listener()
+        _await("subscribed", lambda: len(server.received[0]) >= 4)
+        l.send("/app/marketplaces/7/orders", '{"price": 450, "symbol": "\u00e9"}')
+        _await("the SEND", lambda: len(server.received[0]) >= 5)
+        sent = fm_events._decode_frame(server.received[0][4])
+        assert sent.command == "SEND"
+        assert sent.headers == {"destination": "/app/marketplaces/7/orders",
+                                "content-type": "application/json",
+                                "content-length": "30"}
+        assert sent.body == '{"price": 450, "symbol": "\u00e9"}'
+
+    def test_there_is_nothing_to_send_on_before_start_or_after_close(self, server, events):
+        from fm.exceptions import ConnectionFailedError
+        l = EventListener(server.url, "Bearer the-token", MP, events, "fm-sdk-test")
+        with pytest.raises(ConnectionFailedError, match="not connected"):
+            l.send("/app/marketplaces/7/orders", "{}")
+        l.start()
+        l.close()
+        with pytest.raises(ConnectionFailedError, match="not connected"):
+            l.send("/app/marketplaces/7/orders", "{}")
+
+    def test_a_send_that_fails_says_so_as_a_connection_failure(self, server, listener):
+        from fm.exceptions import ConnectionFailedError
+        l = listener()
+
+        class _Broken:
+            def send(self, _: str) -> None:
+                raise OSError("broken pipe")
+
+            def close(self) -> None:
+                pass
+
+        real, l._ws = l._ws, _Broken()
+        try:
+            with pytest.raises(ConnectionFailedError, match="broken pipe"):
+                l.send("/app/marketplaces/7/orders", "{}")
+        finally:
+            l._ws = real

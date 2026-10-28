@@ -838,6 +838,51 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     public Order submitLimit(long marketplaceId, long marketId, OrderSide side, long units, long price,
                              String ownerTarget, Long ownerTargetId, String clientDescription) {
+        var order = _limitOrder(marketplaceId, marketId, side, units, price, ownerTarget, ownerTargetId,
+                                clientDescription);
+        var url = _marketplace(marketplaceId) + "/orders";
+        try {
+            return _post(url, order, ORDER_TYPE);
+        } catch (ApiException lost) {
+            if (!(lost.getCause() instanceof IOException)) {
+                throw lost;
+            }
+            return _post(url, order, ORDER_TYPE);
+        }
+    }
+
+    @Override
+    public fm.PendingOrder sendLimit(long marketplaceId, long marketId, OrderSide side, long units, long price) {
+        return sendLimit(marketplaceId, marketId, side, units, price, null, null, null);
+    }
+
+    @Override
+    public fm.PendingOrder sendLimit(long marketplaceId, long marketId, OrderSide side, long units, long price,
+                                     String ownerTarget, Long ownerTargetId, String clientDescription) {
+        var order = _limitOrder(marketplaceId, marketId, side, units, price, ownerTarget, ownerTargetId,
+                                clientDescription);
+        return _orderStream(marketplaceId).submit((String) order.get("submissionId"),
+                                                  MAPPER.writeValueAsString(order));
+    }
+
+    /** The marketplace's order socket, opened on first use. */
+    OrderStream _orderStream(long marketplaceId) {
+        synchronized (_orderStreams) {
+            if (_closed) {
+                throw new fm.error.ConnectionFailedException("The client is closed; the order was not sent.");
+            }
+            return _orderStreams.computeIfAbsent(marketplaceId, id -> new OrderStream(
+                    queue -> _connectEvents(id, queue), id, OrderStream.MAX_IN_FLIGHT));
+        }
+    }
+
+    /** The socket each marketplace's sendLimit orders go out on, opened by the first of them. */
+    private final java.util.Map<Long, OrderStream> _orderStreams = new java.util.HashMap<>();
+
+    /** The body of a limit order, named with a fresh submission id. */
+    private LinkedHashMap<String, Object> _limitOrder(long marketplaceId, long marketId, OrderSide side, long units,
+                                                      long price, String ownerTarget, Long ownerTargetId,
+                                                      String clientDescription) {
         if (null != ownerTarget && null != ownerTargetId) {
             throw new InvalidArgumentException("Name the counterparty by ownerTarget or ownerTargetId, not both");
         }
@@ -867,15 +912,7 @@ public class HttpFlexemarkets implements Flexemarkets {
         // its connection may or may not have landed; reporting it as refused
         // invited the caller to place it again and double the position.
         order.put("submissionId", UUID.randomUUID().toString());
-        var url = _marketplace(marketplaceId) + "/orders";
-        try {
-            return _post(url, order, ORDER_TYPE);
-        } catch (ApiException lost) {
-            if (!(lost.getCause() instanceof IOException)) {
-                throw lost;
-            }
-            return _post(url, order, ORDER_TYPE);
-        }
+        return order;
     }
 
     /**
@@ -1275,7 +1312,17 @@ public class HttpFlexemarkets implements Flexemarkets {
     @Override
     public void close() {
         if (_closed) return;
-        _closed = true;
+        // Before the listeners: an order still unanswered is told so, rather
+        // than waiting on a socket that has gone.
+        java.util.List<OrderStream> streams;
+        synchronized (_orderStreams) {
+            _closed = true;
+            streams = new java.util.ArrayList<>(_orderStreams.values());
+            _orderStreams.clear();
+        }
+        for (var stream : streams) {
+            stream.close();
+        }
         if (_events != null) {
             _events.close();
         }
@@ -2138,7 +2185,7 @@ public class HttpFlexemarkets implements Flexemarkets {
      * <p>A status with a meaning a caller can act on gets its own type. What is
      * left is HttpException, carrying the status so a caller can still ask.
      */
-    private static FlexemarketsException _failureFor(int statusCode, String body) {
+    static FlexemarketsException _failureFor(int statusCode, String body) {
         return _bare(statusCode, body).withResponse(statusCode, _reason(body), body);
     }
 

@@ -587,6 +587,8 @@ class AdminApiTest {
             public Order submitLimit(long m, long k, OrderSide s, long u, long p, String n, Long t, String r) { return null; }
             public Order submitCancel(long m, long k, long o) { return null; }
             public Order submitMarket(long m, long k, OrderSide s, long u) { return null; }
+            public PendingOrder sendLimit(long m, long k, OrderSide s, long u, long p) { return null; }
+            public PendingOrder sendLimit(long m, long k, OrderSide s, long u, long p, String n, Long t, String r) { return null; }
         };
 
         assertThat(trader.submitCancel(1, 1, 1)).isNull();

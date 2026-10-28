@@ -199,5 +199,6 @@ export function limit(
     lastModifiedDate: null,
     mine: null,
     originalSessionId: null,
+    submissionId: null,
   };
 }

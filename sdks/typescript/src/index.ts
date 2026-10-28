@@ -69,6 +69,7 @@ export {
   AuthorizationError,
   InvalidArgumentError,
   OrderRefusedLocallyError,
+  OrderOutcomeUnknownError,
   ConnectionFailedError,
   ConfigurationError,
   ConflictError,
@@ -120,9 +121,14 @@ export type {
   StreamDropped,
   StreamReconnected,
   FrameUnreadable,
+  OrderAccepted,
+  OrderRejected,
   FmEvent,
   EventCallback,
 } from "./stomp.js";
+
+// Orders sent without waiting
+export { PendingOrder } from "./order-stream.js";
 
 // Desk
 export type { Desk, Subscription, GapEvent, DeskRecovery } from "./desk.js";

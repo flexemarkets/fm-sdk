@@ -102,3 +102,18 @@ class ConnectionFailedError(FlexemarketsError):
 
 class ConfigurationError(FlexemarketsError):
     """Raised for configuration problems."""
+
+
+class OrderOutcomeUnknownError(FlexemarketsError):
+    """An order was sent and no answer to it can now arrive.
+
+    Not a refusal: fm-server may well have placed it. Raised for an order sent
+    over the socket that was still unanswered when its stream closed. Placing
+    it again under a new submission risks holding the position twice; read
+    the book, or the orders, to learn whether it stands. *submission_id* is
+    the id it was sent under, which the order carries if it was placed.
+    """
+
+    def __init__(self, message: str, submission_id: str | None = None) -> None:
+        super().__init__(message)
+        self.submission_id = submission_id

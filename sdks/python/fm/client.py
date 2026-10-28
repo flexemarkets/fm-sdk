@@ -25,6 +25,7 @@ from .timestamps import parse as _timestamp
 if TYPE_CHECKING:
     from .events import EventListener
     from .desk import Desk
+    from .order_stream import OrderStream, PendingOrder
 
 
 @dataclass
@@ -289,6 +290,7 @@ def _parse_order(data: dict[str, Any]) -> Order:
         last_modified_date=_timestamp(data.get("lastModifiedDate")),
         mine=data.get("mine"),
         original_session_id=data.get("originalSessionId"),
+        submission_id=data.get("submissionId"),
     )
 
 
@@ -708,19 +710,34 @@ def _check_response(response: httpx.Response) -> None:
     status = response.status_code
     if 200 <= status < 300:
         return
+    raise _refused(status, response.text)
+
+
+def _refused(status: int, body: str) -> FlexemarketsError:
+    """The error for a refusal with this status and failure body.
+
+    REST reads the status off the response; the socket's ORDER-REJECTED
+    carries it in the body. One mapping, so an order refused either way
+    raises the same thing.
+    """
     if status == 400:
-        raise _answered(InvalidArgumentError("Invalid request: " + _detail(response.text)), response)
-    if status == 401:
-        raise _answered(AuthenticationError("Authentication failed: " + _detail(response.text)), response)
-    if status == 403:
-        raise _answered(AuthorizationError("Not permitted: " + _detail(response.text)), response)
-    if status == 409:
-        raise _answered(ConflictError(response.text), response)
-    if status >= 500:
-        raise _answered(ConnectionFailedError(response.text), response)
-    # Anything else, typed rather than left to httpx: a caller catching
-    # FlexemarketsError should not have httpx.HTTPStatusError escape past it.
-    raise _answered(HttpError(status, response.text), response)
+        error: FlexemarketsError = InvalidArgumentError("Invalid request: " + _detail(body))
+    elif status == 401:
+        error = AuthenticationError("Authentication failed: " + _detail(body))
+    elif status == 403:
+        error = AuthorizationError("Not permitted: " + _detail(body))
+    elif status == 409:
+        error = ConflictError(body)
+    elif status >= 500:
+        error = ConnectionFailedError(body)
+    else:
+        # Anything else, typed rather than left to httpx: a caller catching
+        # FlexemarketsError should not have httpx.HTTPStatusError escape past it.
+        error = HttpError(status, body)
+    error.status_code = status
+    error.body = body
+    error.reason = _reason(body)
+    return error
 
 
 def _check_conflict_account(response: httpx.Response, account_name: str) -> None:
@@ -849,6 +866,11 @@ class Flexemarkets:
         # Phase 2d shared-desk registry, keyed by marketplace_id.
         self._shared_views: dict[int, _SharedView] = {}
         self._view_lock = threading.Lock()
+
+        # The socket each marketplace's send_limit orders go out on, opened by
+        # the first of them.
+        self._order_streams: dict[int, "OrderStream"] = {}
+        self._order_stream_lock = threading.Lock()
 
     # -- factory helpers matching Java's connect() overloads ----------------
 
@@ -1482,6 +1504,49 @@ class Flexemarkets:
         it on the order; it defaults to the description this client connected
         with.
         """
+        order = self._limit_order(marketplace_id, market_id, side, units, price, owner_target,
+                                  owner_target_id, client_description)
+        url = _marketplace(self._endpoint, marketplace_id) + "/orders"
+        try:
+            resp = self._post(url, order)
+        except httpx.TransportError:
+            resp = self._post(url, order)
+        return _parse_order(_json(resp))
+
+    def send_limit(
+        self,
+        marketplace_id: int,
+        market_id: int,
+        side: str,
+        units: int,
+        price: int,
+        *,
+        owner_target: str | None = None,
+        owner_target_id: int | None = None,
+        client_description: str | None = None,
+    ) -> "PendingOrder":
+        """Place a limit order without waiting for the answer.
+
+        The order goes over the marketplace's socket and this returns a
+        :class:`~fm.order_stream.PendingOrder` at once: the next order can go
+        before this one is matched, and fm-server still matches them in the
+        order sent. Its ``result()`` is the order, or the refusal
+        :meth:`submit_limit` would have raised -- or
+        :class:`~fm.exceptions.OrderOutcomeUnknownError` if the socket closed
+        before the answer came. The socket opens with the first order sent this
+        way and stays open until :meth:`close`; at most
+        :data:`~fm.order_stream.MAX_IN_FLIGHT` orders are unanswered at once.
+        The arguments are :meth:`submit_limit`'s. See docs/SUBMIT-RATE.md.
+        """
+        order = self._limit_order(marketplace_id, market_id, side, units, price, owner_target,
+                                  owner_target_id, client_description)
+        return self._order_stream(marketplace_id).submit(order)
+
+    def _limit_order(
+        self, marketplace_id: int, market_id: int, side: str, units: int, price: int,
+        owner_target: str | None, owner_target_id: int | None, client_description: str | None,
+    ) -> dict[str, Any]:
+        """The body of a limit order, named with a fresh submission id."""
         if owner_target is not None and owner_target_id is not None:
             raise InvalidArgumentError(
                 "Name the counterparty by owner_target or owner_target_id, not both")
@@ -1506,12 +1571,18 @@ class Flexemarkets:
         # its connection may or may not have landed; reporting it as refused
         # invited the caller to place it again and double the position.
         order["submissionId"] = str(uuid.uuid4())
-        url = _marketplace(self._endpoint, marketplace_id) + "/orders"
-        try:
-            resp = self._post(url, order)
-        except httpx.TransportError:
-            resp = self._post(url, order)
-        return _parse_order(_json(resp))
+        return order
+
+    def _order_stream(self, marketplace_id: int) -> "OrderStream":
+        """The marketplace's order socket, opened on first use."""
+        from .order_stream import OrderStream
+
+        with self._order_stream_lock:
+            stream = self._order_streams.get(marketplace_id)
+            if stream is None:
+                stream = OrderStream(lambda events: self._connect_events(marketplace_id, events), marketplace_id)
+                self._order_streams[marketplace_id] = stream
+            return stream
 
     def submit_market(
         self, marketplace_id: int, market_id: int, side: str, units: int,
@@ -2093,6 +2164,12 @@ class Flexemarkets:
     # -- lifecycle ---------------------------------------------------------
 
     def close(self) -> None:
+        # Before the listeners: an order still unanswered is told so, rather
+        # than waiting on a socket that has gone.
+        with getattr(self, "_order_stream_lock", threading.Lock()):
+            streams, self._order_streams = list(getattr(self, "_order_streams", {}).values()), {}
+        for stream in streams:
+            stream.close()
         if hasattr(self, "_event_listener") and self._event_listener is not None:
             self._event_listener.close()
             self._event_listener = None

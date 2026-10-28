@@ -2,7 +2,9 @@
 
 from .client import Flexemarkets
 from .enums import OrderType, OrderSide
-from .events import NO_SEQ, OrdersUpdate, FrameUnreadable, StreamReconnected, StreamDropped
+from .events import (NO_SEQ, OrdersUpdate, FrameUnreadable, StreamReconnected, StreamDropped,
+                     OrderAccepted, OrderRejected)
+from .order_stream import PendingOrder
 from .page import Page
 from .snapshot import Snapshot
 from .decimals import Decimals
@@ -17,6 +19,7 @@ from .exceptions import (
     FlexemarketsError,
     HttpError,
     InvalidArgumentError,
+    OrderOutcomeUnknownError,
     OrderRefusedLocallyError,
     PersonHasMarketplaceDataError,
 )
@@ -104,6 +107,10 @@ __all__ = [
     "FrameUnreadable",
     "StreamReconnected",
     "OrdersUpdate",
+    "OrderAccepted",
+    "OrderRejected",
+    # orders sent without waiting
+    "PendingOrder",
     # snapshot
     "Snapshot",
     "NO_SEQ",
@@ -115,6 +122,7 @@ __all__ = [
     "AuthorizationError",
     "InvalidArgumentError",
     "OrderRefusedLocallyError",
+    "OrderOutcomeUnknownError",
     "AccountNameConflictError",
     "ApiError",
     "HttpError",

@@ -39,6 +39,7 @@
     "mine": false,
     "ownerId": null,
     "ownerTarget": "T2",
-    "originalSessionId": null
+    "originalSessionId": null,
+    "submissionId": null
   }
 }
