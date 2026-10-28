@@ -403,6 +403,10 @@ class Order:
     # The session the order was first placed in, when it was carried into a
     # later one; None when the response did not say.
     original_session_id: int | None = None
+    # The id the submitting client named the order with, as fm-server keeps it
+    # on the order. What ties an order arriving on the stream to the one a
+    # client sent over the socket; None for an order sent without one.
+    submission_id: str | None = None
 
 
 

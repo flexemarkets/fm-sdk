@@ -289,6 +289,7 @@ def _parse_order(data: dict[str, Any]) -> Order:
         last_modified_date=_timestamp(data.get("lastModifiedDate")),
         mine=data.get("mine"),
         original_session_id=data.get("originalSessionId"),
+        submission_id=data.get("submissionId"),
     )
 
 
