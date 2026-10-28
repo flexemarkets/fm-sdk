@@ -290,6 +290,26 @@ class EventsSocketTest {
         assertThat(call.calledDate()).isEqualTo(java.time.Instant.parse("2026-10-25T09:00:05Z"));
     }
 
+    /** What an indicative call market would clear at now arrives as sent, its seq kept for the caller to order by. */
+    @Test
+    @Timeout(20)
+    void anIndicativePriceArrivesWithItsSeq() throws Exception {
+        connected();
+        _Connection socket = server.connection(0);
+
+        socket.send(message("CALL-INDICATIVE", null, "{\"marketplaceId\":7,\"marketId\":12,\"sessionId\":30,\"price\":550,\"volume\":4,\"seq\":9,\"at\":\"2026-10-25T09:00:03.500\"}"));
+        socket.send(message("CALL-INDICATIVE", null, "{\"marketplaceId\":7,\"marketId\":12,\"sessionId\":30,\"price\":null,\"volume\":0,\"seq\":10,\"at\":\"2026-10-25T09:00:04\"}"));
+
+        var crossed = (fm.model.CallIndicative) next();
+        assertThat(crossed.price()).isEqualTo(550L);
+        assertThat(crossed.volume()).isEqualTo(4L);
+        assertThat(crossed.seq()).isEqualTo(9L);
+        assertThat(crossed.at()).isEqualTo(java.time.Instant.parse("2026-10-25T09:00:03.500Z"));
+        var uncrossed = (fm.model.CallIndicative) next();
+        assertThat(uncrossed.price()).as("no cross").isNull();
+        assertThat(uncrossed.seq()).isEqualTo(10L);
+    }
+
     /**
      * What this client does not read is skipped, not queued: a frame that is
      * not a MESSAGE, even one carrying a message-type, and a MESSAGE of a type

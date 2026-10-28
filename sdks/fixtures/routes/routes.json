@@ -1789,6 +1789,32 @@
       ]
     },
     {
+      "call": "indicative",
+      "args": {
+        "marketplaceId": 1,
+        "marketId": 12
+      },
+      "why": "What an indicative call market would clear at now is the market's, so it hangs off the market (fm-server 4.17); a client reads it on subscribe and then applies CALL-INDICATIVE frames with a higher seq.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/markets/12/indicative",
+          "response": {
+            "status": 200,
+            "body": {
+              "marketplaceId": 1,
+              "marketId": 12,
+              "sessionId": 77,
+              "price": 550,
+              "volume": 4,
+              "seq": 9,
+              "at": "2026-10-25T09:00:03.500"
+            }
+          }
+        }
+      ]
+    },
+    {
       "call": "calls",
       "args": {
         "marketplaceId": 1

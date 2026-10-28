@@ -1,0 +1,47 @@
+# Upgrading from fm-sdk 0.14.x to 0.15.x
+
+## How to use this document
+
+0.15.0 is additive for code that only **calls** the SDK. Code that
+**implements** the SDK's types has one method to add:
+
+| | What breaks | Fix |
+|---|---|---|
+| Java | a class implementing `Reading` (and so `Flexemarkets`) -- a test double, fm-server's in-process client -- no longer compiles: `indicative(long, long)` is abstract, as every read on `Reading` is | implement it, or throw as the class does for other reads it cannot answer |
+| Java | code calling `Market`'s 17-argument constructor still compiles: that shape is kept, sealed. Only the new canonical constructor takes `callBook` | |
+| TypeScript | a hand-built `Market` literal lacks `callBook`, a required field | add `callBook: MARKET_CALL_BOOK_SEALED` |
+| Python | nothing | |
+
+It needs fm-server 4.17, which every 0.14 client already needs.
+
+What 0.14.0 changed is in [UPGRADING-0.14.md](UPGRADING-0.14.md) and is not
+revisited here.
+
+---
+
+## What is new
+
+**A call market can show the price it would clear at now.** A call market
+(`Market.isCall()`) has a book setting, `callBook`:
+
+- `SEALED`, the default and what every call market was before: a participant
+  sees only their own resting orders until a call trades them.
+- `INDICATIVE`: everyone in the marketplace also sees the price the book
+  would clear at if it were called now, and the volume, but still no other
+  participant's orders.
+
+`Market.showsIndicative()` (Java), `Market.shows_indicative()` (Python) and
+`showsIndicative(market)` (TypeScript) say whether a market publishes it. A
+market from an older server, or one that does not say, is sealed.
+
+The value is a `CallIndicative`: `price` (null when nothing crosses), `volume`
+(0 then), `seq` and `at`. Read it once with `indicative(marketplaceId,
+marketId)` when you subscribe; the stream then delivers each change as a
+`CallIndicative`, from the `CALL-INDICATIVE` frame. Two values can arrive out
+of order, so keep the one with the highest `seq` for the session and drop the
+rest. The SDK delivers them as sent; it does not order them for you.
+
+A sealed market, a continuous one, or no open session refuses the read.
+
+Setting `callBook` when creating a market is not in this release:
+administrators set it in fm-ui.

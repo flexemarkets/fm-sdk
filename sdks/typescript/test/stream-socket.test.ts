@@ -15,7 +15,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { EventListener } from "../src/stomp.ts";
 import type { FmEvent, OrdersUpdate } from "../src/stomp.ts";
 import { Flexemarkets, parseHolding, parseOrder } from "../src/client.ts";
-import type { Holding, MarketCall, Session, Version } from "../src/types.ts";
+import type { CallIndicative, Holding, MarketCall, Session, Version } from "../src/types.ts";
 import type { FrameUnreadable, StreamDropped } from "../src/stomp.ts";
 import { HEARTBEAT_INTERVAL_MS } from "../src/stomp.ts";
 
@@ -219,6 +219,23 @@ test("a call frame arrives as the call", async () => {
     assert.equal(call.marketId, 12);
     assert.equal(call.price, null, "nothing crossed");
     assert.equal(call.calledDate?.toISOString(), "2026-10-25T09:00:05.000Z");
+  } finally { await done(); }
+});
+
+test("an indicative price arrives with its seq", async () => {
+  const { s, events, done } = await listening();
+  try {
+    s.sockets[0].send(message("CALL-INDICATIVE", '{"marketplaceId":7,"marketId":12,"sessionId":30,"price":550,"volume":4,"seq":9,"at":"2026-10-25T09:00:03.500"}'));
+    s.sockets[0].send(message("CALL-INDICATIVE", '{"marketplaceId":7,"marketId":12,"sessionId":30,"price":null,"volume":0,"seq":10,"at":"2026-10-25T09:00:04"}'));
+    await until("both values", () => events.length >= 2);
+    const crossed = events[0] as CallIndicative;
+    assert.equal(crossed.price, 550);
+    assert.equal(crossed.volume, 4);
+    assert.equal(crossed.seq, 9);
+    assert.equal(crossed.at?.toISOString(), "2026-10-25T09:00:03.500Z");
+    const uncrossed = events[1] as CallIndicative;
+    assert.equal(uncrossed.price, null, "no cross");
+    assert.equal(uncrossed.seq, 10);
   } finally { await done(); }
 });
 

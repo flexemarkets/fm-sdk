@@ -237,10 +237,19 @@ export interface Market {
    * when the server does not say.
    */
   unitDecimals: number;
+  /**
+   * For a call market, what it shows of its book during the call:
+   * {@link MARKET_CALL_BOOK_SEALED}, a participant's own orders only, or
+   * {@link MARKET_CALL_BOOK_INDICATIVE}, also the price it would clear at now
+   * and the volume ({@link CallIndicative}). Sealed when the server does not say.
+   */
+  callBook: string;
 }
 
 export const MARKET_MECHANISM_CONTINUOUS = "CONTINUOUS";
 export const MARKET_MECHANISM_CALL = "CALL";
+export const MARKET_CALL_BOOK_SEALED = "SEALED";
+export const MARKET_CALL_BOOK_INDICATIVE = "INDICATIVE";
 
 /**
  * Whether `market` is a call auction, where a crossing order rests until a
@@ -249,6 +258,15 @@ export const MARKET_MECHANISM_CALL = "CALL";
  */
 export function isCall(market: Market): boolean {
   return market.mechanism === MARKET_MECHANISM_CALL;
+}
+
+/**
+ * Whether `market` is a call market that publishes the price its book would
+ * clear at now: `indicative()` reads it, and the stream delivers each change
+ * as a {@link CallIndicative}.
+ */
+export function showsIndicative(market: Market): boolean {
+  return isCall(market) && market.callBook === MARKET_CALL_BOOK_INDICATIVE;
 }
 
 /**
@@ -283,6 +301,32 @@ export interface MarketCall {
 
 export const MARKET_CALL_TRIGGER_MANUAL = "MANUAL";
 export const MARKET_CALL_TRIGGER_INTERVAL = "INTERVAL";
+
+/**
+ * What an indicative call market's book would clear at if it were called
+ * now: the price and volume a call would make, and nothing of the orders
+ * behind them.
+ *
+ * The server works it out after each batch of orders that touched the
+ * market, and after each call, and publishes it only when it changed. Two
+ * values can arrive out of order, so keep the one with the highest `seq` for
+ * the session: read it on subscribe, then apply only values with a higher
+ * `seq`.
+ */
+export interface CallIndicative {
+  marketplaceId: number;
+  marketId: number;
+  /** The session whose book it is. */
+  sessionId: number;
+  /** The price the book would clear at, or null when nothing crosses. */
+  price: number | null;
+  /** Units that would trade there; 0 when nothing crosses. */
+  volume: number;
+  /** Rises with each change in the market; 0 for a value read before any was published. */
+  seq: number;
+  /** When it was worked out. */
+  at: Date | null;
+}
 
 /**
  * The legal values for one dimension of a market: a range, and a step.

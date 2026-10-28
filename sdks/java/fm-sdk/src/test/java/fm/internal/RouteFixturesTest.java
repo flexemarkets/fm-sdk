@@ -262,6 +262,7 @@ class RouteFixturesTest {
                     a.get("intervalSeconds").isNull() ? null : a.get("intervalSeconds").asInt(),
                     a.get("carry").asBoolean());
             case "clearNow" -> fm.clearNow(mp, a.get("marketId").asLong());
+            case "indicative" -> fm.indicative(mp, a.get("marketId").asLong());
             case "calls" -> a.has("sessionId") ? fm.calls(mp, a.get("sessionId").asLong()) : fm.calls(mp);
             case "marketplacesPage" -> _page(a.has("before") ? fm.marketplacesPage(_limit(a), _before(a))
                                                               : fm.marketplacesPage(_limit(a)), Marketplace::id);

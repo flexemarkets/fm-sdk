@@ -739,6 +739,7 @@ class ManagementApiTest {
             public Marketplace marketplace(long id) { return null; }
             public List<Market> markets(long id) { return List.of(); }
             public List<String> symbols(long id) { return List.of(); }
+            public fm.model.CallIndicative indicative(long id, long marketId) { return null; }
             public List<Session> sessions(long id) { return List.of(); }
             public List<Session> sessions(long id, List<Long> s) { return List.of(); }
             public Session session(long id) { return null; }

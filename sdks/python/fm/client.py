@@ -55,6 +55,7 @@ from .types import (
     Account,
     Allotment,
     Approval,
+    CallIndicative,
     ClientConnection,
     Holding,
     ManagerOtpBundle,
@@ -197,6 +198,7 @@ def _parse_market(data: dict[str, Any]) -> Market:
         call_carry=data.get("callCarry") is not False,
         price_decimals=_or_default(data.get("priceDecimals"), Decimals.DEFAULT_PRICE_DECIMALS),
         unit_decimals=_or_default(data.get("unitDecimals"), Decimals.DEFAULT_UNIT_DECIMALS),
+        call_book=data.get("callBook") or Market.CALL_BOOK_SEALED,
     )
 
 
@@ -207,6 +209,18 @@ def _or_default(value: Any, default: int) -> int:
     reading it as the default shows whole dollars as cents.
     """
     return default if value is None else value
+
+
+def _parse_call_indicative(data: dict[str, Any]) -> CallIndicative:
+    return CallIndicative(
+        marketplace_id=data.get("marketplaceId", 0),
+        market_id=data.get("marketId", 0),
+        session_id=data.get("sessionId", 0),
+        price=data.get("price"),
+        volume=data.get("volume", 0),
+        seq=data.get("seq", 0),
+        at=_timestamp(data.get("at")),
+    )
 
 
 def _parse_market_call(data: dict[str, Any]) -> MarketCall:
@@ -1283,6 +1297,19 @@ class Flexemarkets:
         """The markets' own symbols: V1 has no ``/symbols``, which was this
         projection server-side."""
         return [m.symbol for m in self.markets(marketplace_id)]  # type: ignore[misc]
+
+    def indicative(self, marketplace_id: int, market_id: int) -> CallIndicative:
+        """What an indicative call market's book would clear at now: the price
+        and volume a call would make, read on subscribe. The stream then
+        delivers each change as a :class:`CallIndicative`; apply those with a
+        higher ``seq`` for the same session.
+
+        Only for a market that :meth:`Market.shows_indicative`, while a
+        session is open; the server refuses a sealed market, a continuous one,
+        or no session.
+        """
+        url = _marketplace(self._endpoint, marketplace_id) + f"/markets/{market_id}/indicative"
+        return _parse_call_indicative(_json(self._get(url)))
 
     def create_market(
         self,

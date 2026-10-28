@@ -1,0 +1,27 @@
+{
+  "type": "CallIndicative",
+  "why": "What an indicative call market would clear at now, which robots quote against during a call. Without seq a client cannot tell a stale value from a new one, since two pushes can arrive out of order; without at in UTC a robot timing its quotes against the next call is off by its own zone.",
+  "source": {
+    "constructed": "fm-server's CallIndicative record (4.17.0) as GET /marketplaces/{id}/markets/{marketId}/indicative and the CALL-INDICATIVE frame both send it: a crossed book, at zone-less in UTC with milliseconds, as the server writes it."
+  },
+  "payload": {
+    "marketplaceId": 3050,
+    "marketId": 12,
+    "sessionId": 77,
+    "price": 550,
+    "volume": 4,
+    "seq": 9,
+    "at": "2026-10-25T09:00:03.500"
+  },
+  "expect": {
+    "marketplaceId": 3050,
+    "marketId": 12,
+    "sessionId": 77,
+    "price": 550,
+    "volume": 4,
+    "seq": 9,
+    "at": {
+      "epochMilli": 1792918803500
+    }
+  }
+}

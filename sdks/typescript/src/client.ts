@@ -8,13 +8,14 @@ import { randomUUID } from "node:crypto";
 import { readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { MARKET_MECHANISM_CALL, MARKET_MECHANISM_CONTINUOUS, orderedSecurities, toOrderType, toSide, unitGrid } from "./types.js";
+import { MARKET_CALL_BOOK_SEALED, MARKET_MECHANISM_CALL, MARKET_MECHANISM_CONTINUOUS, orderedSecurities, toOrderType, toSide, unitGrid } from "./types.js";
 import { toInstant } from "./timestamps.js";
 import { Decimals } from "./decimals.js";
 import type {
   Account,
   Allotment,
   Assets,
+  CallIndicative,
   ClientConnection,
   Holding,
   ManagerOtpBundle,
@@ -250,6 +251,19 @@ export function parseMarket(data: JsonObject): Market {
     callCarry: data.callCarry !== false,
     priceDecimals: (data.priceDecimals as number) ?? Decimals.DEFAULT_PRICE_DECIMALS,
     unitDecimals: (data.unitDecimals as number) ?? Decimals.DEFAULT_UNIT_DECIMALS,
+    callBook: (data.callBook as string) || MARKET_CALL_BOOK_SEALED,
+  };
+}
+
+export function parseCallIndicative(data: JsonObject): CallIndicative {
+  return {
+    marketplaceId: (data.marketplaceId as number) ?? 0,
+    marketId: (data.marketId as number) ?? 0,
+    sessionId: (data.sessionId as number) ?? 0,
+    price: (data.price as number) ?? null,
+    volume: (data.volume as number) ?? 0,
+    seq: (data.seq as number) ?? 0,
+    at: toInstant(data.at as string),
   };
 }
 
@@ -1450,6 +1464,19 @@ export class Flexemarkets {
   async markets(marketplaceId: number): Promise<Market[]> {
     const data = await this._get(`${this._marketplace(marketplaceId)}/markets`);
     return (data as unknown as JsonObject[]).map(parseMarket);
+  }
+
+  /**
+   * What an indicative call market's book would clear at now: the price and
+   * volume a call would make, read on subscribe. The stream then delivers
+   * each change as a {@link CallIndicative}; apply those with a higher `seq`
+   * for the same session.
+   *
+   * Only for a market that `showsIndicative()`, while a session is open; the
+   * server refuses a sealed market, a continuous one, or no session.
+   */
+  async indicative(marketplaceId: number, marketId: number): Promise<CallIndicative> {
+    return parseCallIndicative(await this._get(`${this._marketplace(marketplaceId)}/markets/${marketId}/indicative`));
   }
 
   /**

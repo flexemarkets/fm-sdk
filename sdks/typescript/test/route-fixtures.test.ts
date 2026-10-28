@@ -132,6 +132,7 @@ const RUNNERS: Record<string, (fm: Flexemarkets, a: Args) => Promise<unknown>> =
   createCallMarket: (fm, a) =>
     fm.createCallMarket(a.marketplaceId, a.symbol, a.name, a.price, a.units, a.intervalSeconds, a.carry),
   clearNow: (fm, a) => fm.clearNow(a.marketplaceId, a.marketId),
+  indicative: (fm, a) => fm.indicative(a.marketplaceId, a.marketId),
   calls: (fm, a) => fm.calls(a.marketplaceId, a.sessionId),
   marketplacesPage: async (fm, a) => ids(await fm.marketplacesPage(a.limit, a.before)),
   sessionsPage: async (fm, a) => ids(await fm.sessionsPage(a.marketplaceId, a.limit, a.before)),

@@ -884,6 +884,8 @@ EXPORT_EXEMPTIONS: dict[str, str] = {
     "SESSION_STATE_CLOSED": "same",
     "MARKET_MECHANISM_CONTINUOUS":  "Market.MECHANISM_CONTINUOUS in Java and Python, string constants in TypeScript",
     "MARKET_MECHANISM_CALL":        "same",
+    "MARKET_CALL_BOOK_SEALED":      "Market.CALL_BOOK_SEALED in Java and Python, string constants in TypeScript",
+    "MARKET_CALL_BOOK_INDICATIVE":  "same",
     "MARKET_CALL_TRIGGER_MANUAL":   "MarketCall.TRIGGER_MANUAL in Java and Python, string constants in TypeScript",
     "MARKET_CALL_TRIGGER_INTERVAL": "same",
 
@@ -898,6 +900,7 @@ EXPORT_EXEMPTIONS: dict[str, str] = {
     "priceRound":        "Market.priceRound() in Java",
     "unitRound":         "Market.unitRound() in Java",
     "isCall":            "Market.isCall() in Java, Market.is_call() in Python",
+    "showsIndicative":   "Market.showsIndicative() in Java, Market.shows_indicative() in Python",
     "unitGrid":          "Market.unitGrid() in Java",
     "tickRound":         "TickGrid arithmetic, package-private in Java",
     "gridRound":         "TickGrid arithmetic, package-private in Java",
