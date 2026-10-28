@@ -313,6 +313,19 @@ export const MARKET_CALL_TRIGGER_INTERVAL = "INTERVAL";
  * the session: read it on subscribe, then apply only values with a higher
  * `seq`.
  */
+/**
+ * A marketplace's current session, as `GET /marketplaces/current-sessions`
+ * lists it: which session is current and its state, without the rest of the
+ * session.
+ */
+export interface CurrentSession {
+  marketplaceId: number;
+  /** Its current session. */
+  sessionId: number;
+  /** That session's state: OPEN, PAUSED or CLOSED. */
+  state: string;
+}
+
 export interface CallIndicative {
   marketplaceId: number;
   marketId: number;

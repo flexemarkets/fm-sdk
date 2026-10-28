@@ -16,6 +16,7 @@ import type {
   Allotment,
   Assets,
   CallIndicative,
+  CurrentSession,
   ClientConnection,
   Holding,
   ManagerOtpBundle,
@@ -252,6 +253,14 @@ export function parseMarket(data: JsonObject): Market {
     priceDecimals: (data.priceDecimals as number) ?? Decimals.DEFAULT_PRICE_DECIMALS,
     unitDecimals: (data.unitDecimals as number) ?? Decimals.DEFAULT_UNIT_DECIMALS,
     callBook: (data.callBook as string) || MARKET_CALL_BOOK_SEALED,
+  };
+}
+
+export function parseCurrentSession(data: JsonObject): CurrentSession {
+  return {
+    marketplaceId: (data.marketplaceId as number) ?? 0,
+    sessionId: (data.sessionId as number) ?? 0,
+    state: (data.state as string) ?? "",
   };
 }
 
@@ -1461,6 +1470,26 @@ export class Flexemarkets {
    */
   async marketplacesPage(limit: number, before?: number): Promise<Page<Marketplace>> {
     return this._page(this._v1("/marketplaces"), limit, before, parseMarketplace);
+  }
+
+  /**
+   * Each marketplace `marketplaces()` lists that has a session, with that
+   * session: one read where `session()` would be one per marketplace. A
+   * marketplace that has never opened a session is left out.
+   */
+  async currentSessions(): Promise<CurrentSession[]> {
+    const data = await this._get(this._v1("/marketplaces/current-sessions"));
+    return (data as unknown as JsonObject[]).map(parseCurrentSession);
+  }
+
+  /**
+   * A page of `currentSessions()`, paged by marketplace as `marketplacesPage()`
+   * pages: the current sessions of exactly the marketplaces that page holds. One
+   * with no session is left out, so a page can hold fewer rows than `limit` and
+   * still have a `next`.
+   */
+  async currentSessionsPage(limit: number, before?: number): Promise<Page<CurrentSession>> {
+    return this._page(this._v1("/marketplaces/current-sessions"), limit, before, parseCurrentSession);
   }
 
   async marketplace(marketplaceId: number): Promise<Marketplace> {

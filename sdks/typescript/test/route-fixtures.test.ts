@@ -22,7 +22,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { Flexemarkets } from "../src/client.ts";
-import type { Holding } from "../src/types.ts";
+import type { CurrentSession, Holding } from "../src/types.ts";
 import type { Page } from "../src/page.ts";
 
 const TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl";
@@ -135,6 +135,9 @@ const RUNNERS: Record<string, (fm: Flexemarkets, a: Args) => Promise<unknown>> =
   indicative: (fm, a) => fm.indicative(a.marketplaceId, a.marketId),
   calls: (fm, a) => fm.calls(a.marketplaceId, a.sessionId),
   marketplacesPage: async (fm, a) => ids(await fm.marketplacesPage(a.limit, a.before)),
+  currentSessions: (fm) => fm.currentSessions(),
+  currentSessionsPage: async (fm, a) =>
+    ids(await fm.currentSessionsPage(a.limit, a.before), (row: CurrentSession) => row.marketplaceId),
   sessionsPage: async (fm, a) => ids(await fm.sessionsPage(a.marketplaceId, a.limit, a.before)),
   ordersPage: async (fm, a) => ids(await fm.ordersPage(a.marketplaceId, a.limit, a.before)),
   usersPage: async (fm, a) => ids(await fm.usersPage(a.limit, a.before)),
