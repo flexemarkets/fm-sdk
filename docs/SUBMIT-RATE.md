@@ -92,8 +92,12 @@ the hand-written socket burst in the same run, with nothing out of order.
 **Python, 2026-10-28** (`feat/socket-orders`): 737 orders a second, median
 of 6 runs of 200 (509-874), none of 1,200 out of order, against 564 for the
 hand-written socket burst and 201 for REST in the same runs, on a local
-fm-server 4.17.0 (`live_wait_false.py` in the comparison bench). TypeScript
-and Java to follow.
+fm-server 4.17.0 (`live_wait_false.py` in the comparison bench).
+
+**TypeScript and Java, 2026-10-28**: `sendLimit` in both, the same design.
+Against the same local server, three rounds of 200 each: TypeScript 682,
+1,037 and 939 orders a second, Java 967, 1,022 and 799, none of 600 out of
+order in either (`live-sdks/` in the comparison bench).
 
 ## 2. FMClientLibrary: no poll, and the window
 
