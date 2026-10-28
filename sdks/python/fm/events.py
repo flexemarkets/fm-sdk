@@ -18,7 +18,7 @@ from typing import Any, Callable
 
 import websockets.sync.client as ws_sync
 
-from .types import Holding, MarketCall, Order, Session, Version
+from .types import CallIndicative, Holding, MarketCall, Order, Session, Version
 
 log = logging.getLogger(__name__)
 
@@ -237,6 +237,10 @@ def _parse_event(frame: StompFrame) -> object | None:
             # A call of a call-auction market; its trades come as an
             # ORDERS-UPDATE of their own.
             return _parse_market_call(data)
+        case "CALL-INDICATIVE":
+            # What an indicative call market would clear at now; delivered as
+            # sent, so a caller keeps the highest seq it has seen.
+            return _parse_call_indicative(data)
         case _:
             log.warning("Unknown message-type: %s", msg_type)
             return None
@@ -274,6 +278,11 @@ def _parse_session_list(data: Any) -> list[Session]:
 def _parse_holding(data: dict[str, Any]) -> Holding:
     from .client import _parse_holding as _client_parse_holding
     return _client_parse_holding(data)
+
+
+def _parse_call_indicative(data: dict[str, Any]) -> CallIndicative:
+    from .client import _parse_call_indicative as _client_parse_call_indicative
+    return _client_parse_call_indicative(data)
 
 
 def _parse_market_call(data: dict[str, Any]) -> MarketCall:

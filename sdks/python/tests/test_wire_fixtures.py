@@ -37,6 +37,7 @@ PARSERS: dict[str, list[tuple[str, Callable[[dict[str, Any]], Any]]]] = {
     "Person": [("client", rest._parse_person)],
     "Market": [("client", rest._parse_market)],
     "MarketCall": [("client", rest._parse_market_call), ("events", ws._parse_market_call)],
+    "CallIndicative": [("client", rest._parse_call_indicative), ("events", ws._parse_call_indicative)],
     "Marketplace": [("client", rest._parse_marketplace)],
     "ClientConnection": [("client", rest._parse_connection)],
     "Security": [("client", rest._parse_security)],

@@ -244,15 +244,28 @@ class Market:
     # the grants and holdings of this market's asset: at 0 units are whole. 0
     # when the server does not say.
     unit_decimals: int = Decimals.DEFAULT_UNIT_DECIMALS
+    # For a call market, what it shows of its book during the call:
+    # CALL_BOOK_SEALED, a participant's own orders only, or
+    # CALL_BOOK_INDICATIVE, also the price it would clear at now and the
+    # volume (CallIndicative). Sealed when the server does not say.
+    call_book: str = "SEALED"
 
     MECHANISM_CONTINUOUS = "CONTINUOUS"
     MECHANISM_CALL = "CALL"
+    CALL_BOOK_SEALED = "SEALED"
+    CALL_BOOK_INDICATIVE = "INDICATIVE"
 
     def is_call(self) -> bool:
         """Whether this is a call auction, where a crossing order rests until a
         call rather than trading, and a participant sees only their own resting
         orders."""
         return self.mechanism == Market.MECHANISM_CALL
+
+    def shows_indicative(self) -> bool:
+        """Whether this is a call market that publishes the price its book
+        would clear at now: :meth:`Flexemarkets.indicative` reads it, and the
+        stream delivers each change as a :class:`CallIndicative`."""
+        return self.is_call() and self.call_book == Market.CALL_BOOK_INDICATIVE
 
     def price_round(self, price: int) -> int:
         """*price* moved down to the nearest price this market will accept."""
@@ -299,6 +312,33 @@ class MarketCall:
 
     TRIGGER_MANUAL = "MANUAL"
     TRIGGER_INTERVAL = "INTERVAL"
+
+
+@dataclass
+class CallIndicative:
+    """What an indicative call market's book would clear at if it were called
+    now: the price and volume a call would make, and nothing of the orders
+    behind them.
+
+    The server works it out after each batch of orders that touched the
+    market, and after each call, and publishes it only when it changed. Two
+    values can arrive out of order, so keep the one with the highest ``seq``
+    for the session: read it on subscribe, then apply only values with a
+    higher ``seq``.
+    """
+    marketplace_id: int = 0
+    market_id: int = 0
+    # The session whose book it is.
+    session_id: int = 0
+    # The price the book would clear at, or None when nothing crosses.
+    price: int | None = None
+    # Units that would trade there; 0 when nothing crosses.
+    volume: int = 0
+    # Rises with each change in the market; 0 for a value read before any was
+    # published.
+    seq: int = 0
+    # When it was worked out.
+    at: "datetime | None" = None
 
 
 @dataclass
