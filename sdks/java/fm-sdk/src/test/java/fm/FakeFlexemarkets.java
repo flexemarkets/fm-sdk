@@ -195,7 +195,7 @@ class FakeFlexemarkets implements Flexemarkets {
     }
 
     @Override public Token signup(String a, String e, String p) { throw _no("signup"); }
-    @Override public Market createCallMarket(long mp, String symbol, String name, TickGrid price, TickGrid units, Integer intervalSeconds, boolean carry) { throw _no("createCallMarket"); }
+    @Override public Market createCallMarket(long mp, String symbol, String name, TickGrid price, TickGrid units, Integer intervalSeconds, boolean carry, String callBook) { throw _no("createCallMarket"); }
     @Override public Token signup(String a, String e, String p, String first, String last) { throw _no("signup"); }
     @Override public Person createUser(String e, String p, String first, String last, String... roles) { throw _no("createUser"); }
     @Override public Market createMarket(long mp, String symbol, String name, TickGrid price, TickGrid units, boolean privateMarket) { throw _no("createMarket"); }

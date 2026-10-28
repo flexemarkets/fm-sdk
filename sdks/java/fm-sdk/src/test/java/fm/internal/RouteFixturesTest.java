@@ -260,7 +260,8 @@ class RouteFixturesTest {
             case "createCallMarket" -> fm.createCallMarket(mp, a.get("symbol").asString(), a.get("name").asString(),
                     _grid(a.get("price")), _grid(a.get("units")),
                     a.get("intervalSeconds").isNull() ? null : a.get("intervalSeconds").asInt(),
-                    a.get("carry").asBoolean());
+                    a.get("carry").asBoolean(),
+                    a.has("callBook") ? a.get("callBook").asString() : null);
             case "clearNow" -> fm.clearNow(mp, a.get("marketId").asLong());
             case "indicative" -> fm.indicative(mp, a.get("marketId").asLong());
             case "calls" -> a.has("sessionId") ? fm.calls(mp, a.get("sessionId").asLong()) : fm.calls(mp);
