@@ -70,9 +70,12 @@ Python first, then TypeScript and Java (W4).
 - A window of at most `max_in_flight` orders (default 64) blocks the caller
   when full, so a robot cannot outrun the server's 4 MB per-session send
   buffer.
-- While the socket is down, orders go over REST, one at a time. On reconnect,
-  every unresolved order is sent again with its own submission id; the
-  server answers a repeat with the order it already made.
+- While the socket is down, an order is held, not sent. On reconnect every
+  unanswered order is sent again, in the order first submitted, with its own
+  submission id; the server answers a repeat with the order it already made.
+  (The first draft sent held orders over REST. That lets them overtake orders
+  sent before the drop and still waiting to be resent, and keeping the order
+  is the point.)
 - An order whose outcome cannot be learned fails as `OrderOutcomeUnknown`,
   never as refused. Today both transports report a lost answer as a
   refusal, which invites the robot to place the order again
@@ -82,6 +85,12 @@ Python first, then TypeScript and Java (W4).
 
 Done when: on one socket, `submit_limit(wait=False)` sustains within 10% of
 the hand-written socket burst in the same run, with nothing out of order.
+
+**Python, 2026-10-28** (`feat/socket-orders`): 737 orders a second, median
+of 6 runs of 200 (509-874), none of 1,200 out of order, against 564 for the
+hand-written socket burst and 201 for REST in the same runs, on a local
+fm-server 4.17.0 (`live_wait_false.py` in the comparison bench). TypeScript
+and Java to follow.
 
 ## 2. FMClientLibrary: no poll, and the window
 
