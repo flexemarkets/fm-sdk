@@ -123,5 +123,6 @@ export type {
 // Desk
 export type { Desk, Subscription, GapEvent, DeskRecovery } from "./desk.js";
 export type { Snapshot } from "./snapshot.js";
+export { Page } from "./page.js";
 export { NO_SEQ } from "./stomp.js";
 export type { OrdersUpdate } from "./stomp.js";

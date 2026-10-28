@@ -15,9 +15,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, TypeVar
 
 from .decimals import Decimals
+from .page import Page
 from .snapshot import NO_SEQ, Snapshot
 from .timestamps import parse as _timestamp
 
@@ -112,6 +113,10 @@ log = logging.getLogger(__name__)
 
 _BCRYPT_RE = re.compile(r"^\$2[abxy]?\$\d{2}\$[./A-Za-z0-9]{53}$")
 _JWT_RE = re.compile(r"^[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+$")
+# The before in a Link header's rel="next" target: where a page's older rows start.
+_NEXT_LINK = re.compile(r'<[^>]*[?&]before=(\d+)[^>]*>\s*;\s*rel="?next"?')
+
+T = TypeVar("T")
 
 
 # ---------------------------------------------------------------------------
@@ -1113,6 +1118,12 @@ class Flexemarkets:
         data = _json(self._get(url))
         return [_parse_account(a) for a in data]
 
+    def accounts_page(self, limit: int, before: int | None = None) -> Page[Account]:
+        """A page of :meth:`accounts`: the newest *limit*, or of those whose id is
+        below *before* -- a page's ``next``. The server answers at most 5,000.
+        """
+        return self._page(_v1(self._endpoint, "/accounts"), limit, before, _parse_account)
+
     def signup(
         self,
         account_name: str,
@@ -1190,6 +1201,12 @@ class Flexemarkets:
         data = _json(self._get(url))
         return [_parse_person(u) for u in data]  # type: ignore[misc]
 
+    def users_page(self, limit: int, before: int | None = None) -> Page[Person]:
+        """A page of :meth:`users`: the newest *limit*, or of those whose id is
+        below *before* -- a page's ``next``. The server answers at most 5,000.
+        """
+        return self._page(_v1(self._endpoint, "/users"), limit, before, _parse_person)  # type: ignore[arg-type]
+
     def create_user(
         self,
         email: str,
@@ -1220,6 +1237,12 @@ class Flexemarkets:
         url = _v1(self._endpoint, "/marketplaces")
         data = _json(self._get(url))
         return [_parse_marketplace(m) for m in data]
+
+    def marketplaces_page(self, limit: int, before: int | None = None) -> Page[Marketplace]:
+        """A page of :meth:`marketplaces`: the newest *limit*, or of those whose id is
+        below *before* -- a page's ``next``. The server answers at most 5,000.
+        """
+        return self._page(_v1(self._endpoint, "/marketplaces"), limit, before, _parse_marketplace)
 
     def marketplace(self, marketplace_id: int) -> Marketplace:
         url = _marketplace(self._endpoint, marketplace_id)
@@ -1350,6 +1373,12 @@ class Flexemarkets:
         """
         url = _marketplace(self._endpoint, marketplace_id) + "/sessions"
         return [_parse_session(s) for s in _json(self._get(url))]
+
+    def sessions_page(self, marketplace_id: int, limit: int, before: int | None = None) -> Page[Session]:
+        """A page of :meth:`sessions`: the newest *limit*, or of those whose id is
+        below *before* -- a page's ``next``. The server answers at most 5,000.
+        """
+        return self._page(_marketplace(self._endpoint, marketplace_id) + "/sessions", limit, before, _parse_session)
 
     def session(self, marketplace_id: int) -> Session:
         url = _marketplace(self._endpoint, marketplace_id) + "/sessions/current"
@@ -1547,6 +1576,17 @@ class Flexemarkets:
         orders_raw = _orders_of(body)
         return Snapshot(body=[_parse_order(o) for o in orders_raw], as_of_seq=as_of_seq)
 
+    def _page(self, url: str, limit: int, before: int | None, parse: Callable[[Any], T]) -> Page[T]:
+        """A page of a collection: *url* with ``?limit=`` and ``?before=``, and
+        the ``before`` of the page after it read from the ``Link: <...>;
+        rel="next"`` the server sends while older rows remain."""
+        url += ("&" if "?" in url else "?") + f"limit={limit}"
+        if before is not None:
+            url += f"&before={before}"
+        resp = self._get(url)
+        nxt = _NEXT_LINK.search(",".join(resp.headers.get_list("link")))
+        return Page(rows=[parse(row) for row in _json(resp)], next=int(nxt.group(1)) if nxt else None)
+
     def _get_snapshot(self, url: str) -> tuple[dict[str, Any], int]:
         """GET helper that returns the parsed body alongside the
         ``x-fm-as-of-seq`` response header value. Returns
@@ -1595,6 +1635,14 @@ class Flexemarkets:
             return [_parse_order(o) for o in data]
         data = _json(self._get(f"{base}?cancelled=false"))
         return [_parse_order(o) for o in data]
+
+    def orders_page(self, marketplace_id: int, limit: int, before: int | None = None) -> Page[Order]:
+        """A page of :meth:`orders` with no filter -- cancellations left out,
+        as there: the newest *limit*, or of those whose id is below *before* --
+        a page's ``next``. The server answers at most 5,000.
+        """
+        url = _marketplace(self._endpoint, marketplace_id) + "/orders?cancelled=false"
+        return self._page(url, limit, before, _parse_order)
 
     def trades(self, marketplace_id: int, symbol: str) -> list[Order]:
         """Tape in one market, in ascending order id.
@@ -1787,6 +1835,12 @@ class Flexemarkets:
             url += f"?sessions={session_id}"
         return [_parse_market_call(c) for c in _json(self._get(url))]
 
+    def calls_page(self, marketplace_id: int, limit: int, before: int | None = None) -> Page[MarketCall]:
+        """A page of :meth:`calls`: the newest *limit*, or of those whose id is
+        below *before* -- a page's ``next``. The server answers at most 5,000.
+        """
+        return self._page(_marketplace(self._endpoint, marketplace_id) + "/calls", limit, before, _parse_market_call)
+
     def marketplace_robots(self, marketplace_id: int) -> list[MarketplaceRobot]:
         """Every robot the marketplace's robot host offers, with whether it is
         enabled here and how a manager has configured its parameters.
@@ -1860,6 +1914,12 @@ class Flexemarkets:
         """
         url = _marketplace(self._endpoint, marketplace_id) + "/connections"
         return [_parse_connection(c) for c in _json(self._get(url))]
+
+    def connections_page(self, marketplace_id: int, limit: int, before: int | None = None) -> Page[ClientConnection]:
+        """A page of :meth:`connections`: the newest *limit*, or of those whose id is
+        below *before* -- a page's ``next``. The server answers at most 5,000.
+        """
+        return self._page(_marketplace(self._endpoint, marketplace_id) + "/connections", limit, before, _parse_connection)
 
     # -- events / WebSocket ------------------------------------------------
 

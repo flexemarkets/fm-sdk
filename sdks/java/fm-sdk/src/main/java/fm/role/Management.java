@@ -1,5 +1,6 @@
 package fm.role;
 
+import fm.Page;
 import fm.model.Holding;
 import fm.model.ParticipantState;
 import fm.model.MarketCall;
@@ -227,6 +228,37 @@ public interface Management {
      * @return the calls, every session's
      */
     List<MarketCall> calls(long marketplaceId);
+
+    /**
+     * The newest {@code limit} calls, every session's: the first page of {@link #calls}.
+     *
+     * @param marketplaceId the marketplace to read
+     * @param limit         how many, 1 or more; the server answers at most 5,000
+     * @return the page, with {@link Page#next()} set while older ones remain
+     * @see #callsPage(long, int, Long)
+     */
+    default Page<MarketCall> callsPage(long marketplaceId, int limit) {
+        return callsPage(marketplaceId, limit, null);
+    }
+
+    /**
+     * A page of {@link #calls}: {@code GET /marketplaces/{id}/calls} with {@code ?limit=} and
+     * {@code ?before=}.
+     *
+     * <p>By default, the whole collection read and cut as fm-server cuts it
+     * ({@link Page#of}), so an implementation that reads only whole
+     * collections pages the same way; the HTTP client asks the server for the
+     * page.
+     *
+     * @param marketplaceId the marketplace to read
+     * @param limit         how many, 1 or more; the server answers at most 5,000
+     * @param before        only those whose id is below this -- a page's
+     *                      {@link Page#next()} -- or null for the newest
+     * @return the page, with {@link Page#next()} set while older ones remain
+     */
+    default Page<MarketCall> callsPage(long marketplaceId, int limit, Long before) {
+        return Page.of(calls(marketplaceId), MarketCall::id, limit, before);
+    }
 
     /**
      * One session's calls, oldest first.

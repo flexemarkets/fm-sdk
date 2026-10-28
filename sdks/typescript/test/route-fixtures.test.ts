@@ -23,6 +23,7 @@ import { fileURLToPath } from "node:url";
 
 import { Flexemarkets } from "../src/client.ts";
 import type { Holding } from "../src/types.ts";
+import type { Page } from "../src/page.ts";
 
 const TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl";
 
@@ -37,7 +38,7 @@ interface ExpectedRequest {
   contentType?: string;
   accept?: string;
   body?: unknown;
-  response: { status: number; body?: unknown; contentType?: string };
+  response: { status: number; body?: unknown; contentType?: string; headers?: Record<string, string> };
 }
 
 interface Case {
@@ -63,6 +64,11 @@ function csvFile(content: string): string {
 }
 
 /** A fixture holding is the fields that matter; the rest take their opening values. */
+/** A page as the fixture states it: the rows' ids, and the next page's before. */
+function ids<T>(page: Page<T>, id: (row: T) => number = (row) => (row as { id: number }).id): unknown {
+  return { rows: page.rows.map(id), next: page.next };
+}
+
 function holding(marketplaceId: number, h: Args): Holding {
   return {
     marketplaceId,
@@ -127,6 +133,14 @@ const RUNNERS: Record<string, (fm: Flexemarkets, a: Args) => Promise<unknown>> =
     fm.createCallMarket(a.marketplaceId, a.symbol, a.name, a.price, a.units, a.intervalSeconds, a.carry),
   clearNow: (fm, a) => fm.clearNow(a.marketplaceId, a.marketId),
   calls: (fm, a) => fm.calls(a.marketplaceId, a.sessionId),
+  marketplacesPage: async (fm, a) => ids(await fm.marketplacesPage(a.limit, a.before)),
+  sessionsPage: async (fm, a) => ids(await fm.sessionsPage(a.marketplaceId, a.limit, a.before)),
+  ordersPage: async (fm, a) => ids(await fm.ordersPage(a.marketplaceId, a.limit, a.before)),
+  usersPage: async (fm, a) => ids(await fm.usersPage(a.limit, a.before)),
+  connectionsPage: async (fm, a) =>
+    ids(await fm.connectionsPage(a.marketplaceId, a.limit, a.before), (c) => c.connectionId),
+  accountsPage: async (fm, a) => ids(await fm.accountsPage(a.limit, a.before)),
+  callsPage: async (fm, a) => ids(await fm.callsPage(a.marketplaceId, a.limit, a.before)),
   marketplaceRobots: (fm, a) => fm.marketplaceRobots(a.marketplaceId),
   configureRobotParameter: (fm, a) =>
     fm.configureRobotParameter(a.marketplaceId, a.robotId, a.paramName, a.value, a.control),
@@ -210,12 +224,12 @@ function mismatch(
 
 function answer(res: http.ServerResponse, response: ExpectedRequest["response"]): void {
   if (response.body === undefined) {
-    res.writeHead(response.status);
+    res.writeHead(response.status, response.headers ?? {});
     res.end();
     return;
   }
   const json = response.contentType === undefined;
-  res.writeHead(response.status, { "Content-Type": response.contentType ?? "application/json" });
+  res.writeHead(response.status, { ...response.headers, "Content-Type": response.contentType ?? "application/json" });
   res.end(json ? JSON.stringify(response.body) : String(response.body));
 }
 

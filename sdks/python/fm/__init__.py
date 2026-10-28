@@ -3,6 +3,7 @@
 from .client import Flexemarkets
 from .enums import OrderType, OrderSide
 from .events import NO_SEQ, OrdersUpdate, FrameUnreadable, StreamReconnected, StreamDropped
+from .page import Page
 from .snapshot import Snapshot
 from .decimals import Decimals
 from .exceptions import (
@@ -104,6 +105,8 @@ __all__ = [
     # snapshot
     "Snapshot",
     "NO_SEQ",
+    # page
+    "Page",
     # exceptions
     "FlexemarketsError",
     "AuthenticationError",

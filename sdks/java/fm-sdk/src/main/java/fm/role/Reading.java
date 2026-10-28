@@ -3,6 +3,7 @@ package fm.role;
 import fm.Flexemarkets;
 import fm.Tape;
 import fm.Desk;
+import fm.Page;
 import fm.Snapshot;
 import fm.model.Allotment;
 import fm.model.ClientConnection;
@@ -28,9 +29,11 @@ import java.util.List;
  * a study calls rather than of what they do. {@link #trades} and
  * {@link #downloadHoldings} read; they are here.
  *
- * <p>Every method is abstract. An implementation that cannot answer a read has
+ * <p>Every read is abstract. An implementation that cannot answer a read has
  * no business claiming this role — the point of the split is that possessing
- * the type means the calls work.
+ * the type means the calls work. The defaults are computed from those reads:
+ * the {@code ...Page} reads cut the whole collection as the server would, so
+ * they work wherever the read they page does.
  */
 public interface Reading {
 
@@ -40,6 +43,35 @@ public interface Reading {
      * @return the visible marketplaces, empty if there are none
      */
     List<Marketplace> marketplaces();
+
+    /**
+     * The newest {@code limit} marketplaces: the first page of {@link #marketplaces}.
+     *
+     * @param limit         how many, 1 or more; the server answers at most 5,000
+     * @return the page, with {@link Page#next()} set while older ones remain
+     * @see #marketplacesPage(int, Long)
+     */
+    default Page<Marketplace> marketplacesPage(int limit) {
+        return marketplacesPage(limit, null);
+    }
+
+    /**
+     * A page of {@link #marketplaces}: {@code GET /marketplaces} with {@code ?limit=} and
+     * {@code ?before=}.
+     *
+     * <p>By default, the whole collection read and cut as fm-server cuts it
+     * ({@link Page#of}), so an implementation that reads only whole
+     * collections pages the same way; the HTTP client asks the server for the
+     * page.
+     *
+     * @param limit         how many, 1 or more; the server answers at most 5,000
+     * @param before        only those whose id is below this -- a page's
+     *                      {@link Page#next()} -- or null for the newest
+     * @return the page, with {@link Page#next()} set while older ones remain
+     */
+    default Page<Marketplace> marketplacesPage(int limit, Long before) {
+        return Page.of(marketplaces(), Marketplace::id, limit, before);
+    }
 
     /**
      * One marketplace by id, with its markets.
@@ -69,7 +101,8 @@ public interface Reading {
      * The marketplace's sessions.
      *
      * <p>All of them: there is no server-side filter. {@code GET
-     * /marketplaces/{id}/sessions} takes only {@code format}, so an overload
+     * /marketplaces/{id}/sessions} takes no filter -- only paging, which
+     * {@link #sessionsPage} sends -- so an overload
      * accepting session ids existed here and was silently ignored — it
      * returned the whole history and looked like it had filtered.
      *
@@ -81,6 +114,37 @@ public interface Reading {
      * @return every session it has ever had, oldest first
      */
     List<Session> sessions(long marketplaceId);
+
+    /**
+     * The newest {@code limit} sessions: the first page of {@link #sessions}.
+     *
+     * @param marketplaceId the marketplace to read
+     * @param limit         how many, 1 or more; the server answers at most 5,000
+     * @return the page, with {@link Page#next()} set while older ones remain
+     * @see #sessionsPage(long, int, Long)
+     */
+    default Page<Session> sessionsPage(long marketplaceId, int limit) {
+        return sessionsPage(marketplaceId, limit, null);
+    }
+
+    /**
+     * A page of {@link #sessions}: {@code GET /marketplaces/{id}/sessions} with {@code ?limit=} and
+     * {@code ?before=}.
+     *
+     * <p>By default, the whole collection read and cut as fm-server cuts it
+     * ({@link Page#of}), so an implementation that reads only whole
+     * collections pages the same way; the HTTP client asks the server for the
+     * page.
+     *
+     * @param marketplaceId the marketplace to read
+     * @param limit         how many, 1 or more; the server answers at most 5,000
+     * @param before        only those whose id is below this -- a page's
+     *                      {@link Page#next()} -- or null for the newest
+     * @return the page, with {@link Page#next()} set while older ones remain
+     */
+    default Page<Session> sessionsPage(long marketplaceId, int limit, Long before) {
+        return Page.of(sessions(marketplaceId), Session::id, limit, before);
+    }
 
     /**
      * The current session, or null when the marketplace has never opened one.
@@ -97,6 +161,37 @@ public interface Reading {
      * @return the current session's orders, empty if it has none
      */
     List<Order> orders(long marketplaceId);
+
+    /**
+     * The newest {@code limit} orders, by order id: the first page of {@link #orders}.
+     *
+     * @param marketplaceId the marketplace to read
+     * @param limit         how many, 1 or more; the server answers at most 5,000
+     * @return the page, with {@link Page#next()} set while older ones remain
+     * @see #ordersPage(long, int, Long)
+     */
+    default Page<Order> ordersPage(long marketplaceId, int limit) {
+        return ordersPage(marketplaceId, limit, null);
+    }
+
+    /**
+     * A page of {@link #orders}: {@code GET /marketplaces/{id}/orders?cancelled=false} with {@code ?limit=} and
+     * {@code ?before=}.
+     *
+     * <p>By default, the whole collection read and cut as fm-server cuts it
+     * ({@link Page#of}), so an implementation that reads only whole
+     * collections pages the same way; the HTTP client asks the server for the
+     * page.
+     *
+     * @param marketplaceId the marketplace to read
+     * @param limit         how many, 1 or more; the server answers at most 5,000
+     * @param before        only those whose id is below this -- a page's
+     *                      {@link Page#next()} -- or null for the newest
+     * @return the page, with {@link Page#next()} set while older ones remain
+     */
+    default Page<Order> ordersPage(long marketplaceId, int limit, Long before) {
+        return Page.of(orders(marketplaceId), Order::id, limit, before);
+    }
 
     /**
      * Orders from particular sessions, rather than the current one.
@@ -209,6 +304,35 @@ public interface Reading {
     List<Person> users();
 
     /**
+     * The newest {@code limit} people: the first page of {@link #users}.
+     *
+     * @param limit         how many, 1 or more; the server answers at most 5,000
+     * @return the page, with {@link Page#next()} set while older ones remain
+     * @see #usersPage(int, Long)
+     */
+    default Page<Person> usersPage(int limit) {
+        return usersPage(limit, null);
+    }
+
+    /**
+     * A page of {@link #users}: {@code GET /users} with {@code ?limit=} and
+     * {@code ?before=}.
+     *
+     * <p>By default, the whole collection read and cut as fm-server cuts it
+     * ({@link Page#of}), so an implementation that reads only whole
+     * collections pages the same way; the HTTP client asks the server for the
+     * page.
+     *
+     * @param limit         how many, 1 or more; the server answers at most 5,000
+     * @param before        only those whose id is below this -- a page's
+     *                      {@link Page#next()} -- or null for the newest
+     * @return the page, with {@link Page#next()} set while older ones remain
+     */
+    default Page<Person> usersPage(int limit, Long before) {
+        return Page.of(users(), person -> person.id(), limit, before);
+    }
+
+    /**
      * Who is attached to the marketplace.
      *
      * <p>All of them, for the reason {@link #sessions} gives: {@code GET
@@ -222,6 +346,37 @@ public interface Reading {
      * @return every connection it has recorded
      */
     List<ClientConnection> connections(long marketplaceId);
+
+    /**
+     * The newest {@code limit} connections: the first page of {@link #connections}.
+     *
+     * @param marketplaceId the marketplace to read
+     * @param limit         how many, 1 or more; the server answers at most 5,000
+     * @return the page, with {@link Page#next()} set while older ones remain
+     * @see #connectionsPage(long, int, Long)
+     */
+    default Page<ClientConnection> connectionsPage(long marketplaceId, int limit) {
+        return connectionsPage(marketplaceId, limit, null);
+    }
+
+    /**
+     * A page of {@link #connections}: {@code GET /marketplaces/{id}/connections} with {@code ?limit=} and
+     * {@code ?before=}.
+     *
+     * <p>By default, the whole collection read and cut as fm-server cuts it
+     * ({@link Page#of}), so an implementation that reads only whole
+     * collections pages the same way; the HTTP client asks the server for the
+     * page.
+     *
+     * @param marketplaceId the marketplace to read
+     * @param limit         how many, 1 or more; the server answers at most 5,000
+     * @param before        only those whose id is below this -- a page's
+     *                      {@link Page#next()} -- or null for the newest
+     * @return the page, with {@link Page#next()} set while older ones remain
+     */
+    default Page<ClientConnection> connectionsPage(long marketplaceId, int limit, Long before) {
+        return Page.of(connections(marketplaceId), ClientConnection::connectionId, limit, before);
+    }
 
     /**
      * Every robot the marketplace's robot host offers, with whether it is

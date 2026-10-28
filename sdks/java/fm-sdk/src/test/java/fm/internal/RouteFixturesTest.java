@@ -28,8 +28,16 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
 import fm.Flexemarkets;
+import fm.Page;
+import fm.model.Account;
+import fm.model.ClientConnection;
 import fm.model.Holding;
+import fm.model.MarketCall;
+import fm.model.Marketplace;
+import fm.model.Order;
 import fm.model.OrderSide;
+import fm.model.Person;
+import fm.model.Session;
 import fm.model.TickGrid;
 import tools.jackson.databind.JsonNode;
 
@@ -96,6 +104,8 @@ class RouteFixturesTest {
             String contentType = response.has("contentType") ? response.get("contentType").asString() : "application/json";
             String text = null == payload ? "" : payload.isString() ? payload.asString()
                         : HttpFlexemarkets.MAPPER.writeValueAsString(payload);
+            response.path("headers").properties()
+                    .forEach(e -> exchange.getResponseHeaders().add(e.getKey(), e.getValue().asString()));
             _respond(exchange, response.path("status").asInt(200), contentType, text);
         });
         server.start();
@@ -253,6 +263,21 @@ class RouteFixturesTest {
                     a.get("carry").asBoolean());
             case "clearNow" -> fm.clearNow(mp, a.get("marketId").asLong());
             case "calls" -> a.has("sessionId") ? fm.calls(mp, a.get("sessionId").asLong()) : fm.calls(mp);
+            case "marketplacesPage" -> _page(a.has("before") ? fm.marketplacesPage(_limit(a), _before(a))
+                                                              : fm.marketplacesPage(_limit(a)), Marketplace::id);
+            case "sessionsPage" -> _page(a.has("before") ? fm.sessionsPage(mp, _limit(a), _before(a))
+                                                      : fm.sessionsPage(mp, _limit(a)), Session::id);
+            case "ordersPage" -> _page(a.has("before") ? fm.ordersPage(mp, _limit(a), _before(a))
+                                                    : fm.ordersPage(mp, _limit(a)), Order::id);
+            case "usersPage" -> _page(a.has("before") ? fm.usersPage(_limit(a), _before(a))
+                                                   : fm.usersPage(_limit(a)), Person::id);
+            case "connectionsPage" -> _page(a.has("before") ? fm.connectionsPage(mp, _limit(a), _before(a))
+                                                         : fm.connectionsPage(mp, _limit(a)),
+                                            ClientConnection::connectionId);
+            case "accountsPage" -> _page(a.has("before") ? fm.accountsPage(_limit(a), _before(a))
+                                                      : fm.accountsPage(_limit(a)), Account::id);
+            case "callsPage" -> _page(a.has("before") ? fm.callsPage(mp, _limit(a), _before(a))
+                                                   : fm.callsPage(mp, _limit(a)), MarketCall::id);
             case "marketplaceRobots" -> fm.marketplaceRobots(mp);
             case "configureRobotParameter" -> fm.configureRobotParameter(mp, a.get("robotId").asString(),
                     a.get("paramName").asString(), a.get("value").asString(), _control(a.get("control")));
@@ -269,6 +294,26 @@ class RouteFixturesTest {
             case "managerOtpBundle" -> fm.managerOtpBundle(_longs(a.get("userIds")));
             default -> throw new AssertionError("no runner mapping for '" + call + "'");
         };
+    }
+
+    private static int _limit(JsonNode a) {
+        return a.get("limit").asInt();
+    }
+
+    private static Long _before(JsonNode a) {
+        return a.get("before").isNull() ? null : a.get("before").asLong();
+    }
+
+    /**
+     * A page as the fixture states it: the rows' ids, and the next page's
+     * {@code before}. Read back from text, so a long compares equal to the int
+     * the fixture parses as.
+     */
+    private static <T> JsonNode _page(Page<T> page, Function<T, Long> id) {
+        var answer = new LinkedHashMap<String, Object>();
+        answer.put("rows", page.rows().stream().map(id).toList());
+        answer.put("next", page.next());
+        return HttpFlexemarkets.MAPPER.readTree(HttpFlexemarkets.MAPPER.writeValueAsString(answer));
     }
 
     private static List<Long> _longs(JsonNode array) {

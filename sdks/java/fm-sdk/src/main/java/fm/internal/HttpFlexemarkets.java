@@ -26,6 +26,7 @@ import fm.model.TickGrid;
 import fm.model.Token;
 import fm.Flexemarkets;
 import fm.Desk;
+import fm.Page;
 import fm.Snapshot;
 import fm.Subscription;
 import fm.error.AccountNameConflictException;
@@ -50,6 +51,7 @@ import java.net.http.HttpClient;
 import java.time.Duration;
 import java.time.Instant;
 import java.net.http.HttpConnectTimeoutException;
+import java.net.http.HttpHeaders;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.math.BigDecimal;
@@ -68,6 +70,9 @@ import java.util.Objects;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
+import java.util.function.BiFunction;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.net.ssl.SSLException;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -212,6 +217,8 @@ public class HttpFlexemarkets implements Flexemarkets {
     private static final TypeReference<List<Widget>>         WIDGETS_TYPE      = new TypeReference<>() {};
     private static final TypeReference<List<MarketplaceRobot>> MARKETPLACE_ROBOTS_TYPE = new TypeReference<>() {};
     private static final TypeReference<RobotParameterConfig> ROBOT_PARAMETER_CONFIG_TYPE = new TypeReference<>() {};
+    /** The {@code before} in a {@code Link} header's {@code rel="next"} target. */
+    private static final Pattern NEXT_LINK = Pattern.compile("<[^>]*[?&]before=(\\d+)[^>]*>\\s*;\\s*rel=\"?next\"?");
 
     /**
      * Who the server should treat the caller as, rather than whoever the
@@ -429,6 +436,11 @@ public class HttpFlexemarkets implements Flexemarkets {
         return _get(_v1("/marketplaces"), MARKETPLACES_TYPE);
     }
 
+    @Override
+    public Page<Marketplace> marketplacesPage(int limit, Long before) {
+        return _getPage(_v1("/marketplaces"), limit, before, MARKETPLACES_TYPE);
+    }
+
     public Marketplace marketplace(long marketplaceId) {
         return _get(_marketplace(marketplaceId), MARKETPLACE_TYPE);
     }
@@ -456,6 +468,11 @@ public class HttpFlexemarkets implements Flexemarkets {
         return _get(_marketplace(marketplaceId) + "/sessions", SESSIONS_TYPE);
     }
 
+    @Override
+    public Page<Session> sessionsPage(long marketplaceId, int limit, Long before) {
+        return _getPage(_marketplace(marketplaceId) + "/sessions", limit, before, SESSIONS_TYPE);
+    }
+
     public Session session(long marketplaceId) {
         return _get(_marketplace(marketplaceId) + "/sessions/current", SESSION_TYPE);
     }
@@ -468,6 +485,11 @@ public class HttpFlexemarkets implements Flexemarkets {
      */
     public List<Order> orders(long marketplaceId) {
         return _get(_marketplace(marketplaceId) + "/orders?cancelled=false", ORDERS_TYPE);
+    }
+
+    @Override
+    public Page<Order> ordersPage(long marketplaceId, int limit, Long before) {
+        return _getPage(_marketplace(marketplaceId) + "/orders?cancelled=false", limit, before, ORDERS_TYPE);
     }
 
     /**
@@ -550,6 +572,11 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     public List<ClientConnection> connections(long marketplaceId) {
         return _get(_marketplace(marketplaceId) + "/connections", CONNECTIONS_TYPE);
+    }
+
+    @Override
+    public Page<ClientConnection> connectionsPage(long marketplaceId, int limit, Long before) {
+        return _getPage(_marketplace(marketplaceId) + "/connections", limit, before, CONNECTIONS_TYPE);
     }
 
     @Override
@@ -687,6 +714,11 @@ public class HttpFlexemarkets implements Flexemarkets {
     @Override
     public List<Account> accounts() {
         return _get(_v1("/accounts"), ACCOUNTS_TYPE);
+    }
+
+    @Override
+    public Page<Account> accountsPage(int limit, Long before) {
+        return _getPage(_v1("/accounts"), limit, before, ACCOUNTS_TYPE);
     }
 
     @Override
@@ -952,6 +984,11 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     @Override
+    public Page<Person> usersPage(int limit, Long before) {
+        return _getPage(_v1("/users"), limit, before, PERSONS_TYPE);
+    }
+
+    @Override
     public List<Allotment> allotments(long marketplaceId, long allocationId) {
         return List.copyOf(_get(_marketplace(marketplaceId) + "/allocations/" + allocationId + "/allotments",
                                 ALLOTMENTS_TYPE));
@@ -1059,6 +1096,11 @@ public class HttpFlexemarkets implements Flexemarkets {
     @Override
     public List<MarketCall> calls(long marketplaceId) {
         return List.copyOf(_get(_marketplace(marketplaceId) + "/calls", MARKET_CALLS_TYPE));
+    }
+
+    @Override
+    public Page<MarketCall> callsPage(long marketplaceId, int limit, Long before) {
+        return _getPage(_marketplace(marketplaceId) + "/calls", limit, before, MARKET_CALLS_TYPE);
     }
 
     @Override
@@ -1499,6 +1541,30 @@ public class HttpFlexemarkets implements Flexemarkets {
      * is absent.
      */
     private <T> Snapshot<T> _getSnapshot(String url, TypeReference<T> type) {
+        return _getRead(url, type, "Snapshot", (body, headers) -> new Snapshot<>(body,
+                headers.firstValue("x-fm-as-of-seq").map(Long::parseLong).orElse(Snapshot.NO_SEQ)));
+    }
+
+    /**
+     * A page of a collection: {@code url} with {@code ?limit=} and
+     * {@code ?before=}, and the {@code before} of the page after it read from
+     * the {@code Link: <...>; rel="next"} the server sends while older rows
+     * remain.
+     */
+    private <T> Page<T> _getPage(String url, int limit, Long before, TypeReference<List<T>> type) {
+        var paged = url + (url.contains("?") ? "&" : "?") + "limit=" + limit
+                + (null == before ? "" : "&before=" + before);
+        return _getRead(paged, type, "Page", (rows, headers) -> new Page<>(rows, _next(headers.allValues("Link"))));
+    }
+
+    /** The {@code before} a {@code rel="next"} link names, or null when there is none. */
+    private static Long _next(List<String> links) {
+        Matcher next = NEXT_LINK.matcher(String.join(",", links));
+        return next.find() ? Long.valueOf(next.group(1)) : null;
+    }
+
+    /** GET a body the answer needs a response header beside: a snapshot's sequence, a page's next link. */
+    private <T, R> R _getRead(String url, TypeReference<T> type, String what, BiFunction<T, HttpHeaders, R> answer) {
         var request = _request(url, "application/json")
             .GET()
             .build();
@@ -1506,20 +1572,16 @@ public class HttpFlexemarkets implements Flexemarkets {
             var response = _exchange(request);
             var statusCode = response.statusCode();
             if (statusCode >= 200 && statusCode < 300) {
-                T body = MAPPER.readValue(response.body(), type);
-                long asOfSeq = response.headers().firstValue("x-fm-as-of-seq")
-                        .map(Long::parseLong)
-                        .orElse(Snapshot.NO_SEQ);
-                return new Snapshot<>(body, asOfSeq);
+                return answer.apply(MAPPER.readValue(response.body(), type), response.headers());
             }
             throw _failureFor(statusCode, response.body());
         } catch (FlexemarketsException e) {
             throw e;
         } catch (IOException e) {
-            throw transportFailure("Snapshot request failed", request, e);
+            throw transportFailure(what + " request failed", request, e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new ApiException("Snapshot request interrupted", e);
+            throw new ApiException(what + " request interrupted", e);
         }
     }
 

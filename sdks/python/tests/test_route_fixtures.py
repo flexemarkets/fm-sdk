@@ -21,7 +21,8 @@ from urllib.parse import parse_qsl, urlsplit
 import pytest
 
 from fm.client import Flexemarkets
-from fm.types import Holding, RobotParameterControl, Security, TickGrid
+from fm.page import Page
+from fm.types import ClientConnection, Holding, RobotParameterControl, Security, TickGrid
 
 ROUTES = Path(__file__).resolve().parents[2] / "fixtures" / "routes" / "routes.json"
 CASES: list[dict[str, Any]] = json.loads(ROUTES.read_text())["cases"]
@@ -89,7 +90,14 @@ def _call(fm: Flexemarkets, case: dict[str, Any], tmp: Path) -> Any:
     if special is not None:
         return special(fm, case["args"], tmp)
     method = getattr(fm, _snake(case["call"]))
-    return method(**{_snake(k): v for k, v in case["args"].items()})
+    result = method(**{_snake(k): v for k, v in case["args"].items()})
+    return _page(result) if isinstance(result, Page) else result
+
+
+def _page(page: Page[Any]) -> dict[str, Any]:
+    """A page as the fixture states it: the rows' ids, and the next page's before."""
+    ids = [row.connection_id if isinstance(row, ClientConnection) else row.id for row in page.rows]
+    return {"rows": ids, "next": page.next}
 
 
 def _mismatch(expected: dict[str, Any], method: str, target: str,
@@ -146,7 +154,8 @@ class _Loopback:
             def log_message(self, *args):  # keep the test output clean
                 pass
 
-            def _reply(self, status: int, body: Any, content_type: str) -> None:
+            def _reply(self, status: int, body: Any, content_type: str,
+                       headers: dict[str, str] | None = None) -> None:
                 if body is None:
                     payload = b""
                 elif isinstance(body, str) and content_type != "application/json":
@@ -156,6 +165,8 @@ class _Loopback:
                 self.send_response(status)
                 if payload:
                     self.send_header("Content-Type", content_type)
+                for name, value in (headers or {}).items():
+                    self.send_header(name, value)
                 self.send_header("Content-Length", str(len(payload)))
                 self.end_headers()
                 self.wfile.write(payload)
@@ -179,7 +190,8 @@ class _Loopback:
                     return
                 response = expected["response"]
                 self._reply(response["status"], response.get("body"),
-                            response.get("contentType", "application/json"))
+                            response.get("contentType", "application/json"),
+                            response.get("headers", {}))
 
             do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = _answer
 
