@@ -1754,6 +1754,64 @@
       ]
     },
     {
+      "call": "createCallMarket",
+      "args": {
+        "marketplaceId": 1,
+        "symbol": "IND",
+        "name": "Indicative",
+        "price": {
+          "minimum": 0,
+          "maximum": 10000,
+          "tick": 1
+        },
+        "units": {
+          "minimum": 1,
+          "maximum": 100,
+          "tick": 1
+        },
+        "intervalSeconds": 5,
+        "carry": true,
+        "callBook": "INDICATIVE"
+      },
+      "why": "A call market whose book shows the price it would clear at now says so in the create (fm-server 4.17); left out, the server makes it sealed and nothing says so.",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/api/v1/marketplaces/1/markets",
+          "body": {
+            "symbol": "IND",
+            "name": "Indicative",
+            "privateMarket": false,
+            "mechanism": "CALL",
+            "callIntervalSeconds": 5,
+            "callCarry": true,
+            "callBook": "INDICATIVE"
+          },
+          "contentType": "application/json",
+          "response": {
+            "status": 200,
+            "body": {
+              "id": 12,
+              "marketplaceId": 1,
+              "symbol": "IND",
+              "name": "Indicative",
+              "priceMinimum": 0,
+              "priceMaximum": 10000,
+              "priceTick": 1,
+              "unitMinimum": 1,
+              "unitMaximum": 100,
+              "unitTick": 1,
+              "privateMarket": false,
+              "mechanism": "CALL",
+              "callIntervalSeconds": 5,
+              "callCarry": true,
+              "callBook": "INDICATIVE"
+            }
+          }
+        }
+      ]
+    },
+    {
       "call": "clearNow",
       "args": {
         "marketplaceId": 1,
