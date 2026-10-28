@@ -75,6 +75,17 @@ export class PendingOrder {
  */
 export const RECONNECT_MAX_MS = 5_000;
 
+/**
+ * The longest an order waits, unsent, for the order socket to come back. Long
+ * enough for a reconnect after a blip (the socket retries within
+ * {@link RECONNECT_MAX_MS}); after that the order is refused as not sent, as
+ * REST refused it with a 503 during an outage. Held for the whole outage
+ * instead, a robot's quotes went onto the book up to a minute and a half after
+ * it sent them -- stale, and on top of the ones it sent again once it saw the
+ * stream come back.
+ */
+export const HOLD_MS = 5_000;
+
 /** What an order stream needs of its event listener. */
 export interface OrderListener {
   send(destination: string, body: string): void;
@@ -95,6 +106,8 @@ interface Unanswered {
   body: string;
   /** Whether a send of it was attempted; one that never was cannot have been placed. */
   sent: boolean;
+  /** While it waits, unsent, for the socket: the timer that refuses it at the hold's end. */
+  hold?: NodeJS.Timeout;
 }
 
 /**
@@ -103,12 +116,16 @@ interface Unanswered {
  * While the socket is down an order is held rather than sent another way, and
  * every unanswered order is sent again, in the order first submitted, once it
  * is back. Sending the held ones over REST meanwhile would let them overtake
- * orders sent before the drop, and in-order is the point.
+ * orders sent before the drop, and in-order is the point. An order that has
+ * not gone out at all is held for at most {@link HOLD_MS}, then refused as not
+ * sent; one sent before the drop may have been placed, and is sent again
+ * whenever the socket returns.
  */
 export class OrderStream {
   private readonly _destination: string;
   private readonly _errors: OrderStreamErrors;
   private readonly _maxInFlight: number;
+  private readonly _holdMs: number;
   /** In submission order: a Map iterates in insertion order. */
   private readonly _unanswered = new Map<string, Unanswered>();
   /** Callers waiting for a place in the window, first come first served. */
@@ -118,10 +135,11 @@ export class OrderStream {
   private _up = true;
   private _closed = false;
 
-  private constructor(marketplaceId: number, errors: OrderStreamErrors, maxInFlight: number) {
+  private constructor(marketplaceId: number, errors: OrderStreamErrors, maxInFlight: number, holdMs: number) {
     this._destination = `/app/marketplaces/${marketplaceId}/orders`;
     this._errors = errors;
     this._maxInFlight = maxInFlight;
+    this._holdMs = holdMs;
   }
 
   /** Open the stream: `connect` starts a listener delivering to the callback it is given. */
@@ -130,8 +148,9 @@ export class OrderStream {
     marketplaceId: number,
     errors: OrderStreamErrors,
     maxInFlight = MAX_IN_FLIGHT,
+    holdMs = HOLD_MS,
   ): Promise<OrderStream> {
-    const stream = new OrderStream(marketplaceId, errors, maxInFlight);
+    const stream = new OrderStream(marketplaceId, errors, maxInFlight, holdMs);
     stream._listener = await connect((event) => stream._onEvent(event));
     return stream;
   }
@@ -153,6 +172,7 @@ export class OrderStream {
     const entry: Unanswered = { pending, body: JSON.stringify(order), sent: false };
     this._unanswered.set(pending.submissionId, entry);
     if (this._up) this._send(entry);
+    else this._hold(entry);
     return pending;
   }
 
@@ -197,7 +217,21 @@ export class OrderStream {
   // -- events ----------------------------------------------------------------
 
   /** Send one. A failure leaves it held for the reconnect. */
+  /** Hold an order the socket cannot send now, until it can or the hold ends. */
+  private _hold(entry: Unanswered): void {
+    const id = entry.pending.submissionId;
+    entry.hold = setTimeout(() => {
+      if (this._unanswered.get(id) !== entry) return;
+      this._unanswered.delete(id);
+      this._answer(entry, this._errors.notSent(
+        `Order ${id} was not sent: the order socket was down for more than ${this._holdMs / 1000} s.`));
+    }, this._holdMs);
+    entry.hold.unref?.();
+  }
+
   private _send(entry: Unanswered): void {
+    clearTimeout(entry.hold);
+    entry.hold = undefined;
     entry.sent = true;
     try {
       this._listener.send(this._destination, entry.body);
@@ -245,6 +279,7 @@ export class OrderStream {
   }
 
   private _answer(entry: Unanswered, outcome: Order | Error): void {
+    clearTimeout(entry.hold);
     entry.pending._answer(outcome);
     this._release();
   }

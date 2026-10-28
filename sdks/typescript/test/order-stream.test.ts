@@ -291,6 +291,35 @@ test("answers that name no submission, and events it does not read, answer nothi
   stream.close();
 });
 
+test("an order not sent within the hold is refused, and one sent before the drop is not", async () => {
+  // Held for a whole outage, a robot's quotes went onto the book long after it sent them.
+  const listener = new Stub();
+  const stream = await OrderStream.open(async (callback) => {
+    listener.callback = callback;
+    return listener;
+  }, MP, ERRORS, undefined, 50);
+  const sent = await stream.submit(order("s-1"));
+  listener.callback({ kind: "stream-dropped", exception: new Error("gone") });
+  const held = await stream.submit(order("s-2"));
+
+  await assert.rejects(held.result(), (e: Error) =>
+    e instanceof ConnectionFailedError && /was not sent: the order socket was down/.test(e.message));
+  assert.ok(!sent.done, "sent before the drop: it may have been placed");
+  listener.callback({ kind: "reconnected", marketplaceId: MP });
+  assert.deepEqual(listener.sent, ["s-1", "s-1"], "only the one that went out goes again");
+  stream.close();
+});
+
+test("an order held less than the hold goes when the socket is back", async () => {
+  const { stream, listener } = await stubbed();
+  listener.callback({ kind: "stream-dropped", exception: new Error("gone") });
+  const held = await stream.submit(order("s-1"));
+  listener.callback({ kind: "reconnected", marketplaceId: MP });
+  assert.deepEqual(listener.sent, ["s-1"]);
+  assert.ok(!held.done);
+  stream.close();
+});
+
 test("closing fails what is unanswered by whether it was sent", async () => {
   const { stream, listener } = await stubbed();
   const sent = await stream.submit(order("s-1"));
