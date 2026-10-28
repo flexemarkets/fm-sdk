@@ -87,7 +87,14 @@ public interface Reading {
      * @return the current sessions, in the order {@link #marketplaces} lists the marketplaces
      */
     default List<CurrentSession> currentSessions() {
-        return _currentSessionsOf(marketplaces());
+        return marketplaces().stream()
+                .map(marketplace -> {
+                    Session session = session(marketplace.id());
+                    return null == session ? null
+                            : new CurrentSession(marketplace.id(), session.id(), session.state());
+                })
+                .filter(java.util.Objects::nonNull)
+                .toList();
     }
 
     /**
@@ -119,11 +126,7 @@ public interface Reading {
      */
     default Page<CurrentSession> currentSessionsPage(int limit, Long before) {
         Page<Marketplace> marketplaces = marketplacesPage(limit, before);
-        return new Page<>(_currentSessionsOf(marketplaces.rows()), marketplaces.next());
-    }
-
-    private List<CurrentSession> _currentSessionsOf(List<Marketplace> marketplaces) {
-        return marketplaces.stream()
+        List<CurrentSession> rows = marketplaces.rows().stream()
                 .map(marketplace -> {
                     Session session = session(marketplace.id());
                     return null == session ? null
@@ -131,6 +134,7 @@ public interface Reading {
                 })
                 .filter(java.util.Objects::nonNull)
                 .toList();
+        return new Page<>(rows, marketplaces.next());
     }
 
     /**
