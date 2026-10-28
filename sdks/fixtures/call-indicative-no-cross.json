@@ -1,0 +1,27 @@
+{
+  "type": "CallIndicative",
+  "why": "A book that does not cross has no indicative price. Read as zero, \"no cross\" looks like a call about to trade at 0.00, and a robot quoting around the indicative price drags its quotes to the floor.",
+  "source": {
+    "constructed": "fm-server's CallIndicative record (4.17.0) for a book with no cross: price null, volume 0, and seq 0 because the value was read before any was published."
+  },
+  "payload": {
+    "marketplaceId": 3050,
+    "marketId": 12,
+    "sessionId": 77,
+    "price": null,
+    "volume": 0,
+    "seq": 0,
+    "at": "2026-10-25T09:00:00"
+  },
+  "expect": {
+    "marketplaceId": 3050,
+    "marketId": 12,
+    "sessionId": 77,
+    "price": null,
+    "volume": 0,
+    "seq": 0,
+    "at": {
+      "epochMilli": 1792918800000
+    }
+  }
+}

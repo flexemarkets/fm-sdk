@@ -250,6 +250,7 @@ way the last one did:
 | `DELETE markets/{marketId}` | manager | remove a market no order has used |
 | `GET participants` | user | the participants the caller may name in a private order: `{name}`, and `userId` for a manager |
 | `POST calls` | manager | Clear now: `{"marketId": ...}` calls that call-auction market, while a session is open; 201 with the call (fm-server 4.17; `POST markets/{marketId}/calls` before) |
+| `GET markets/{marketId}/indicative` | user | what an `INDICATIVE` call market's book would clear at now: `{marketplaceId, marketId, sessionId, price, volume, seq, at}`, `price` null when nothing crosses; refused for a sealed or continuous market, or with no open session (fm-server 4.17) |
 | `GET calls` | manager | every call the marketplace's call markets have made, oldest first; `?sessions=` for one session's (`?sessionId=` before 4.17); `Accept: text/csv` for the same as CSV |
 
 A market's `mechanism` is `CONTINUOUS`, where an order trades the moment it
@@ -261,6 +262,14 @@ imbalance, then the midpoint of that range. A call market has
 private. Its book is sealed: a participant sees their own resting orders and
 the trades, not other resting orders. A market from a server without call
 auctions reads as continuous.
+
+A call market's `callBook` says what its book shows during the call:
+`SEALED`, the default, or `INDICATIVE`, where everyone in the marketplace also
+sees the price the book would clear at now and the volume (null and 0 when
+nothing crosses), but no orders. A client reads it on subscribe with
+`GET markets/{marketId}/indicative` and then applies `CALL-INDICATIVE` frames
+with a higher `seq` for the same session; two frames can arrive out of order.
+A market from a server without it reads as sealed.
 
 Every price, unit and cash amount is an integer counting the smallest step of
 its scale, and the scale is on the wire: a market's `priceDecimals` (prices,
@@ -279,7 +288,11 @@ refuses text with more decimal places than the scale rather than rounding it.
 | TypeScript | `createCallMarket(marketplaceId, symbol, name, price, units?, intervalSeconds?, carry?)` | `clearNow(marketplaceId, marketId)` | `calls(marketplaceId, sessionId?)` |
 
 `Market.isCall()` (Java), `Market.is_call()` (Python) and `isCall(market)`
-(TypeScript) say whether a market is a call auction.
+(TypeScript) say whether a market is a call auction;
+`Market.showsIndicative()`, `Market.shows_indicative()` and
+`showsIndicative(market)` whether it publishes its indicative price, which
+`indicative(marketplaceId, marketId)` reads in all three and the stream
+delivers as a `CallIndicative`.
 
 ### Sessions
 
@@ -671,6 +684,7 @@ Every frame carries a `message-type` header naming the payload:
 | `SERIES-UPDATE` | a market's sampled price series on one period grid: a snapshot in the subscribe burst, then one point per boundary (topic) |
 | `WIDGETS-UPDATE` | pushed widgets: a snapshot of what the recipient may see in the subscribe burst, then upserts and removals (topic for the marketplace's, user queue for their own) |
 | `CALL-UPDATE` | a call of a call-auction market, as `GET calls` answers each (topic); its trades come as an `ORDERS-UPDATE`. The stream delivers it as a `MarketCall` |
+| `CALL-INDICATIVE` | what an `INDICATIVE` call market's book would clear at now, as `GET markets/{marketId}/indicative` answers it (topic), sent only when it changed. The stream delivers it as a `CallIndicative`; keep the highest `seq` per session |
 | `ERROR` | `{"error": "…"}`, e.g. the marketplace isn't available |
 
 Additional headers on every frame: `system-current-time-millis`,
