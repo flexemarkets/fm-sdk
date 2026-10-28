@@ -219,6 +219,9 @@ public class HttpFlexemarkets implements Flexemarkets {
      */
     private static final String HEADER_IMPERSONATION = "X-FM-Account";
 
+    /** Names a create, so it can be sent again without making two (fm-server 4.17). */
+    private static final String IDEMPOTENCY_KEY = "Idempotency-Key";
+
     /**
      * The token fm-server asks for beside {@link #HEADER_IMPERSONATION}
      * (fm-server 4.7, SECURITY-VULNERABILITIES #3): issued to this
@@ -694,9 +697,8 @@ public class HttpFlexemarkets implements Flexemarkets {
     @Override
     public Person createUser(String email, String password, String firstName,
                              String lastName, String... roles) {
-        return _post(_v1("/users"),
-                    new CreateUser(email, password, firstName, lastName, roles),
-                    PERSON_TYPE);
+        var user = new CreateUser(email, password, firstName, lastName, roles);
+        return _create(key -> _post(_v1("/users"), user, PERSON_TYPE, key));
     }
 
     @Override
@@ -720,23 +722,23 @@ public class HttpFlexemarkets implements Flexemarkets {
     @Override
     public Market createMarket(long marketplaceId, String symbol, String name,
                                TickGrid price, TickGrid units, boolean privateMarket) {
-        return _post(_marketplace(marketplaceId) + "/markets",
-                    new CreateMarket(symbol, name,
+        return _createMarket(marketplaceId, new CreateMarket(symbol, name,
                                      price.minimum(), price.maximum(), price.tick(),
                                      units.minimum(), units.maximum(), units.tick(),
-                                     privateMarket, null, null, null),
-                    MARKET_TYPE);
+                                     privateMarket, null, null, null));
     }
 
     @Override
     public Market createCallMarket(long marketplaceId, String symbol, String name,
                                    TickGrid price, TickGrid units, Integer intervalSeconds, boolean carry) {
-        return _post(_marketplace(marketplaceId) + "/markets",
-                    new CreateMarket(symbol, name,
+        return _createMarket(marketplaceId, new CreateMarket(symbol, name,
                                      price.minimum(), price.maximum(), price.tick(),
                                      units.minimum(), units.maximum(), units.tick(),
-                                     false, Market.MECHANISM_CALL, intervalSeconds, carry),
-                    MARKET_TYPE);
+                                     false, Market.MECHANISM_CALL, intervalSeconds, carry));
+    }
+
+    private Market _createMarket(long marketplaceId, CreateMarket market) {
+        return _create(key -> _post(_marketplace(marketplaceId) + "/markets", market, MARKET_TYPE, key));
     }
 
     @Override
@@ -963,13 +965,14 @@ public class HttpFlexemarkets implements Flexemarkets {
         } catch (JacksonException e) {
             throw new ApiException("Marketplace definition is not valid JSON", e);
         }
-        return _post(_v1("/marketplaces"), definition, MARKETPLACE_TYPE);
+        return _create(key -> _post(_v1("/marketplaces"), definition, MARKETPLACE_TYPE, key));
     }
 
     @Override
     public List<Holding> allocate(long marketplaceId, List<Holding> holdings) {
         var allotments = holdings.stream().map(h -> _toAllotment(marketplaceId, h)).toList();
-        return _toHoldings(_post(_marketplace(marketplaceId) + "/allocations", allotments, ALLOTMENTS_TYPE));
+        return _toHoldings(_create(key -> _post(_marketplace(marketplaceId) + "/allocations", allotments,
+                ALLOTMENTS_TYPE, key)));
     }
 
     @Override
@@ -979,13 +982,15 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     @Override
     public List<Holding> uploadHoldings(long marketplaceId, Path csv) {
-        return _toHoldings(_sendCsv("POST", _marketplace(marketplaceId) + "/allocations", csv, ALLOTMENTS_TYPE));
+        return _toHoldings(_create(key -> _sendCsv("POST", _marketplace(marketplaceId) + "/allocations", csv,
+                ALLOTMENTS_TYPE, key)));
     }
 
     @Override
     public List<Holding> uploadHoldingsCsv(long marketplaceId, String csv) {
-        return _toHoldings(_sendCsv("POST", _marketplace(marketplaceId) + "/allocations",
-                csv.getBytes(StandardCharsets.UTF_8), ALLOTMENTS_TYPE));
+        byte[] content = csv.getBytes(StandardCharsets.UTF_8);
+        return _toHoldings(_create(key -> _sendCsv("POST", _marketplace(marketplaceId) + "/allocations", content,
+                ALLOTMENTS_TYPE, key)));
     }
 
     @Override
@@ -996,8 +1001,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     /** Always an array on the wire, even for one widget, so the answer is always a list. */
     @Override
     public List<Widget> pushWidgets(long marketplaceId, List<WidgetPush> widgets) {
-        return List.copyOf(_post(_marketplace(marketplaceId) + "/widgets",
-                widgets, WIDGETS_TYPE));
+        return List.copyOf(_create(key -> _post(_marketplace(marketplaceId) + "/widgets", widgets, WIDGETS_TYPE, key)));
     }
 
     @Override
@@ -1048,7 +1052,8 @@ public class HttpFlexemarkets implements Flexemarkets {
     @Override
     public MarketCall clearNow(long marketplaceId, long marketId) {
         // Created where the calls are listed (fm-server 4.17); the market's own route is superseded.
-        return _post(_marketplace(marketplaceId) + "/calls", Map.of("marketId", marketId), MARKET_CALL_TYPE);
+        return _create(key -> _post(_marketplace(marketplaceId) + "/calls", Map.of("marketId", marketId),
+                MARKET_CALL_TYPE, key));
     }
 
     @Override
@@ -1519,6 +1524,11 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     private <T> T _post(String url, Object body, TypeReference<T> type) {
+        return _post(url, body, type, null);
+    }
+
+    /** POST, under {@code idempotencyKey} when there is one (see {@link #_create}). */
+    private <T> T _post(String url, Object body, TypeReference<T> type, String idempotencyKey) {
         String json;
 
         // Only the write is guarded. The catch used to cover send() as well, so
@@ -1534,10 +1544,32 @@ public class HttpFlexemarkets implements Flexemarkets {
 
         var request = _request(url, "application/json")
             .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString(json))
-            .build();
+            .POST(HttpRequest.BodyPublishers.ofString(json));
+        if (null != idempotencyKey) {
+            request.header(IDEMPOTENCY_KEY, idempotencyKey);
+        }
 
-        return _send(request, type);
+        return _send(request.build(), type);
+    }
+
+    /**
+     * Send a create under an {@code Idempotency-Key}, and once more under the
+     * same key if its answer was lost. A create that timed out or lost its
+     * connection may or may not have landed; fm-server 4.17 answers a key it
+     * already holds with what it answered the first time (its
+     * IdempotencyFilter), so the resend makes one marketplace, market or
+     * call, never two. Orders do the same with their own submissionId.
+     */
+    private <T> T _create(java.util.function.Function<String, T> send) {
+        String key = UUID.randomUUID().toString();
+        try {
+            return send.apply(key);
+        } catch (ApiException lost) {
+            if (!(lost.getCause() instanceof IOException)) {
+                throw lost;
+            }
+            return send.apply(key);
+        }
     }
 
     /** PUT {@code body} as the resource's new state -- a robot parameter's configuration, say. */
@@ -1616,22 +1648,29 @@ public class HttpFlexemarkets implements Flexemarkets {
      * the file's own encoding survives.
      */
     private <T> T _sendCsv(String method, String url, Path file, TypeReference<T> type) {
+        return _sendCsv(method, url, file, type, null);
+    }
+
+    /** The file form, under {@code idempotencyKey} when there is one. */
+    private <T> T _sendCsv(String method, String url, Path file, TypeReference<T> type, String idempotencyKey) {
         byte[] content;
         try {
             content = Files.readAllBytes(file);
         } catch (IOException e) {
             throw new ApiException("Failed to read " + file, e);
         }
-        return _sendCsv(method, url, content, type);
+        return _sendCsv(method, url, content, type, idempotencyKey);
     }
 
     /** CSV bytes as the body, {@code Content-Type: text/csv}; see the file form above. */
-    private <T> T _sendCsv(String method, String url, byte[] content, TypeReference<T> type) {
+    private <T> T _sendCsv(String method, String url, byte[] content, TypeReference<T> type, String idempotencyKey) {
         var request = _request(url, "application/json")
             .header("Content-Type", "text/csv")
-            .method(method, HttpRequest.BodyPublishers.ofByteArray(content))
-            .build();
-        return _send(request, type);
+            .method(method, HttpRequest.BodyPublishers.ofByteArray(content));
+        if (null != idempotencyKey) {
+            request.header(IDEMPOTENCY_KEY, idempotencyKey);
+        }
+        return _send(request.build(), type);
     }
 
     private <T> T _send(HttpRequest request, TypeReference<T> type) {
