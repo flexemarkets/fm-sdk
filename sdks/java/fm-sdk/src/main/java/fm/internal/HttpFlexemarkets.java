@@ -1047,7 +1047,8 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     @Override
     public MarketCall clearNow(long marketplaceId, long marketId) {
-        return _post(_marketplace(marketplaceId) + "/markets/" + marketId + "/calls", null, MARKET_CALL_TYPE);
+        // Created where the calls are listed (fm-server 4.17); the market's own route is superseded.
+        return _post(_marketplace(marketplaceId) + "/calls", Map.of("marketId", marketId), MARKET_CALL_TYPE);
     }
 
     @Override
@@ -1057,7 +1058,7 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     @Override
     public List<MarketCall> calls(long marketplaceId, long sessionId) {
-        return List.copyOf(_get(_marketplace(marketplaceId) + "/calls?sessionId=" + sessionId, MARKET_CALLS_TYPE));
+        return List.copyOf(_get(_marketplace(marketplaceId) + "/calls?sessions=" + sessionId, MARKET_CALLS_TYPE));
     }
 
     @Override
