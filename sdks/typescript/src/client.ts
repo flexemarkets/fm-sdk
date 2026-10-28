@@ -37,6 +37,7 @@ import type {
   RobotParameterControl,
 } from "./types.js";
 import { EventListener, NO_SEQ, type EventCallback } from "./stomp.js";
+import { OrderStream, type PendingOrder } from "./order-stream.js";
 import {
   DefaultDesk,
   DeskHandle,
@@ -111,6 +112,21 @@ export class OrderRefusedLocallyError extends InvalidArgumentError {
 }
 export class ConnectionFailedError extends FlexemarketsError {}
 export class ConfigurationError extends FlexemarketsError {}
+
+/**
+ * An order was sent and no answer to it can now arrive.
+ *
+ * Not a refusal: fm-server may well have placed it. Thrown for an order sent
+ * over the socket that was still unanswered when its stream closed. Placing it
+ * again under a new submission risks holding the position twice; read the
+ * book, or the orders, to learn whether it stands. `submissionId` is the id it
+ * was sent under, which the order carries if it was placed.
+ */
+export class OrderOutcomeUnknownError extends FlexemarketsError {
+  constructor(message: string, readonly submissionId: string | null = null) {
+    super(message);
+  }
+}
 
 /**
  * A response the SDK has no better name for, carrying its status and body.
@@ -753,12 +769,21 @@ function answeredAs<E extends FlexemarketsError>(error: E, from: FlexemarketsErr
 function checkResponse(response: Response, body: string): void {
   const status = response.status;
   if (status >= 200 && status < 300) return;
-  if (status === 400) throw answered(new InvalidArgumentError("Invalid request: " + detail(body)), status, body);
-  if (status === 401) throw answered(new AuthenticationError("Authentication failed: " + detail(body)), status, body);
-  if (status === 403) throw answered(new AuthorizationError("Not permitted: " + detail(body)), status, body);
-  if (status === 409) throw answered(new ConflictError(body), status, body);
-  if (status >= 500) throw answered(new ConnectionFailedError(body), status, body);
-  throw answered(new HttpError(status, body), status, body);
+  throw refused(status, body);
+}
+
+/**
+ * The error for a refusal with this status and failure body. REST reads the
+ * status off the response; the socket's ORDER-REJECTED carries it in the body.
+ * One mapping, so an order refused either way throws the same thing.
+ */
+export function refused(status: number, body: string): FlexemarketsError {
+  if (status === 400) return answered(new InvalidArgumentError("Invalid request: " + detail(body)), status, body);
+  if (status === 401) return answered(new AuthenticationError("Authentication failed: " + detail(body)), status, body);
+  if (status === 403) return answered(new AuthorizationError("Not permitted: " + detail(body)), status, body);
+  if (status === 409) return answered(new ConflictError(body), status, body);
+  if (status >= 500) return answered(new ConnectionFailedError(body), status, body);
+  return answered(new HttpError(status, body), status, body);
 }
 
 /** The server's proposed alternative name, when a 409 body carries one. */
@@ -1563,6 +1588,52 @@ export class Flexemarkets {
     price: number,
     options: { ownerTarget?: string; ownerTargetId?: number; clientDescription?: string } = {},
   ): Promise<Order> {
+    const order = this._limitOrder(marketplaceId, marketId, side, units, price, options);
+    const url = `${this._marketplace(marketplaceId)}/orders`;
+    let data: JsonObject;
+    try {
+      data = await this._post(url, order);
+    } catch (e) {
+      if (!answerLost(e)) throw e;
+      data = await this._post(url, order);
+    }
+    return parseOrder(data);
+  }
+
+  /**
+   * Place a limit order without waiting for the answer.
+   *
+   * The order goes over the marketplace's socket and the {@link PendingOrder}
+   * this resolves to is there at once: the next order can go before this one
+   * is matched, and fm-server still matches them in the order sent. Its
+   * `result()` is the order, or the refusal {@link submitLimit} would have
+   * thrown -- or {@link OrderOutcomeUnknownError} if the socket closed before
+   * the answer came. The socket opens with the first order sent this way and
+   * stays open until {@link close}; at most `MAX_IN_FLIGHT` orders are
+   * unanswered at once, and this waits, in turn, while they are. The arguments
+   * are {@link submitLimit}'s. See docs/SUBMIT-RATE.md.
+   */
+  async sendLimit(
+    marketplaceId: number,
+    marketId: number,
+    side: string,
+    units: number,
+    price: number,
+    options: { ownerTarget?: string; ownerTargetId?: number; clientDescription?: string } = {},
+  ): Promise<PendingOrder> {
+    const order = this._limitOrder(marketplaceId, marketId, side, units, price, options);
+    return (await this._orderStream(marketplaceId)).submit(order);
+  }
+
+  /** The body of a limit order, named with a fresh submission id. */
+  private _limitOrder(
+    marketplaceId: number,
+    marketId: number,
+    side: string,
+    units: number,
+    price: number,
+    options: { ownerTarget?: string; ownerTargetId?: number; clientDescription?: string },
+  ): JsonObject {
     const { ownerTarget, ownerTargetId, clientDescription } = options;
     if (ownerTarget !== undefined && ownerTargetId !== undefined) {
       throw new InvalidArgumentError("Name the counterparty by ownerTarget or ownerTargetId, not both");
@@ -1586,15 +1657,22 @@ export class Flexemarkets {
     // may not have landed; reporting it as refused invited the caller to place
     // it again and double the position.
     order.submissionId = randomUUID();
-    const url = `${this._marketplace(marketplaceId)}/orders`;
-    let data: JsonObject;
-    try {
-      data = await this._post(url, order);
-    } catch (e) {
-      if (!answerLost(e)) throw e;
-      data = await this._post(url, order);
+    return order;
+  }
+
+  /** The marketplace's order socket, opened on first use; one open for concurrent first callers. */
+  private _orderStream(marketplaceId: number): Promise<OrderStream> {
+    let stream = this._orderStreams.get(marketplaceId);
+    if (stream === undefined) {
+      stream = OrderStream.open((callback) => this._connectEvents(marketplaceId, callback), marketplaceId, {
+        notSent: (message) => new ConnectionFailedError(message),
+        outcomeUnknown: (message, submissionId) => new OrderOutcomeUnknownError(message, submissionId),
+      });
+      this._orderStreams.set(marketplaceId, stream);
+      // One that could not open is forgotten, so the next order tries again.
+      stream.catch(() => this._orderStreams.delete(marketplaceId));
     }
-    return parseOrder(data);
+    return stream;
   }
 
   /**
@@ -2090,6 +2168,8 @@ export class Flexemarkets {
   // -- events / WebSocket ----------------------------------------------------
 
   private readonly _sharedViews = new Map<number, { desk: DefaultDesk; refCount: number }>();
+  /** The socket each marketplace's sendLimit orders go out on, opened by the first of them. */
+  private readonly _orderStreams = new Map<number, Promise<OrderStream>>();
   private readonly _sharedViewPromises = new Map<number, Promise<DefaultDesk>>();
 
   /**
@@ -2226,6 +2306,7 @@ export class Flexemarkets {
       parseOrder,
       (presented) => this._renewToken(presented),
       history,
+      refused,
     );
     await events.start();
     return events;
@@ -2241,6 +2322,12 @@ export class Flexemarkets {
   // -- lifecycle -------------------------------------------------------------
 
   close(): void {
+    // Before the listeners: an order still unanswered is told so, rather than
+    // waiting on a socket that has gone.
+    for (const stream of this._orderStreams.values()) {
+      stream.then((s) => s.close(), () => {});
+    }
+    this._orderStreams.clear();
     if (this._eventListener !== null) {
       this._eventListener.close();
       this._eventListener = null;

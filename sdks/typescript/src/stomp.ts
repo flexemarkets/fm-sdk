@@ -5,6 +5,7 @@
  * EventListener / Java StompListener behaviour.
  */
 
+import { STATUS_CODES } from "node:http";
 import WebSocket from "ws";
 import { toInstant } from "./timestamps.js";
 import type { CallIndicative, Holding, MarketCall, Order, Session, Version } from "./types.js";
@@ -170,6 +171,31 @@ export interface OrdersUpdate {
   readonly seq: number;
 }
 
+/**
+ * An order sent over the socket was already accepted: the answer to a resend
+ * of a submission fm-server holds, carrying the order it made then.
+ *
+ * A first submission is not answered this way. Its acceptance is the
+ * ORDERS-UPDATE fan-out, whose order carries the submission id; a resend makes
+ * no order, so it is in no fan-out, and this is its answer.
+ */
+export interface OrderAccepted {
+  readonly kind: "order-accepted";
+  readonly submissionId: string | null;
+  readonly order: Order;
+}
+
+/**
+ * An order sent over the socket was refused. `error` is what REST throws for
+ * the same refusal, built from the same failure body, so a caller handles a
+ * refused order one way whichever route it took.
+ */
+export interface OrderRejected {
+  readonly kind: "order-rejected";
+  readonly submissionId: string | null;
+  readonly error: Error;
+}
+
 export type FmEvent =
   | Version
   | Session
@@ -178,9 +204,14 @@ export type FmEvent =
   | OrdersUpdate
   | MarketCall
   | CallIndicative
+  | OrderAccepted
+  | OrderRejected
   | StreamDropped
   | StreamReconnected
   | FrameUnreadable;
+
+/** The error REST throws for a refusal with this status and failure body. */
+export type Refusal = (status: number, body: string) => Error;
 
 export type EventCallback = (event: FmEvent) => void;
 
@@ -190,14 +221,23 @@ export type EventCallback = (event: FmEvent) => void;
 
 const MESSAGE_TYPE = "message-type";
 const SEQ_HEADER   = "seq";
+/** fm-server's name for the submission an ORDER-ACCEPTED or ORDER-REJECTED answers. */
+const SUBMISSION_ID_HEADER = "submission-id";
+
+/** HTTP status codes by the names fm-server spells them in a failure body: BAD_REQUEST, 400. */
+const STATUS_BY_NAME = new Map(
+  Object.entries(STATUS_CODES).map(([code, phrase]) =>
+    [String(phrase).toUpperCase().replace(/[^A-Z0-9]+/g, "_"), Number(code)]),
+);
 
 /** Sentinel for "no seq header" — see OrdersUpdate.seq docstring. */
 export const NO_SEQ = -1;
 
-function parseEvent(
+export function parseEvent(
   frame: StompFrame,
   parseHolding: (data: Record<string, unknown>) => Holding,
   parseOrder: (data: Record<string, unknown>) => Order,
+  refusal: Refusal = (_, body) => new Error(body),
 ): FmEvent | null {
   const msgType = frame.headers[MESSAGE_TYPE];
   if (msgType === undefined) return null;
@@ -219,6 +259,18 @@ function parseEvent(
       const seq = _parseSeq(frame.headers[SEQ_HEADER]);
       return { kind: "orders-update", orders: parseOrders(data, parseOrder), seq };
     }
+    case "ORDER-ACCEPTED":
+      return {
+        kind: "order-accepted",
+        submissionId: frame.headers[SUBMISSION_ID_HEADER] ?? null,
+        order: parseOrder(data as Record<string, unknown>),
+      };
+    case "ORDER-REJECTED":
+      return {
+        kind: "order-rejected",
+        submissionId: frame.headers[SUBMISSION_ID_HEADER] ?? null,
+        error: refusal(statusOf(data), frame.body),
+      };
     // A call of a call-auction market; its trades come as an ORDERS-UPDATE of their own.
     case "CALL-UPDATE":
       return parseMarketCall(data as Record<string, unknown>);
@@ -229,6 +281,17 @@ function parseEvent(
     default:
       return null;
   }
+}
+
+/**
+ * The status a socket failure body names. The body spells it as an HTTP status
+ * name (`BAD_REQUEST`) where REST has the code on the response; a name this
+ * client does not know is read as a bad request, which is what a refused
+ * order is.
+ */
+function statusOf(data: unknown): number {
+  const name = typeof data === "object" && data !== null ? (data as Record<string, unknown>).status : undefined;
+  return (typeof name === "string" ? STATUS_BY_NAME.get(name) : undefined) ?? 400;
 }
 
 /** Parse the per-frame `seq` header; falls back to NO_SEQ on absent
@@ -347,6 +410,7 @@ export class EventListener {
   private readonly _clientDescription: string;
   private readonly _parseHolding: (data: Record<string, unknown>) => Holding;
   private readonly _parseOrder: (data: Record<string, unknown>) => Order;
+  private readonly _refusal: Refusal;
 
   private _ws: WebSocket | null = null;
   private _closed = false;
@@ -381,6 +445,7 @@ export class EventListener {
     parseOrder: (data: Record<string, unknown>) => Order,
     renew: (presented: string) => Promise<boolean> = async () => false,
     history = false,
+    refusal: Refusal = (_, body) => new Error(body),
   ) {
     this._wsUrl = wsUrl;
     // The V0 subscribe, whose first ORDERS-UPDATE is the session's whole
@@ -393,6 +458,7 @@ export class EventListener {
     this._clientDescription = clientDescription;
     this._parseHolding = parseHolding;
     this._parseOrder = parseOrder;
+    this._refusal = refusal;
   }
 
   // -- public API ------------------------------------------------------------
@@ -519,6 +585,36 @@ export class EventListener {
   }
 
   /**
+   * Whether this stream has stopped for good: closed by its owner, or given
+   * up after its token was refused twice. A drop it will recover from is not.
+   */
+  get closed(): boolean {
+    return this._closed;
+  }
+
+  /**
+   * Send `body`, JSON, to an `/app` `destination` on this connection.
+   *
+   * Throws while there is no open connection to send on -- before `start`,
+   * after `close`, or between a drop and the reconnect.
+   */
+  send(destination: string, body: string): void {
+    const ws = this._ws;
+    if (this._closed || ws === null || ws.readyState !== WebSocket.OPEN) {
+      throw new Error("The event stream is not connected.");
+    }
+    ws.send(encodeFrame({
+      command: "SEND",
+      headers: {
+        destination,
+        "content-type": "application/json",
+        "content-length": String(Buffer.byteLength(body)),
+      },
+      body,
+    }));
+  }
+
+  /**
    * Send a bare EOL every {@link HEARTBEAT_INTERVAL_MS}.
    *
    * A newline on its own is what STOMP 1.2 defines a heartbeat to be, so the
@@ -634,7 +730,7 @@ export class EventListener {
         // could not be parsed threw out of this callback. Java reports both.
         let event: FmEvent | null;
         try {
-          event = parseEvent(frame, this._parseHolding, this._parseOrder);
+          event = parseEvent(frame, this._parseHolding, this._parseOrder, this._refusal);
         } catch (e) {
           this._callback({
             kind: "frame-unreadable",
