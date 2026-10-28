@@ -1,5 +1,6 @@
 package fm.role;
 
+import fm.Page;
 import fm.model.Account;
 import fm.model.Holding;
 import fm.model.ManagerOtpBundle;
@@ -107,6 +108,35 @@ public interface Administration {
      * @return every account
      */
     List<Account> accounts();
+
+    /**
+     * The newest {@code limit} accounts: the first page of {@link #accounts}.
+     *
+     * @param limit         how many, 1 or more; the server answers at most 5,000
+     * @return the page, with {@link Page#next()} set while older ones remain
+     * @see #accountsPage(int, Long)
+     */
+    default Page<Account> accountsPage(int limit) {
+        return accountsPage(limit, null);
+    }
+
+    /**
+     * A page of {@link #accounts}: {@code GET /accounts} with {@code ?limit=} and
+     * {@code ?before=}.
+     *
+     * <p>By default, the whole collection read and cut as fm-server cuts it
+     * ({@link Page#of}), so an implementation that reads only whole
+     * collections pages the same way; the HTTP client asks the server for the
+     * page.
+     *
+     * @param limit         how many, 1 or more; the server answers at most 5,000
+     * @param before        only those whose id is below this -- a page's
+     *                      {@link Page#next()} -- or null for the newest
+     * @return the page, with {@link Page#next()} set while older ones remain
+     */
+    default Page<Account> accountsPage(int limit, Long before) {
+        return Page.of(accounts(), account -> account.id(), limit, before);
+    }
 
     /**
      * Delete an account. Destructive, and takes its users with it.
