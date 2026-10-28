@@ -39,7 +39,8 @@ dropped three links from its root.
   more (a `clientDescription`); anything else -- an array, a CSV string -- is
   compared whole.
 - `response` is what the loopback server answers: `status`, and `body` with
-  `contentType` (JSON by default). No body means none.
+  `contentType` (JSON by default). No body means none. `headers`, when given,
+  are sent as they are -- a page's `Link: <...>; rel="next"`, say.
 - `returns`, when present, is what the call must answer.
 
 Adding a case needs no code in any SDK unless the call is new to the runner's

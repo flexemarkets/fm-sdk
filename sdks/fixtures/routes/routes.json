@@ -1857,6 +1857,403 @@
           }
         }
       ]
+    },
+    {
+      "call": "marketplacesPage",
+      "args": {
+        "limit": 2
+      },
+      "why": "A page is ?limit= on the collection's own route (fm-server 4.17, P1), and the next page's before is the one the Link header names: without reading it a caller cannot tell a full last page from one with older rows behind it.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces",
+          "query": {
+            "limit": "2"
+          },
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "id": 4,
+                "name": "mp",
+                "accountId": 1,
+                "markets": [
+                  {
+                    "id": 11,
+                    "marketplaceId": 1,
+                    "symbol": "STK",
+                    "name": "Stock",
+                    "priceMinimum": 110,
+                    "priceMaximum": 199,
+                    "priceTick": 25,
+                    "unitMinimum": 1,
+                    "unitMaximum": 100,
+                    "unitTick": 1,
+                    "privateMarket": false
+                  }
+                ]
+              },
+              {
+                "id": 5,
+                "name": "mp",
+                "accountId": 1,
+                "markets": [
+                  {
+                    "id": 11,
+                    "marketplaceId": 1,
+                    "symbol": "STK",
+                    "name": "Stock",
+                    "priceMinimum": 110,
+                    "priceMaximum": 199,
+                    "priceTick": 25,
+                    "unitMinimum": 1,
+                    "unitMaximum": 100,
+                    "unitTick": 1,
+                    "privateMarket": false
+                  }
+                ]
+              }
+            ],
+            "headers": {
+              "Link": "</api/v1/marketplaces?limit=2&before=4>; rel=\"next\""
+            }
+          }
+        }
+      ],
+      "returns": {
+        "rows": [
+          4,
+          5
+        ],
+        "next": 4
+      }
+    },
+    {
+      "call": "sessionsPage",
+      "args": {
+        "marketplaceId": 1,
+        "limit": 2
+      },
+      "why": "The first page of a marketplace's sessions: the newest two, oldest first as the whole list is, and Link: rel=\"next\" while older ones remain.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/sessions",
+          "query": {
+            "limit": "2"
+          },
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "marketplaceId": 1,
+                "allocationId": 12,
+                "id": 43,
+                "original": 43,
+                "state": "OPEN",
+                "name": "Round 3",
+                "openDate": "2026-08-21T09:00:00",
+                "closeDate": null
+              },
+              {
+                "marketplaceId": 1,
+                "allocationId": 12,
+                "id": 44,
+                "original": 44,
+                "state": "OPEN",
+                "name": "Round 3",
+                "openDate": "2026-08-21T09:00:00",
+                "closeDate": null
+              }
+            ],
+            "headers": {
+              "Link": "</api/v1/marketplaces/1/sessions?limit=2&before=43>; rel=\"next\""
+            }
+          }
+        }
+      ],
+      "returns": {
+        "rows": [
+          43,
+          44
+        ],
+        "next": 43
+      }
+    },
+    {
+      "call": "sessionsPage",
+      "args": {
+        "marketplaceId": 1,
+        "limit": 2,
+        "before": 43
+      },
+      "why": "A full page with no Link is the last. A client that guessed the next before from the oldest row would read one more, empty page -- or loop, against a server whose rows are not dense.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/sessions",
+          "query": {
+            "limit": "2",
+            "before": "43"
+          },
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "marketplaceId": 1,
+                "allocationId": 12,
+                "id": 41,
+                "original": 41,
+                "state": "OPEN",
+                "name": "Round 3",
+                "openDate": "2026-08-21T09:00:00",
+                "closeDate": null
+              },
+              {
+                "marketplaceId": 1,
+                "allocationId": 12,
+                "id": 42,
+                "original": 42,
+                "state": "OPEN",
+                "name": "Round 3",
+                "openDate": "2026-08-21T09:00:00",
+                "closeDate": null
+              }
+            ]
+          }
+        }
+      ],
+      "returns": {
+        "rows": [
+          41,
+          42
+        ],
+        "next": null
+      }
+    },
+    {
+      "call": "ordersPage",
+      "args": {
+        "marketplaceId": 1,
+        "limit": 2
+      },
+      "why": "orders() reads the lifecycle less cancellations (?cancelled=false); its page must keep that filter, or a page of orders holds rows the whole read never did.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/orders",
+          "query": {
+            "cancelled": "false",
+            "limit": "2"
+          },
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "id": 45,
+                "original": 45,
+                "supplier": null,
+                "consumer": null,
+                "type": "LIMIT",
+                "side": "BUY",
+                "units": 5,
+                "price": 135,
+                "marketplaceId": 1,
+                "marketId": 11,
+                "sessionId": 41,
+                "ownerId": 7
+              },
+              {
+                "id": 46,
+                "original": 46,
+                "supplier": null,
+                "consumer": null,
+                "type": "LIMIT",
+                "side": "BUY",
+                "units": 5,
+                "price": 135,
+                "marketplaceId": 1,
+                "marketId": 11,
+                "sessionId": 41,
+                "ownerId": 7
+              }
+            ],
+            "headers": {
+              "Link": "</api/v1/marketplaces/1/orders?cancelled=false&limit=2&before=45>; rel=\"next\""
+            }
+          }
+        }
+      ],
+      "returns": {
+        "rows": [
+          45,
+          46
+        ],
+        "next": 45
+      }
+    },
+    {
+      "call": "usersPage",
+      "args": {
+        "limit": 1,
+        "before": 9
+      },
+      "why": "before is sent as given, and the next page's comes from the Link, not from the request.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/users",
+          "query": {
+            "limit": "1",
+            "before": "9"
+          },
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "id": 8,
+                "accountId": 1,
+                "firstName": "Dev",
+                "lastName": "Eloper",
+                "email": "dev@dev",
+                "roles": [
+                  "ROLE_USER"
+                ]
+              }
+            ],
+            "headers": {
+              "Link": "</api/v1/users?limit=1&before=8>; rel=\"next\""
+            }
+          }
+        }
+      ],
+      "returns": {
+        "rows": [
+          8
+        ],
+        "next": 8
+      }
+    },
+    {
+      "call": "connectionsPage",
+      "args": {
+        "marketplaceId": 1,
+        "limit": 2
+      },
+      "why": "A short page is the last: no Link, so next is null.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/connections",
+          "query": {
+            "limit": "2"
+          },
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "id": 3,
+                "marketplaceId": 1,
+                "ownerId": 7,
+                "sessionId": 41
+              }
+            ]
+          }
+        }
+      ],
+      "returns": {
+        "rows": [
+          3
+        ],
+        "next": null
+      }
+    },
+    {
+      "call": "accountsPage",
+      "args": {
+        "limit": 2
+      },
+      "why": "The admin's account list pages like every other growing collection.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/accounts",
+          "query": {
+            "limit": "2"
+          },
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "id": 2,
+                "name": "dev",
+                "approval": true
+              },
+              {
+                "id": 3,
+                "name": "dev",
+                "approval": true
+              }
+            ],
+            "headers": {
+              "Link": "</api/v1/accounts?limit=2&before=2>; rel=\"next\""
+            }
+          }
+        }
+      ],
+      "returns": {
+        "rows": [
+          2,
+          3
+        ],
+        "next": 2
+      }
+    },
+    {
+      "call": "callsPage",
+      "args": {
+        "marketplaceId": 1,
+        "limit": 1,
+        "before": 92
+      },
+      "why": "A marketplace's calls grow with every clear; their page is under the marketplace, as calls() is.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/1/calls",
+          "query": {
+            "limit": "1",
+            "before": "92"
+          },
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "id": 91,
+                "marketplaceId": 1,
+                "marketId": 12,
+                "sessionId": 77,
+                "calledDate": "2026-10-25T09:00:05",
+                "trigger": "MANUAL",
+                "price": 550,
+                "volume": 2,
+                "demand": 3,
+                "supply": 2,
+                "buyOrders": 2,
+                "sellOrders": 1,
+                "carry": true
+              }
+            ]
+          }
+        }
+      ],
+      "returns": {
+        "rows": [
+          91
+        ],
+        "next": null
+      }
     }
   ]
 }
