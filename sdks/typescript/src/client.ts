@@ -1064,7 +1064,7 @@ export class Flexemarkets {
     return body;
   }
 
-  private async _post(url: string, json: unknown): Promise<JsonObject> {
+  private async _post(url: string, json: unknown, headers: Record<string, string> = {}): Promise<JsonObject> {
     const resp = await this._fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
       method: "POST",
       headers: {
@@ -1072,6 +1072,7 @@ export class Flexemarkets {
         "Content-Type": "application/json",
         Accept: "application/json",
         "User-Agent": FM_NETWORK_CLIENT,
+        ...headers,
       },
       body: JSON.stringify(json),
     });
@@ -1191,7 +1192,8 @@ export class Flexemarkets {
     lastName: string,
     roles: string[] = [],
   ): Promise<Person> {
-    const data = await this._post(this._v1("/users"), { email, password, firstName, lastName, roles });
+    const user = { email, password, firstName, lastName, roles };
+    const data = await this._create((key) => this._post(this._v1("/users"), user, key));
     return parsePerson(data) as Person;
   }
 
@@ -1236,7 +1238,7 @@ export class Flexemarkets {
     units: TickGrid = unitGrid(),
     privateMarket = false,
   ): Promise<Market> {
-    return parseMarket(await this._post(`${this._marketplace(marketplaceId)}/markets`, {
+    return parseMarket(await this._create((key) => this._post(`${this._marketplace(marketplaceId)}/markets`, {
       symbol,
       name,
       priceMinimum: price.minimum,
@@ -1246,7 +1248,7 @@ export class Flexemarkets {
       unitMaximum: units.maximum,
       unitTick: units.tick,
       privateMarket,
-    }));
+    }, key)));
   }
 
   /**
@@ -1268,7 +1270,7 @@ export class Flexemarkets {
     intervalSeconds: number | null = null,
     carry = true,
   ): Promise<Market> {
-    return parseMarket(await this._post(`${this._marketplace(marketplaceId)}/markets`, {
+    return parseMarket(await this._create((key) => this._post(`${this._marketplace(marketplaceId)}/markets`, {
       symbol,
       name,
       priceMinimum: price.minimum,
@@ -1281,7 +1283,7 @@ export class Flexemarkets {
       mechanism: MARKET_MECHANISM_CALL,
       callIntervalSeconds: intervalSeconds,
       callCarry: carry,
-    }));
+    }, key)));
   }
 
   /**
@@ -1332,12 +1334,34 @@ export class Flexemarkets {
    * header, where 0.3 posted it as a multipart upload to an `/uploads`
    * segment. Bytes, not a string, so the file's own encoding survives.
    */
-  private async _sendCsv(method: string, url: string, filename: string): Promise<unknown> {
-    return this._sendCsvContent(method, url, readFileSync(filename));
+  /**
+   * Send a create under an `Idempotency-Key`, and once more under the same key
+   * if its answer was lost. A create that lost its connection may or may not
+   * have landed; fm-server 4.17 answers a key it already holds with what it
+   * answered the first time (its IdempotencyFilter), so the resend makes one
+   * marketplace, market or call, never two. Orders do the same with their own
+   * `submissionId`.
+   */
+  private async _create<T>(send: (key: Record<string, string>) => Promise<T>): Promise<T> {
+    const key = { "Idempotency-Key": randomUUID() };
+    try {
+      return await send(key);
+    } catch (e) {
+      if (!answerLost(e)) throw e;
+      return send(key);
+    }
+  }
+
+  private async _sendCsv(
+    method: string, url: string, filename: string, headers: Record<string, string> = {},
+  ): Promise<unknown> {
+    return this._sendCsvContent(method, url, readFileSync(filename), headers);
   }
 
   /** CSV as the request body, declared text/csv; see {@link _sendCsv}. */
-  private async _sendCsvContent(method: string, url: string, content: RequestInit["body"]): Promise<unknown> {
+  private async _sendCsvContent(
+    method: string, url: string, content: RequestInit["body"], headers: Record<string, string> = {},
+  ): Promise<unknown> {
     const resp = await this._fetch(url, {
       method,
       headers: {
@@ -1345,6 +1369,7 @@ export class Flexemarkets {
         "Content-Type": "text/csv",
         Accept: "application/json",
         "User-Agent": FM_NETWORK_CLIENT,
+        ...headers,
       },
       body: content,
     });
@@ -1711,7 +1736,7 @@ export class Flexemarkets {
         `Marketplace definition is not valid JSON: ${(e as Error).message}`,
       );
     }
-    return parseMarketplace(await this._post(this._v1("/marketplaces"), parsed));
+    return parseMarketplace(await this._create((key) => this._post(this._v1("/marketplaces"), parsed, key)));
   }
 
   /** Opens the marketplace's session, returning it in its new state. */
@@ -1767,7 +1792,7 @@ export class Flexemarkets {
   async allocate(marketplaceId: number, holdings: Holding[]): Promise<Holding[]> {
     const url = `${this._marketplace(marketplaceId)}/allocations`;
     const body = holdings.map((h) => holdingToAllotment(marketplaceId, h));
-    const data = await this._post(url, body);
+    const data = await this._create((key) => this._post(url, body, key));
     return allotmentsToHoldings((data as unknown as JsonObject[]).map(parseAllotment));
   }
 
@@ -1789,7 +1814,7 @@ export class Flexemarkets {
    */
   async uploadHoldings(marketplaceId: number, filename: string): Promise<Holding[]> {
     const url = `${this._marketplace(marketplaceId)}/allocations`;
-    const data = (await this._sendCsv("POST", url, filename)) as JsonObject[];
+    const data = (await this._create((key) => this._sendCsv("POST", url, filename, key))) as JsonObject[];
     return allotmentsToHoldings(data.map(parseAllotment));
   }
 
@@ -1805,7 +1830,7 @@ export class Flexemarkets {
    */
   async uploadHoldingsCsv(marketplaceId: number, csv: string): Promise<Holding[]> {
     const url = `${this._marketplace(marketplaceId)}/allocations`;
-    const data = (await this._sendCsvContent("POST", url, csv)) as JsonObject[];
+    const data = (await this._create((key) => this._sendCsvContent("POST", url, csv, key))) as JsonObject[];
     return allotmentsToHoldings(data.map(parseAllotment));
   }
 
@@ -1847,7 +1872,8 @@ export class Flexemarkets {
    */
   async pushWidgets(marketplaceId: number, widgets: WidgetPush[]): Promise<Widget[]> {
     const url = `${this._marketplace(marketplaceId)}/widgets`;
-    const data = await this._post(url, widgets.map(widgetPushJson));
+    const pushes = widgets.map(widgetPushJson);
+    const data = await this._create((key) => this._post(url, pushes, key));
     return (data as unknown as JsonObject[]).map(parseWidget);
   }
 
@@ -1899,7 +1925,8 @@ export class Flexemarkets {
    */
   async clearNow(marketplaceId: number, marketId: number): Promise<MarketCall> {
     // Created where the calls are listed (fm-server 4.17); the market's own route is superseded.
-    return parseMarketCall(await this._post(`${this._marketplace(marketplaceId)}/calls`, { marketId }));
+    return parseMarketCall(await this._create((key) =>
+      this._post(`${this._marketplace(marketplaceId)}/calls`, { marketId }, key)));
   }
 
   /** Every call the marketplace's call markets have made, oldest first; one session's with `sessionId`. */
