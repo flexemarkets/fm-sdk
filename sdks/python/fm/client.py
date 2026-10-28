@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Optional, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, Optional, TypeVar, overload
 
 from .decimals import Decimals
 from .page import Page
@@ -25,6 +25,7 @@ from .timestamps import parse as _timestamp
 if TYPE_CHECKING:
     from .events import EventListener
     from .desk import Desk
+    from .order_stream import OrderStream, PendingOrder
 
 
 @dataclass
@@ -866,6 +867,11 @@ class Flexemarkets:
         self._shared_views: dict[int, _SharedView] = {}
         self._view_lock = threading.Lock()
 
+        # The socket each marketplace's wait=False orders go out on, opened by
+        # the first of them; see submit_limit.
+        self._order_streams: dict[int, "OrderStream"] = {}
+        self._order_stream_lock = threading.Lock()
+
     # -- factory helpers matching Java's connect() overloads ----------------
 
     @classmethod
@@ -1464,6 +1470,20 @@ class Flexemarkets:
 
     # -- orders ------------------------------------------------------------
 
+    @overload
+    def submit_limit(
+        self, marketplace_id: int, market_id: int, side: str, units: int, price: int, *,
+        owner_target: str | None = ..., owner_target_id: int | None = ...,
+        client_description: str | None = ..., wait: Literal[True] = ...,
+    ) -> Order: ...
+
+    @overload
+    def submit_limit(
+        self, marketplace_id: int, market_id: int, side: str, units: int, price: int, *,
+        owner_target: str | None = ..., owner_target_id: int | None = ...,
+        client_description: str | None = ..., wait: Literal[False],
+    ) -> "PendingOrder": ...
+
     def submit_limit(
         self,
         marketplace_id: int,
@@ -1475,7 +1495,8 @@ class Flexemarkets:
         owner_target: str | None = None,
         owner_target_id: int | None = None,
         client_description: str | None = None,
-    ) -> Order:
+        wait: bool = True,
+    ) -> "Order | PendingOrder":
         """Place a limit order.
 
         A private market matches an order only with one aimed back at its
@@ -1488,6 +1509,15 @@ class Flexemarkets:
         *client_description* is this order's own reference, as the server keeps
         it on the order; it defaults to the description this client connected
         with.
+
+        With ``wait=False`` the order goes over the marketplace's socket and
+        this returns a :class:`~fm.order_stream.PendingOrder` at once, without
+        waiting for the answer: the next order can go before this one is
+        matched, and fm-server still matches them in the order sent. Its
+        ``result()`` is the order, or the refusal REST would have raised. The
+        socket opens with the first such order and stays open until
+        :meth:`close`; at most :data:`~fm.order_stream.MAX_IN_FLIGHT` orders
+        are unanswered at once. See docs/SUBMIT-RATE.md.
         """
         if owner_target is not None and owner_target_id is not None:
             raise InvalidArgumentError(
@@ -1513,12 +1543,25 @@ class Flexemarkets:
         # its connection may or may not have landed; reporting it as refused
         # invited the caller to place it again and double the position.
         order["submissionId"] = str(uuid.uuid4())
+        if not wait:
+            return self._order_stream(marketplace_id).submit(order)
         url = _marketplace(self._endpoint, marketplace_id) + "/orders"
         try:
             resp = self._post(url, order)
         except httpx.TransportError:
             resp = self._post(url, order)
         return _parse_order(_json(resp))
+
+    def _order_stream(self, marketplace_id: int) -> "OrderStream":
+        """The marketplace's order socket, opened on first use."""
+        from .order_stream import OrderStream
+
+        with self._order_stream_lock:
+            stream = self._order_streams.get(marketplace_id)
+            if stream is None:
+                stream = OrderStream(lambda events: self._connect_events(marketplace_id, events), marketplace_id)
+                self._order_streams[marketplace_id] = stream
+            return stream
 
     def submit_market(
         self, marketplace_id: int, market_id: int, side: str, units: int,
@@ -2100,6 +2143,12 @@ class Flexemarkets:
     # -- lifecycle ---------------------------------------------------------
 
     def close(self) -> None:
+        # Before the listeners: an order still unanswered is told so, rather
+        # than waiting on a socket that has gone.
+        with getattr(self, "_order_stream_lock", threading.Lock()):
+            streams, self._order_streams = list(getattr(self, "_order_streams", {}).values()), {}
+        for stream in streams:
+            stream.close()
         if hasattr(self, "_event_listener") and self._event_listener is not None:
             self._event_listener.close()
             self._event_listener = None

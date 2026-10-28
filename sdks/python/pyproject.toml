@@ -59,6 +59,7 @@ include = [
     "fm/decimals.py",
     "fm/desk.py",
     "fm/events.py",
+    "fm/order_stream.py",
     "fm/order_utils.py",
     "fm/orderbook.py",
     "fm/trades.py",
