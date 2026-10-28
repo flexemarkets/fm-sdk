@@ -211,6 +211,21 @@ test("failed attempts wait longer and longer", async () => {
   listener.close();
 });
 
+test("a listener given a shorter ceiling waits no longer than it", async () => {
+  // An order socket: orders wait on it, so it comes back within five seconds, not a minute.
+  const listener = new StubListener(() => {});
+  listener.reconnectMaxPauseMs = 5000;
+  await listener.start();
+  listener.pauses = [];
+  listener.failConnects = listener.connects + 5;
+
+  await listener.reconnect();
+
+  assertPaced(listener.pauses, [2000, 4000, 5000, 5000, 5000]);
+  assert.equal(reconnectPause(10_000, (_lo, hi) => hi, 5000), 5000);
+  listener.close();
+});
+
 /** Drop the stream and wait until it is restored. */
 async function dropped(listener: StubListener, events: FmEvent[]): Promise<void> {
   const before = events.filter((e) => (e as StreamReconnected).kind === "reconnected").length;

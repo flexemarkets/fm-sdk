@@ -38,7 +38,7 @@ import type {
   RobotParameterControl,
 } from "./types.js";
 import { EventListener, NO_SEQ, type EventCallback } from "./stomp.js";
-import { OrderStream, type PendingOrder } from "./order-stream.js";
+import { OrderStream, RECONNECT_MAX_MS, type PendingOrder } from "./order-stream.js";
 import {
   DefaultDesk,
   DeskHandle,
@@ -1701,7 +1701,8 @@ export class Flexemarkets {
   private _orderStream(marketplaceId: number): Promise<OrderStream> {
     let stream = this._orderStreams.get(marketplaceId);
     if (stream === undefined) {
-      stream = OrderStream.open((callback) => this._connectEvents(marketplaceId, callback), marketplaceId, {
+      stream = OrderStream.open((callback) => this._connectEvents(marketplaceId, callback, false, RECONNECT_MAX_MS),
+                                marketplaceId, {
         notSent: (message) => new ConnectionFailedError(message),
         outcomeUnknown: (message, submissionId) => new OrderOutcomeUnknownError(message, submissionId),
       });
@@ -2328,7 +2329,9 @@ export class Flexemarkets {
    * the singleton {@link #_eventListener}. Lets multiple
    * desk(marketplaceId) calls coexist within one Flexemarkets.
    */
-  async _connectEvents(marketplaceId: number, callback: EventCallback, history = false): Promise<EventListener> {
+  async _connectEvents(
+    marketplaceId: number, callback: EventCallback, history = false, reconnectMaxPauseMs?: number,
+  ): Promise<EventListener> {
     const wsUrl =
       server(this._endpoint)
         .replace("https://", "wss://")
@@ -2345,6 +2348,7 @@ export class Flexemarkets {
       history,
       refused,
     );
+    if (reconnectMaxPauseMs !== undefined) events.reconnectMaxPauseMs = reconnectMaxPauseMs;
     await events.start();
     return events;
   }
