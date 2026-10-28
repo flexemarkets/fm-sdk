@@ -17,9 +17,9 @@
 | Python | nothing | |
 
 It needs fm-server 4.17, which every 0.14 client already needs. One read
-needs more: `currentSessionsPage` pages only on the fm-server release after
-4.17.2. On 4.17 the server ignores `limit` and `before`, so the first page
-holds every current session and has no next.
+needs more: `currentSessionsPage` pages only on fm-server 4.17.3 and later.
+Before that the server ignores `limit` and `before`, so the first page holds
+every current session and has no next.
 
 What 0.14.0 changed is in [UPGRADING-0.14.md](UPGRADING-0.14.md) and is not
 revisited here.
