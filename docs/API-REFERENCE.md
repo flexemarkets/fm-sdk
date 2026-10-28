@@ -215,9 +215,16 @@ way the last one did:
 - **Format by header.** CSV is `Accept: text/csv` to read and
   `Content-Type: text/csv` to send; there are no `/uploads` or `/downloads`.
 - **`?dryRun=true`** on a request answers what it would do and does nothing.
-- **Status.** A create answers 201 where it is new to V1 (200 where it was
-  not, unchanged); a `DELETE` answers 204, except where the answer carries
-  something — cancelling an order answers the CANCEL the exchange recorded.
+- **Status.** A create answers 201, with `Location` where what it made can
+  be read back (fm-server 4.17; some answered 200 before); a `DELETE`
+  answers 204, except where the answer carries something — cancelling an
+  order answers the CANCEL the exchange recorded.
+- **A create can be sent again.** A `POST` with an `Idempotency-Key` header
+  is remembered for a day; the same key and body again answers what the first
+  answered, with `Idempotent-Replayed: true`, and makes nothing (a different
+  body, or the first still being answered, is 409). Every SDK create sends one
+  and resends once when the answer is lost (fm-server 4.17). Orders use their
+  own `submissionId` instead.
 
 ### Marketplaces and markets
 
@@ -230,8 +237,8 @@ way the last one did:
 | `POST markets` | manager | add a market |
 | `DELETE markets/{marketId}` | manager | remove a market no order has used |
 | `GET participants` | user | the participants the caller may name in a private order: `{name}`, and `userId` for a manager |
-| `POST markets/{marketId}/calls` | manager | Clear now: call a call-auction market, while a session is open; answers the call |
-| `GET calls` | manager | every call the marketplace's call markets have made, oldest first; `?sessionId=` for one session's; `Accept: text/csv` for the same as CSV |
+| `POST calls` | manager | Clear now: `{"marketId": ...}` calls that call-auction market, while a session is open; 201 with the call (fm-server 4.17; `POST markets/{marketId}/calls` before) |
+| `GET calls` | manager | every call the marketplace's call markets have made, oldest first; `?sessions=` for one session's (`?sessionId=` before 4.17); `Accept: text/csv` for the same as CSV |
 
 A market's `mechanism` is `CONTINUOUS`, where an order trades the moment it
 crosses, or `CALL`, a call auction: orders collect, crossed or not, and a call
