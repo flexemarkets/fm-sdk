@@ -315,6 +315,18 @@ class MarketCall:
 
 
 @dataclass
+class CurrentSession:
+    """A marketplace's current session, as ``GET /marketplaces/current-sessions``
+    lists it: which session is current and its state, without the rest of the
+    session."""
+    marketplace_id: int = 0
+    # Its current session.
+    session_id: int = 0
+    # That session's state: OPEN, PAUSED or CLOSED.
+    state: str = ""
+
+
+@dataclass
 class CallIndicative:
     """What an indicative call market's book would clear at if it were called
     now: the price and volume a call would make, and nothing of the orders

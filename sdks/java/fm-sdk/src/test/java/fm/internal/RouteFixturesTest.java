@@ -33,6 +33,7 @@ import fm.model.Account;
 import fm.model.ClientConnection;
 import fm.model.Holding;
 import fm.model.MarketCall;
+import fm.model.CurrentSession;
 import fm.model.Marketplace;
 import fm.model.Order;
 import fm.model.OrderSide;
@@ -214,6 +215,7 @@ class RouteFixturesTest {
         long mp = a.path("marketplaceId").asLong();
         return switch (call) {
             case "marketplaces" -> fm.marketplaces();
+            case "currentSessions" -> fm.currentSessions();
             case "marketplace" -> fm.marketplace(mp);
             case "markets" -> fm.markets(mp);
             case "symbols" -> fm.symbols(mp);
@@ -267,6 +269,9 @@ class RouteFixturesTest {
             case "calls" -> a.has("sessionId") ? fm.calls(mp, a.get("sessionId").asLong()) : fm.calls(mp);
             case "marketplacesPage" -> _page(a.has("before") ? fm.marketplacesPage(_limit(a), _before(a))
                                                               : fm.marketplacesPage(_limit(a)), Marketplace::id);
+            case "currentSessionsPage" -> _page(a.has("before") ? fm.currentSessionsPage(_limit(a), _before(a))
+                                                                 : fm.currentSessionsPage(_limit(a)),
+                                                CurrentSession::marketplaceId);
             case "sessionsPage" -> _page(a.has("before") ? fm.sessionsPage(mp, _limit(a), _before(a))
                                                       : fm.sessionsPage(mp, _limit(a)), Session::id);
             case "ordersPage" -> _page(a.has("before") ? fm.ordersPage(mp, _limit(a), _before(a))

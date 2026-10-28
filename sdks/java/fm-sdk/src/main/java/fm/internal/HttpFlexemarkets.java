@@ -7,6 +7,7 @@ import fm.model.Assets;
 import fm.model.CallIndicative;
 import fm.model.ClientConnection;
 import fm.model.ConflictFailure;
+import fm.model.CurrentSession;
 import fm.model.Holding;
 import fm.model.ManagerOtpBundle;
 import fm.model.Market;
@@ -196,6 +197,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     private static final String REFRESH_TOKEN_PREFIX = "refresh:";
     private static final TypeReference<List<Marketplace>>    MARKETPLACES_TYPE = new TypeReference<>() {};
     private static final TypeReference<Marketplace>          MARKETPLACE_TYPE  = new TypeReference<>() {};
+    private static final TypeReference<List<CurrentSession>> CURRENT_SESSIONS_TYPE = new TypeReference<>() {};
     private static final TypeReference<List<Market>>         MARKETS_TYPE      = new TypeReference<>() {};
     private static final TypeReference<Market>               MARKET_TYPE       = new TypeReference<>() {};
     private static final TypeReference<MarketCall>           MARKET_CALL_TYPE  = new TypeReference<>() {};
@@ -441,6 +443,16 @@ public class HttpFlexemarkets implements Flexemarkets {
     @Override
     public Page<Marketplace> marketplacesPage(int limit, Long before) {
         return _getPage(_v1("/marketplaces"), limit, before, MARKETPLACES_TYPE);
+    }
+
+    @Override
+    public List<CurrentSession> currentSessions() {
+        return _get(_v1("/marketplaces/current-sessions"), CURRENT_SESSIONS_TYPE);
+    }
+
+    @Override
+    public Page<CurrentSession> currentSessionsPage(int limit, Long before) {
+        return _getPage(_v1("/marketplaces/current-sessions"), limit, before, CURRENT_SESSIONS_TYPE);
     }
 
     public Marketplace marketplace(long marketplaceId) {

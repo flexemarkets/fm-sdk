@@ -22,7 +22,7 @@ import pytest
 
 from fm.client import Flexemarkets
 from fm.page import Page
-from fm.types import ClientConnection, Holding, RobotParameterControl, Security, TickGrid
+from fm.types import ClientConnection, CurrentSession, Holding, RobotParameterControl, Security, TickGrid
 
 ROUTES = Path(__file__).resolve().parents[2] / "fixtures" / "routes" / "routes.json"
 CASES: list[dict[str, Any]] = json.loads(ROUTES.read_text())["cases"]
@@ -96,7 +96,9 @@ def _call(fm: Flexemarkets, case: dict[str, Any], tmp: Path) -> Any:
 
 def _page(page: Page[Any]) -> dict[str, Any]:
     """A page as the fixture states it: the rows' ids, and the next page's before."""
-    ids = [row.connection_id if isinstance(row, ClientConnection) else row.id for row in page.rows]
+    ids = [row.connection_id if isinstance(row, ClientConnection)
+           else row.marketplace_id if isinstance(row, CurrentSession)
+           else row.id for row in page.rows]
     return {"rows": ids, "next": page.next}
 
 

@@ -8,6 +8,7 @@ import fm.Snapshot;
 import fm.model.Allotment;
 import fm.model.CallIndicative;
 import fm.model.ClientConnection;
+import fm.model.CurrentSession;
 import fm.model.Holding;
 import fm.model.Market;
 import fm.model.Marketplace;
@@ -72,6 +73,68 @@ public interface Reading {
      */
     default Page<Marketplace> marketplacesPage(int limit, Long before) {
         return Page.of(marketplaces(), Marketplace::id, limit, before);
+    }
+
+    /**
+     * Each marketplace {@link #marketplaces} lists that has a session, with
+     * that session: {@code GET /marketplaces/current-sessions}. One read
+     * where {@link #session} would be one per marketplace; a marketplace that
+     * has never opened a session is left out.
+     *
+     * <p>By default, {@link #session} of each marketplace, which is the answer
+     * the server gives; the HTTP client asks it once.
+     *
+     * @return the current sessions, in the order {@link #marketplaces} lists the marketplaces
+     */
+    default List<CurrentSession> currentSessions() {
+        return marketplaces().stream()
+                .map(marketplace -> {
+                    Session session = session(marketplace.id());
+                    return null == session ? null
+                            : new CurrentSession(marketplace.id(), session.id(), session.state());
+                })
+                .filter(java.util.Objects::nonNull)
+                .toList();
+    }
+
+    /**
+     * The current sessions of the newest {@code limit} marketplaces: the
+     * first page of {@link #currentSessions}.
+     *
+     * @param limit how many marketplaces, 1 or more; the server answers at most 5,000
+     * @return the page, with {@link Page#next()} set while older marketplaces remain
+     * @see #currentSessionsPage(int, Long)
+     */
+    default Page<CurrentSession> currentSessionsPage(int limit) {
+        return currentSessionsPage(limit, null);
+    }
+
+    /**
+     * A page of {@link #currentSessions}, paged by marketplace as
+     * {@link #marketplacesPage(int, Long)} pages: the current sessions of
+     * exactly the marketplaces that page holds. A marketplace on it with no
+     * session is left out, so a page can hold fewer rows than {@code limit}
+     * and still have a {@link Page#next()} (fm-server P3).
+     *
+     * <p>By default, {@link #marketplacesPage(int, Long)} and {@link #session}
+     * of each marketplace on it; the HTTP client asks the server for the page.
+     *
+     * @param limit  how many marketplaces, 1 or more; the server answers at most 5,000
+     * @param before only marketplaces whose id is below this -- a page's
+     *               {@link Page#next()} -- or null for the newest
+     * @return the page, with {@link Page#next()} set while older marketplaces remain
+     */
+    default Page<CurrentSession> currentSessionsPage(int limit, Long before) {
+        Page<Marketplace> marketplaces = marketplacesPage(limit, before);
+        List<CurrentSession> rows = marketplaces.rows().stream()
+                .map(marketplace -> {
+                    Session session = session(marketplace.id());
+                    return null == session ? null
+                            : new CurrentSession(marketplace.id(), session.id(), session.state());
+                })
+                .filter(java.util.Objects::nonNull)
+                .toList();
+        return new Page<>(rows, marketplaces.next());
     }
 
     /**

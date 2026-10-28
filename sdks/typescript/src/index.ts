@@ -13,6 +13,7 @@ export type {
   Market,
   MarketCall,
   CallIndicative,
+  CurrentSession,
   Marketplace,
   Session,
   Order,

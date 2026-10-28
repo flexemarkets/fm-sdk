@@ -19,6 +19,7 @@ import fm.Flexemarkets;
 import fm.Page;
 import fm.model.Account;
 import fm.model.ClientConnection;
+import fm.model.CurrentSession;
 import fm.model.MarketCall;
 import fm.model.Marketplace;
 import fm.model.Order;
@@ -79,15 +80,43 @@ class PagedDefaultsTest {
         assertThat(fm.sessionsPage(MP, 2, 2L).next()).isNull();
     }
 
+    /**
+     * The current sessions page by marketplace, as the list does: the page is
+     * the marketplaces' page, less any with no session, and its next is the
+     * marketplaces' next even when that leaves it short of limit (P3).
+     */
+    @Test
+    void currentSessionsPageByMarketplaceAndLeaveOutOnesWithNoSession() {
+        Flexemarkets fm = _wholeReadsOnly(Map.of(2L, 20L));
+
+        Page<CurrentSession> page = fm.currentSessionsPage(2);
+        assertThat(page.rows()).extracting(CurrentSession::marketplaceId).containsExactly(2L);
+        assertThat(page.rows()).extracting(CurrentSession::sessionId).containsExactly(20L);
+        assertThat(page.next()).isEqualTo(2L);
+        assertThat(fm.currentSessionsPage(2, 2L).rows()).isEmpty();
+        assertThat(fm.currentSessions()).extracting(CurrentSession::marketplaceId).containsExactly(2L);
+    }
+
     private static <T> void _assertNewestTwo(Page<T> page, Function<T, Long> id) {
         assertThat(page.rows()).extracting(id).containsExactly(2L, 3L);
         assertThat(page.next()).isEqualTo(2L);
     }
 
     private static Flexemarkets _wholeReadsOnly() {
+        return _wholeReadsOnly(Map.of());
+    }
+
+    /** As {@link #_wholeReadsOnly()}, and {@code session(marketplaceId)} answers a session for each one in {@code current}. */
+    private static Flexemarkets _wholeReadsOnly(Map<Long, Long> current) {
         InvocationHandler handler = (proxy, method, args) -> {
             if (method.isDefault()) {
                 return InvocationHandler.invokeDefault(proxy, method, args);
+            }
+            if ("session".equals(method.getName()) && null != args && 1 == args.length) {
+                long marketplaceId = (Long) args[0];
+                Long id = current.get(marketplaceId);
+                return null == id ? null
+                        : new Session(marketplaceId, 1, id, id, Session.STATE_OPEN, "s", "", null, null);
             }
             List<?> rows = _reads.get(method.getName());
             if (null != rows && method.getReturnType() == List.class

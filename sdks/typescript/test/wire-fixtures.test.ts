@@ -20,7 +20,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
-  parseAccount, parseConnection, parseHolding, parseMarket, parseMarketCall, parseCallIndicative, parseMarketplace,
+  parseAccount, parseConnection, parseHolding, parseMarket, parseMarketCall, parseCallIndicative, parseCurrentSession, parseMarketplace,
   parseOrder, parseParticipantState, parsePerson, parseSecurity, parseSession, parseToken,
   parseWidget,
   parseMarketplaceRobot,
@@ -45,6 +45,7 @@ const PARSERS: Record<string, [string, (data: Json) => unknown][]> = {
   Market: [["client", (d) => parseMarket(d)]],
   MarketCall: [["client", (d) => parseMarketCall(d)], ["stomp", (d) => parseMarketCallOverWs(d)]],
   CallIndicative: [["client", (d) => parseCallIndicative(d)], ["stomp", (d) => parseCallIndicativeOverWs(d)]],
+  CurrentSession: [["client", (d) => parseCurrentSession(d)]],
   Marketplace: [["client", (d) => parseMarketplace(d)]],
   ClientConnection: [["client", (d) => parseConnection(d)]],
   Security: [["client", (d) => parseSecurity(d)]],

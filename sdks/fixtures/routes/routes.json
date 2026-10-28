@@ -2014,6 +2014,67 @@
       }
     },
     {
+      "call": "currentSessions",
+      "args": {},
+      "why": "Every visible marketplace's current session in one read beside the list (fm-server 4.17.0): a client that asks each marketplace's sessions/current instead pays a round trip per marketplace on every sign-in.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/current-sessions",
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "marketplaceId": 4,
+                "sessionId": 40,
+                "state": "OPEN"
+              },
+              {
+                "marketplaceId": 5,
+                "sessionId": 50,
+                "state": "CLOSED"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "call": "currentSessionsPage",
+      "args": {
+        "limit": 2
+      },
+      "why": "Paged by marketplace, as the list pages (fm-server P3): of the two newest marketplaces only 5 has a session, so the page holds one row and still has a next. A client that stops at a short page misses every older marketplace's session.",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/marketplaces/current-sessions",
+          "query": {
+            "limit": "2"
+          },
+          "response": {
+            "status": 200,
+            "body": [
+              {
+                "marketplaceId": 5,
+                "sessionId": 50,
+                "state": "OPEN"
+              }
+            ],
+            "headers": {
+              "Link": "</api/v1/marketplaces/current-sessions?limit=2&before=4>; rel=\"next\""
+            }
+          }
+        }
+      ],
+      "returns": {
+        "rows": [
+          5
+        ],
+        "next": 4
+      }
+    },
+    {
       "call": "sessionsPage",
       "args": {
         "marketplaceId": 1,
