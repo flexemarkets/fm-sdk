@@ -884,7 +884,8 @@ public class HttpFlexemarkets implements Flexemarkets {
                 throw new fm.error.ConnectionFailedException("The client is closed; the order was not sent.");
             }
             return _orderStreams.computeIfAbsent(marketplaceId, id -> new OrderStream(
-                    queue -> _connectEvents(id, queue), id, OrderStream.MAX_IN_FLIGHT));
+                    queue -> _connectEvents(id, queue, false, OrderStream.RECONNECT_MAX_MS), id,
+                    OrderStream.MAX_IN_FLIGHT));
         }
     }
 
@@ -1253,8 +1254,15 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     Events _connectEvents(long marketplaceId, BlockingQueue<Object> queue, boolean history) {
+        return _connectEvents(marketplaceId, queue, history, Events.RECONNECT_MAX_PAUSE_MS);
+    }
+
+    /** A stream that waits at most {@code reconnectMaxPauseMillis} between attempts to come back. */
+    Events _connectEvents(long marketplaceId, BlockingQueue<Object> queue, boolean history,
+                          long reconnectMaxPauseMillis) {
         var ev = new Events(_wsUrl(), this::_bearer, marketplaceId, _clientDescription(), MAPPER, queue,
             this::_renewToken, history);
+        ev.reconnectMaxPauseMillis = reconnectMaxPauseMillis;
         ev.connect();
         return ev;
     }
