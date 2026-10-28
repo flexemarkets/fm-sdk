@@ -65,6 +65,7 @@ class WireFixturesTest {
             Map.entry("Market", fm.model.Market.class),
             Map.entry("MarketCall", fm.model.MarketCall.class),
             Map.entry("CallIndicative", fm.model.CallIndicative.class),
+            Map.entry("CurrentSession", fm.model.CurrentSession.class),
             Map.entry("Marketplace", fm.model.Marketplace.class),
             Map.entry("ClientConnection", fm.model.ClientConnection.class),
             Map.entry("Security", fm.model.Security.class),
