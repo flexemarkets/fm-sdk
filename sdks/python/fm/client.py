@@ -56,6 +56,7 @@ from .types import (
     Allotment,
     Approval,
     CallIndicative,
+    CurrentSession,
     ClientConnection,
     Holding,
     ManagerOtpBundle,
@@ -209,6 +210,14 @@ def _or_default(value: Any, default: int) -> int:
     reading it as the default shows whole dollars as cents.
     """
     return default if value is None else value
+
+
+def _parse_current_session(data: dict[str, Any]) -> CurrentSession:
+    return CurrentSession(
+        marketplace_id=data.get("marketplaceId", 0),
+        session_id=data.get("sessionId", 0),
+        state=data.get("state", ""),
+    )
 
 
 def _parse_call_indicative(data: dict[str, Any]) -> CallIndicative:
@@ -1257,6 +1266,23 @@ class Flexemarkets:
         below *before* -- a page's ``next``. The server answers at most 5,000.
         """
         return self._page(_v1(self._endpoint, "/marketplaces"), limit, before, _parse_marketplace)
+
+    def current_sessions(self) -> list[CurrentSession]:
+        """Each marketplace :meth:`marketplaces` lists that has a session, with that
+        session: one read where :meth:`session` would be one per marketplace. A
+        marketplace that has never opened a session is left out.
+        """
+        url = _v1(self._endpoint, "/marketplaces/current-sessions")
+        return [_parse_current_session(s) for s in _json(self._get(url))]
+
+    def current_sessions_page(self, limit: int, before: int | None = None) -> Page[CurrentSession]:
+        """A page of :meth:`current_sessions`, paged by marketplace as
+        :meth:`marketplaces_page` pages: the current sessions of exactly the
+        marketplaces that page holds. One with no session is left out, so a page
+        can hold fewer rows than *limit* and still have a ``next``.
+        """
+        return self._page(_v1(self._endpoint, "/marketplaces/current-sessions"), limit, before,
+                          _parse_current_session)
 
     def marketplace(self, marketplace_id: int) -> Marketplace:
         url = _marketplace(self._endpoint, marketplace_id)
