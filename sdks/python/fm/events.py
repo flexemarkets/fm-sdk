@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+from http import HTTPStatus
 import os
 import queue
 import random
@@ -18,6 +19,7 @@ from typing import Any, Callable
 
 import websockets.sync.client as ws_sync
 
+from .exceptions import ConnectionFailedError
 from .types import CallIndicative, Holding, MarketCall, Order, Session, Version
 
 log = logging.getLogger(__name__)
@@ -201,12 +203,41 @@ class OrdersUpdate:
     seq: int
 
 
+@dataclass
+class OrderAccepted:
+    """An order sent over the socket was already accepted: the answer to a
+    resend of a submission fm-server holds, carrying the order it made then.
+
+    A first submission is not answered this way. Its acceptance is the
+    ORDERS-UPDATE fan-out, whose order carries the submission id; a resend
+    makes no order, so it is in no fan-out, and this is its answer.
+    """
+
+    submission_id: str | None
+    order: Order
+
+
+@dataclass
+class OrderRejected:
+    """An order sent over the socket was refused.
+
+    *error* is what REST raises for the same refusal, built from the same
+    failure body, so a caller handles a refused order one way whichever
+    route it took.
+    """
+
+    submission_id: str | None
+    error: Exception
+
+
 # ---------------------------------------------------------------------------
 # Event parsing — mirrors Java EventParser.getPayloadType()
 # ---------------------------------------------------------------------------
 
 _MESSAGE_TYPE = "message-type"
 _SEQ_HEADER   = "seq"
+# fm-server's name for the submission an ORDER-ACCEPTED or ORDER-REJECTED answers.
+_SUBMISSION_ID_HEADER = "submission-id"
 
 
 def _parse_event(frame: StompFrame) -> object | None:
@@ -237,6 +268,12 @@ def _parse_event(frame: StompFrame) -> object | None:
             # A call of a call-auction market; its trades come as an
             # ORDERS-UPDATE of their own.
             return _parse_market_call(data)
+        case "ORDER-ACCEPTED":
+            return OrderAccepted(submission_id=frame.headers.get(_SUBMISSION_ID_HEADER),
+                                 order=_parse_order(data))
+        case "ORDER-REJECTED":
+            return OrderRejected(submission_id=frame.headers.get(_SUBMISSION_ID_HEADER),
+                                 error=_refusal(data, frame.body))
         case "CALL-INDICATIVE":
             # What an indicative call market would clear at now; delivered as
             # sent, so a caller keeps the highest seq it has seen.
@@ -256,6 +293,22 @@ def _parse_seq(value: str | None) -> int:
         return int(value)
     except ValueError:
         return NO_SEQ
+
+
+def _refusal(data: Any, body: str) -> Exception:
+    """The exception REST raises for this failure body.
+
+    The body names its status as an HTTP status name (``BAD_REQUEST``), where
+    REST has the code on the response; a name this client does not know is
+    read as a bad request, which is what a refused order is.
+    """
+    from .client import _refused
+    name = data.get("status") if isinstance(data, dict) else None
+    try:
+        status = HTTPStatus[name].value if isinstance(name, str) else HTTPStatus.BAD_REQUEST.value
+    except KeyError:
+        status = HTTPStatus.BAD_REQUEST.value
+    return _refused(status, body)
 
 
 def _parse_version(data: Any) -> Version:
@@ -500,6 +553,28 @@ class EventListener:
                     )))
                     return
                 self._failures += 1
+
+    def send(self, destination: str, body: str) -> None:
+        """Send *body*, JSON, to an ``/app`` *destination* on this connection.
+
+        Safe from any thread: the socket serialises whole messages, as it
+        already does for the heartbeats sent beside the receive loop. Raises
+        :class:`~fm.exceptions.ConnectionFailedError` while there is no
+        connection to send on -- before :meth:`start`, after :meth:`close`,
+        or between a drop and the reconnect -- and when the send itself fails.
+        """
+        ws = self._ws
+        if self._closed or ws is None:
+            raise ConnectionFailedError("The event stream is not connected.")
+        frame = StompFrame(command="SEND", headers={
+            "destination": destination,
+            "content-type": "application/json",
+            "content-length": str(len(body.encode())),
+        }, body=body)
+        try:
+            ws.send(_encode_frame(frame))
+        except Exception as exc:
+            raise ConnectionFailedError(f"The event stream could not send: {exc}") from exc
 
     def close(self) -> None:
         """Disconnect and stop the background thread."""

@@ -12,6 +12,8 @@ import pytest
 
 from fm.events import (
     NO_SEQ,
+    OrderAccepted,
+    OrderRejected,
     OrdersUpdate,
     StompFrame,
     _decode_frame,
@@ -19,6 +21,7 @@ from fm.events import (
     _parse_event,
     _resolve_api_version_prefix,
 )
+from fm.exceptions import AuthorizationError, InvalidArgumentError
 from fm.types import CallIndicative, MarketCall, Session, Version
 
 
@@ -137,3 +140,44 @@ class TestIsAuthRefusal:
         first.__cause__, second.__cause__ = second, first
 
         assert _is_auth_refusal(first) is False
+
+
+class TestOrderAnswers:
+    """What fm-server answers to the socket that sent an order: refused, or
+    (for a resend) accepted with the order it made the first time."""
+
+    SID = "9b2f6c1e-4d3a-4e8b-a1f0-5c7d2e9b3a61"
+
+    def test_an_accepted_resend_carries_its_submission_and_the_order(self):
+        body = ('{"id": 41, "original": 41, "supplier": 41, "type": "LIMIT", "side": "SELL",'
+                ' "units": 2, "price": 450, "submissionId": "%s"}' % self.SID)
+        event = _parse_event(_frame("ORDER-ACCEPTED", body, **{"submission-id": self.SID}))
+        assert isinstance(event, OrderAccepted)
+        assert event.submission_id == self.SID
+        assert (event.order.id, event.order.submission_id) == (41, self.SID)
+
+    def test_a_refusal_raises_what_rest_raises_for_the_same_body(self):
+        body = '{"status": "BAD_REQUEST", "error": "ORDER_INVALID", "message": "Price is off the tick."}'
+        event = _parse_event(_frame("ORDER-REJECTED", body, **{"submission-id": self.SID}))
+        assert isinstance(event, OrderRejected)
+        assert event.submission_id == self.SID
+        assert isinstance(event.error, InvalidArgumentError)
+        assert str(event.error) == "Invalid request: Price is off the tick."
+        assert (event.error.status_code, event.error.body, event.error.reason) == (400, body, "ORDER_INVALID")
+
+    def test_the_status_name_chooses_the_error(self):
+        body = '{"status": "FORBIDDEN", "error": "ACCESS_DENIED", "message": "An observer cannot trade."}'
+        event = _parse_event(_frame("ORDER-REJECTED", body, **{"submission-id": self.SID}))
+        assert isinstance(event.error, AuthorizationError)
+        assert event.error.status_code == 403
+
+    @pytest.mark.parametrize("body", [
+        '{"status": "NOT_A_STATUS", "message": "?"}',
+        '{"message": "no status at all"}',
+        '"a bare string"',
+    ])
+    def test_a_status_it_cannot_read_is_a_bad_request(self, body):
+        event = _parse_event(_frame("ORDER-REJECTED", body))
+        assert event.submission_id is None
+        assert isinstance(event.error, InvalidArgumentError)
+        assert event.error.status_code == 400

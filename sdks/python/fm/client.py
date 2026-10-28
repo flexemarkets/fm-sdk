@@ -709,19 +709,34 @@ def _check_response(response: httpx.Response) -> None:
     status = response.status_code
     if 200 <= status < 300:
         return
+    raise _refused(status, response.text)
+
+
+def _refused(status: int, body: str) -> FlexemarketsError:
+    """The error for a refusal with this status and failure body.
+
+    REST reads the status off the response; the socket's ORDER-REJECTED
+    carries it in the body. One mapping, so an order refused either way
+    raises the same thing.
+    """
     if status == 400:
-        raise _answered(InvalidArgumentError("Invalid request: " + _detail(response.text)), response)
-    if status == 401:
-        raise _answered(AuthenticationError("Authentication failed: " + _detail(response.text)), response)
-    if status == 403:
-        raise _answered(AuthorizationError("Not permitted: " + _detail(response.text)), response)
-    if status == 409:
-        raise _answered(ConflictError(response.text), response)
-    if status >= 500:
-        raise _answered(ConnectionFailedError(response.text), response)
-    # Anything else, typed rather than left to httpx: a caller catching
-    # FlexemarketsError should not have httpx.HTTPStatusError escape past it.
-    raise _answered(HttpError(status, response.text), response)
+        error: FlexemarketsError = InvalidArgumentError("Invalid request: " + _detail(body))
+    elif status == 401:
+        error = AuthenticationError("Authentication failed: " + _detail(body))
+    elif status == 403:
+        error = AuthorizationError("Not permitted: " + _detail(body))
+    elif status == 409:
+        error = ConflictError(body)
+    elif status >= 500:
+        error = ConnectionFailedError(body)
+    else:
+        # Anything else, typed rather than left to httpx: a caller catching
+        # FlexemarketsError should not have httpx.HTTPStatusError escape past it.
+        error = HttpError(status, body)
+    error.status_code = status
+    error.body = body
+    error.reason = _reason(body)
+    return error
 
 
 def _check_conflict_account(response: httpx.Response, account_name: str) -> None:
