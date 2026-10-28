@@ -125,9 +125,10 @@ def _decode_frame(raw: str) -> StompFrame:
 # Error / transport event types put onto the queue
 # ---------------------------------------------------------------------------
 
-def _reconnect_pause(failures: int, draw: Callable[[float, float], float] | None = None) -> float:
-    """The wait before the next attempt, after *failures* in a row (one or more)."""
-    ceiling = min(_RECONNECT_MAX_PAUSE_SECONDS,
+def _reconnect_pause(failures: int, draw: Callable[[float, float], float] | None = None,
+                     most: float = _RECONNECT_MAX_PAUSE_SECONDS) -> float:
+    """The wait before the next attempt, after *failures* in a row (one or more), at *most* seconds."""
+    ceiling = min(most,
                   _RECONNECT_FIRST_PAUSE_SECONDS * 2 ** min(failures - 1, 16))
     return (draw or random.uniform)(ceiling / 2, ceiling)
 
@@ -375,6 +376,7 @@ class EventListener:
         client_description: str = "Unspecified client",
         renew: Callable[[str], bool] | None = None,
         history: bool = False,
+        reconnect_max_seconds: float = _RECONNECT_MAX_PAUSE_SECONDS,
     ):
         self._ws_url = ws_url
         # The V0 subscribe, whose first ORDERS-UPDATE is the session's whole
@@ -407,6 +409,9 @@ class EventListener:
         # together they pace reconnect().
         self._failures = 0
         self._connected_at: float | None = None
+        # The longest wait between attempts: a minute for a subscription; less
+        # for a socket orders are waiting on (order_stream.RECONNECT_MAX_SECONDS).
+        self._reconnect_max_seconds = reconnect_max_seconds
 
         # Sends the heartbeats this client promises.
         #
@@ -507,7 +512,7 @@ class EventListener:
         renewed = False
         while not self._closed:
             if self._failures:
-                time.sleep(_reconnect_pause(self._failures))
+                time.sleep(_reconnect_pause(self._failures, most=self._reconnect_max_seconds))
                 if self._closed:
                     return
             try:

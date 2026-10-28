@@ -96,7 +96,7 @@ class TestOnTheSocket:
         assert (a.result(5).id, c.result(5).id) == (101, 103)
 
     def test_unanswered_orders_are_sent_again_in_order_once_the_socket_is_back(self, server, stream, monkeypatch):
-        monkeypatch.setattr(fm_events, "_reconnect_pause", lambda *_: 0.05)
+        monkeypatch.setattr(fm_events, "_reconnect_pause", lambda *_, **__: 0.05)
         s = stream()
         first = s.submit(_order("s-1"))
         _await("the first order sent", lambda: _sent(server, 0) == ["s-1"])
@@ -268,8 +268,10 @@ class TestFromTheClient:
                                   "order-stream-test")
         opened: list[EventListener] = []
 
-        def connect(marketplace_id: int, events: "queue.Queue[object]", history: bool = False) -> EventListener:
-            assert (marketplace_id, history) == (MP, False)
+        def connect(marketplace_id: int, events: "queue.Queue[object]", history: bool = False,
+                    reconnect_max_seconds: float | None = None) -> EventListener:
+            # An order socket comes back within five seconds; a subscription waits up to a minute.
+            assert (marketplace_id, history, reconnect_max_seconds) == (MP, False, 5.0)
             listener = EventListener(server.url, "Bearer the-token", MP, events, "fm-sdk-test")
             listener.start()
             opened.append(listener)

@@ -32,12 +32,13 @@ class _Listener(EventListener):
     queue after the receive loop dies.
     """
 
-    def __init__(self, event_queue: queue.Queue[object]) -> None:
+    def __init__(self, event_queue: queue.Queue[object], **kwargs) -> None:
         super().__init__(
             ws_url="ws://127.0.0.1:0/events",
             bearer_token="t",
             marketplace_id=7,
             event_queue=event_queue,
+            **kwargs,
         )
         self.connects = 0
         self.fail_connects = 0
@@ -257,6 +258,19 @@ def test_failed_attempts_wait_longer_and_longer(monkeypatch) -> None:
 
     assert listener.connects == 5
     assert pauses == [2, 4, 8]
+    listener.close()
+
+
+def test_a_listener_given_a_shorter_ceiling_waits_no_longer_than_it(monkeypatch) -> None:
+    """An order socket: orders wait on it, so it comes back within five seconds, not a minute."""
+    pauses = _paced(monkeypatch)
+    listener = _Listener(queue.Queue(), reconnect_max_seconds=5.0)
+    listener.start()
+    listener.fail_connects = 6
+
+    listener.reconnect()
+
+    assert pauses == [2, 4, 5, 5, 5]
     listener.close()
 
 
