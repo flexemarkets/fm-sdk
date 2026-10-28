@@ -30,9 +30,11 @@ def test_no_class_defines_a_method_twice() -> None:
                 child.name
                 for child in node.body
                 if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
-                # A property and its setter share a name legitimately.
+                # A property and its setter share a name legitimately, and so
+                # do @overload stubs and the one definition they type.
                 and not any(
-                    isinstance(d, ast.Attribute) and d.attr == "setter"
+                    (isinstance(d, ast.Attribute) and d.attr == "setter")
+                    or (isinstance(d, ast.Name) and d.id == "overload")
                     for d in child.decorator_list
                 )
             )
