@@ -1,0 +1,21 @@
+{
+  "type": "CurrentSession",
+  "why": "What a marketplace list's live badge reads, in one request where each marketplace's sessions/current was one each: without it a client goes back to a round trip per marketplace on every sign-in (fm-ui#872).",
+  "source": {
+    "captured": {
+      "path": "/v1/marketplaces/current-sessions",
+      "server": "4.17.0",
+      "on": "2026-10-28"
+    }
+  },
+  "payload": {
+    "marketplaceId": 3265,
+    "sessionId": 180389,
+    "state": "OPEN"
+  },
+  "expect": {
+    "marketplaceId": 3265,
+    "sessionId": 180389,
+    "state": "OPEN"
+  }
+}
