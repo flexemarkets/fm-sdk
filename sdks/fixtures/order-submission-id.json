@@ -1,0 +1,38 @@
+{
+  "type": "Order",
+  "why": "An order sent over the socket is answered by the ORDERS-UPDATE fan-out, not by a response, and the only thing that ties a row of that fan-out to the order the client sent is the submissionId the client put on it. An SDK that drops the field cannot tell which of its orders a row accepts, so a pipelined submit never completes.",
+  "source": {
+    "captured": {
+      "path": "POST /v1/marketplaces/{marketplaceId}/orders",
+      "server": "4.17.0 + afb076413",
+      "on": "2026-10-28"
+    }
+  },
+  "payload": {
+    "createdDate" : "2026-10-28T19:23:54.492055Z",
+    "lastModifiedDate" : "2026-10-28T19:23:54.492431Z",
+    "id" : 86696885,
+    "original" : 86696885,
+    "supplier" : 86696885,
+    "consumer" : null,
+    "type" : "LIMIT",
+    "side" : "SELL",
+    "symbol" : "A",
+    "units" : 2,
+    "price" : 450,
+    "mine" : true,
+    "ownerTarget" : null,
+    "ownerId" : 151527,
+    "accountId" : 51,
+    "marketplaceId" : 7314,
+    "marketId" : 12758,
+    "sessionId" : 186929,
+    "clientDescription" : "fixture",
+    "submissionId" : "9b2f6c1e-4d3a-4e8b-a1f0-5c7d2e9b3a61"
+  },
+  "expect": {
+    "id": 86696885,
+    "mine": true,
+    "submissionId": "9b2f6c1e-4d3a-4e8b-a1f0-5c7d2e9b3a61"
+  }
+}
