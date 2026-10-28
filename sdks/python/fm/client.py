@@ -942,8 +942,24 @@ class Flexemarkets:
     def _get(self, url: str) -> httpx.Response:
         return self._request("GET", url, headers={"Accept": "application/json"})
 
-    def _post(self, url: str, json: Any) -> httpx.Response:
-        return self._request("POST", url, json=json, headers={"Accept": "application/json"})
+    def _post(self, url: str, json: Any, headers: dict[str, str] | None = None) -> httpx.Response:
+        return self._request("POST", url, json=json, headers={"Accept": "application/json", **(headers or {})})
+
+    def _create(self, send: Callable[[dict[str, str]], httpx.Response]) -> httpx.Response:
+        """Send a create under an ``Idempotency-Key``, and once more under the
+        same key if its answer was lost.
+
+        A create that timed out or lost its connection may or may not have
+        landed; fm-server 4.17 answers a key it already holds with what it
+        answered the first time (its IdempotencyFilter), so the resend makes
+        one marketplace, market or call, never two. Orders do the same with
+        their own ``submissionId``.
+        """
+        key = {"Idempotency-Key": str(uuid.uuid4())}
+        try:
+            return send(key)
+        except httpx.TransportError:
+            return send(key)
 
     def _patch(self, url: str, json: Any) -> httpx.Response:
         return self._request("PATCH", url, json=json, headers={"Accept": "application/json"})
@@ -954,7 +970,9 @@ class Flexemarkets:
     def _delete(self, url: str) -> httpx.Response:
         return self._request("DELETE", url, headers={"Accept": "application/json"})
 
-    def _send_csv(self, method: str, url: str, filename: str) -> httpx.Response:
+    def _send_csv(
+        self, method: str, url: str, filename: str, headers: dict[str, str] | None = None,
+    ) -> httpx.Response:
         """The file as the request body, declared text/csv.
 
         V1 says what a body is by its Content-Type (API-V1 rule 7), where V0
@@ -962,9 +980,11 @@ class Flexemarkets:
         """
         with open(filename, "rb") as f:
             content = f.read()
-        return self._send_csv_content(method, url, content)
+        return self._send_csv_content(method, url, content, headers)
 
-    def _send_csv_content(self, method: str, url: str, content: bytes) -> httpx.Response:
+    def _send_csv_content(
+        self, method: str, url: str, content: bytes, headers: dict[str, str] | None = None,
+    ) -> httpx.Response:
         """CSV bytes as the request body, declared text/csv; see :meth:`_send_csv`."""
         resp = self._http.request(
             method, url, content=content,
@@ -972,6 +992,7 @@ class Flexemarkets:
                 **self._auth_headers(),
                 "Content-Type": "text/csv",
                 "Accept": "application/json",
+                **(headers or {}),
             },
         )
         _check_response(resp)
@@ -1178,13 +1199,14 @@ class Flexemarkets:
         *roles: str,
     ) -> Person:
         url = _v1(self._endpoint, "/users")
-        resp = self._post(url, {
+        user = {
             "email": email,
             "password": password,
             "firstName": first_name,
             "lastName": last_name,
             "roles": list(roles),
-        })
+        }
+        resp = self._create(lambda key: self._post(url, user, key))
         return _parse_person(_json(resp))  # type: ignore[return-value]
 
     def delete_user(self, user_id: int) -> None:
@@ -1222,7 +1244,7 @@ class Flexemarkets:
                 f"Marketplace definition is not valid JSON: {e}") from e
 
         url = _v1(self._endpoint, "/marketplaces")
-        return _parse_marketplace(_json(self._post(url, parsed)))
+        return _parse_marketplace(_json(self._create(lambda key: self._post(url, parsed, key))))
 
     def delete_marketplace(self, marketplace_id: int) -> None:
         self._delete(_marketplace(self._endpoint, marketplace_id))
@@ -1258,7 +1280,7 @@ class Flexemarkets:
         """
         units = units if units is not None else TickGrid.units()
         url = _marketplace(self._endpoint, marketplace_id) + "/markets"
-        resp = self._post(url, {
+        market = {
             "symbol": symbol,
             "name": name,
             "priceMinimum": price.minimum,
@@ -1268,7 +1290,8 @@ class Flexemarkets:
             "unitMaximum": units.maximum,
             "unitTick": units.tick,
             "privateMarket": private_market,
-        })
+        }
+        resp = self._create(lambda key: self._post(url, market, key))
         return _parse_market(_json(resp))
 
     def create_call_market(
@@ -1293,7 +1316,7 @@ class Flexemarkets:
         """
         units = units if units is not None else TickGrid.units()
         url = _marketplace(self._endpoint, marketplace_id) + "/markets"
-        resp = self._post(url, {
+        market = {
             "symbol": symbol,
             "name": name,
             "priceMinimum": price.minimum,
@@ -1306,7 +1329,8 @@ class Flexemarkets:
             "mechanism": Market.MECHANISM_CALL,
             "callIntervalSeconds": interval_seconds,
             "callCarry": carry,
-        })
+        }
+        resp = self._create(lambda key: self._post(url, market, key))
         return _parse_market(_json(resp))
 
     # -- sessions ----------------------------------------------------------
@@ -1646,7 +1670,7 @@ class Flexemarkets:
         the file as a ``text/csv`` body, on the same terms as :meth:`allocate`.
         """
         url = _marketplace(self._endpoint, marketplace_id) + "/allocations"
-        resp = self._send_csv("POST", url, filename)
+        resp = self._create(lambda key: self._send_csv("POST", url, filename, key))
         allotments = [_parse_allotment(a) for a in _json(resp)]
         return _allotments_to_holdings(allotments)
 
@@ -1661,7 +1685,8 @@ class Flexemarkets:
         accepted, as in a downloaded file.
         """
         url = _marketplace(self._endpoint, marketplace_id) + "/allocations"
-        resp = self._send_csv_content("POST", url, csv.encode("utf-8"))
+        content = csv.encode("utf-8")
+        resp = self._create(lambda key: self._send_csv_content("POST", url, content, key))
         allotments = [_parse_allotment(a) for a in _json(resp)]
         return _allotments_to_holdings(allotments)
 
@@ -1702,7 +1727,8 @@ class Flexemarkets:
         back off and push again.
         """
         url = _marketplace(self._endpoint, marketplace_id) + "/widgets"
-        resp = self._post(url, [_widget_push_json(w) for w in widgets])
+        pushes = [_widget_push_json(w) for w in widgets]
+        resp = self._create(lambda key: self._post(url, pushes, key))
         return [_parse_widget(w) for w in _json(resp)]
 
     def remove_widget(
@@ -1749,15 +1775,16 @@ class Flexemarkets:
         refuses either otherwise. The trades arrive as orders on the stream, as
         every trade does.
         """
-        url = _marketplace(self._endpoint, marketplace_id) + f"/markets/{market_id}/calls"
-        return _parse_market_call(_json(self._post(url, None)))
+        # Created where the calls are listed (fm-server 4.17); the market's own route is superseded.
+        url = _marketplace(self._endpoint, marketplace_id) + "/calls"
+        return _parse_market_call(_json(self._create(lambda key: self._post(url, {"marketId": market_id}, key))))
 
     def calls(self, marketplace_id: int, session_id: int | None = None) -> list[MarketCall]:
         """Every call the marketplace's call markets have made, oldest first;
         one session's with *session_id*."""
         url = _marketplace(self._endpoint, marketplace_id) + "/calls"
         if session_id is not None:
-            url += f"?sessionId={session_id}"
+            url += f"?sessions={session_id}"
         return [_parse_market_call(c) for c in _json(self._get(url))]
 
     def marketplace_robots(self, marketplace_id: int) -> list[MarketplaceRobot]:
@@ -1819,7 +1846,7 @@ class Flexemarkets:
         """
         url = _marketplace(self._endpoint, marketplace_id) + "/allocations"
         body = [_holding_to_allotment(marketplace_id, h) for h in holdings]
-        resp = self._post(url, body)
+        resp = self._create(lambda key: self._post(url, body, key))
         return _allotments_to_holdings([_parse_allotment(a) for a in _json(resp)])
 
     # -- connections -------------------------------------------------------

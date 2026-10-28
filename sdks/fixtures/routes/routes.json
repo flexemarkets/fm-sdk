@@ -1759,13 +1759,16 @@
         "marketplaceId": 1,
         "marketId": 12
       },
-      "why": "Clear now is a POST to the market's calls: a new call. A GET there would read nothing, since the history is the marketplace's.",
+      "why": "Clear now creates a call where the calls are listed (fm-server 4.17, R5): POST the marketplace's calls with the market in the body. The market's own calls route is superseded.",
       "requests": [
         {
           "method": "POST",
-          "path": "/api/v1/marketplaces/1/markets/12/calls",
+          "path": "/api/v1/marketplaces/1/calls",
+          "body": {
+            "marketId": 12
+          },
           "response": {
-            "status": 200,
+            "status": 201,
             "body": {
               "id": 91,
               "marketplaceId": 1,
@@ -1824,13 +1827,13 @@
         "marketplaceId": 1,
         "sessionId": 77
       },
-      "why": "One session's calls are a filter, so a query parameter (rule 5), sessionId as the server names it.",
+      "why": "One session's calls are a filter, so a query parameter (rule 5), spelled ?sessions= as on every other list since fm-server 4.17 (Q1); ?sessionId= is still read for older SDKs.",
       "requests": [
         {
           "method": "GET",
           "path": "/api/v1/marketplaces/1/calls",
           "query": {
-            "sessionId": "77"
+            "sessions": "77"
           },
           "response": {
             "status": 200,
