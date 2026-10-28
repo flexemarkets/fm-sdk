@@ -1,5 +1,6 @@
 package fm.role;
 
+import fm.PendingOrder;
 import fm.model.Market;
 import fm.model.Order;
 import fm.model.OrderSide;
@@ -94,6 +95,51 @@ public interface Writing {
      */
     Order submitLimit(long marketplaceId, long marketId, OrderSide side, long units, long price,
                       String ownerTarget, Long ownerTargetId, String clientDescription);
+
+    /**
+     * Place a limit order without waiting for the answer.
+     *
+     * <p>The order goes over the marketplace's socket and this returns a
+     * {@link PendingOrder} at once: the next order can go before this one is
+     * matched, and fm-server still matches them in the order sent. It completes
+     * with the order, or with the refusal {@link #submitLimit} would have
+     * thrown -- or {@link fm.error.OrderOutcomeUnknownException} if the socket
+     * closed before the answer came. The socket opens with the first order sent
+     * this way and stays open until the client is closed; at most 64 orders are
+     * unanswered at once, and this waits, in turn, while they are. See
+     * docs/SUBMIT-RATE.md.
+     *
+     * @param marketplaceId the marketplace to trade in
+     * @param marketId      the market within it
+     * @param side          which way round the order goes
+     * @param units         how many units to trade
+     * @param price         the limit price, an integer at the market's
+     *                      {@link fm.model.Market#priceDecimals}
+     * @return the order, sent and not yet answered
+     */
+    PendingOrder sendLimit(long marketplaceId, long marketId, OrderSide side, long units, long price);
+
+    /**
+     * {@link #sendLimit(long, long, OrderSide, long, long)}, naming its
+     * counterparty either way and with its own reference, as
+     * {@link #submitLimit(long, long, OrderSide, long, long, String, Long, String)} does.
+     *
+     * @param marketplaceId     the marketplace to trade in
+     * @param marketId          the market within it
+     * @param side              which way round the order goes
+     * @param units             how many units to trade
+     * @param price             the limit price, an integer at the market's
+     *                          {@link fm.model.Market#priceDecimals}
+     * @param ownerTarget       the counterparty this order is for, by allotment name;
+     *                          null when it names none or names it by id
+     * @param ownerTargetId     the counterparty this order is for, by owner id; null
+     *                          when it names none or names it by name
+     * @param clientDescription this order's reference; null for the client's own
+     * @return the order, sent and not yet answered
+     * @throws fm.error.InvalidArgumentException when both targets are given
+     */
+    PendingOrder sendLimit(long marketplaceId, long marketId, OrderSide side, long units, long price,
+                           String ownerTarget, Long ownerTargetId, String clientDescription);
 
     /**
      * Cancel a resting order.

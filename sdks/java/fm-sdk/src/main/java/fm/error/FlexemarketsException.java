@@ -13,7 +13,7 @@ package fm.error;
  */
 public sealed class FlexemarketsException extends RuntimeException
     permits AuthenticationException, AuthorizationException, InvalidArgumentException,
-            ConnectionFailedException, ConfigurationException,
+            ConnectionFailedException, ConfigurationException, OrderOutcomeUnknownException,
             HttpException, ConflictException, ApiException {
 
     /** The status the server answered, or null when no server answered. */
