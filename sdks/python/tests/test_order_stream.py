@@ -222,6 +222,30 @@ class TestStubbed:
         with pytest.raises(InvalidArgumentError, match="refused"):
             pending.result(5)
 
+    def test_an_order_not_sent_within_the_hold_is_refused_and_one_sent_before_the_drop_is_not(self, stub):
+        """Held for a whole outage, a robot's quotes went onto the book long after it sent them."""
+        s, listener = stub(hold_seconds=0.1)
+        sent = s.submit(_order("s-1"))
+        s._events.put(StreamDropped(exception=OSError("gone")))
+        _settle(s)
+        held = s.submit(_order("s-2"))
+
+        with pytest.raises(ConnectionFailedError, match="was not sent: the order socket was down"):
+            held.result(5)
+        assert not sent.done(), "sent before the drop: it may have been placed"
+        s._events.put(StreamReconnected(marketplace_id=MP))
+        _settle(s)
+        assert listener.sent == ["s-1", "s-1"], "only the one that went out goes again"
+
+    def test_an_order_held_less_than_the_hold_goes_when_the_socket_is_back(self, stub):
+        s, listener = stub(hold_seconds=5.0)
+        s._events.put(StreamDropped(exception=OSError("gone")))
+        _settle(s)
+        held = s.submit(_order("s-1"))
+        s._events.put(StreamReconnected(marketplace_id=MP))
+        _settle(s)
+        assert listener.sent == ["s-1"] and not held.done()
+
     def test_closing_fails_what_is_unanswered_by_whether_it_was_sent(self, stub):
         s, listener = stub()
         sent = s.submit(_order("s-1"))
