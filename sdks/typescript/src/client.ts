@@ -1304,6 +1304,12 @@ export class Flexemarkets {
    * the latter. `carry` is whether what a call leaves unfilled waits for the
    * next one rather than being cancelled. A call market cannot be private, so
    * there is no flag for it here; the server refuses the combination.
+   *
+   * `callBook` is what the book shows during the call:
+   * {@link MARKET_CALL_BOOK_SEALED}, a participant's own orders only, or
+   * {@link MARKET_CALL_BOOK_INDICATIVE}, also the price it would clear at now
+   * and the volume. Left out, the server makes it sealed. Needs fm-server
+   * 4.17; an older one ignores it.
    */
   async createCallMarket(
     marketplaceId: number,
@@ -1313,6 +1319,7 @@ export class Flexemarkets {
     units: TickGrid = unitGrid(),
     intervalSeconds: number | null = null,
     carry = true,
+    callBook?: string,
   ): Promise<Market> {
     return parseMarket(await this._create((key) => this._post(`${this._marketplace(marketplaceId)}/markets`, {
       symbol,
@@ -1327,6 +1334,7 @@ export class Flexemarkets {
       mechanism: MARKET_MECHANISM_CALL,
       callIntervalSeconds: intervalSeconds,
       callCarry: carry,
+      ...(callBook === undefined ? {} : { callBook }),
     }, key)));
   }
 
