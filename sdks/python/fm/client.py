@@ -1353,6 +1353,7 @@ class Flexemarkets:
         units: TickGrid | None = None,
         interval_seconds: int | None = None,
         carry: bool = True,
+        call_book: str | None = None,
     ) -> Market:
         """Add a call-auction market to a marketplace: orders collect, crossed
         or not, and a call clears them all at one price.
@@ -1363,6 +1364,12 @@ class Flexemarkets:
         for the next one rather than being cancelled. A call market cannot be
         private, so there is no flag for it here; the server refuses the
         combination.
+
+        *call_book* is what the book shows during the call:
+        :attr:`Market.CALL_BOOK_SEALED`, a participant's own orders only, or
+        :attr:`Market.CALL_BOOK_INDICATIVE`, also the price it would clear at
+        now and the volume. None leaves it to the server, which makes it
+        sealed. Needs fm-server 4.17; an older one ignores it.
         """
         units = units if units is not None else TickGrid.units()
         url = _marketplace(self._endpoint, marketplace_id) + "/markets"
@@ -1380,6 +1387,8 @@ class Flexemarkets:
             "callIntervalSeconds": interval_seconds,
             "callCarry": carry,
         }
+        if call_book is not None:
+            market["callBook"] = call_book
         resp = self._create(lambda key: self._post(url, market, key))
         return _parse_market(_json(resp))
 

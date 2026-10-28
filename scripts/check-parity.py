@@ -263,8 +263,9 @@ ARITY_EXEMPTIONS: dict[str, str] = {
         "The unit grid and privateMarket default in Python and TypeScript; "
         "Java has no default arguments and takes all six.",
     "createCallMarket":
-        "The unit grid, interval and carry default in Python and TypeScript; "
-        "Java has no default arguments and takes all seven.",
+        "The unit grid, interval, carry and book default in Python and "
+        "TypeScript; Java has no default arguments, and takes seven, or eight "
+        "with the book.",
 }
 
 

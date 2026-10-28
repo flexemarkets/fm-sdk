@@ -8,6 +8,7 @@
 | | What breaks | Fix |
 |---|---|---|
 | Java | a class implementing `Reading` (and so `Flexemarkets`) -- a test double, fm-server's in-process client -- no longer compiles: `indicative(long, long)` is abstract, as every read on `Reading` is | implement it, or throw as the class does for other reads it cannot answer |
+| Java | a class implementing `Administration` no longer compiles: `createCallMarket` with a trailing `String callBook` is abstract, and the seven-argument form is now a default that calls it with `SEALED` | implement the eight-argument form in place of the seven |
 | Java | code calling `Market`'s 17-argument constructor still compiles: that shape is kept, sealed. Only the new canonical constructor takes `callBook` | |
 | TypeScript | a hand-built `Market` literal lacks `callBook`, a required field | add `callBook: MARKET_CALL_BOOK_SEALED` |
 | Python | nothing | |
@@ -43,5 +44,6 @@ rest. The SDK delivers them as sent; it does not order them for you.
 
 A sealed market, a continuous one, or no open session refuses the read.
 
-Setting `callBook` when creating a market is not in this release:
-administrators set it in fm-ui.
+An administrator creates an indicative market with `createCallMarket`'s
+trailing `callBook` (`call_book` in Python): `CALL_BOOK_INDICATIVE`. Left out,
+the server makes the market sealed, as before.

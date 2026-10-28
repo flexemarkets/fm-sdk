@@ -283,9 +283,9 @@ refuses text with more decimal places than the scale rather than rounding it.
 
 | | add a call market | Clear now | the calls |
 |---|---|---|---|
-| Java | `createCallMarket(marketplaceId, symbol, name, price, units, Integer intervalSeconds, boolean carry)` | `MarketCall clearNow(marketplaceId, marketId)` | `List<MarketCall> calls(marketplaceId)`, and `(…, long sessionId)` |
-| Python | `create_call_market(marketplace_id, symbol, name, price, units=None, interval_seconds=None, carry=True)` | `clear_now(marketplace_id, market_id)` | `calls(marketplace_id, session_id=None)` |
-| TypeScript | `createCallMarket(marketplaceId, symbol, name, price, units?, intervalSeconds?, carry?)` | `clearNow(marketplaceId, marketId)` | `calls(marketplaceId, sessionId?)` |
+| Java | `createCallMarket(marketplaceId, symbol, name, price, units, Integer intervalSeconds, boolean carry[, String callBook])` | `MarketCall clearNow(marketplaceId, marketId)` | `List<MarketCall> calls(marketplaceId)`, and `(…, long sessionId)` |
+| Python | `create_call_market(marketplace_id, symbol, name, price, units=None, interval_seconds=None, carry=True, call_book=None)` | `clear_now(marketplace_id, market_id)` | `calls(marketplace_id, session_id=None)` |
+| TypeScript | `createCallMarket(marketplaceId, symbol, name, price, units?, intervalSeconds?, carry?, callBook?)` | `clearNow(marketplaceId, marketId)` | `calls(marketplaceId, sessionId?)` |
 
 `Market.isCall()` (Java), `Market.is_call()` (Python) and `isCall(market)`
 (TypeScript) say whether a market is a call auction;

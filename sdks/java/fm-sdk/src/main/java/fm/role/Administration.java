@@ -219,9 +219,39 @@ public interface Administration {
      * @param carry           whether what a call leaves unfilled waits for the
      *                        next one, rather than being cancelled
      * @return the market as created, with its server-assigned id
+     * @see #createCallMarket(long, String, String, TickGrid, TickGrid, Integer, boolean, String)
+     */
+    default Market createCallMarket(long marketplaceId, String symbol, String name,
+                                    TickGrid price, TickGrid units, Integer intervalSeconds, boolean carry) {
+        return createCallMarket(marketplaceId, symbol, name, price, units, intervalSeconds, carry,
+                Market.CALL_BOOK_SEALED);
+    }
+
+    /**
+     * Add a call-auction market whose book shows what {@code callBook} says
+     * during the call: {@link Market#CALL_BOOK_SEALED}, a participant's own
+     * orders only, as {@link #createCallMarket(long, String, String, TickGrid,
+     * TickGrid, Integer, boolean)} makes, or {@link Market#CALL_BOOK_INDICATIVE},
+     * also the price it would clear at now and the volume. Needs fm-server
+     * 4.17; an older one ignores it and makes the market sealed.
+     *
+     * @param marketplaceId   the marketplace to add the market to
+     * @param symbol          the market's ticker symbol, unique within the marketplace
+     * @param name            the market's display name
+     * @param price           the legal prices: bounds and tick
+     * @param units           the legal order sizes; {@link TickGrid#units()} for the usual 1/100/1
+     * @param intervalSeconds the seconds between calls while a session is open,
+     *                        or null for calls only when a manager clears
+     * @param carry           whether what a call leaves unfilled waits for the
+     *                        next one, rather than being cancelled
+     * @param callBook        {@link Market#CALL_BOOK_SEALED} or
+     *                        {@link Market#CALL_BOOK_INDICATIVE}; the server's
+     *                        default, sealed, when null
+     * @return the market as created, with its server-assigned id
      */
     Market createCallMarket(long marketplaceId, String symbol, String name,
-                            TickGrid price, TickGrid units, Integer intervalSeconds, boolean carry);
+                            TickGrid price, TickGrid units, Integer intervalSeconds, boolean carry,
+                            String callBook);
 
     /**
      * Mint one-time passcodes for the given users.
