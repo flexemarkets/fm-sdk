@@ -7,7 +7,7 @@
 
 import WebSocket from "ws";
 import { toInstant } from "./timestamps.js";
-import type { Holding, MarketCall, Order, Session, Version } from "./types.js";
+import type { CallIndicative, Holding, MarketCall, Order, Session, Version } from "./types.js";
 
 const HEARTBEAT_MS = 30_000;
 
@@ -177,6 +177,7 @@ export type FmEvent =
   | Holding
   | OrdersUpdate
   | MarketCall
+  | CallIndicative
   | StreamDropped
   | StreamReconnected
   | FrameUnreadable;
@@ -221,6 +222,10 @@ function parseEvent(
     // A call of a call-auction market; its trades come as an ORDERS-UPDATE of their own.
     case "CALL-UPDATE":
       return parseMarketCall(data as Record<string, unknown>);
+    // What an indicative call market would clear at now; delivered as sent,
+    // so a caller keeps the highest seq it has seen.
+    case "CALL-INDICATIVE":
+      return parseCallIndicative(data as Record<string, unknown>);
     default:
       return null;
   }
@@ -254,6 +259,18 @@ export function parseSession(data: Record<string, unknown>): Session {
     closeDate: toInstant(data.closeDate as string),
     createdDate: toInstant(data.createdDate as string),
     lastModifiedDate: toInstant(data.lastModifiedDate as string),
+  };
+}
+
+export function parseCallIndicative(data: Record<string, unknown>): CallIndicative {
+  return {
+    marketplaceId: (data.marketplaceId as number) ?? 0,
+    marketId: (data.marketId as number) ?? 0,
+    sessionId: (data.sessionId as number) ?? 0,
+    price: (data.price as number) ?? null,
+    volume: (data.volume as number) ?? 0,
+    seq: (data.seq as number) ?? 0,
+    at: toInstant(data.at as string),
   };
 }
 

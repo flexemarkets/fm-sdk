@@ -20,13 +20,13 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
-  parseAccount, parseConnection, parseHolding, parseMarket, parseMarketCall, parseMarketplace,
+  parseAccount, parseConnection, parseHolding, parseMarket, parseMarketCall, parseCallIndicative, parseMarketplace,
   parseOrder, parseParticipantState, parsePerson, parseSecurity, parseSession, parseToken,
   parseWidget,
   parseMarketplaceRobot,
   ordersOf,
 } from "../src/client.ts";
-import { parseMarketCall as parseMarketCallOverWs, parseSession as parseSessionOverWs } from "../src/stomp.ts";
+import { parseCallIndicative as parseCallIndicativeOverWs, parseMarketCall as parseMarketCallOverWs, parseSession as parseSessionOverWs } from "../src/stomp.ts";
 
 type Json = Record<string, unknown>;
 
@@ -44,6 +44,7 @@ const PARSERS: Record<string, [string, (data: Json) => unknown][]> = {
   Person: [["client", (d) => parsePerson(d)]],
   Market: [["client", (d) => parseMarket(d)]],
   MarketCall: [["client", (d) => parseMarketCall(d)], ["stomp", (d) => parseMarketCallOverWs(d)]],
+  CallIndicative: [["client", (d) => parseCallIndicative(d)], ["stomp", (d) => parseCallIndicativeOverWs(d)]],
   Marketplace: [["client", (d) => parseMarketplace(d)]],
   ClientConnection: [["client", (d) => parseConnection(d)]],
   Security: [["client", (d) => parseSecurity(d)]],
