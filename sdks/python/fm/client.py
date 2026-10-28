@@ -1749,15 +1749,16 @@ class Flexemarkets:
         refuses either otherwise. The trades arrive as orders on the stream, as
         every trade does.
         """
-        url = _marketplace(self._endpoint, marketplace_id) + f"/markets/{market_id}/calls"
-        return _parse_market_call(_json(self._post(url, None)))
+        # Created where the calls are listed (fm-server 4.17); the market's own route is superseded.
+        url = _marketplace(self._endpoint, marketplace_id) + "/calls"
+        return _parse_market_call(_json(self._post(url, {"marketId": market_id})))
 
     def calls(self, marketplace_id: int, session_id: int | None = None) -> list[MarketCall]:
         """Every call the marketplace's call markets have made, oldest first;
         one session's with *session_id*."""
         url = _marketplace(self._endpoint, marketplace_id) + "/calls"
         if session_id is not None:
-            url += f"?sessionId={session_id}"
+            url += f"?sessions={session_id}"
         return [_parse_market_call(c) for c in _json(self._get(url))]
 
     def marketplace_robots(self, marketplace_id: int) -> list[MarketplaceRobot]:
