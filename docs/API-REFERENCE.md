@@ -219,6 +219,18 @@ way the last one did:
   be read back (fm-server 4.17; some answered 200 before); a `DELETE`
   answers 204, except where the answer carries something — cancelling an
   order answers the CANCEL the exchange recorded.
+- **A growing collection is paged.** Marketplaces, sessions, orders, users,
+  connections, accounts, calls, robot launches, study runs, notifications,
+  idle accounts and an error's events take `?limit=N` -- the `N` newest by id, at most 5000, in the
+  order the whole list is answered in -- and `?before={id}` for the ones
+  older than that. While older ones remain, the answer carries
+  `Link: <...?before={id}>; rel="next"`; a page without it is the last, even
+  a full one. With no `?limit=` the whole list answers, as before
+  (fm-server 4.17). The SDKs read these pages with `marketplacesPage`,
+  `sessionsPage`, `ordersPage`, `usersPage`, `connectionsPage`,
+  `accountsPage` and `callsPage` (`sessions_page` and so on in Python),
+  which answer a `Page`: its rows, and `next`, the `before` of the page
+  after it -- null on the last.
 - **A create can be sent again.** A `POST` with an `Idempotency-Key` header
   is remembered for a day; the same key and body again answers what the first
   answered, with `Idempotent-Replayed: true`, and makes nothing (a different

@@ -51,6 +51,7 @@ each between the version you are on and the one you are moving to, in order.
 | [docs/UPGRADING-0.6.md](docs/UPGRADING-0.6.md) | Moving from 0.5.x to 0.6.x — nothing removed; acting as another account in Java and `CliBuilder` bounds answer differently |
 | [docs/UPGRADING-0.7.md](docs/UPGRADING-0.7.md) | Moving from 0.6.x to 0.7.x — `Order` gains `ownerTargetId`, which code that builds an `Order` itself must pass |
 | [docs/UPGRADING-0.13.md](docs/UPGRADING-0.13.md) | Moving from 0.12.x to 0.13.x — three new methods to implement, `statusCode()` returns `Integer`, new required TypeScript fields, no currency symbol, and an order resent once when its answer is lost |
+| [docs/UPGRADING-0.14.md](docs/UPGRADING-0.14.md) | Moving from 0.13.x to 0.14.x — needs fm-server 4.17; paged reads of growing collections, creates sent with an `Idempotency-Key`, and `clearNow` and `calls` on 4.17's routes |
 
 Per-language quickstarts are in each SDK's README, linked from [Usage](#usage)
 below.
