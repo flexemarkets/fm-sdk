@@ -1601,12 +1601,13 @@ class Flexemarkets:
 
     def _order_stream(self, marketplace_id: int) -> "OrderStream":
         """The marketplace's order socket, opened on first use."""
-        from .order_stream import OrderStream
+        from .order_stream import RECONNECT_MAX_SECONDS, OrderStream
 
         with self._order_stream_lock:
             stream = self._order_streams.get(marketplace_id)
             if stream is None:
-                stream = OrderStream(lambda events: self._connect_events(marketplace_id, events), marketplace_id)
+                stream = OrderStream(lambda events: self._connect_events(
+                    marketplace_id, events, reconnect_max_seconds=RECONNECT_MAX_SECONDS), marketplace_id)
                 self._order_streams[marketplace_id] = stream
             return stream
 
@@ -2110,6 +2111,7 @@ class Flexemarkets:
 
     def _connect_events(
         self, marketplace_id: int, event_queue: queue.Queue[object], history: bool = False,
+        reconnect_max_seconds: float | None = None,
     ) -> "EventListener":
         """Internal helper used by :class:`~fm.desk.Desk`
         (Phase 2d) to own its own subscription rather than clobbering
@@ -2129,6 +2131,7 @@ class Flexemarkets:
             client_description=self._client_description,
             renew=self._renew_token,
             history=history,
+            **({} if reconnect_max_seconds is None else {"reconnect_max_seconds": reconnect_max_seconds}),
         )
         ev.start()
         return ev

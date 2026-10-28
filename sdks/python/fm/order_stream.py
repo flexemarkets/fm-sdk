@@ -37,6 +37,15 @@ from .types import Order
 # queue together. A first guess; fm-server's W3 load run should set it.
 MAX_IN_FLIGHT = 64
 
+# The longest an order socket waits between attempts to come back: five
+# seconds, where a subscription waits up to a minute. Orders are waiting on it,
+# and every second it waits is a second they sit unsent -- an outage ran 24-33 s
+# past the server's return on the minute's back-off. It still doubles from 2 s
+# and is drawn from the upper half, so a classroom's robots do not come back in
+# step; and an order socket asks for no history, which is what the minute
+# spares the server.
+RECONNECT_MAX_SECONDS = 5.0
+
 _STOP = object()
 
 

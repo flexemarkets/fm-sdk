@@ -208,13 +208,24 @@ public class Events implements Subscription, OrderStream.Listener {
 
     /** The wait before the next attempt, after {@code failures} in a row (one or more). */
     static long reconnectPause(int failures, LongBinaryOperator draw) {
-        long ceiling = Math.min(RECONNECT_MAX_PAUSE_MS, RECONNECT_FIRST_PAUSE_MS << Math.min(failures - 1, 16));
+        return reconnectPause(failures, draw, RECONNECT_MAX_PAUSE_MS);
+    }
+
+    /** {@link #reconnectPause(int, LongBinaryOperator)}, waiting at most {@code mostMillis}. */
+    static long reconnectPause(int failures, LongBinaryOperator draw, long mostMillis) {
+        long ceiling = Math.min(mostMillis, RECONNECT_FIRST_PAUSE_MS << Math.min(failures - 1, 16));
         return draw.applyAsLong(ceiling / 2, ceiling);
     }
 
-    static long reconnectPause(int failures) {
-        return reconnectPause(failures, (lo, hi) -> ThreadLocalRandom.current().nextLong(lo, hi + 1));
+    static long reconnectPause(int failures, long mostMillis) {
+        return reconnectPause(failures, (lo, hi) -> ThreadLocalRandom.current().nextLong(lo, hi + 1), mostMillis);
     }
+
+    /**
+     * The longest wait between attempts: a minute for a subscription; less for
+     * a socket orders are waiting on ({@link OrderStream#RECONNECT_MAX_MS}).
+     */
+    long reconnectMaxPauseMillis = RECONNECT_MAX_PAUSE_MS;
 
     /** Attempts that have failed in a row; with {@link #_connectedAt}, paces {@link #reconnect()}. */
     volatile int _failures;
@@ -327,7 +338,7 @@ public class Events implements Subscription, OrderStream.Listener {
             // held, later and later after attempts that failed or connections
             // that fell straight away (RECONNECT_FIRST_PAUSE_MS).
             if (_failures > 0) {
-                _sleep(reconnectPause(_failures));
+                _sleep(reconnectPause(_failures, reconnectMaxPauseMillis));
                 if (_closed) {
                     return;
                 }

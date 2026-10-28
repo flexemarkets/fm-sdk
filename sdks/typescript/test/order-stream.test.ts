@@ -336,8 +336,10 @@ test("sendLimit goes on the marketplace socket, and close ends it", async () => 
                                         "order-stream-test");
   let opened = 0;
   let refusing = false;
-  fm._connectEvents = async (marketplaceId: number, callback: EventCallback, history = false) => {
-    assert.deepEqual([marketplaceId, history], [MP, false]);
+  fm._connectEvents = async (marketplaceId: number, callback: EventCallback, history = false,
+                              reconnectMaxPauseMs?: number) => {
+    // An order socket comes back within five seconds; a subscription waits up to a minute.
+    assert.deepEqual([marketplaceId, history, reconnectMaxPauseMs], [MP, false, 5000]);
     opened += 1;
     if (refusing) throw new Error("no socket");
     const listener = new EventListener(s.url, "Bearer t", MP, callback, "fm-sdk-test",

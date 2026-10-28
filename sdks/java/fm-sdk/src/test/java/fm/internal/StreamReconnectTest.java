@@ -244,6 +244,21 @@ class StreamReconnectTest {
         _assertPaced(listener.pauses, 2_000, 4_000, 8_000);
     }
 
+    /** An order socket: orders wait on it, so it comes back within five seconds, not a minute. */
+    @Test
+    @Timeout(20)
+    void aListenerGivenAShorterCeilingWaitsNoLongerThanIt() throws Exception {
+        var listener = new _Listener(new ArrayBlockingQueue<>(16));
+        listener.reconnectMaxPauseMillis = 5_000;
+        listener.pauses = new ArrayList<>();
+        listener.failConnects = 5;
+
+        listener.reconnect();
+
+        _assertPaced(listener.pauses, 2_000, 4_000, 5_000, 5_000, 5_000);
+        assertThat(Events.reconnectPause(10_000, (lo, hi) -> hi, 5_000)).isEqualTo(5_000);
+    }
+
     private static void _dropped(_Listener listener, BlockingQueue<Object> queue) throws InterruptedException {
         // The last reconnect announces itself before it lets go, and a drop
         // that arrives in between is taken as part of it and starts nothing.

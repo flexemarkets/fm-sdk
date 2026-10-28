@@ -49,6 +49,17 @@ final class OrderStream {
      */
     static final int MAX_IN_FLIGHT = 64;
 
+    /**
+     * The longest an order socket waits between attempts to come back: five
+     * seconds, where a subscription waits up to a minute. Orders are waiting on
+     * it, and every second it waits is a second they sit unsent -- an outage ran
+     * 24-33 s past the server's return on the minute's back-off. It still
+     * doubles from 2 s and is drawn from the upper half, so a classroom's robots
+     * do not come back in step; and an order socket asks for no history, which
+     * is what the minute spares the server.
+     */
+    static final long RECONNECT_MAX_MS = 5_000;
+
     /** What an order stream needs of its event listener. */
     interface Listener {
         void send(String destination, String body);
@@ -246,6 +257,11 @@ final class OrderStream {
         synchronized (_lock) {
             return _up;
         }
+    }
+
+    /** For tests: the listener the orders go out on. */
+    Listener listener() {
+        return _listener;
     }
 
     /** For tests: the dispatcher, to see it end. */

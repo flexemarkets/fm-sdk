@@ -404,6 +404,9 @@ class OrderStreamTest {
         until("both sent", () -> sentCount(this, 0, 2));
         assertThat(sent(0)).containsExactly(first.submissionId(), second.submissionId());
         assertThat(server.connectionCount()).as("one socket for the marketplace").isEqualTo(1);
+        // An order socket comes back within five seconds; a subscription waits up to a minute.
+        assertThat(((Events) fm._orderStream(MP).listener()).reconnectMaxPauseMillis)
+                .isEqualTo(OrderStream.RECONNECT_MAX_MS);
         var frames = server.connection(0).received().stream().filter(f -> f.startsWith("SEND\n")).toList();
         assertThat(frames.get(1)).contains("\"price\":901").contains("\"clientDescription\":\"order-stream-test\"");
 

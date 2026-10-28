@@ -41,12 +41,13 @@ export const RECONNECT_FIRST_PAUSE_MS = 2_000;
 export const RECONNECT_MAX_PAUSE_MS = 60_000;
 export const STABLE_CONNECTION_MS = 60_000;
 
-/** The wait before the next attempt, after `failures` in a row (one or more). */
+/** The wait before the next attempt, after `failures` in a row (one or more), at `most` ms. */
 export function reconnectPause(
   failures: number,
   draw: (lo: number, hi: number) => number = (lo, hi) => lo + Math.random() * (hi - lo),
+  most = RECONNECT_MAX_PAUSE_MS,
 ): number {
-  const ceiling = Math.min(RECONNECT_MAX_PAUSE_MS, RECONNECT_FIRST_PAUSE_MS * 2 ** Math.min(failures - 1, 16));
+  const ceiling = Math.min(most, RECONNECT_FIRST_PAUSE_MS * 2 ** Math.min(failures - 1, 16));
   return draw(ceiling / 2, ceiling);
 }
 
@@ -432,6 +433,11 @@ export class EventListener {
   private _reconnecting = false;
   /** Attempts that have failed in a row; with `_connectedAt`, paces reconnect(). */
   _failures = 0;
+  /**
+   * The longest wait between attempts: a minute for a subscription; less for a
+   * socket orders are waiting on (order-stream.ts RECONNECT_MAX_MS).
+   */
+  reconnectMaxPauseMs = RECONNECT_MAX_PAUSE_MS;
   /** When the socket last opened (Date.now()), or null before it ever has. */
   _connectedAt: number | null = null;
 
@@ -529,7 +535,7 @@ export class EventListener {
     let renewed = false;
     while (!this._closed) {
       if (this._failures > 0) {
-        await this._sleep(reconnectPause(this._failures));
+        await this._sleep(reconnectPause(this._failures, undefined, this.reconnectMaxPauseMs));
         if (this._closed) return;
       }
       try {
