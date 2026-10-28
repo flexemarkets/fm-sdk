@@ -1898,12 +1898,13 @@ export class Flexemarkets {
    * every trade does.
    */
   async clearNow(marketplaceId: number, marketId: number): Promise<MarketCall> {
-    return parseMarketCall(await this._post(`${this._marketplace(marketplaceId)}/markets/${marketId}/calls`, null));
+    // Created where the calls are listed (fm-server 4.17); the market's own route is superseded.
+    return parseMarketCall(await this._post(`${this._marketplace(marketplaceId)}/calls`, { marketId }));
   }
 
   /** Every call the marketplace's call markets have made, oldest first; one session's with `sessionId`. */
   async calls(marketplaceId: number, sessionId?: number): Promise<MarketCall[]> {
-    const query = sessionId === undefined ? "" : `?sessionId=${sessionId}`;
+    const query = sessionId === undefined ? "" : `?sessions=${sessionId}`;
     const data = await this._get(`${this._marketplace(marketplaceId)}/calls${query}`);
     return (data as unknown as JsonObject[]).map(parseMarketCall);
   }
