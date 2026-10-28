@@ -43,6 +43,7 @@ import {
   type Subscription,
 } from "./desk.js";
 import type { Snapshot } from "./snapshot.js";
+import { Page } from "./page.js";
 import { readVersion } from "./version.js";
 
 const FM_NETWORK_CLIENT = `fm-sdk-typescript/${readVersion()}`;
@@ -64,6 +65,8 @@ const MAX_TRADED_LEGS = 5000;
 
 const BCRYPT_RE = /^\$2[abxy]?\$\d{2}\$[./A-Za-z0-9]{53}$/;
 const JWT_RE = /^[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+$/;
+/** The `before` in a `Link` header's `rel="next"` target: where a page's older rows start. */
+const NEXT_LINK = /<[^>]*[?&]before=(\d+)[^>]*>\s*;\s*rel="?next"?/;
 
 // ---------------------------------------------------------------------------
 // Errors
@@ -1006,6 +1009,14 @@ export class Flexemarkets {
    * `Snapshot.NO_SEQ` when the header is absent.
    */
   private async _getSnapshot(url: string): Promise<{ data: JsonObject; asOfSeq: number }> {
+    const { data, headers } = await this._getRead(url);
+    const raw = headers.get("x-fm-as-of-seq");
+    const asOfSeq = raw === null ? NO_SEQ : Number.parseInt(raw, 10);
+    return { data, asOfSeq: Number.isFinite(asOfSeq) ? asOfSeq : NO_SEQ };
+  }
+
+  /** GET a body the answer needs a response header beside: a snapshot's sequence, a page's next link. */
+  private async _getRead(url: string): Promise<{ data: JsonObject; headers: Headers }> {
     const resp = await this._fetch(url.startsWith("/") ? `${this._baseUrl}${url}` : url, {
       headers: {
         ...this._authHeaders(),
@@ -1015,9 +1026,20 @@ export class Flexemarkets {
     });
     const body = await resp.text();
     checkResponse(resp, body);
-    const raw = resp.headers.get("x-fm-as-of-seq");
-    const asOfSeq = raw === null ? NO_SEQ : Number.parseInt(raw, 10);
-    return { data: readBody(body), asOfSeq: Number.isFinite(asOfSeq) ? asOfSeq : NO_SEQ };
+    return { data: readBody(body), headers: resp.headers };
+  }
+
+  /**
+   * A page of a collection: `url` with `?limit=` and `?before=`, and the
+   * `before` of the page after it read from the `Link: <...>; rel="next"` the
+   * server sends while older rows remain.
+   */
+  private async _page<T>(url: string, limit: number, before: number | undefined,
+                         parse: (row: JsonObject) => T): Promise<Page<T>> {
+    const paged = `${url}${url.includes("?") ? "&" : "?"}limit=${limit}${before === undefined ? "" : `&before=${before}`}`;
+    const { data, headers } = await this._getRead(paged);
+    const next = NEXT_LINK.exec(headers.get("link") ?? "");
+    return new Page((data as unknown as JsonObject[]).map(parse), next === null ? null : Number.parseInt(next[1], 10));
   }
 
   /** PATCH with a JSON body -- the shape every session transition takes. */
@@ -1177,6 +1199,14 @@ export class Flexemarkets {
   async accounts(): Promise<Account[]> {
     const data = await this._get(this._v1("/accounts"));
     return (data as unknown as JsonObject[]).map(parseAccount) as Account[];
+  }
+
+  /**
+   * A page of `accounts()`: the newest `limit`, or of those whose id is below
+   * `before` -- a page's `next`. The server answers at most 5,000.
+   */
+  async accountsPage(limit: number, before?: number): Promise<Page<Account>> {
+    return this._page(this._v1("/accounts"), limit, before, (a) => parseAccount(a) as Account);
   }
 
   /** Delete an account. Destructive, and takes its users with it. */
@@ -1403,6 +1433,14 @@ export class Flexemarkets {
     return (data as unknown as JsonObject[]).map(parseMarketplace);
   }
 
+  /**
+   * A page of `marketplaces()`: the newest `limit`, or of those whose id is below
+   * `before` -- a page's `next`. The server answers at most 5,000.
+   */
+  async marketplacesPage(limit: number, before?: number): Promise<Page<Marketplace>> {
+    return this._page(this._v1("/marketplaces"), limit, before, parseMarketplace);
+  }
+
   async marketplace(marketplaceId: number): Promise<Marketplace> {
     return parseMarketplace(await this._get(this._marketplace(marketplaceId)));
   }
@@ -1460,6 +1498,14 @@ export class Flexemarkets {
   async sessions(marketplaceId: number): Promise<Session[]> {
     const url = `${this._marketplace(marketplaceId)}/sessions`;
     return ((await this._get(url)) as unknown as JsonObject[]).map(parseSession);
+  }
+
+  /**
+   * A page of `sessions()`: the newest `limit`, or of those whose id is below
+   * `before` -- a page's `next`. The server answers at most 5,000.
+   */
+  async sessionsPage(marketplaceId: number, limit: number, before?: number): Promise<Page<Session>> {
+    return this._page(`${this._marketplace(marketplaceId)}/sessions`, limit, before, parseSession);
   }
 
   async session(marketplaceId: number): Promise<Session> {
@@ -1656,6 +1702,15 @@ export class Flexemarkets {
   }
 
   /**
+   * A page of `orders()` with no filter -- cancellations left out, as there:
+   * the newest `limit`, or of those whose id is below `before` -- a page's
+   * `next`. The server answers at most 5,000.
+   */
+  async ordersPage(marketplaceId: number, limit: number, before?: number): Promise<Page<Order>> {
+    return this._page(`${this._marketplace(marketplaceId)}/orders?cancelled=false`, limit, before, parseOrder);
+  }
+
+  /**
    * One market's traded legs, as many as the server gives in one read
    * ({@link MAX_TRADED_LEGS}), in the server's order.
    *
@@ -1706,6 +1761,14 @@ export class Flexemarkets {
   async connections(marketplaceId: number): Promise<ClientConnection[]> {
     const url = `${this._marketplace(marketplaceId)}/connections`;
     return ((await this._get(url)) as unknown as JsonObject[]).map(parseConnection);
+  }
+
+  /**
+   * A page of `connections()`: the newest `limit`, or of those whose id is below
+   * `before` -- a page's `next`. The server answers at most 5,000.
+   */
+  async connectionsPage(marketplaceId: number, limit: number, before?: number): Promise<Page<ClientConnection>> {
+    return this._page(`${this._marketplace(marketplaceId)}/connections`, limit, before, parseConnection);
   }
 
   // -- management ------------------------------------------------------------
@@ -1770,6 +1833,14 @@ export class Flexemarkets {
   async users(): Promise<Person[]> {
     const data = await this._get(this._v1("/users"));
     return (data as unknown as JsonObject[]).map((u) => parsePerson(u) as Person);
+  }
+
+  /**
+   * A page of `users()`: the newest `limit`, or of those whose id is below
+   * `before` -- a page's `next`. The server answers at most 5,000.
+   */
+  async usersPage(limit: number, before?: number): Promise<Page<Person>> {
+    return this._page(this._v1("/users"), limit, before, (u) => parsePerson(u) as Person);
   }
 
   /** The opening positions of one allocation. */
@@ -1934,6 +2005,14 @@ export class Flexemarkets {
     const query = sessionId === undefined ? "" : `?sessions=${sessionId}`;
     const data = await this._get(`${this._marketplace(marketplaceId)}/calls${query}`);
     return (data as unknown as JsonObject[]).map(parseMarketCall);
+  }
+
+  /**
+   * A page of `calls()`: the newest `limit`, or of those whose id is below
+   * `before` -- a page's `next`. The server answers at most 5,000.
+   */
+  async callsPage(marketplaceId: number, limit: number, before?: number): Promise<Page<MarketCall>> {
+    return this._page(`${this._marketplace(marketplaceId)}/calls`, limit, before, parseMarketCall);
   }
 
   /**
