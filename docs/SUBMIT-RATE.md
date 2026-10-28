@@ -59,11 +59,14 @@ matter. The socket gives the rate with the order kept.
 
 Python first, then TypeScript and Java (W4).
 
-- `submit_limit(..., wait=False)` (and `submit_cancel`, `submit_market`)
-  returns a `PendingOrder`, a `concurrent.futures.Future` with the
+- `send_limit(...)` (`sendLimit` in TypeScript and Java), with
+  `submit_limit`'s arguments, returns a `PendingOrder`, a `concurrent.futures.Future` with the
   submission id. It sends a STOMP `SEND` to `/app/marketplaces/{id}/orders`
-  on the connection `subscribe` already holds, and returns at once.
-  `wait=True`, the default, keeps today's REST call and its answer.
+  on the marketplace's order socket -- its own connection, opened by the
+  first such order and closed with the client -- and returns at once.
+  `submit_limit` keeps today's REST call and its answer. A separate method
+  rather than a `wait` flag on `submit_limit`: Java cannot vary a method's
+  return type by an argument, and the three SDKs keep one set of names.
 - The future resolves when an `ORDERS-UPDATE` carries the robot's own order
   with that submission id (accepted), or an `ORDER-REJECTED` names it
   (refused, with the same failure body as REST).
@@ -83,7 +86,7 @@ Python first, then TypeScript and Java (W4).
 - An asyncio caller awaits `asyncio.wrap_future(pending)`; nothing in the
   SDK needs an event loop.
 
-Done when: on one socket, `submit_limit(wait=False)` sustains within 10% of
+Done when: on one socket, `send_limit` sustains within 10% of
 the hand-written socket burst in the same run, with nothing out of order.
 
 **Python, 2026-10-28** (`feat/socket-orders`): 737 orders a second, median
@@ -98,7 +101,7 @@ and Java to follow.
   between looks at its queue. That sleep is about 250 of the ~260 ms every
   variant takes from `send_order` to `order_accepted`. Await the queue
   instead, so an order goes when it is queued. This helps both transports.
-- The sdk transport submits with `wait=False` and lets the futures call
+- The sdk transport submits with `send_limit` and lets the futures call
   `order_accepted` / `order_rejected` on the agent's loop, instead of
   awaiting each answer on an executor thread.
 
@@ -133,5 +136,5 @@ For callers that place one order at a time and wait for it:
   that, at the cost of a second message per order.
 - The default window: 64 is a guess. W3 (load run, 20+ sockets) should set
   it, and watch for `SessionLimitExceeded` closes.
-- Whether `wait=False` should become the default for robots once it has
+- Whether `send_limit` should become what robots reach for first once it has
   run in a course.

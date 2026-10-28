@@ -258,7 +258,7 @@ class TestStubbed:
 
 class TestFromTheClient:
 
-    def test_wait_false_sends_on_the_marketplace_socket_and_close_ends_it(self, server, monkeypatch):
+    def test_send_limit_goes_on_the_marketplace_socket_and_close_ends_it(self, server, monkeypatch):
         from test_submission_id import TOKEN, Handler
         from http.server import HTTPServer
 
@@ -277,8 +277,8 @@ class TestFromTheClient:
 
         monkeypatch.setattr(fm, "_connect_events", connect)
         try:
-            first = fm.submit_limit(MP, 11, "SELL", 1, 900, wait=False)
-            second = fm.submit_limit(MP, 11, "SELL", 1, 901, wait=False)
+            first = fm.send_limit(MP, 11, "SELL", 1, 900)
+            second = fm.send_limit(MP, 11, "SELL", 1, 901)
             assert isinstance(first, PendingOrder) and len(opened) == 1
             _await("both sent", lambda: len(_sent(server, 0)) == 2)
             assert _sent(server, 0) == [first.submission_id, second.submission_id]
