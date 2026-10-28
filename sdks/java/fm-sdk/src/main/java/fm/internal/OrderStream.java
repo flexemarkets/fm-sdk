@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 
@@ -35,7 +36,10 @@ import java.util.function.Function;
  * <p>While the socket is down an order is held rather than sent another way,
  * and every unanswered order is sent again, in the order first submitted, once
  * it is back. Sending the held ones over REST meanwhile would let them overtake
- * orders sent before the drop, and in-order is the point.
+ * orders sent before the drop, and in-order is the point. An order that has
+ * not gone out at all is held for at most {@link #HOLD_MS}, then refused as not
+ * sent; one sent before the drop may have been placed, and is sent again
+ * whenever the socket returns.
  *
  * <p>As Python's order_stream and TypeScript's order-stream.ts.
  */
@@ -67,7 +71,19 @@ final class OrderStream {
         boolean isClosed();
     }
 
+    /**
+     * The longest an order waits, unsent, for the order socket to come back.
+     * Long enough for a reconnect after a blip (the socket retries within
+     * {@link #RECONNECT_MAX_MS}); after that the order is refused as not sent,
+     * as REST refused it with a 503 during an outage. Held for the whole outage
+     * instead, a robot's quotes went onto the book up to a minute and a half
+     * after it sent them -- stale, and on top of the ones it sent again once it
+     * saw the stream come back.
+     */
+    static final long HOLD_MS = 5_000;
+
     private static final Object STOP = new Object();
+    private static final Object WAKE = new Object();
 
     private final String _destination;
     private final BlockingQueue<Object> _events = new LinkedBlockingQueue<>();
@@ -78,6 +94,7 @@ final class OrderStream {
     /** In submission order. */
     private final Map<String, Unanswered> _unanswered = new LinkedHashMap<>();
     private final Listener _listener;
+    private final long _holdNanos;
     private final Thread _dispatcher;
     private boolean _up = true;
     private boolean _closed;
@@ -87,6 +104,8 @@ final class OrderStream {
         final String body;
         /** Whether a send of it was attempted; one that never was cannot have been placed. */
         boolean sent;
+        /** When it began waiting, unsent, for the socket ({@link System#nanoTime()}); -1 when it is not. */
+        long heldSince = -1;
 
         Unanswered(PendingOrder pending, String body) {
             this.pending = pending;
@@ -102,6 +121,13 @@ final class OrderStream {
      * @param maxInFlight   how many may be unanswered at once
      */
     OrderStream(Function<BlockingQueue<Object>, Listener> connect, long marketplaceId, int maxInFlight) {
+        this(connect, marketplaceId, maxInFlight, HOLD_MS);
+    }
+
+    /** As above, holding an unsent order at most {@code holdMillis}. */
+    OrderStream(Function<BlockingQueue<Object>, Listener> connect, long marketplaceId, int maxInFlight,
+                long holdMillis) {
+        this._holdNanos = TimeUnit.MILLISECONDS.toNanos(holdMillis);
         this._destination = "/app/marketplaces/" + marketplaceId + "/orders";
         this._window = new Semaphore(maxInFlight, true);
         this._listener = connect.apply(_events);
@@ -128,6 +154,9 @@ final class OrderStream {
             _unanswered.put(submissionId, entry);
             if (_up) {
                 _send(entry);
+            } else {
+                entry.heldSince = System.nanoTime();
+                _events.offer(WAKE);  // so the dispatcher times its hold
             }
             return pending;
         }
@@ -172,6 +201,7 @@ final class OrderStream {
     /** Send one, under the lock. A failure leaves it held for the reconnect. */
     private void _send(Unanswered entry) {
         entry.sent = true;
+        entry.heldSince = -1;
         try {
             _listener.send(_destination, entry.body);
         } catch (RuntimeException notSent) {
@@ -183,7 +213,12 @@ final class OrderStream {
         while (true) {
             Object event;
             try {
-                event = _events.take();
+                long wait = _untilAHoldEnds();
+                event = wait < 0 ? _events.take() : _events.poll(wait, TimeUnit.NANOSECONDS);
+                if (event == null) {
+                    event = WAKE;
+                }
+                _refuseLongHeld();
             } catch (InterruptedException e) {
                 // No answer can be matched from here on: say so to every order
                 // still waiting, rather than leave them waiting for ever.
@@ -228,6 +263,40 @@ final class OrderStream {
                 }
                 default -> { }
             }
+        }
+    }
+
+    /** Nanoseconds until the longest-held unsent order has waited its limit; -1 if none is held. */
+    private long _untilAHoldEnds() {
+        long earliest = Long.MAX_VALUE;
+        synchronized (_lock) {
+            for (var entry : _unanswered.values()) {
+                if (entry.heldSince >= 0) {
+                    earliest = Math.min(earliest, entry.heldSince);
+                }
+            }
+        }
+        return earliest == Long.MAX_VALUE ? -1 : Math.max(0, earliest + _holdNanos - System.nanoTime());
+    }
+
+    /** Refuse, as not sent, every order that has waited unsent for the socket longer than the hold. */
+    private void _refuseLongHeld() {
+        long now = System.nanoTime();
+        var expired = new ArrayList<Unanswered>();
+        synchronized (_lock) {
+            for (var it = _unanswered.values().iterator(); it.hasNext(); ) {
+                var entry = it.next();
+                if (entry.heldSince >= 0 && now - entry.heldSince >= _holdNanos) {
+                    expired.add(entry);
+                    it.remove();
+                }
+            }
+        }
+        // Outside the lock: a caller's continuation may submit again.
+        for (var entry : expired) {
+            entry.pending.completeExceptionally(new ConnectionFailedException("Order " + entry.pending.submissionId()
+                    + " was not sent: the order socket was down for more than "
+                    + TimeUnit.NANOSECONDS.toMillis(_holdNanos) / 1000.0 + " s."));
         }
     }
 

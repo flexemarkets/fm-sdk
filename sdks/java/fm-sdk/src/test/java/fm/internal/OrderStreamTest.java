@@ -342,6 +342,40 @@ class OrderStreamTest {
         assertThat(cause(pending)).hasMessage("refused");
     }
 
+    /** Held for a whole outage, a robot's quotes went onto the book long after it sent them. */
+    @Test
+    @Timeout(20)
+    void anOrderNotSentWithinTheHoldIsRefusedAndOneSentBeforeTheDropIsNot() throws Exception {
+        var stub = new Stub();
+        var stream = new OrderStream(queue -> stub, MP, OrderStream.MAX_IN_FLIGHT, 50);
+        opened.add(stream::close);
+        var sent = stream.submit("s-1", order("s-1"));
+        stream.events().offer(new StreamDropped(new IOException("gone")));
+        settle(stream);
+        var held = stream.submit("s-2", order("s-2"));
+
+        assertThat(cause(held)).isInstanceOf(ConnectionFailedException.class)
+                .hasMessageContaining("was not sent: the order socket was down");
+        assertThat(sent.isDone()).as("sent before the drop: it may have been placed").isFalse();
+        stream.events().offer(new StreamReconnected(MP));
+        settle(stream);
+        assertThat(stub.sent).as("only the one that went out goes again").containsExactly("s-1", "s-1");
+    }
+
+    @Test
+    @Timeout(20)
+    void anOrderHeldLessThanTheHoldGoesWhenTheSocketIsBack() throws Exception {
+        var stub = new Stub();
+        var stream = stubbed(stub, OrderStream.MAX_IN_FLIGHT);
+        stream.events().offer(new StreamDropped(new IOException("gone")));
+        settle(stream);
+        var held = stream.submit("s-1", order("s-1"));
+        stream.events().offer(new StreamReconnected(MP));
+        settle(stream);
+        assertThat(stub.sent).containsExactly("s-1");
+        assertThat(held.isDone()).isFalse();
+    }
+
     @Test
     @Timeout(20)
     void closingFailsWhatIsUnansweredByWhetherItWasSent() throws Exception {
