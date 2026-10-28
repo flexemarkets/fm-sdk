@@ -4,6 +4,7 @@ import fm.role.Reading;
 import fm.model.Account;
 import fm.model.Allotment;
 import fm.model.Assets;
+import fm.model.CallIndicative;
 import fm.model.ClientConnection;
 import fm.model.ConflictFailure;
 import fm.model.Holding;
@@ -198,6 +199,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     private static final TypeReference<List<Market>>         MARKETS_TYPE      = new TypeReference<>() {};
     private static final TypeReference<Market>               MARKET_TYPE       = new TypeReference<>() {};
     private static final TypeReference<MarketCall>           MARKET_CALL_TYPE  = new TypeReference<>() {};
+    private static final TypeReference<CallIndicative>       INDICATIVE_TYPE   = new TypeReference<>() {};
     private static final TypeReference<List<MarketCall>>     MARKET_CALLS_TYPE = new TypeReference<>() {};
     private static final TypeReference<List<Session>>        SESSIONS_TYPE     = new TypeReference<>() {};
     private static final TypeReference<Session>              SESSION_TYPE      = new TypeReference<>() {};
@@ -453,6 +455,11 @@ public class HttpFlexemarkets implements Flexemarkets {
     @Override
     public List<String> symbols(long marketplaceId) {
         return markets(marketplaceId).stream().map(Market::symbol).toList();
+    }
+
+    @Override
+    public CallIndicative indicative(long marketplaceId, long marketId) {
+        return _get(_marketplace(marketplaceId) + "/markets/" + marketId + "/indicative", INDICATIVE_TYPE);
     }
 
     @Override

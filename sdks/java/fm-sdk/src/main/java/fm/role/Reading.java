@@ -6,6 +6,7 @@ import fm.Desk;
 import fm.Page;
 import fm.Snapshot;
 import fm.model.Allotment;
+import fm.model.CallIndicative;
 import fm.model.ClientConnection;
 import fm.model.Holding;
 import fm.model.Market;
@@ -96,6 +97,22 @@ public interface Reading {
      * @return the symbols, one per market
      */
     List<String> symbols(long marketplaceId);
+
+    /**
+     * What an indicative call market's book would clear at now: the price and
+     * volume a call would make, read on subscribe. The stream then delivers
+     * each change as a {@link CallIndicative}; apply those with a higher
+     * {@code seq} for the same session.
+     *
+     * <p>Only for a market that {@link Market#showsIndicative() shows it},
+     * while a session is open; the server refuses a sealed market, a
+     * continuous one, or no session.
+     *
+     * @param marketplaceId the marketplace
+     * @param marketId      the call market
+     * @return the price it would clear at now, or a null price when nothing crosses
+     */
+    CallIndicative indicative(long marketplaceId, long marketId);
 
     /**
      * The marketplace's sessions.

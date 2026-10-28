@@ -152,6 +152,7 @@ class FakeFlexemarkets implements Flexemarkets {
     @Override public List<Marketplace> marketplaces() { throw _no("marketplaces"); }
     @Override public Marketplace marketplace(long id) { throw _no("marketplace"); }
     @Override public List<String> symbols(long id) { throw _no("symbols"); }
+    @Override public fm.model.CallIndicative indicative(long id, long marketId) { throw _no("indicative"); }
     @Override public List<Session> sessions(long id) { throw _no("sessions"); }
     @Override public Session session(long id) { throw _no("session"); }
     @Override public List<Order> orders(long id) { throw _no("orders"); }

@@ -85,12 +85,16 @@ public class Events implements Subscription {
     // A call of a call-auction market (fm-server#1036), on the marketplace's
     // topic. Its trades come as an ORDERS-UPDATE of their own.
     private static final String MESSAGE_TYPE_CALL_UPDATE    = "CALL-UPDATE";
+    // What an indicative call market would clear at now, on the marketplace's
+    // topic; delivered as sent, so a caller keeps the highest seq it has seen.
+    private static final String MESSAGE_TYPE_CALL_INDICATIVE = "CALL-INDICATIVE";
 
     private static final TypeReference<Version>    VERSION_TYPE  = new TypeReference<>() {};
     private static final TypeReference<Session[]>  SESSIONS_TYPE = new TypeReference<>() {};
     private static final TypeReference<Session>    SESSION_TYPE  = new TypeReference<>() {};
     private static final TypeReference<Holding>    HOLDING_TYPE  = new TypeReference<>() {};
     private static final TypeReference<fm.model.MarketCall> MARKET_CALL_TYPE = new TypeReference<>() {};
+    private static final TypeReference<fm.model.CallIndicative> INDICATIVE_TYPE = new TypeReference<>() {};
     private static final TypeReference<Order[]>    ORDERS_TYPE   = new TypeReference<>() {};
 
     private final String _wsUrl;
@@ -595,6 +599,7 @@ public class Events implements Subscription {
                 case MESSAGE_TYPE_HOLDING_UPDATE -> _mapper.readValue(body, HOLDING_TYPE);
                 case MESSAGE_TYPE_ORDERS_UPDATE  -> new OrdersUpdate(_mapper.readValue(body, ORDERS_TYPE), seq);
                 case MESSAGE_TYPE_CALL_UPDATE    -> _mapper.readValue(body, MARKET_CALL_TYPE);
+                case MESSAGE_TYPE_CALL_INDICATIVE -> _mapper.readValue(body, INDICATIVE_TYPE);
                 default -> null;
             };
             if (event != null) {
