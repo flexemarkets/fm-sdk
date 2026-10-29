@@ -2355,9 +2355,14 @@ public class HttpFlexemarkets implements Flexemarkets {
     private static void _loadCredential(Properties properties, String credential) {
         var credentialPath = Path.of(credential);
 
+        // A credential the caller names replaces the one ~/.fm/credential holds,
+        // whole: a refresh token left over from it would be the one the client
+        // signs in with, and every client on the machine would present it (#8).
         properties.setProperty("account", "");
         properties.setProperty("email", "");
         properties.setProperty("password", "");
+        properties.remove("token");
+        properties.remove(REFRESH_TOKEN_PROPERTY);
 
         if (credential.startsWith(REFRESH_TOKEN_PREFIX) && !_isBlank(credential.substring(REFRESH_TOKEN_PREFIX.length()))) {
             properties.setProperty(REFRESH_TOKEN_PROPERTY, credential.substring(REFRESH_TOKEN_PREFIX.length()));

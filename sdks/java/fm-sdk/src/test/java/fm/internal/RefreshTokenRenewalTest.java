@@ -152,4 +152,40 @@ class RefreshTokenRenewalTest {
 
         assertThat(_renewals).containsExactly("rt-1");
     }
+
+    /** The default file's refresh token outlived a credential passed in, and every client signed in with it (#8). */
+    @Test
+    void aCredentialFilePassedReplacesTheDefaultCredentialWhole(@TempDir Path home) throws Exception {
+        _defaultCredential(home, "refresh-token=rt-1\n");
+        Path file = Files.writeString(home.resolve("credential"), "token=" + OLD + "\n");
+
+        var properties = HttpFlexemarkets.loadProperties(name -> null, home, file.toString(), _endpoint(), "refresh-test");
+
+        assertThat(properties.getProperty(HttpFlexemarkets.REFRESH_TOKEN_PROPERTY)).isNull();
+        assertThat(properties.getProperty("token")).isEqualTo(OLD);
+    }
+
+    @Test
+    void aTokenPassedDoesNotSignInWithTheDefaultCredentialsRefreshToken(@TempDir Path home) throws Exception {
+        _defaultCredential(home, "refresh-token=rt-1\ntoken=" + NEW + "\n");
+
+        var properties = HttpFlexemarkets.loadProperties(name -> null, home, OLD, _endpoint(), "refresh-test");
+
+        assertThat(properties.getProperty(HttpFlexemarkets.REFRESH_TOKEN_PROPERTY)).isNull();
+        assertThat(properties.getProperty("token")).isEqualTo(OLD);
+    }
+
+    @Test
+    void aRefreshTokenPassedIsUsedOverTheOneInTheDefaultCredential(@TempDir Path home) throws Exception {
+        _defaultCredential(home, "refresh-token=rt-2\n");
+
+        var properties = HttpFlexemarkets.loadProperties(name -> null, home, "refresh:rt-1", _endpoint(), "refresh-test");
+
+        assertThat(properties.getProperty(HttpFlexemarkets.REFRESH_TOKEN_PROPERTY)).isEqualTo("rt-1");
+    }
+
+    private static void _defaultCredential(Path home, String text) throws IOException {
+        Files.createDirectories(home.resolve(".fm"));
+        Files.writeString(home.resolve(".fm/credential"), text);
+    }
 }
