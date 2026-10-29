@@ -50,8 +50,15 @@ each between the version you are on and the one you are moving to, in order.
 | [docs/UPGRADING-0.5.md](docs/UPGRADING-0.5.md) | Moving from 0.4.x to 0.5.x — per-market shortcuts removed from the book and tape indexes, and what to call instead |
 | [docs/UPGRADING-0.6.md](docs/UPGRADING-0.6.md) | Moving from 0.5.x to 0.6.x — nothing removed; acting as another account in Java and `CliBuilder` bounds answer differently |
 | [docs/UPGRADING-0.7.md](docs/UPGRADING-0.7.md) | Moving from 0.6.x to 0.7.x — `Order` gains `ownerTargetId`, which code that builds an `Order` itself must pass |
+| [docs/UPGRADING-0.8.md](docs/UPGRADING-0.8.md) | Moving from 0.7.x to 0.8.x — additive: refresh-token sign-in (fm-server 4.7), last sign-in on `Person`, and the study carry step; code that builds a `Person` may need two more fields |
+| [docs/UPGRADING-0.9.md](docs/UPGRADING-0.9.md) | Moving from 0.8.x to 0.9.x — only Java's study contract 0.2: session orders, early endings and setup context; record patterns over `Carry` break |
+| [docs/UPGRADING-0.10.md](docs/UPGRADING-0.10.md) | Moving from 0.9.x to 0.10.x — only Java's study contract 0.3, in which a study names the robots it needs; record patterns over `Close` break |
+| [docs/UPGRADING-0.11.md](docs/UPGRADING-0.11.md) | Moving from 0.10.x to 0.11.x — call-auction markets (fm-server 4.15): four methods to implement in Java, three new `Market` fields, and a market that is not necessarily continuous |
+| [docs/UPGRADING-0.12.md](docs/UPGRADING-0.12.md) | Moving from 0.11.x to 0.12.x — needs fm-server 4.16: sign-in and the stream move to `/api/v1`; `allWidgets` works, and a call arrives on the stream |
 | [docs/UPGRADING-0.13.md](docs/UPGRADING-0.13.md) | Moving from 0.12.x to 0.13.x — three new methods to implement, `statusCode()` returns `Integer`, new required TypeScript fields, no currency symbol, and an order resent once when its answer is lost |
 | [docs/UPGRADING-0.14.md](docs/UPGRADING-0.14.md) | Moving from 0.13.x to 0.14.x — needs fm-server 4.17; paged reads of growing collections, creates sent with an `Idempotency-Key`, and `clearNow` and `calls` on 4.17's routes |
+| [docs/UPGRADING-0.15.md](docs/UPGRADING-0.15.md) | Moving from 0.14.x to 0.15.x — additive for callers: `indicative`, `sendLimit` over the socket, a call market's sealed book; Java implementers have methods to add |
+| [docs/UPGRADING-0.16.md](docs/UPGRADING-0.16.md) | Moving from 0.15.x to 0.16.x — no signature changes; `sendLimit`'s socket comes back within 5 s, and an order it cannot send is refused after 5 s instead of placed late |
 
 Per-language quickstarts are in each SDK's README, linked from [Usage](#usage)
 below.
