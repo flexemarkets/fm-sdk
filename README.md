@@ -60,6 +60,7 @@ each between the version you are on and the one you are moving to, in order.
 | [docs/UPGRADING-0.15.md](docs/UPGRADING-0.15.md) | Moving from 0.14.x to 0.15.x — additive for callers: `indicative`, `sendLimit` over the socket, a call market's sealed book; Java implementers have methods to add |
 | [docs/UPGRADING-0.16.md](docs/UPGRADING-0.16.md) | Moving from 0.15.x to 0.16.x — no signature changes; `sendLimit`'s socket comes back within 5 s, and an order it cannot send is refused after 5 s instead of placed late |
 | [docs/UPGRADING-0.17.md](docs/UPGRADING-0.17.md) | Moving from 0.16.x to 0.17.x — additive for callers: `sendCancel` over the socket, in order with `sendLimit`; Java implementers have a method to add; a credential passed replaces `~/.fm/credential`'s whole |
+| [docs/UPGRADING-0.18.md](docs/UPGRADING-0.18.md) | Moving from 0.17.x to 0.18.x — additive: `sendLimit` and `sendCancel` can go over REST, in batches, with one request in flight (fm-server 4.19) |
 
 Per-language quickstarts are in each SDK's README, linked from [Usage](#usage)
 below.
