@@ -23,6 +23,8 @@ study's tests -- may need one change:
 |---|---|---|
 | Java | record patterns over `Carry`: the record gains a last component, `Next next` | add it to the pattern; the three-argument constructor `new Carry(holdings, state, carried)` is kept and means `Next.PERIOD` |
 | Java | a host that reads `Carry.holdings()`: it is null when `next()` is `Next.SETTLE` | check `next()` before staging; see [What a host does](#what-a-host-does) |
+| Java | a call to `settle` or `carry` with a literal `null` for the holdings: each now has a four-argument overload taking `Close` beside the one taking `List<ParticipantHolding>`, so the call is ambiguous | pass `List.of()`, or cast the `null` |
+| Java | a test asserting `studySpiVersion()` is `"0.1"`: `StudyProvider.STUDY_SPI_VERSION` is `"0.2"` | expect `"0.2"` |
 | TypeScript | nothing: there is no study contract in TypeScript | |
 | Python | nothing: there is no study contract in Python | |
 
@@ -54,8 +56,8 @@ the `Close` forms when the payoff or the next period depends on what the
 orders say rather than what anyone holds.
 
 `Close` is a record of `holdings` (`List<ParticipantHolding>`) and `orders`
-(`List<SessionOrder>`, every order of the session in the order it was
-placed). It keeps its own copies and holds empty lists, never nulls;
+(`List<SessionOrder>`, the session's limit orders in the order they were
+placed; see [What a host does](#what-a-host-does)). It keeps its own copies and holds empty lists, never nulls;
 `Close.of(holdings)` makes one with no orders.
 
 `SessionOrder` is a record of `id`, `ownerId` (as `ParticipantHolding.id`),
@@ -102,12 +104,20 @@ implements both.
 
 A host on contract 0.2 calls the three-argument `setup` and the `Close`
 forms of `carry` and `settle`, reading the session's orders into `Close`.
-After a `LAST` carry it runs the staged period and then settles; after a
-`SETTLE` carry it stages nothing and settles the period that just closed.
-Either way the plan's remaining rotations are not run.
+After a `LAST` carry it stages the last period, and once that period's
+session has run it allows only a settle; after a `SETTLE` carry it stages
+nothing, and the next step is the settle of the period that just closed.
+Either way the plan's remaining rotations are not run, and the settle is still
+the manager's to start.
 
-A provider that leaves `studySpiVersion()` alone reports `"0.2"` under
-`fm-spi` 0.0.16.
+The host's orders are its session's limit orders as they ended: a partly
+filled order is two orders, and a split's parent and a cancel's own record are
+not among them.
+
+A provider that leaves `studySpiVersion()` alone reports the contract version
+of the fm-spi it runs against. On a host that is the host's fm-spi, since a
+study builds against it as `provided`, not the version the study was built
+with.
 
 ---
 
@@ -116,10 +126,13 @@ A provider that leaves `studySpiVersion()` alone reports `"0.2"` under
 For callers of the client SDKs, the same server as 0.8.0.
 
 A hosted study that uses any of contract 0.2 needs **fm-server 4.14.0 or
-later**, the first release that hosts it (fm-server 1a8b0dd15). Before 4.14.0,
-fm-server checks only the contract's major, so it loads such a study and calls
-only the holdings forms: no orders, no early ending, and no manager. From
-4.14.0 it also leaves out a study whose minor is newer than its own.
+later**, the first release that hosts it (fm-server 1a8b0dd15). An older
+fm-server runs fm-spi 0.0.15, contract 0.1, and still loads such a study, but
+the study fails when it reaches what 0.0.15 lacks: `NoClassDefFoundError` on
+`Close`, `SessionOrder` or `Carry.Next`, `NoSuchMethodError` on `Carry.last`,
+`Carry.settle` or `next()`. A study that overrides only the `Close` form of
+`carry` is never called there: the host calls the holdings form, whose default
+throws `UnsupportedOperationException`.
 
 To build a study against contract 0.2, depend on `com.flexemarkets:fm-spi`
 0.0.16 or later.
