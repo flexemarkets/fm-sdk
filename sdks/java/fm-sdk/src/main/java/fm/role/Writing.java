@@ -1,6 +1,9 @@
 package fm.role;
 
+import java.util.List;
+
 import fm.PendingOrder;
+import fm.model.Limit;
 import fm.model.Market;
 import fm.model.Order;
 import fm.model.OrderSide;
@@ -140,6 +143,31 @@ public interface Writing {
      */
     PendingOrder sendLimit(long marketplaceId, long marketId, OrderSide side, long units, long price,
                            String ownerTarget, Long ownerTargetId, String clientDescription);
+
+    /**
+     * Place several limit orders in one request, matched in the order given.
+     *
+     * <p>One {@code POST .../orders/batch} of up to 64 orders; a longer list
+     * goes as several, one after the other. Each order is matched before the
+     * next, as if sent one at a time with {@link #submitLimit}, for one round
+     * trip instead of one each. Returns one {@link PendingOrder} per order, in
+     * order, already answered: it completes with the order, or with what
+     * {@link #submitLimit} would have thrown for it. One refusal does not stop
+     * the rest.
+     *
+     * <p>A request whose answer was lost is sent once more, whole: every order
+     * names its submission, and fm-server answers one it already placed with
+     * the order it made. A failure of the whole request -- the token, the
+     * connection -- is thrown, as {@link #submitLimit} throws it. Needs
+     * fm-server 4.19. See docs/SUBMIT-RATE.md, section 5.
+     *
+     * @param marketplaceId the marketplace to trade in
+     * @param limits        the orders, in the order they are to be matched
+     * @return one answered order per limit, in the same order
+     * @throws fm.error.InvalidArgumentException when a limit names both targets;
+     *                                           nothing is sent
+     */
+    List<PendingOrder> submitLimits(long marketplaceId, List<Limit> limits);
 
     /**
      * Cancel a resting order.

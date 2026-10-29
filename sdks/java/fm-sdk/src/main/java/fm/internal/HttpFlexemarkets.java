@@ -9,6 +9,7 @@ import fm.model.ClientConnection;
 import fm.model.ConflictFailure;
 import fm.model.CurrentSession;
 import fm.model.Holding;
+import fm.model.Limit;
 import fm.model.ManagerOtpBundle;
 import fm.model.Market;
 import fm.model.MarketCall;
@@ -61,6 +62,7 @@ import java.nio.channels.UnresolvedAddressException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -890,6 +892,52 @@ public class HttpFlexemarkets implements Flexemarkets {
         cancel.put("submissionId", submissionId);
         return _orderStream(marketplaceId).submit(submissionId, MAPPER.writeValueAsString(cancel));
     }
+
+    /** The most orders one {@code POST .../orders/batch} carries: fm-server's OrderBatchV1Controller.MOST_ORDERS. */
+    static final int MOST_BATCHED = 64;
+
+    @Override
+    public List<fm.PendingOrder> submitLimits(long marketplaceId, List<Limit> limits) {
+        var orders = new ArrayList<LinkedHashMap<String, Object>>(limits.size());
+        for (Limit limit : limits) {
+            orders.add(_limitOrder(marketplaceId, limit.marketId(), limit.side(), limit.units(), limit.price(),
+                                   limit.ownerTarget(), limit.ownerTargetId(), limit.clientDescription()));
+        }
+        var url = _marketplace(marketplaceId) + "/orders/batch";
+        var answered = new ArrayList<fm.PendingOrder>(orders.size());
+        for (int start = 0; start < orders.size(); start += MOST_BATCHED) {
+            var batch = orders.subList(start, Math.min(start + MOST_BATCHED, orders.size()));
+            List<BatchEntry> entries;
+            try {
+                entries = _post(url, batch, BATCH_TYPE);
+            } catch (ApiException lost) {
+                if (!(lost.getCause() instanceof IOException)) {
+                    throw lost;
+                }
+                entries = _post(url, batch, BATCH_TYPE);
+            }
+            if (null == entries || entries.size() != batch.size()) {
+                throw new ApiException("Expected " + batch.size() + " answers to a batch of " + batch.size()
+                                     + " orders");
+            }
+            for (int i = 0; i < batch.size(); i++) {
+                var entry = entries.get(i);
+                var pending = new fm.PendingOrder((String) batch.get(i).get("submissionId"));
+                if (entry.status() >= 200 && entry.status() < 300) {
+                    pending.complete(entry.order());
+                } else {
+                    pending.completeExceptionally(_failureFor(entry.status(), MAPPER.writeValueAsString(entry.failure())));
+                }
+                answered.add(pending);
+            }
+        }
+        return answered;
+    }
+
+    /** One order's answer in a batch: the status its own POST would have had, and its order or failure body. */
+    private record BatchEntry(int status, Order order, JsonNode failure) {}
+
+    private static final TypeReference<List<BatchEntry>> BATCH_TYPE = new TypeReference<>() {};
 
     /** The marketplace's order socket, opened on first use. */
     OrderStream _orderStream(long marketplaceId) {
