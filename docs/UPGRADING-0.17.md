@@ -104,6 +104,45 @@ delivered for that attempt.
 
 ---
 
+## What fm-server changed under you
+
+These came with fm-server 4.18.1 and 4.19, whatever fm-sdk version calls
+them. fm-sdk's own calls are unaffected by every one; code that reads the
+server's answers itself, or calls routes the SDK does not wrap, may not be.
+
+**V1 refuses a query parameter it does not take** (4.18.1). A
+`GET /api/v1/...` with a parameter its route does not read -- a misspelt
+`?sesion=`, or one a route never had -- used to be ignored, so the answer was
+the unfiltered one and looked right. It is now a 400 `REQUEST_INVALID` naming
+it: `GET /api/v1/marketplaces takes no ?bogus=; it takes ?limit= and
+?before=`. `?canary=` is taken everywhere, and `/api` without `/v1` is not
+refused. Every parameter fm-sdk sends is one its route takes.
+
+**Socket order refusals carry REST's code** (4.18.1). An order refused on the
+order socket was answered `ORDER_INVALID` whatever the reason. It now has the
+code and message the same order's POST would have had: `ORDER_INSUFFICIENT_ASSETS`,
+`ORDER_INVALID_INSTRUMENT`, `ORDER_ALREADY_CANCELLED` (409) or
+`ORDER_NOT_ALLOWED`, and `ORDER_INVALID` only for what is invalid. A
+`sendLimit` or `sendCancel` that fails raises with that code, as `submitLimit`
+and `submitCancel` always did. Code that tested a socket refusal for
+`ORDER_INVALID` to mean "refused" should test for the refusal instead.
+
+**A study's roster, payments and consents answer JSON when asked** (4.18.1).
+`GET /api/v1/studies/runs/{runId}/roster` and `.../payments`, and
+`GET /api/v1/marketplaces/{id}/consents`, were CSV only. With `Accept: application/json` -- named outright, above
+`text/csv`, with no `text/plain` beside it -- they answer rows as JSON; any
+other `Accept`, a browser's included, still gets the CSV. fm-sdk has no call
+for these.
+
+**A market's decimals can be other than 2 and 0** (4.19, fm-server#1059). A
+manager can now set a market's `priceDecimals` and `unitDecimals` and a
+marketplace's `cashDecimals`, which fm-sdk has read since 0.13 with defaults
+2, 0 and 2. Before 4.19 every market had the defaults, so code that assumed
+cents and whole units was never wrong; now it can be. Read prices, units and
+cash through `Decimals` at the market's and marketplace's scale.
+
+---
+
 ## Checking your code
 
 ```bash
@@ -111,4 +150,8 @@ delivered for that attempt.
 grep -rnE "implements .*(Writing|Flexemarkets)\b" .
 # Calls to connect that pass a credential, which no longer borrow ~/.fm/credential's refresh token
 grep -rnE "Flexemarkets\.connect|\bconnect\(" .
+# Socket refusals tested for ORDER_INVALID, which now carry their own code
+grep -rn "ORDER_INVALID" .
+# Prices, units or cash turned into dollars by a hard-coded 100, which markets with other decimals break
+grep -rnE "/ ?100(\.0)?\b|\* ?100(\.0)?\b|%\.2f|toFixed\(2\)" .
 ```
