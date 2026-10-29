@@ -283,6 +283,37 @@ class RestOrderWindowTest {
         post.release();
     }
 
+    @Test
+    void aCallerInterruptedWhileWaitingForRoom_isToldItsOrderWasNotSent() throws Exception {
+        var post = new FakePost();
+        var window = new RestOrderWindow(post, 1L, 1);
+        submit(window, 100);
+        post.waitFor(1);
+        submit(window, 101);
+        var refused = new java.util.concurrent.atomic.AtomicReference<Throwable>();
+        var stillInterrupted = new java.util.concurrent.atomic.AtomicBoolean();
+        var blocked = new Thread(() -> {
+            try {
+                submit(window, 102);
+            } catch (RuntimeException e) {
+                refused.set(e);
+                stillInterrupted.set(Thread.currentThread().isInterrupted());
+            }
+        });
+        blocked.start();
+        blocked.join(200);
+        blocked.interrupt();
+        blocked.join(TIMEOUT_S * 1000);
+
+        assertThat(refused.get()).isInstanceOf(ConnectionFailedException.class);
+        assertThat(stillInterrupted.get()).as("the interrupt is kept for the caller").isTrue();
+        post.release();
+        post.waitFor(1);
+        post.release();
+        assertThat(post.prices()).as("the interrupted order was never sent")
+                .containsExactly(List.of(100L), List.of(101L));
+    }
+
     // -- through the client ---------------------------------------------------
 
     private static final String TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl";
@@ -320,16 +351,20 @@ class RestOrderWindowTest {
             respond(exchange, answers.toString());
         });
         server.start();
-        try (Flexemarkets fm = Flexemarkets.connect(TOKEN,
+        Flexemarkets fm = Flexemarkets.connect(TOKEN,
                 "http://127.0.0.1:" + server.getAddress().getPort() + "/api/marketplaces/1",
-                "rest-order-window-test", OrderRoute.REST)) {
+                "rest-order-window-test", OrderRoute.REST);
+        try {
             var placed = fm.sendLimit(1L, 11L, OrderSide.BUY, 1L, 150L).get(TIMEOUT_S, TimeUnit.SECONDS);
             var cancel = fm.sendCancel(1L, 11L, placed.id()).get(TIMEOUT_S, TimeUnit.SECONDS);
             assertThat(placed.price()).isEqualTo(150L);
             assertThat(cancel.type()).hasToString("CANCEL");
         } finally {
+            fm.close();
             server.stop(0);
         }
+        assertThatThrownBy(() -> fm.sendLimit(1L, 11L, OrderSide.BUY, 1L, 150L))
+                .as("a closed client sends nothing").isInstanceOf(ConnectionFailedException.class);
 
         assertThat(requests).hasSize(2);
         var sent = requests.get(1).get(0);
