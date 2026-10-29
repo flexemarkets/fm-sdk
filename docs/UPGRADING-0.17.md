@@ -67,6 +67,20 @@ default file would have supplied. A client that passed a token and relied on
 the default file's refresh token to renew it no longer has one: pass the
 refresh token (`refresh:<token>`) or a credential file that carries it.
 
+**`subscribe(..., history=True)` takes a history fm-server sends in chunks.**
+fm-server from the release after 4.18.1 sends a subscriber's history as
+several ORDERS-UPDATE frames of at most 1 MB, each marked `history: i/n`, one
+at a time. fm-sdk puts them back together, so the history still arrives as the
+first `OrdersUpdate`, once, under one seq; an fm-server that sends it in one
+frame, with no mark, works as before. What the history holds is fm-server's
+choice: every resting order, plus the orders behind the marketplace's last
+`fm.history.trades` trades (default 2000), at most four times that many --
+not necessarily every order of the session. If the connection drops part-way
+through, the part received is discarded and the reconnect delivers the whole
+history again. A malformed or out-of-turn chunk is reported as
+`FrameUnreadable` (`frame-unreadable` in TypeScript), and no history is
+delivered for that attempt.
+
 ---
 
 ## Checking your code
