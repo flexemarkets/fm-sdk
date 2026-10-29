@@ -109,6 +109,38 @@ def test_a_credential_file_carries_the_refresh_token_too(server, tmp_path):
     assert server.renewals == ["rt-2"]
 
 
+def _default_credential(text: str) -> None:
+    from pathlib import Path
+    fm_dir = Path.home() / ".fm"
+    fm_dir.mkdir(exist_ok=True)
+    (fm_dir / "credential").write_text(text)
+
+
+def test_a_refresh_token_passed_is_used_over_the_one_in_the_default_credential(server):
+    _default_credential("refresh-token=rt-2\n")
+    client = Flexemarkets.connect("refresh:rt-1", f"{server.base}/marketplaces/1", "refresh-test")
+    client.close()
+
+    assert server.renewals == ["rt-1"]
+
+
+def test_a_credential_file_passed_replaces_the_default_credential_whole(server, tmp_path):
+    """The default file's refresh token outlived a file without one, and every client signed in with it (#8)."""
+    _default_credential("refresh-token=rt-1\n")
+    path = tmp_path / "credential"
+    path.write_text(f"token={OLD}\n")
+    with pytest.raises(Exception):
+        Flexemarkets.connect(str(path), f"{server.base}/marketplaces/1", "refresh-test")
+    assert server.renewals == [], "the default file's refresh token was presented"
+
+
+def test_a_token_passed_does_not_sign_in_with_the_default_credentials_refresh_token(server):
+    _default_credential("refresh-token=rt-1\n")
+    with pytest.raises(Exception):
+        Flexemarkets.connect(OLD, f"{server.base}/marketplaces/1", "refresh-test")
+    assert server.renewals == [], "the default file's refresh token was presented"
+
+
 def test_a_refresh_token_the_server_will_not_take_is_refused_at_connect(server):
     with pytest.raises(AuthenticationError):
         Flexemarkets.connect("refresh:rt-unknown", f"{server.base}/marketplaces/1", "refresh-test")

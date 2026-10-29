@@ -804,7 +804,10 @@ class Flexemarkets:
 
         # Build config from defaults then override with explicit args
         config = _load_config()
-        if any(v is not None for v in (account, email, password)):
+        # A credential the caller names replaces the one ~/.fm/credential holds,
+        # whole: a refresh token left over from it would be the one the client
+        # signs in with, and every client on the machine would present it (#8).
+        if credential is not None or any(v is not None for v in (account, email, password)):
             for key in ("account", "email", "password", "token", _REFRESH_TOKEN_PROPERTY):
                 config.pop(key, None)
 
