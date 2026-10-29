@@ -111,6 +111,118 @@ test("an orders update arrives with its sequence number", async () => {
   } finally { await done(); }
 });
 
+function chunk(ids: number[], seq: number, mark: string): string {
+  return message("ORDERS-UPDATE", JSON.stringify(ids.map((id) => ({ id, consumer: 0 }))),
+                 `seq:${seq}\nhistory:${mark}`);
+}
+
+const updates = (events: FmEvent[]): OrdersUpdate[] => events.filter(isOrdersUpdate);
+
+test("a history that fits one chunk is delivered as it came", async () => {
+  const { s, events, done } = await listening(true);
+  try {
+    s.sockets[0].send(chunk([5, 6], 8, "1/1"));
+    await until("the history", () => events.length >= 1);
+    assert.ok(isOrdersUpdate(events[0]));
+    assert.equal(events[0].seq, 8);
+    assert.deepEqual(events[0].orders.map((o) => o.id), [5, 6]);
+  } finally { await done(); }
+});
+
+test("an orders update with no history mark -- an older fm-server's history -- is delivered as it came", async () => {
+  const { s, events, done } = await listening(true);
+  try {
+    s.sockets[0].send(message("ORDERS-UPDATE", '[{"id":5,"consumer":0},{"id":6,"consumer":5}]', "seq:8"));
+    await until("the history", () => events.length >= 1);
+    assert.ok(isOrdersUpdate(events[0]));
+    assert.equal(events[0].seq, 8);
+    assert.deepEqual(events[0].orders.map((o) => o.id), [5, 6]);
+  } finally { await done(); }
+});
+
+test("a history in chunks is delivered as one update in the order sent", async () => {
+  // fm-server sends a long history as frames of at most 1 MB. The caller is
+  // promised the history as the first update; three updates would hand it a
+  // third of the session and two deltas that are not deltas.
+  const { s, events, done } = await listening(true);
+  try {
+    s.sockets[0].send(chunk([5, 6], 8, "1/3"));
+    s.sockets[0].send(chunk([7], 8, "2/3"));
+    s.sockets[0].send(chunk([8, 9], 8, "3/3"));
+    s.sockets[0].send(message("ORDERS-UPDATE", '[{"id":10,"consumer":0}]', "seq:9"));
+    await until("the delta after the history", () => updates(events).some((u) => u.seq === 9));
+    const [history, delta, ...rest] = updates(events);
+    assert.equal(history.seq, 8);
+    assert.deepEqual(history.orders.map((o) => o.id), [5, 6, 7, 8, 9]);
+    assert.deepEqual(delta.orders.map((o) => o.id), [10]);
+    assert.equal(rest.length, 0);
+  } finally { await done(); }
+});
+
+test("history chunks reach the caller with no repeated sequence number", async () => {
+  // Every chunk carries the history's seq. Delivered one by one, the second
+  // and third repeat it -- a Desk skips a repeated seq as already applied,
+  // and anything counting seqs reads it as out of order.
+  const { s, events, done } = await listening(true);
+  const warn = mock.method(console, "warn", () => {});
+  try {
+    s.sockets[0].send(chunk([5], 8, "1/2"));
+    s.sockets[0].send(chunk([6], 8, "2/2"));
+    s.sockets[0].send(message("ORDERS-UPDATE", '[{"id":7,"consumer":0}]', "seq:9"));
+    await until("the delta after the history", () => updates(events).some((u) => u.seq === 9));
+    assert.deepEqual(events.map((e) => (isOrdersUpdate(e) ? e.seq : kind(e))), [8, 9]);
+    assert.equal(warn.mock.callCount(), 0);
+  } finally { warn.mock.restore(); await done(); }
+});
+
+test("a drop mid-history discards the part received", async () => {
+  // The reconnect sends the whole history again. Kept, the first socket's
+  // chunks would be prepended to it -- or, with a chunk short, delivered as a
+  // history that is not one.
+  const { s, events, done } = await listening(true);
+  try {
+    s.sockets[0].send(chunk([1, 2], 8, "1/3"));
+    s.sockets[0].send(chunk([3], 8, "2/3"));
+    await new Promise((r) => setTimeout(r, 200)); // for the client to have read both
+    s.sockets[0].close();
+    await until("dropped and reconnected", () => events.some((e) => kind(e) === "reconnected"));
+    await until("the new socket subscribes", () => s.received[1]?.length >= 4);
+    s.sockets[1].send(chunk([1, 2], 9, "1/2"));
+    s.sockets[1].send(chunk([3, 4], 9, "2/2"));
+    s.sockets[1].send(message("ORDERS-UPDATE", '[{"id":5,"consumer":0}]', "seq:10"));
+    await until("the delta after the history", () => updates(events).some((u) => u.seq === 10));
+    assert.deepEqual(events.map((e) => kind(e)), ["stream-dropped", "reconnected", "orders-update", "orders-update"]);
+    const [history, delta] = updates(events);
+    assert.equal(history.seq, 9);
+    assert.deepEqual(history.orders.map((o) => o.id), [1, 2, 3, 4]);
+    assert.deepEqual(delta.orders.map((o) => o.id), [5]);
+  } finally { await done(); }
+});
+
+test("a history chunk out of turn is reported, not delivered as the history", async () => {
+  const { s, events, done } = await listening(true);
+  try {
+    s.sockets[0].send(chunk([5], 8, "1/3"));
+    s.sockets[0].send(chunk([7], 8, "3/3"));
+    s.sockets[0].send(chunk([5], 8, "1/1"));
+    await until("two events", () => events.length >= 2);
+    assert.equal(kind(events[0]), "frame-unreadable");
+    assert.match((events[0] as FrameUnreadable).exception.message, /out of turn/);
+    assert.ok(isOrdersUpdate(events[1]));
+    assert.deepEqual(events[1].orders.map((o) => o.id), [5]);
+  } finally { await done(); }
+});
+
+test("a history mark that is not <i>/<n> is reported", async () => {
+  const { s, events, done } = await listening(true);
+  try {
+    s.sockets[0].send(chunk([5], 8, "2/1"));
+    await until("the report", () => events.length >= 1);
+    assert.equal(kind(events[0]), "frame-unreadable");
+    assert.match((events[0] as FrameUnreadable).exception.message, /is not <i>\/<n>/);
+  } finally { await done(); }
+});
+
 test("a frame that cannot be read is reported and the stream carries on", async () => {
   // Reconnecting cannot fix a malformed frame. Java reports it and reads the
   // next one; here a non-JSON body vanished without a word, and one whose
