@@ -9,7 +9,7 @@ both this SDK and the TypeScript one, from the day each was written.
 A caller holding a token has no account, email or password to present. The
 route that exists for them is ``/tokens/refresh``, which validates the token
 and returns the account and person behind it -- a ``POST`` since fm-server
-4.6.2, where it was a ``GET``. The Java SDK has always used it,
+4.5.37, where it was a ``GET``. The Java SDK has always used it,
 and says in a comment that fm-lib-net carried the same branch and an earlier
 rewrite dropped it -- this is the third occurrence.
 
@@ -47,7 +47,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         requests.append(f"GET {self.path}")
-        # Refresh is a POST; a GET of it is the route as it was before 4.6.2.
+        # Refresh is a POST; a GET of it is the route as it was before 4.5.37.
         self._send({"error": "METHOD_NOT_ALLOWED", "path": self.path}, status=405)
 
     def do_POST(self):
