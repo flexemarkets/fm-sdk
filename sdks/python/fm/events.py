@@ -239,6 +239,8 @@ _MESSAGE_TYPE = "message-type"
 _SEQ_HEADER   = "seq"
 # fm-server's name for the submission an ORDER-ACCEPTED or ORDER-REJECTED answers.
 _SUBMISSION_ID_HEADER = "submission-id"
+# fm-server's mark on one chunk of a history: ``<i>/<n>``, 1-based.
+_HISTORY_HEADER = "history"
 
 
 def _parse_event(frame: StompFrame) -> object | None:
@@ -353,6 +355,60 @@ def _parse_orders(data: Any) -> list[Order]:
     if isinstance(data, list):
         return [_parse_order(o) for o in data]
     return []
+
+
+class _History:
+    """Reassembles a history fm-server sends in chunks.
+
+    fm-server sends a history subscribe's orders as one or more ORDERS-UPDATE
+    frames of at most 1 MB, each marked ``history: <i>/<n>`` and all with the
+    same ``seq``. The caller is promised the history as one update, so chunks
+    1 to n-1 are held and the n-th delivers them all, in the order sent. A
+    frame with no mark -- every delta, and the whole history from an
+    fm-server older than the chunking -- passes through as it came.
+
+    One per socket: a drop mid-history leaves the part received behind with
+    the dead socket, and the reconnect brings the whole history again.
+    """
+
+    def __init__(self) -> None:
+        self._orders: list[Order] | None = None
+        self._received = 0
+        self._total = 0
+        self._seq = NO_SEQ
+
+    def add(self, update: OrdersUpdate, mark: str | None) -> OrdersUpdate | None:
+        """The update to deliver for this frame, or None while chunks are
+        still to come. Raises ValueError for a mark that is not ``<i>/<n>``
+        or a chunk out of turn, discarding the part held."""
+        if mark is None:
+            return update
+        try:
+            i_text, n_text = mark.split("/")
+            i, n = int(i_text), int(n_text)
+        except ValueError:
+            i = n = 0
+        if not 1 <= i <= n:
+            self._discard()
+            raise ValueError(f"history: {mark} is not <i>/<n>")
+        if i == 1:
+            self._orders, self._total, self._seq = [], n, update.seq
+        elif self._orders is None or i != self._received + 1 or n != self._total or update.seq != self._seq:
+            self._discard()
+            raise ValueError(f"history chunk {mark} (seq {update.seq}) out of turn; "
+                             "the part of the history received is discarded")
+        self._orders.extend(update.orders)
+        self._received = i
+        if i < n:
+            return None
+        orders = self._orders
+        self._discard()
+        return OrdersUpdate(orders=orders, seq=update.seq)
+
+    def _discard(self) -> None:
+        self._orders = None
+        self._received = self._total = 0
+        self._seq = NO_SEQ
 
 
 # ---------------------------------------------------------------------------
@@ -706,6 +762,9 @@ class EventListener:
         # reporting one queued a StreamDropped and a second reconnect that tore
         # down the socket just opened (as Java's c981b65 found).
         ws = self._ws
+        # Chunks of a history arrive on this socket; a drop takes the part
+        # received with it.
+        history = _History()
         try:
             while not self._closed:
                 try:
@@ -727,6 +786,8 @@ class EventListener:
                     # reconnecting cannot fix. Java reports it and carries on.
                     try:
                         event = _parse_event(frame)
+                        if isinstance(event, OrdersUpdate):
+                            event = history.add(event, frame.headers.get(_HISTORY_HEADER))
                     except Exception as exc:
                         self._queue.put(FrameUnreadable(
                             command=frame.command, headers=frame.headers,

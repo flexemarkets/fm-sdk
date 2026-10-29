@@ -190,6 +190,107 @@ def test_the_history_arrives_as_an_orders_update_with_its_sequence_number(server
         l.close()
 
 
+@pytest.fixture
+def history_listener(server, events):
+    l = EventListener(server.url, "Bearer the-token", MP, events, "fm-sdk-test", history=True)
+    l.start()
+    yield l
+    l.close()
+
+
+def _chunk(ids: list[int], seq: int, mark: str) -> str:
+    return _message("ORDERS-UPDATE", "[" + ",".join(f'{{"id":{i},"consumer":0}}' for i in ids) + "]",
+                    f"seq:{seq}\nhistory:{mark}")
+
+
+def test_a_history_that_fits_one_chunk_is_delivered_as_it_came(server, events, history_listener):
+    server.connection(0).send(_chunk([5, 6], 8, "1/1"))
+
+    update = _next(events)
+    assert isinstance(update, OrdersUpdate) and update.seq == 8
+    assert [o.id for o in update.orders] == [5, 6]
+
+
+def test_a_history_in_chunks_is_delivered_as_one_update_in_the_order_sent(server, events, history_listener):
+    """fm-server sends a long history as frames of at most 1 MB. The caller is
+    promised the history as the first update; three updates would hand it a
+    third of the session and two deltas that are not deltas."""
+    connection = server.connection(0)
+    connection.send(_chunk([5, 6], 8, "1/3"))
+    connection.send(_chunk([7], 8, "2/3"))
+    connection.send(_chunk([8, 9], 8, "3/3"))
+    connection.send(_message("ORDERS-UPDATE", '[{"id":10,"consumer":0}]', "seq:9"))
+
+    history = _next(events)
+    assert isinstance(history, OrdersUpdate) and history.seq == 8
+    assert [o.id for o in history.orders] == [5, 6, 7, 8, 9]
+    delta = _next(events)
+    assert isinstance(delta, OrdersUpdate) and delta.seq == 9
+    assert [o.id for o in delta.orders] == [10]
+
+
+def test_history_chunks_reach_the_caller_with_no_repeated_sequence_number(server, events, history_listener, caplog):
+    """Every chunk carries the history's seq. Delivered one by one, the second
+    and third repeat it -- a Desk skips a repeated seq as already applied, and
+    anything counting seqs reads it as out of order."""
+    caplog.set_level(logging.WARNING)
+    connection = server.connection(0)
+    connection.send(_chunk([5], 8, "1/2"))
+    connection.send(_chunk([6], 8, "2/2"))
+    connection.send(_message("ORDERS-UPDATE", '[{"id":7,"consumer":0}]', "seq:9"))
+
+    seqs = [_next(events).seq, _next(events).seq]  # type: ignore[attr-defined]
+    assert seqs == [8, 9]
+    assert events.empty()
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+
+
+def test_a_drop_mid_history_discards_the_part_received(server, events, history_listener):
+    """The reconnect sends the whole history again. Kept, the first socket's
+    chunks would be prepended to it -- or, with a chunk short, delivered as a
+    history that is not one."""
+    first = server.connection(0)
+    first.send(_chunk([1, 2], 8, "1/3"))
+    first.send(_chunk([3], 8, "2/3"))
+    time.sleep(0.2)  # for the client to have read both before the socket falls
+    first.close()
+
+    assert isinstance(_next(events), StreamDropped)
+    assert _next(events) == StreamReconnected(marketplace_id=MP)
+    second = server.connection(1)
+    second.send(_chunk([1, 2], 9, "1/2"))
+    second.send(_chunk([3, 4], 9, "2/2"))
+    second.send(_message("ORDERS-UPDATE", '[{"id":5,"consumer":0}]', "seq:10"))
+
+    history = _next(events)
+    assert isinstance(history, OrdersUpdate) and history.seq == 9
+    assert [o.id for o in history.orders] == [1, 2, 3, 4]
+    delta = _next(events)
+    assert isinstance(delta, OrdersUpdate) and [o.id for o in delta.orders] == [5]
+
+
+def test_a_history_chunk_out_of_turn_is_reported_not_delivered_as_the_history(server, events, history_listener):
+    connection = server.connection(0)
+    connection.send(_chunk([5], 8, "1/3"))
+    connection.send(_chunk([7], 8, "3/3"))
+
+    unreadable = _next(events)
+    assert isinstance(unreadable, FrameUnreadable)
+    assert "out of turn" in str(unreadable.exception)
+    connection.send(_chunk([5], 8, "1/1"))
+    update = _next(events)
+    assert isinstance(update, OrdersUpdate) and [o.id for o in update.orders] == [5]
+
+
+@pytest.mark.parametrize("mark", ["2/1", "0/1", "one/two", "1"])
+def test_a_history_mark_that_is_not_i_of_n_is_reported(server, events, history_listener, mark):
+    server.connection(0).send(_chunk([5], 8, mark))
+
+    unreadable = _next(events)
+    assert isinstance(unreadable, FrameUnreadable)
+    assert "is not <i>/<n>" in str(unreadable.exception)
+
+
 def test_an_orders_update_arrives_with_its_sequence_number(server, events, listener):
     listener()
     server.connection(0).send(_message(

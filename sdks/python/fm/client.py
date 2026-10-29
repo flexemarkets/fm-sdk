@@ -2098,16 +2098,19 @@ class Flexemarkets:
         what ``Desk``'s ``on_*`` handlers already return here. Java
         returns a ``Subscription``; both names describe the same lifetime.
 
-        With *history*, the first :class:`~fm.events.OrdersUpdate` is every
-        order of the current session as this caller may see it -- cancelled
-        and split ones included, a counterparty's private order named from the
-        caller's side -- stamped with the ``seq`` it was read at, and each
-        reconnect delivers it again. That is fm-server's original subscribe,
-        and the only whole history a participant can read: the REST history is
-        a manager's. Without it the first update is empty and the book comes
-        from :meth:`active_orders`. A history is one frame, so on a session
-        with a very long one it is a large frame -- fm-server's V1 subscribe
-        exists to avoid exactly that.
+        With *history*, the first :class:`~fm.events.OrdersUpdate` is the
+        current session's orders as this caller may see them and as
+        fm-server's history setting keeps them: every resting order, and the
+        orders behind the marketplace's last N trades (``fm.history.trades``,
+        default 2000) -- cancelled and split ones included, a counterparty's
+        private order named from the caller's side -- stamped with the ``seq``
+        it was read at, and each reconnect delivers it again. That is
+        fm-server's original subscribe, and the only history a participant can
+        read: the REST history is a manager's. Without it the first update is
+        empty and the book comes from :meth:`active_orders`. fm-server sends a
+        long history in chunks of at most 1 MB; fm-sdk reassembles them into
+        the one update, and a drop part-way discards what had arrived, since
+        the reconnect sends the whole history again.
         """
         listener = self._connect_events(marketplace_id, event_queue, history=history)
         return listener.close
