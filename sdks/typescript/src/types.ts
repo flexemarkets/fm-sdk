@@ -547,6 +547,21 @@ export interface Order {
 }
 
 /**
+ * A limit order to place: `submitLimit`'s arguments, as one value, for
+ * `submitLimits` to take several of. The marketplace is the call's, and the
+ * submission id is made when it is sent.
+ */
+export interface Limit {
+  marketId: number;
+  side: string;
+  units: number;
+  price: number;
+  ownerTarget?: string;
+  ownerTargetId?: number;
+  clientDescription?: string;
+}
+
+/**
  * The best human label a person record carries: the trimmed full name, or the
  * email when there is no name.
  *

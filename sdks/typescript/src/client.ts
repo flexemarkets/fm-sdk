@@ -23,6 +23,7 @@ import type {
   Market,
   MarketCall,
   Marketplace,
+  Limit,
   Order,
   ParticipantState,
   Person,
@@ -38,7 +39,7 @@ import type {
   RobotParameterControl,
 } from "./types.js";
 import { EventListener, NO_SEQ, type EventCallback } from "./stomp.js";
-import { OrderStream, RECONNECT_MAX_MS, type PendingOrder } from "./order-stream.js";
+import { OrderStream, PendingOrder, RECONNECT_MAX_MS } from "./order-stream.js";
 import {
   DefaultDesk,
   DeskHandle,
@@ -154,6 +155,13 @@ export class HttpError extends FlexemarketsError {
  * malformed body.
  */
 export class ApiError extends FlexemarketsError {}
+
+/**
+ * The most orders one `POST .../orders/batch` carries: fm-server's limit
+ * (OrderBatchV1Controller.MOST_ORDERS). {@link Flexemarkets.submitLimits}
+ * sends a longer list as several requests, one after the other.
+ */
+export const MOST_BATCHED = 64;
 
 /** A 409. The Java and Python SDKs have raised this since the admin surface landed. */
 export class ConflictError extends FlexemarketsError {}
@@ -1665,6 +1673,53 @@ export class Flexemarkets {
   ): Promise<PendingOrder> {
     const order = this._limitOrder(marketplaceId, marketId, side, units, price, options);
     return (await this._orderStream(marketplaceId)).submit(order);
+  }
+
+  /**
+   * Place several limit orders in one request, matched in the order given.
+   *
+   * One `POST .../orders/batch` of up to {@link MOST_BATCHED} orders; a longer
+   * list goes as several, one after the other. Each order is matched before
+   * the next, as if sent one at a time with {@link submitLimit}, for one round
+   * trip instead of one each. Resolves to one {@link PendingOrder} per order,
+   * in order, already answered: its `result()` is the order, or rejects with
+   * what {@link submitLimit} would have thrown for it. One refusal does not
+   * stop the rest.
+   *
+   * A request whose answer was lost is sent once more, whole: every order
+   * names its submission, and fm-server answers one it already placed with the
+   * order it made. A failure of the whole request -- the token, the connection
+   * -- is thrown, as {@link submitLimit} throws it. Needs fm-server 4.19. See
+   * docs/SUBMIT-RATE.md, section 5.
+   */
+  async submitLimits(marketplaceId: number, limits: readonly Limit[]): Promise<PendingOrder[]> {
+    const orders = limits.map((limit) => this._limitOrder(marketplaceId, limit.marketId, limit.side, limit.units,
+                                                           limit.price, limit));
+    const url = `${this._marketplace(marketplaceId)}/orders/batch`;
+    const answered: PendingOrder[] = [];
+    for (let start = 0; start < orders.length; start += MOST_BATCHED) {
+      const batch = orders.slice(start, start + MOST_BATCHED);
+      let data: unknown;
+      try {
+        data = await this._post(url, batch);
+      } catch (e) {
+        if (!answerLost(e)) throw e;
+        data = await this._post(url, batch);
+      }
+      if (!Array.isArray(data) || data.length !== batch.length) {
+        throw new ApiError(`Expected ${batch.length} answers to a batch of ${batch.length} orders`);
+      }
+      batch.forEach((order, i) => {
+        const entry = data[i] as JsonObject;
+        const pending = new PendingOrder(order.submissionId as string);
+        const status = typeof entry.status === "number" ? entry.status : 0;
+        pending._answer(status >= 200 && status < 300
+          ? parseOrder(entry.order as JsonObject)
+          : refused(status, JSON.stringify(entry.failure ?? null)));
+        answered.push(pending);
+      });
+    }
+    return answered;
   }
 
   /** The body of a limit order, named with a fresh submission id. */

@@ -17,6 +17,7 @@ export type {
   Marketplace,
   Session,
   Order,
+  Limit,
   ParticipantState,
   Widget,
   WidgetPush,
