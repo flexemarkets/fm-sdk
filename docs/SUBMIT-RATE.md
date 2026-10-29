@@ -17,7 +17,7 @@ The plan, in order of what it buys:
    answer.
 3. **fm-server: one lookup per submission id, not two.** Socket orders run
    one at a time per socket, so the server's time per order is the socket's
-   rate.
+   rate. Measured: no saving, not taken (section 3).
 4. **fm-sdk: a leaner REST path for one order at a time**: an asyncio client,
    and less work per request.
 
@@ -122,6 +122,14 @@ orders run one after another per socket, each after the last was matched,
 so the server's time per order sets the socket's rate. Measure the saving
 against the 1.1 ms before taking anything further.
 
+Measured 2026-10-29 on fm-server 4.18.1 (`rest_split.py` in the comparison
+bench, httpx with and without a `submissionId` interleaved, the server's own
+time from `Server-Timing`, one warm-up run discarded, then four): a
+`submissionId` adds 0.75 ms (median of the four runs, 0.46-1.02). With one
+lookup it adds 0.72 ms (0.43-0.84). The second lookup costs too little to
+measure, so the change was not taken. The 1.1 ms above, and 1.2 ms in one
+later run, were single runs.
+
 ## 4. fm-sdk: a leaner REST order
 
 For callers that place one order at a time and wait for it:
@@ -134,10 +142,16 @@ For callers that place one order at a time and wait for it:
 
 ## Open
 
-- One at a time, the socket is slower than REST (8.3 against ~6 ms): the
+- One at a time, the socket was slower than REST (8.3 against ~6 ms): the
   acceptance comes on the marketplace's `ORDERS-UPDATE` fan-out, not as an
-  answer to the frame. A direct acceptance to the submitter would close
-  that, at the cost of a second message per order.
+  answer to the frame. Through FMClient on fm-server 4.18.1 it is now the
+  faster of the two: 4.3 ms a single order against 6.8 ms over REST.
+  A direct acceptance was tried on 2026-10-28: fm-server answered every
+  socket order with `ORDER-ACCEPTED` to the submitter. Against the same
+  server without it, a single order took 1.02x as long (95% interval
+  0.97-1.11), a burst placed 0.81x as many orders (0.67-1.01), and the
+  client's CPU per order was 1.12x (1.05-1.23). Not taken: the reply goes
+  through the same broker send, under the same lock, as the fan-out.
 - The default window: 64 is a guess. W3 (load run, 20+ sockets) should set
   it, and watch for `SessionLimitExceeded` closes.
 - Whether `send_limit` should become what robots reach for first once it has
