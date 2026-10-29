@@ -156,6 +156,35 @@ public interface Writing {
     Order submitCancel(long marketplaceId, long marketId, long originalId);
 
     /**
+     * Cancel a resting order without waiting for the answer.
+     *
+     * <p>{@link #submitCancel} over the marketplace's socket, as
+     * {@link #sendLimit(long, long, OrderSide, long, long)} is
+     * {@link #submitLimit(long, long, OrderSide, long, long)}: the cancel goes on
+     * the same socket as the limits sent there, through the same window, and
+     * fm-server takes them in the order sent -- a cancel and the limit sent after
+     * it reach the book in that order. It completes with the CANCEL order the
+     * exchange recorded, or with the refusal {@link #submitCancel} would have
+     * thrown -- or {@link fm.error.OrderOutcomeUnknownException} if the socket
+     * closed before the answer came.
+     *
+     * <p>{@code originalId} is the order's {@link Order#original()}: for the
+     * order a {@code sendLimit} or {@code submitLimit} answered, its
+     * {@link Order#id()}. Unlike {@link #submitCancel}'s DELETE, which looks the
+     * order up, the socket's CANCEL goes to the exchange as named, and the id of
+     * a fragment a split left behind matches nothing -- the CANCEL is recorded,
+     * consumed by itself, and nothing is cancelled. An order not yet answered has
+     * no id and cannot be cancelled this way.
+     *
+     * @param marketplaceId the marketplace the order rests in
+     * @param marketId      the market within it; on the wire, as the socket's
+     *                      CANCEL names its market
+     * @param originalId    the original id of the order to cancel
+     * @return the cancel, sent and not yet answered
+     */
+    PendingOrder sendCancel(long marketplaceId, long marketId, long originalId);
+
+    /**
      * Cross the book: buy at the highest price this market allows, sell at the
      * lowest.
      *

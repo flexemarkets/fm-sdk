@@ -174,6 +174,7 @@ class FakeFlexemarkets implements Flexemarkets {
     @Override public PendingOrder sendLimit(long mp, long marketId, OrderSide side, long units, long price) { throw _no("sendLimit"); }
     @Override public PendingOrder sendLimit(long mp, long marketId, OrderSide side, long units, long price,
                                             String ownerTarget, Long ownerTargetId, String clientDescription) { throw _no("sendLimit"); }
+    @Override public PendingOrder sendCancel(long mp, long marketId, long originalId) { throw _no("sendCancel"); }
     @Override public Order submitMarket(long mp, long marketId, OrderSide side, long units) { throw _no("submitMarket"); }
 
     @Override public Session openSession(long id) { throw _no("openSession"); }
