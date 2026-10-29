@@ -18,6 +18,7 @@ export type {
   Session,
   Order,
   Limit,
+  OrderRoute,
   ParticipantState,
   Widget,
   WidgetPush,

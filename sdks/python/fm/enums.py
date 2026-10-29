@@ -67,3 +67,19 @@ class OrderType(StrEnum):
             if order_type.value == value.strip().upper():
                 return order_type
         return None
+
+
+class OrderRoute(StrEnum):
+    """How :meth:`~fm.client.Flexemarkets.send_limit` and ``send_cancel``
+    send a client's orders, chosen once, when it connects.
+
+    ``SOCKET``, the default: each order goes out on the marketplace's order
+    socket at once, as a STOMP SEND, up to 64 unanswered. ``REST``: orders go
+    as ``POST .../orders/batch``, one request in flight; those sent while it is
+    out wait, and go together as the next. For a caller that cannot hold a
+    socket open. One route for the client's life, so its orders never take two
+    routes and overtake each other on the way (docs/SUBMIT-RATE.md, section 5).
+    """
+
+    SOCKET = "SOCKET"
+    REST = "REST"

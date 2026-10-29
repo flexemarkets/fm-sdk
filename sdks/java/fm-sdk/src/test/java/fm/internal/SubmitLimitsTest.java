@@ -88,6 +88,10 @@ class SubmitLimitsTest {
             if ("short".equals(step)) {
                 answers.remove(0);
             }
+            if ("garbage".equals(step)) {
+                respond(exchange, 200, "<html>not JSON</html>");
+                return;
+            }
             respond(exchange, 200, answers.toString());
         });
         server.start();
@@ -244,6 +248,17 @@ class SubmitLimitsTest {
             assertThatThrownBy(() -> fm.submitLimits(1L, List.of(limit(150), limit(151))))
                     .isInstanceOf(ApiException.class);
         }
+    }
+
+    /** An answer that came but cannot be read is not a lost one: it is not sent again. */
+    @Test
+    void anUnreadableAnswerIsAnApiException_andNotSentAgain() throws Exception {
+        plan.add("garbage");
+
+        try (Flexemarkets fm = connect()) {
+            assertThatThrownBy(() -> fm.submitLimits(1L, List.of(limit(150)))).isInstanceOf(ApiException.class);
+        }
+        assertThat(requests).hasSize(1);
     }
 
     @Test

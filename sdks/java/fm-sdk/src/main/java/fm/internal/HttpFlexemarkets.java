@@ -133,7 +133,32 @@ public class HttpFlexemarkets implements Flexemarkets {
     public static Flexemarkets open(String credential, String endpoint,
                                     String clientDescription, boolean capture,
                                     String impersonateAccount) throws IOException {
+        return open(credential, endpoint, clientDescription, capture, impersonateAccount, null);
+    }
+
+    /**
+     * {@link #open(String, String, String, boolean, String)}, sending
+     * {@code sendLimit} and {@code sendCancel} orders by {@code orderRoute}.
+     *
+     * @param credential         a password, a token, {@code refresh:} and a refresh
+     *                           token, or a path to a credential file holding one
+     * @param endpoint           the endpoint to connect to
+     * @param clientDescription  how this client identifies itself
+     * @param capture            whether to write each request and response to
+     *                           stdout
+     * @param impersonateAccount the account an administrator wishes to act as,
+     *                           or null
+     * @param orderRoute         how sent orders go; null for the socket
+     * @return an open connection, which the caller must close
+     * @throws IOException if the connection cannot be established
+     */
+    public static Flexemarkets open(String credential, String endpoint,
+                                    String clientDescription, boolean capture,
+                                    String impersonateAccount, fm.OrderRoute orderRoute) throws IOException {
         var properties = loadProperties(credential, endpoint, clientDescription);
+        if (null != orderRoute) {
+            properties.setProperty("order-route", orderRoute.name());
+        }
 
         if (capture) {
             properties.setProperty("capture", "true");
@@ -363,6 +388,8 @@ public class HttpFlexemarkets implements Flexemarkets {
     private volatile ImpersonationGrant _impersonation;
     private final Object _impersonationLock = new Object();
     private final boolean _capture;
+    /** How sendLimit and sendCancel send this client's orders, for its whole life. */
+    private final fm.OrderRoute _orderRoute;
 
     private Events _events;
     private volatile boolean _closed;
@@ -386,6 +413,7 @@ public class HttpFlexemarkets implements Flexemarkets {
         var impersonate = properties.getProperty("impersonate-account");
         this._impersonateAccount = impersonate == null || impersonate.isBlank() ? null : impersonate;
         this._capture = Boolean.parseBoolean(properties.getProperty("capture"));
+        this._orderRoute = fm.OrderRoute.valueOf(properties.getProperty("order-route", fm.OrderRoute.SOCKET.name()));
 
         var refreshToken = properties.getProperty(REFRESH_TOKEN_PROPERTY);
         this._refreshToken = _isBlank(refreshToken) ? null : refreshToken.trim();
@@ -875,9 +903,32 @@ public class HttpFlexemarkets implements Flexemarkets {
                                      String ownerTarget, Long ownerTargetId, String clientDescription) {
         var order = _limitOrder(marketplaceId, marketId, side, units, price, ownerTarget, ownerTargetId,
                                 clientDescription);
-        return _orderStream(marketplaceId).submit((String) order.get("submissionId"),
-                                                  MAPPER.writeValueAsString(order));
+        return _send(marketplaceId, (String) order.get("submissionId"), order);
     }
+
+    /** The order to the marketplace's socket, or to its REST window, by this client's route. */
+    private fm.PendingOrder _send(long marketplaceId, String submissionId, LinkedHashMap<String, Object> order) {
+        if (fm.OrderRoute.REST == _orderRoute) {
+            return _restWindow(marketplaceId).submit(submissionId, order);
+        }
+        return _orderStream(marketplaceId).submit(submissionId, MAPPER.writeValueAsString(order));
+    }
+
+    /** The marketplace's REST window, made on first use. */
+    RestOrderWindow _restWindow(long marketplaceId) {
+        synchronized (_orderStreams) {
+            if (_closed) {
+                throw new fm.error.ConnectionFailedException("The client is closed; the order was not sent.");
+            }
+            return _restWindows.computeIfAbsent(marketplaceId, id -> {
+                var url = _marketplace(id) + "/orders/batch";
+                return new RestOrderWindow(batch -> _postBatch(url, batch), id);
+            });
+        }
+    }
+
+    /** Each marketplace's REST window, for a client connected with OrderRoute.REST; guarded by _orderStreams. */
+    private final java.util.Map<Long, RestOrderWindow> _restWindows = new java.util.HashMap<>();
 
     @Override
     public fm.PendingOrder sendCancel(long marketplaceId, long marketId, long originalId) {
@@ -890,7 +941,13 @@ public class HttpFlexemarkets implements Flexemarkets {
         // answered with the one fm-server already recorded.
         var submissionId = UUID.randomUUID().toString();
         cancel.put("submissionId", submissionId);
-        return _orderStream(marketplaceId).submit(submissionId, MAPPER.writeValueAsString(cancel));
+        if (fm.OrderRoute.REST == _orderRoute) {
+            // As a REST CANCEL has always named its order. The exchange matches
+            // it by the original as given, which is why it must be one.
+            cancel.put("id",       originalId);
+            cancel.put("supplier", originalId);
+        }
+        return _send(marketplaceId, submissionId, cancel);
     }
 
     /** The most orders one {@code POST .../orders/batch} carries: fm-server's OrderBatchV1Controller.MOST_ORDERS. */
@@ -907,31 +964,46 @@ public class HttpFlexemarkets implements Flexemarkets {
         var answered = new ArrayList<fm.PendingOrder>(orders.size());
         for (int start = 0; start < orders.size(); start += MOST_BATCHED) {
             var batch = orders.subList(start, Math.min(start + MOST_BATCHED, orders.size()));
-            List<BatchEntry> entries;
-            try {
-                entries = _post(url, batch, BATCH_TYPE);
-            } catch (ApiException lost) {
-                if (!(lost.getCause() instanceof IOException)) {
-                    throw lost;
-                }
-                entries = _post(url, batch, BATCH_TYPE);
-            }
-            if (null == entries || entries.size() != batch.size()) {
-                throw new ApiException("Expected " + batch.size() + " answers to a batch of " + batch.size()
-                                     + " orders");
-            }
+            var outcomes = _postBatch(url, new ArrayList<Map<String, Object>>(batch));
             for (int i = 0; i < batch.size(); i++) {
-                var entry = entries.get(i);
+                var outcome = outcomes.get(i);
                 var pending = new fm.PendingOrder((String) batch.get(i).get("submissionId"));
-                if (entry.status() >= 200 && entry.status() < 300) {
-                    pending.complete(entry.order());
+                if (null != outcome.refusal()) {
+                    pending.completeExceptionally(outcome.refusal());
                 } else {
-                    pending.completeExceptionally(_failureFor(entry.status(), MAPPER.writeValueAsString(entry.failure())));
+                    pending.complete(outcome.order());
                 }
                 answered.add(pending);
             }
         }
         return answered;
+    }
+
+    /**
+     * One {@code POST .../orders/batch}, sent once more, whole, if its answer was
+     * lost: each order's placed order, or the exception its refusal throws.
+     */
+    private List<RestOrderWindow.Outcome> _postBatch(String url, List<Map<String, Object>> batch) {
+        List<BatchEntry> entries;
+        try {
+            entries = _post(url, batch, BATCH_TYPE);
+        } catch (ApiException lost) {
+            if (!(lost.getCause() instanceof IOException)) {
+                throw lost;
+            }
+            entries = _post(url, batch, BATCH_TYPE);
+        }
+        if (null == entries || entries.size() != batch.size()) {
+            throw new ApiException("Expected " + batch.size() + " answers to a batch of " + batch.size() + " orders");
+        }
+        var outcomes = new ArrayList<RestOrderWindow.Outcome>(entries.size());
+        for (var entry : entries) {
+            outcomes.add(entry.status() >= 200 && entry.status() < 300
+                    ? new RestOrderWindow.Outcome(entry.order(), null)
+                    : new RestOrderWindow.Outcome(null,
+                            _failureFor(entry.status(), MAPPER.writeValueAsString(entry.failure()))));
+        }
+        return outcomes;
     }
 
     /** One order's answer in a batch: the status its own POST would have had, and its order or failure body. */
@@ -1397,13 +1469,19 @@ public class HttpFlexemarkets implements Flexemarkets {
         // Before the listeners: an order still unanswered is told so, rather
         // than waiting on a socket that has gone.
         java.util.List<OrderStream> streams;
+        java.util.List<RestOrderWindow> windows;
         synchronized (_orderStreams) {
             _closed = true;
             streams = new java.util.ArrayList<>(_orderStreams.values());
             _orderStreams.clear();
+            windows = new java.util.ArrayList<>(_restWindows.values());
+            _restWindows.clear();
         }
         for (var stream : streams) {
             stream.close();
+        }
+        for (var window : windows) {
+            window.close();
         }
         if (_events != null) {
             _events.close();

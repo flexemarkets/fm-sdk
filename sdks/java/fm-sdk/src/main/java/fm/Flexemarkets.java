@@ -83,6 +83,37 @@ public interface Flexemarkets
     }
 
     /**
+     * Connect, choosing how {@link fm.role.Writing#sendLimit} and
+     * {@link fm.role.Writing#sendCancel} send this client's orders for its whole
+     * life: {@link OrderRoute#SOCKET}, as the plain connect does, or
+     * {@link OrderRoute#REST}, batches over REST for a caller that cannot hold a
+     * socket open.
+     *
+     * <p>A provider that claims the endpoint is handed the plain connect: the
+     * route is a property of the HTTP client.
+     *
+     * @param credential        a password, a token, {@code refresh:} and a refresh
+     *                          token, or a path to a credential file holding one
+     * @param endpoint          a URL, a bare marketplace id, or a file holding
+     *                          either; see {@link Endpoints#resolve}
+     * @param clientDescription how this client identifies itself to the server
+     * @param orderRoute        how sent orders go; null for the socket
+     * @return an open connection, which the caller must close
+     * @throws IOException if the endpoint cannot be resolved or the connection
+     *                     cannot be established
+     */
+    static Flexemarkets connect(String credential, String endpoint, String clientDescription,
+                                OrderRoute orderRoute) throws IOException {
+        String resolved = Endpoints.resolve(endpoint);
+
+        FlexemarketsProvider provider = Providers.forEndpoint(resolved);
+        if (null != provider) {
+            return provider.connect(credential, resolved, clientDescription);
+        }
+        return HttpFlexemarkets.open(credential, endpoint, clientDescription, false, null, orderRoute);
+    }
+
+    /**
      * Connect, tracing the exchange and/or acting as another account.
      *
      * <p>Both are operator concerns rather than programming ones, which is why

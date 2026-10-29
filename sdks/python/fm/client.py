@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from .events import EventListener
     from .desk import Desk
     from .order_stream import OrderStream, PendingOrder
+    from .rest_orders import RestOrderWindow
 
 
 @dataclass
@@ -51,7 +52,7 @@ from .exceptions import (
     InvalidArgumentError,
     PersonHasMarketplaceDataError,
 )
-from .enums import OrderType, OrderSide
+from .enums import OrderRoute, OrderType, OrderSide
 from .types import (
     Account,
     Allotment,
@@ -794,8 +795,14 @@ class Flexemarkets:
         email: str | None = None,
         token: str | None = None,
         password: str | None = None,
+        order_route: OrderRoute | str = OrderRoute.SOCKET,
     ):
         """Connect and sign in.
+
+        *order_route* is how :meth:`send_limit` and :meth:`send_cancel` send
+        this client's orders, for its whole life: :attr:`OrderRoute.SOCKET`, the
+        default, or :attr:`OrderRoute.REST`, batches over REST for a caller that
+        cannot hold a socket open (see :class:`~fm.enums.OrderRoute`).
 
         An identity named here -- *account*, *email*, *password* -- replaces
         the one in ``~/.fm/credential`` rather than overlaying it. Overlaying
@@ -807,6 +814,10 @@ class Flexemarkets:
         supply the endpoint when *endpoint* is not given.
         """
         self._client_description = client_description or "Unspecified client"
+        try:
+            self._order_route = OrderRoute(str(order_route).strip().upper())
+        except ValueError:
+            raise InvalidArgumentError(f"order_route is SOCKET or REST, not {order_route!r}") from None
 
         # Build config from defaults then override with explicit args
         config = _load_config()
@@ -887,7 +898,7 @@ class Flexemarkets:
 
         # The socket each marketplace's send_limit orders go out on, opened by
         # the first of them.
-        self._order_streams: dict[int, "OrderStream"] = {}
+        self._order_streams: dict[int, "OrderStream | RestOrderWindow"] = {}
         self._order_stream_lock = threading.Lock()
 
     # -- factory helpers matching Java's connect() overloads ----------------
@@ -898,11 +909,14 @@ class Flexemarkets:
         credential: str | None = None,
         endpoint: str | None = None,
         client_description: str | None = None,
+        *,
+        order_route: OrderRoute | str = OrderRoute.SOCKET,
     ) -> Flexemarkets:
         return cls(
             credential=credential,
             endpoint=endpoint,
             client_description=client_description,
+            order_route=order_route,
         )
 
     # -- properties --------------------------------------------------------
@@ -1572,6 +1586,14 @@ class Flexemarkets:
         way and stays open until :meth:`close`; at most
         :data:`~fm.order_stream.MAX_IN_FLIGHT` orders are unanswered at once.
         The arguments are :meth:`submit_limit`'s. See docs/SUBMIT-RATE.md.
+
+        On a client connected with ``order_route=OrderRoute.REST`` the order
+        goes over REST instead: one ``POST .../orders/batch`` is in flight at a
+        time, and the orders sent while it is out -- at most
+        :data:`~fm.rest_orders.MOST_WAITING` -- go together as the next, in the
+        order sent. Its ``result()`` is then the order or the refusal, or
+        :class:`~fm.exceptions.OrderOutcomeUnknownError` if the request was
+        sent twice without a readable answer. Needs fm-server 4.19.
         """
         order = self._limit_order(marketplace_id, market_id, side, units, price, owner_target,
                                   owner_target_id, client_description)
@@ -1604,22 +1626,31 @@ class Flexemarkets:
         answered: list[PendingOrder] = []
         for start in range(0, len(orders), MOST_BATCHED):
             batch = orders[start:start + MOST_BATCHED]
-            try:
-                resp = self._post(url, batch)
-            except httpx.TransportError:
-                resp = self._post(url, batch)
-            entries = _json(resp)
-            if not isinstance(entries, list) or len(entries) != len(batch):
-                raise ApiError(f"Expected {len(batch)} answers to a batch of {len(batch)} orders")
-            for order, entry in zip(batch, entries):
+            for order, outcome in zip(batch, self._post_batch(url, batch)):
                 pending = PendingOrder(order["submissionId"])
-                status = entry.get("status", 0)
-                if 200 <= status < 300:
-                    pending.set_result(_parse_order(entry.get("order")))
+                if isinstance(outcome, FlexemarketsError):
+                    pending.set_exception(outcome)
                 else:
-                    pending.set_exception(_refused(status, json.dumps(entry.get("failure"))))
+                    pending.set_result(outcome)
                 answered.append(pending)
         return answered
+
+    def _post_batch(self, url: str, batch: list[dict[str, Any]]) -> "list[Order | FlexemarketsError]":
+        """One ``POST .../orders/batch``, sent once more, whole, if its answer was
+        lost: each order's placed order, or the error its refusal raises."""
+        try:
+            resp = self._post(url, batch)
+        except httpx.TransportError:
+            resp = self._post(url, batch)
+        entries = _json(resp)
+        if not isinstance(entries, list) or len(entries) != len(batch):
+            raise ApiError(f"Expected {len(batch)} answers to a batch of {len(batch)} orders")
+        outcomes: list[Order | FlexemarketsError] = []
+        for entry in entries:
+            status = entry.get("status", 0)
+            outcomes.append(_parse_order(entry.get("order")) if 200 <= status < 300
+                            else _refused(status, json.dumps(entry.get("failure"))))
+        return outcomes
 
     def _limit_order(
         self, marketplace_id: int, market_id: int, side: str, units: int, price: int,
@@ -1652,15 +1683,22 @@ class Flexemarkets:
         order["submissionId"] = str(uuid.uuid4())
         return order
 
-    def _order_stream(self, marketplace_id: int) -> "OrderStream":
-        """The marketplace's order socket, opened on first use."""
+    def _order_stream(self, marketplace_id: int) -> "OrderStream | RestOrderWindow":
+        """Where the marketplace's sent orders go, by this client's
+        :class:`~fm.enums.OrderRoute`: its order socket, or its REST window,
+        made on first use."""
         from .order_stream import RECONNECT_MAX_SECONDS, OrderStream
+        from .rest_orders import RestOrderWindow
 
         with self._order_stream_lock:
             stream = self._order_streams.get(marketplace_id)
             if stream is None:
-                stream = OrderStream(lambda events: self._connect_events(
-                    marketplace_id, events, reconnect_max_seconds=RECONNECT_MAX_SECONDS), marketplace_id)
+                if self._order_route is OrderRoute.REST:
+                    url = _marketplace(self._endpoint, marketplace_id) + "/orders/batch"
+                    stream = RestOrderWindow(lambda batch: self._post_batch(url, batch), marketplace_id)
+                else:
+                    stream = OrderStream(lambda events: self._connect_events(
+                        marketplace_id, events, reconnect_max_seconds=RECONNECT_MAX_SECONDS), marketplace_id)
                 self._order_streams[marketplace_id] = stream
             return stream
 
@@ -1732,7 +1770,9 @@ class Flexemarkets:
         reach the book in that order. Its ``result()`` is the CANCEL order the
         exchange recorded, or the refusal :meth:`submit_cancel` would have
         raised -- or :class:`~fm.exceptions.OrderOutcomeUnknownError` if the
-        socket closed before the answer came.
+        socket closed before the answer came. On a client connected with
+        ``order_route=OrderRoute.REST`` it goes in that window instead, with the
+        limits sent there, in the same order.
 
         *original_id* is the order's ``original``: for the order a
         :meth:`send_limit` or :meth:`submit_limit` answered, its ``id``. Unlike
@@ -1752,6 +1792,11 @@ class Flexemarkets:
             # answered with the one fm-server already recorded.
             "submissionId": str(uuid.uuid4()),
         }
+        if self._order_route is OrderRoute.REST:
+            # As a REST CANCEL has always named its order. The exchange matches
+            # it by the original as given, which is why it must be one.
+            cancel["id"] = original_id
+            cancel["supplier"] = original_id
         return self._order_stream(marketplace_id).submit(cancel)
 
     def active_orders(self, marketplace_id: int) -> "Snapshot[list[Order]]":

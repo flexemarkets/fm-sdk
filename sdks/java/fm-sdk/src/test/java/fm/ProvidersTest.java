@@ -94,6 +94,17 @@ class ProvidersTest {
     }
 
     /**
+     * The order route is the HTTP client's: a provider that claims the
+     * endpoint is handed the plain connect, as it is for capture.
+     */
+    @Test
+    void aProviderIsHandedTheConnectWhateverTheOrderRoute() throws IOException {
+        try (Flexemarkets fm = Flexemarkets.connect("c", LOOPBACK, "d", OrderRoute.REST)) {
+            assertThat(fm.accountName()).isEqualTo(TestLoopbackProvider.DESCRIPTION);
+        }
+    }
+
+    /**
      * The interface is usable as a lambda-free minimal implementation, which is
      * what a host will actually write. Compiling this is the assertion.
      */

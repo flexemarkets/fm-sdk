@@ -25,6 +25,7 @@ import type {
   Marketplace,
   Limit,
   Order,
+  OrderRoute,
   ParticipantState,
   Person,
   Security,
@@ -40,6 +41,7 @@ import type {
 } from "./types.js";
 import { EventListener, NO_SEQ, type EventCallback } from "./stomp.js";
 import { OrderStream, PendingOrder, RECONNECT_MAX_MS } from "./order-stream.js";
+import { RestOrderWindow } from "./rest-orders.js";
 import {
   DefaultDesk,
   DeskHandle,
@@ -881,6 +883,7 @@ export class Flexemarkets {
     baseUrl: string,
     tokenObj: Token,
     clientDescription: string,
+    private readonly _orderRoute: OrderRoute = "SOCKET",
   ) {
     this._endpoint = endpoint;
     this._baseUrl = baseUrl;
@@ -888,13 +891,25 @@ export class Flexemarkets {
     this._clientDescription = clientDescription;
   }
 
-  /** Connect to the Flexemarkets API. */
+  /**
+   * Connect to the Flexemarkets API.
+   *
+   * `options.orderRoute` is how {@link sendLimit} and {@link sendCancel} send
+   * this client's orders, for its whole life: `"SOCKET"`, the default, or
+   * `"REST"`, batches over REST for a caller that cannot hold a socket open
+   * (see {@link OrderRoute}).
+   */
   static async connect(
     credential?: string | null,
     endpoint?: string | null,
     clientDescription?: string | null,
+    options: { orderRoute?: OrderRoute | string } = {},
   ): Promise<Flexemarkets> {
     const desc = clientDescription ?? "Unspecified client";
+    const orderRoute = (options.orderRoute ?? "SOCKET").trim().toUpperCase();
+    if (orderRoute !== "SOCKET" && orderRoute !== "REST") {
+      throw new InvalidArgumentError(`orderRoute is SOCKET or REST, not '${options.orderRoute}'`);
+    }
     const config = loadConfig();
 
     if (credential != null) {
@@ -927,7 +942,7 @@ export class Flexemarkets {
     // Authenticate
     const tokenObj = await signIn(baseUrl, config, desc);
 
-    const fm = new Flexemarkets(ep, baseUrl, tokenObj, desc);
+    const fm = new Flexemarkets(ep, baseUrl, tokenObj, desc, orderRoute);
     if (config[REFRESH_TOKEN_PROPERTY]?.trim()) {
       // The same object, not a copy: each renewal writes the refresh token it
       // was handed back into it, and the next presents that one.
@@ -1662,6 +1677,13 @@ export class Flexemarkets {
    * stays open until {@link close}; at most `MAX_IN_FLIGHT` orders are
    * unanswered at once, and this waits, in turn, while they are. The arguments
    * are {@link submitLimit}'s. See docs/SUBMIT-RATE.md.
+   *
+   * On a client connected with `orderRoute: "REST"` the order goes over REST
+   * instead: one `POST .../orders/batch` is in flight at a time, and the orders
+   * sent while it is out -- at most 64 -- go together as the next, in the order
+   * sent. Its `result()` is then the order or the refusal, or
+   * {@link OrderOutcomeUnknownError} if the request was sent twice without a
+   * readable answer. Needs fm-server 4.19.
    */
   async sendLimit(
     marketplaceId: number,
@@ -1699,27 +1721,38 @@ export class Flexemarkets {
     const answered: PendingOrder[] = [];
     for (let start = 0; start < orders.length; start += MOST_BATCHED) {
       const batch = orders.slice(start, start + MOST_BATCHED);
-      let data: unknown;
-      try {
-        data = await this._post(url, batch);
-      } catch (e) {
-        if (!answerLost(e)) throw e;
-        data = await this._post(url, batch);
-      }
-      if (!Array.isArray(data) || data.length !== batch.length) {
-        throw new ApiError(`Expected ${batch.length} answers to a batch of ${batch.length} orders`);
-      }
+      const outcomes = await this._postBatch(url, batch);
       batch.forEach((order, i) => {
-        const entry = data[i] as JsonObject;
         const pending = new PendingOrder(order.submissionId as string);
-        const status = typeof entry.status === "number" ? entry.status : 0;
-        pending._answer(status >= 200 && status < 300
-          ? parseOrder(entry.order as JsonObject)
-          : refused(status, JSON.stringify(entry.failure ?? null)));
+        pending._answer(outcomes[i]);
         answered.push(pending);
       });
     }
     return answered;
+  }
+
+  /**
+   * One `POST .../orders/batch`, sent once more, whole, if its answer was lost:
+   * each order's placed order, or the error its refusal throws.
+   */
+  private async _postBatch(url: string, batch: JsonObject[]): Promise<Array<Order | FlexemarketsError>> {
+    let data: unknown;
+    try {
+      data = await this._post(url, batch);
+    } catch (e) {
+      if (!answerLost(e)) throw e;
+      data = await this._post(url, batch);
+    }
+    if (!Array.isArray(data) || data.length !== batch.length) {
+      throw new ApiError(`Expected ${batch.length} answers to a batch of ${batch.length} orders`);
+    }
+    return data.map((raw) => {
+      const entry = raw as JsonObject;
+      const status = typeof entry.status === "number" ? entry.status : 0;
+      return status >= 200 && status < 300
+        ? parseOrder(entry.order as JsonObject)
+        : refused(status, JSON.stringify(entry.failure ?? null));
+    });
   }
 
   /** The body of a limit order, named with a fresh submission id. */
@@ -1757,9 +1790,23 @@ export class Flexemarkets {
     return order;
   }
 
-  /** The marketplace's order socket, opened on first use; one open for concurrent first callers. */
-  private _orderStream(marketplaceId: number): Promise<OrderStream> {
+  /**
+   * Where the marketplace's sent orders go, by this client's {@link OrderRoute}:
+   * its order socket, opened on first use (one open for concurrent first
+   * callers), or its REST window.
+   */
+  private _orderStream(marketplaceId: number): Promise<OrderStream | RestOrderWindow> {
     let stream = this._orderStreams.get(marketplaceId);
+    if (stream === undefined && this._orderRoute === "REST") {
+      const url = `${this._marketplace(marketplaceId)}/orders/batch`;
+      stream = Promise.resolve(new RestOrderWindow((batch) => this._postBatch(url, batch as JsonObject[]), {
+        notSent: (message) => new ConnectionFailedError(message),
+        outcomeUnknown: (message, submissionId) => new OrderOutcomeUnknownError(message, submissionId),
+        refusedWhole: (failure) => failure instanceof FlexemarketsError
+          && typeof failure.statusCode === "number" && failure.statusCode >= 400 && failure.statusCode < 500,
+      }));
+      this._orderStreams.set(marketplaceId, stream);
+    }
     if (stream === undefined) {
       stream = OrderStream.open((callback) => this._connectEvents(marketplaceId, callback, false, RECONNECT_MAX_MS),
                                 marketplaceId, {
@@ -1871,6 +1918,12 @@ export class Flexemarkets {
       // with the one fm-server already recorded.
       submissionId: randomUUID(),
     };
+    if (this._orderRoute === "REST") {
+      // As a REST CANCEL has always named its order. The exchange matches it by
+      // the original as given, which is why it must be one.
+      cancel.id = originalId;
+      cancel.supplier = originalId;
+    }
     return (await this._orderStream(marketplaceId)).submit(cancel);
   }
 
@@ -2303,7 +2356,7 @@ export class Flexemarkets {
 
   private readonly _sharedViews = new Map<number, { desk: DefaultDesk; refCount: number }>();
   /** The socket each marketplace's sendLimit orders go out on, opened by the first of them. */
-  private readonly _orderStreams = new Map<number, Promise<OrderStream>>();
+  private readonly _orderStreams = new Map<number, Promise<OrderStream | RestOrderWindow>>();
   private readonly _sharedViewPromises = new Map<number, Promise<DefaultDesk>>();
 
   /**

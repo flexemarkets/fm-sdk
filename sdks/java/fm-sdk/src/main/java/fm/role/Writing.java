@@ -112,6 +112,13 @@ public interface Writing {
      * unanswered at once, and this waits, in turn, while they are. See
      * docs/SUBMIT-RATE.md.
      *
+     * <p>On a client connected with {@link fm.OrderRoute#REST} the order goes
+     * over REST instead: one {@code POST .../orders/batch} is in flight at a
+     * time, and the orders sent while it is out -- at most 64 -- go together as
+     * the next, in the order sent. It then completes with the order or the
+     * refusal, or {@link fm.error.OrderOutcomeUnknownException} if the request
+     * was sent twice without a readable answer. Needs fm-server 4.19.
+     *
      * @param marketplaceId the marketplace to trade in
      * @param marketId      the market within it
      * @param side          which way round the order goes
