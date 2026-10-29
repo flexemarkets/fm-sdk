@@ -18,8 +18,8 @@ subscription sees the new one:
 | TypeScript | the `FmEvent` union gains `MarketCall`: a switch or type guard that must cover every member no longer does | handle `MarketCall`, or let it fall through |
 | Python | nothing: the queue given to `subscribe(marketplace_id, event_queue)` now also receives `MarketCall` | ignore it, or handle it |
 
-What 0.7.0 settled is in [UPGRADING-0.7.md](UPGRADING-0.7.md) and is not
-revisited here.
+Earlier releases are covered by their own upgrade notes, listed in the
+[README](../README.md#upgrade-notes), and are not revisited here.
 
 ---
 

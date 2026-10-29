@@ -22,8 +22,8 @@ study types may need a change:
 | TypeScript | nothing | |
 | Python | nothing | |
 
-What 0.7.0 settled is in [UPGRADING-0.7.md](UPGRADING-0.7.md) and is not
-revisited here.
+Earlier releases are covered by their own upgrade notes, listed in the
+[README](../README.md#upgrade-notes), and are not revisited here.
 
 ---
 

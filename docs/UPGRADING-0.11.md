@@ -21,8 +21,8 @@ fixtures, mostly) may need changes:
 | TypeScript | an object literal typed `Market`: three new required fields, `mechanism: string`, `callIntervalSeconds: number \| null` and `callCarry: boolean` | add `mechanism: "CONTINUOUS"` (or `MARKET_MECHANISM_CONTINUOUS`), `callIntervalSeconds: null`, `callCarry: true` |
 | Python | nothing: `mechanism`, `call_interval_seconds` and `call_carry` default to `"CONTINUOUS"`, `None` and `True`, after every existing field | |
 
-[UPGRADING-0.10.md](UPGRADING-0.10.md) covers what 0.10.0 changed, and this
-note does not repeat it.
+Earlier releases are covered by their own upgrade notes, listed in the
+[README](../README.md#upgrade-notes), and are not revisited here.
 
 ---
 

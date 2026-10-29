@@ -17,8 +17,8 @@ does not see. Code that **implements** the SDK's types needs nothing either:
 | TypeScript | nothing: the paged reads are methods of the `Flexemarkets` class, which a fake extends | |
 | Python | nothing | |
 
-What 0.13.0 changed is in [UPGRADING-0.13.md](UPGRADING-0.13.md) and is not
-revisited here.
+Earlier releases are covered by their own upgrade notes, listed in the
+[README](../README.md#upgrade-notes), and are not revisited here.
 
 ---
 

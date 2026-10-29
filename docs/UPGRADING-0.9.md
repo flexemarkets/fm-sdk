@@ -26,8 +26,8 @@ study's tests -- may need one change:
 | TypeScript | nothing: there is no study contract in TypeScript | |
 | Python | nothing: there is no study contract in Python | |
 
-What 0.8.0 changed is in [UPGRADING-0.8.md](UPGRADING-0.8.md) and is not
-revisited here.
+Earlier releases are covered by their own upgrade notes, listed in the
+[README](../README.md#upgrade-notes), and are not revisited here.
 
 ---
 

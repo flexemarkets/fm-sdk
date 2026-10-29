@@ -8,8 +8,8 @@ account, and fm-spi's `CliBuilder` given a value outside a robot's bounds.
 If neither applies to you, changing the version and rebuilding is the
 whole upgrade.
 
-What 0.5.0 settled is in [UPGRADING-0.5.md](UPGRADING-0.5.md) and is not
-revisited here.
+Earlier releases are covered by their own upgrade notes, listed in the
+[README](../README.md#upgrade-notes), and are not revisited here.
 
 ---
 

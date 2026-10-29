@@ -8,8 +8,8 @@ same arguments. What changes is where each call goes, and that changes what a
 few of them answer. Those are listed under *What answers differently*; if none
 applies to you, changing the version and rebuilding is the whole upgrade.
 
-What 0.3.0 settled is in [UPGRADING-0.3.md](UPGRADING-0.3.md) and is not
-revisited here.
+Earlier releases are covered by their own upgrade notes, listed in the
+[README](../README.md#upgrade-notes), and are not revisited here.
 
 ---
 

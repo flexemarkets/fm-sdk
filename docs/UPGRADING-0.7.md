@@ -17,8 +17,8 @@ test fixtures, mostly -- may need one more argument:
 | TypeScript | an object literal typed `Order`: the interface gains a required `ownerTargetId: number \| null` | add `ownerTargetId: null` |
 | Python | only a positional `created_date` / `last_modified_date`: the new field, defaulting to `None`, sits before them | pass those two by keyword |
 
-What 0.6.0 settled is in [UPGRADING-0.6.md](UPGRADING-0.6.md) and is not
-revisited here.
+Earlier releases are covered by their own upgrade notes, listed in the
+[README](../README.md#upgrade-notes), and are not revisited here.
 
 ---
 

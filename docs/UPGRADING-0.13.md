@@ -25,8 +25,8 @@ A jar that shades an fm-sdk 0.12.x or older (a robot built as a fat jar)
 must not share a classpath with 0.13.0: whichever `HttpException` loads
 first, the other's callers break. Rebuild it against 0.13.0.
 
-What 0.7.0 settled is in [UPGRADING-0.7.md](UPGRADING-0.7.md) and is not
-revisited here.
+Earlier releases are covered by their own upgrade notes, listed in the
+[README](../README.md#upgrade-notes), and are not revisited here.
 
 ---
 

@@ -9,8 +9,8 @@ client offers. If you read books and tapes through a Desk, as every example
 in this repository does, nothing you call is gone. The rest is additions and
 fixes, listed so a changed behaviour is not a surprise.
 
-What 0.4.0 settled is in [UPGRADING-0.4.md](UPGRADING-0.4.md) and is not
-revisited here.
+Earlier releases are covered by their own upgrade notes, listed in the
+[README](../README.md#upgrade-notes), and are not revisited here.
 
 ---
 

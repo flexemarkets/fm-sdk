@@ -23,8 +23,8 @@ A Java `StudyProvider` needs nothing either. The new methods are defaults,
 and a study that plans every period at setup runs as it did. See
 [If you implement a study](#if-you-implement-a-study).
 
-What 0.7.0 settled is in [UPGRADING-0.7.md](UPGRADING-0.7.md) and is not
-revisited here.
+Earlier releases are covered by their own upgrade notes, listed in the
+[README](../README.md#upgrade-notes), and are not revisited here.
 
 ---
 

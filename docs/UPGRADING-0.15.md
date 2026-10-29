@@ -21,8 +21,8 @@ needs more: `currentSessionsPage` pages only on fm-server 4.17.3 and later.
 Before that the server ignores `limit` and `before`, so the first page holds
 every current session and has no next.
 
-What 0.14.0 changed is in [UPGRADING-0.14.md](UPGRADING-0.14.md) and is not
-revisited here.
+Earlier releases are covered by their own upgrade notes, listed in the
+[README](../README.md#upgrade-notes), and are not revisited here.
 
 ---
 

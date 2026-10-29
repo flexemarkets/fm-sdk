@@ -11,8 +11,8 @@ guarantee below 1.0, the README says outright that anything may be added,
 renamed or removed in any release, and 0.2.0 did exactly that — 42 Java types
 moved packages and a dozen were renamed. 0.3.0 simply did not need to.
 
-What 0.2.0 settled is in [UPGRADING-0.2.md](UPGRADING-0.2.md) and is not
-revisited here.
+Earlier releases are covered by their own upgrade notes, listed in the
+[README](../README.md#upgrade-notes), and are not revisited here.
 
 ---
 

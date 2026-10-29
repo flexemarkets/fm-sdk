@@ -24,8 +24,8 @@ decide whether to send the order again. Code that sends orders only with
 
 It needs the same server as 0.15.0: fm-server 4.17.
 
-What 0.15.0 changed is in [UPGRADING-0.15.md](UPGRADING-0.15.md) and is not
-revisited here.
+Earlier releases are covered by their own upgrade notes, listed in the
+[README](../README.md#upgrade-notes), and are not revisited here.
 
 ---
 
