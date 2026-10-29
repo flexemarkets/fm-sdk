@@ -566,7 +566,7 @@ export function parseConnection(data: JsonObject): ClientConnection {
  *
  * Only the array is read because the V1 route never sent anything else:
  * `GET /api/v1/marketplaces/{id}/orders` has always answered a bare array, and
- * 0.4 requires fm-server 4.6.2. The HAL envelopes earlier SDKs tolerated
+ * 0.4 requires fm-server 4.6.3. The HAL envelopes earlier SDKs tolerated
  * belonged to the routes 0.4 no longer calls.
  *
  * Anything else throws rather than reading as empty. An empty snapshot is the
