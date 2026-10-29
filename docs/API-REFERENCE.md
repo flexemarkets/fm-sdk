@@ -669,6 +669,55 @@ Manager actions are sent, not subscribed:
 | `/app/marketplaces/{id}/close` | close the session |
 | `/app/marketplaces/{id}/sessions/current` | request a fresh `SESSION-LIST` |
 
+### Orders over the socket
+
+A limit or a cancel can go on the socket instead of REST:
+`SEND /app/marketplaces/{id}/orders`, with the body `POST orders` takes and a
+`submissionId` of your choosing. fm-server takes one socket's orders in the
+order sent, so a client may send the next before the last is answered.
+
+```json
+{"marketplaceId": 2540, "marketId": 8801, "type": "LIMIT", "side": "BUY",
+ "units": 1, "price": 950, "submissionId": "3f0c…"}
+{"marketplaceId": 2540, "marketId": 8801, "type": "CANCEL", "original": 771002,
+ "submissionId": "9a41…"}
+```
+
+A cancel names the order by its `original`, as the exchange matches it --
+not, as `DELETE orders/{orderId}` does, by any order of its lineage. For an
+order as it was answered, `original` is its `id`; the `id` of a split's
+remainder matches nothing, and the CANCEL is recorded, consumed by itself.
+
+Each order is answered on `/user/queue/marketplaces/{id}`, matched to it by
+`submissionId`:
+
+| Outcome | Answer |
+|---|---|
+| placed | the `ORDERS-UPDATE` fan-out, whose rows include the order with its `submissionId`. For a cancel, the CANCEL row carries the cancel's `submissionId`; the LIMIT it consumed carries its own |
+| refused | `ORDER-REJECTED`, with a `submission-id` header and the body REST would have answered |
+| sent again, already placed | `ORDER-ACCEPTED`, with a `submission-id` header and the order the first made |
+
+An order sent again after a reconnect under the same `submissionId` makes
+nothing new; the server answers with the order it already made.
+
+The SDKs send this way with `sendLimit` and `sendCancel` (`send_limit`,
+`send_cancel` in Python), the socket counterparts of `submitLimit` and
+`submitCancel`, with the same arguments. Each returns a `PendingOrder` at
+once, which completes with what the REST call returns, or fails with what it
+throws. Both go on one socket per marketplace, opened by the first and closed
+with the client, in the order sent:
+
+- at most 64 are unanswered at once; the next waits for an answer;
+- one the socket could not send waits up to 5 s for it to come back, then
+  fails with `ConnectionFailed` and no status, as not sent;
+- every one sent and still unanswered is sent again, in order, when the
+  socket comes back;
+- one sent and unanswered when the client closes fails with
+  `OrderOutcomeUnknown`: it may have been placed.
+
+A cancel needs the order's id, so an order cannot be cancelled until it is
+answered. See [`SUBMIT-RATE.md`](SUBMIT-RATE.md) for the rates this reaches.
+
 ### Message types
 
 Every frame carries a `message-type` header naming the payload:
@@ -685,6 +734,8 @@ Every frame carries a `message-type` header naming the payload:
 | `WIDGETS-UPDATE` | pushed widgets: a snapshot of what the recipient may see in the subscribe burst, then upserts and removals (topic for the marketplace's, user queue for their own) |
 | `CALL-UPDATE` | a call of a call-auction market, as `GET calls` answers each (topic); its trades come as an `ORDERS-UPDATE`. The stream delivers it as a `MarketCall` |
 | `CALL-INDICATIVE` | what an `INDICATIVE` call market's book would clear at now, as `GET markets/{marketId}/indicative` answers it (topic), sent only when it changed. The stream delivers it as a `CallIndicative`; keep the highest `seq` per session |
+| `ORDER-REJECTED` | an order sent on the socket and refused: REST's failure body, with a `submission-id` header (user queue) |
+| `ORDER-ACCEPTED` | an order sent on the socket again, already placed: the order, with a `submission-id` header (user queue) |
 | `ERROR` | `{"error": "…"}`, e.g. the marketplace isn't available |
 
 Additional headers on every frame: `system-current-time-millis`,

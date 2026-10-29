@@ -877,6 +877,20 @@ public class HttpFlexemarkets implements Flexemarkets {
                                                   MAPPER.writeValueAsString(order));
     }
 
+    @Override
+    public fm.PendingOrder sendCancel(long marketplaceId, long marketId, long originalId) {
+        var cancel = new LinkedHashMap<String, Object>();
+        cancel.put("marketplaceId", marketplaceId);
+        cancel.put("marketId",      marketId);
+        cancel.put("type",          OrderType.CANCEL);
+        cancel.put("original",      originalId);
+        // Named, as a limit is: a cancel sent again after a reconnect is
+        // answered with the one fm-server already recorded.
+        var submissionId = UUID.randomUUID().toString();
+        cancel.put("submissionId", submissionId);
+        return _orderStream(marketplaceId).submit(submissionId, MAPPER.writeValueAsString(cancel));
+    }
+
     /** The marketplace's order socket, opened on first use. */
     OrderStream _orderStream(long marketplaceId) {
         synchronized (_orderStreams) {

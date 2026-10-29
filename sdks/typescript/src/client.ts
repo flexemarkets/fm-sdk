@@ -1784,6 +1784,42 @@ export class Flexemarkets {
   }
 
   /**
+   * Cancel what remains of `originalId` without waiting for the answer.
+   *
+   * {@link submitCancel} over the marketplace's socket, as {@link sendLimit} is
+   * {@link submitLimit}: the cancel goes on the same socket as the limits sent
+   * there, through the same window, and fm-server takes them in the order sent
+   * -- a cancel and the limit sent after it reach the book in that order. Its
+   * `result()` is the CANCEL order the exchange recorded, or the refusal
+   * {@link submitCancel} would have thrown -- or {@link OrderOutcomeUnknownError}
+   * if the socket closed before the answer came.
+   *
+   * `originalId` is the order's `original`: for the order a {@link sendLimit} or
+   * {@link submitLimit} answered, its `id`. Unlike {@link submitCancel}'s DELETE,
+   * which looks the order up, the socket's CANCEL goes to the exchange as named,
+   * and the id of a fragment a split left behind matches nothing -- the CANCEL is
+   * recorded, consumed by itself, and nothing is cancelled. An order not yet
+   * answered has no id and cannot be cancelled this way. `marketId` goes on the
+   * wire: the socket's CANCEL names its market.
+   */
+  async sendCancel(
+    marketplaceId: number,
+    marketId: number,
+    originalId: number,
+  ): Promise<PendingOrder> {
+    const cancel: JsonObject = {
+      marketplaceId,
+      marketId,
+      type: "CANCEL",
+      original: originalId,
+      // Named, as a limit is: a cancel sent again after a reconnect is answered
+      // with the one fm-server already recorded.
+      submissionId: randomUUID(),
+    };
+    return (await this._orderStream(marketplaceId)).submit(cancel);
+  }
+
+  /**
    * The active-orders snapshot: every resting limit order on the
    * marketplace's current session, plus the `x-fm-as-of-seq` sequence
    * the snapshot was read at. Used by `Desk` seeding

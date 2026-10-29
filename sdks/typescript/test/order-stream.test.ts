@@ -409,3 +409,105 @@ test("the status a refusal names chooses the error, as on REST", async () => {
       e instanceof AuthorizationError && e.message === "Not permitted: Observers cannot trade.");
   } finally { await done(); }
 });
+
+/** A client whose order socket is a stub: the whole of each order it sends, and the callback its answers go to. */
+async function stubbedClient() {
+  const TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl";
+  const rest = http.createServer((_req, res) => {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ token: TOKEN, person: { id: 7, accountId: 1 }, account: { id: 1, name: "dev" } }));
+  });
+  await new Promise<void>((resolve) => rest.listen(0, "127.0.0.1", () => resolve()));
+  const fm = await Flexemarkets.connect(TOKEN, `http://127.0.0.1:${(rest.address() as AddressInfo).port}/api/marketplaces/1`,
+                                        "order-stream-test");
+  const bodies: Record<string, unknown>[] = [];
+  const listener = new Stub();
+  const send = listener.send.bind(listener);
+  listener.send = (destination: string, body: string) => {
+    send(destination, body);
+    bodies.push(JSON.parse(body));
+  };
+  fm._connectEvents = async (_marketplaceId: number, callback: EventCallback) => {
+    listener.callback = callback;
+    return listener as never;
+  };
+  /** The marketplace's order stream, opened on first use as an order would open it. */
+  const stream = async () =>
+    (fm as unknown as { _orderStream(mp: number): Promise<OrderStream> })._orderStream(MP);
+  return { fm, listener, bodies, stream, done: () => { fm.close(); rest.close(); } };
+}
+
+test("sendCancel names the original and is answered by its cancel row", async () => {
+  const { fm, listener, bodies, done } = await stubbedClient();
+  try {
+    const pending = await fm.sendCancel(MP, 11, 101);
+    assert.ok(pending instanceof PendingOrder);
+    assert.deepEqual(bodies, [{ marketplaceId: MP, marketId: 11, type: "CANCEL", original: 101,
+                                submissionId: pending.submissionId }]);
+
+    // fm-server's answer to an accepted cancel: the limit it consumed, which
+    // carries the limit's own submission id, and the CANCEL row with this one's.
+    listener.callback({ kind: "orders-update", seq: 1, orders: [
+      parseOrder({ ...row("the-limit", 101), consumer: 102 } as never),
+      parseOrder({ id: 102, original: 101, supplier: 102, consumer: null, type: "CANCEL", side: null,
+                   units: 1, price: 900, submissionId: pending.submissionId } as never),
+    ] });
+    const cancel = await pending.result();
+    assert.deepEqual([cancel.id, cancel.original, cancel.type], [102, 101, "CANCEL"]);
+  } finally { done(); }
+});
+
+test("a refused sendCancel rejects with what REST throws", async () => {
+  const { fm, listener, done } = await stubbedClient();
+  try {
+    const pending = await fm.sendCancel(MP, 11, 101);
+    listener.callback({ kind: "order-rejected", submissionId: pending.submissionId,
+                        error: new InvalidArgumentError("Order 101 is not in the marketplace") });
+    await assert.rejects(pending.result(), (e: Error) =>
+      e instanceof InvalidArgumentError && /not in the marketplace/.test(e.message));
+  } finally { done(); }
+});
+
+test("a sendCancel is sent again after a reconnect, and its replay answers it", async () => {
+  const { fm, listener, bodies, done } = await stubbedClient();
+  try {
+    const pending = await fm.sendCancel(MP, 11, 101);
+    listener.callback({ kind: "stream-dropped", exception: new Error("gone") });
+    listener.callback({ kind: "reconnected", marketplaceId: MP });
+    assert.deepEqual(listener.sent, [pending.submissionId, pending.submissionId]);
+    assert.deepEqual(bodies[0], bodies[1]);
+
+    listener.callback({ kind: "order-accepted", submissionId: pending.submissionId,
+                        order: parseOrder({ id: 102, original: 101, type: "CANCEL" } as never) });
+    assert.equal((await pending.result()).id, 102);
+  } finally { done(); }
+});
+
+test("a sendCancel the socket could not send is refused after the hold", async () => {
+  const { fm, listener, bodies, stream, done } = await stubbedClient();
+  try {
+    (await stream() as unknown as { _holdMs: number })._holdMs = 50;
+    listener.callback({ kind: "stream-dropped", exception: new Error("gone") });
+    const pending = await fm.sendCancel(MP, 11, 101);
+    await assert.rejects(pending.result(), (e: Error) =>
+      e instanceof ConnectionFailedError && /was not sent: the order socket was down/.test(e.message)
+      && (e as ConnectionFailedError).statusCode === null);
+    assert.deepEqual(bodies, []);
+  } finally { done(); }
+});
+
+test("limits and cancels go in the order sent, and are sent again in it", async () => {
+  const { fm, listener, bodies, done } = await stubbedClient();
+  try {
+    const first = await fm.sendLimit(MP, 11, "SELL", 1, 900);
+    const cancel = await fm.sendCancel(MP, 11, 101);
+    const second = await fm.sendLimit(MP, 11, "SELL", 1, 905);
+    const sent = [first.submissionId, cancel.submissionId, second.submissionId];
+    assert.deepEqual(listener.sent, sent);
+    assert.deepEqual(bodies.map((b) => b.type), ["LIMIT", "CANCEL", "LIMIT"]);
+
+    listener.callback({ kind: "stream-dropped", exception: new Error("gone") });
+    listener.callback({ kind: "reconnected", marketplaceId: MP });
+    assert.deepEqual(listener.sent, [...sent, ...sent]);
+  } finally { done(); }
+});

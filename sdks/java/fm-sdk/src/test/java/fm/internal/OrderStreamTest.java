@@ -34,6 +34,7 @@ import fm.event.StreamDropped;
 import fm.event.StreamReconnected;
 import fm.model.Order;
 import fm.model.OrderSide;
+import fm.model.OrderType;
 
 /**
  * Orders over the socket, several in flight (fm-sdk#7).
@@ -448,5 +449,144 @@ class OrderStreamTest {
         assertThat(cause(first)).isInstanceOf(OrderOutcomeUnknownException.class);
         assertThatThrownBy(() -> fm.sendLimit(MP, 11, OrderSide.SELL, 1, 900))
                 .isInstanceOf(ConnectionFailedException.class).hasMessageContaining("closed");
+    }
+
+    // --- sendCancel ---
+
+    /** Stub that keeps the whole of each order it sends. */
+    private static final class Bodies implements OrderStream.Listener {
+        final Stub stub = new Stub();
+        final List<String> bodies = new CopyOnWriteArrayList<>();
+
+        @Override
+        public void send(String destination, String body) {
+            stub.send(destination, body);
+            bodies.add(body);
+        }
+
+        @Override
+        public void close() {
+            stub.close();
+        }
+
+        @Override
+        public boolean isClosed() {
+            return stub.isClosed();
+        }
+
+        List<String> types() {
+            return bodies.stream().map(b -> HttpFlexemarkets.MAPPER.readTree(b).get("type").asString()).toList();
+        }
+    }
+
+    /** A client whose order socket is a stub, held for {@code holdMs} while down. */
+    private HttpFlexemarkets stubbedClient(Bodies listener, long holdMs) throws IOException {
+        var fm = new HttpFlexemarkets(HttpFlexemarkets.loadProperties(
+                "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl",
+                server.url().replace("ws://", "http://").replace("/api/v1/events", "/api/marketplaces/7"),
+                "order-stream-test")) {
+            private OrderStream stream;
+
+            @Override
+            synchronized OrderStream _orderStream(long marketplaceId) {
+                if (null == stream) {
+                    stream = new OrderStream(queue -> listener, marketplaceId, OrderStream.MAX_IN_FLIGHT, holdMs);
+                    opened.add(stream::close);
+                }
+                return stream;
+            }
+        };
+        opened.add(fm::close);
+        return fm;
+    }
+
+    @Test
+    @Timeout(20)
+    void sendCancelNamesTheOriginalAndIsAnsweredByItsCancelRow() throws Exception {
+        var listener = new Bodies();
+        var fm = stubbedClient(listener, OrderStream.HOLD_MS);
+        var pending = fm.sendCancel(MP, 11, 101);
+        assertThat(HttpFlexemarkets.MAPPER.readTree(listener.bodies.get(0))).isEqualTo(HttpFlexemarkets.MAPPER.readTree(
+                "{\"marketplaceId\":7,\"marketId\":11,\"type\":\"CANCEL\",\"original\":101,"
+                + "\"submissionId\":\"" + pending.submissionId() + "\"}"));
+
+        // fm-server's answer to an accepted cancel: the limit it consumed, which
+        // carries the limit's own submission id, and the CANCEL row with this one's.
+        var limit = HttpFlexemarkets.MAPPER.readValue(row("the-limit", 101).replace("\"mine\"", "\"consumer\":102,\"mine\""),
+                                                      Order.class);
+        var cancelRow = HttpFlexemarkets.MAPPER.readValue("{\"id\":102,\"original\":101,\"supplier\":102,"
+                + "\"consumer\":null,\"type\":\"CANCEL\",\"side\":null,\"units\":1,\"price\":900,"
+                + "\"submissionId\":\"" + pending.submissionId() + "\"}", Order.class);
+        fm._orderStream(MP).events().offer(new OrdersUpdate(new Order[] {limit, cancelRow}, 1));
+        var cancel = pending.get(5, TimeUnit.SECONDS);
+        assertThat(cancel.id()).isEqualTo(102);
+        assertThat(cancel.original()).isEqualTo(101);
+        assertThat(cancel.type()).isEqualTo(OrderType.CANCEL);
+    }
+
+    @Test
+    @Timeout(20)
+    void aRefusedSendCancelFailsWithWhatRestThrows() throws Exception {
+        var fm = stubbedClient(new Bodies(), OrderStream.HOLD_MS);
+        var pending = fm.sendCancel(MP, 11, 101);
+        fm._orderStream(MP).events().offer(new OrderRejected(pending.submissionId(),
+                new InvalidArgumentException("Order 101 is not in the marketplace")));
+        assertThat(cause(pending)).isInstanceOf(InvalidArgumentException.class)
+                .hasMessageContaining("not in the marketplace");
+    }
+
+    @Test
+    @Timeout(20)
+    void aSendCancelIsSentAgainAfterAReconnectAndItsReplayAnswersIt() throws Exception {
+        var listener = new Bodies();
+        var fm = stubbedClient(listener, OrderStream.HOLD_MS);
+        var pending = fm.sendCancel(MP, 11, 101);
+        var stream = fm._orderStream(MP);
+        stream.events().offer(new StreamDropped(new IOException("gone")));
+        stream.events().offer(new StreamReconnected(MP));
+        settle(stream);
+        assertThat(listener.stub.sent).containsExactly(pending.submissionId(), pending.submissionId());
+        assertThat(listener.bodies.get(1)).isEqualTo(listener.bodies.get(0));
+
+        var replayed = HttpFlexemarkets.MAPPER.readValue(
+                "{\"id\":102,\"original\":101,\"supplier\":102,\"type\":\"CANCEL\"}", Order.class);
+        stream.events().offer(new OrderAccepted(pending.submissionId(), replayed));
+        assertThat(pending.get(5, TimeUnit.SECONDS).id()).isEqualTo(102);
+    }
+
+    @Test
+    @Timeout(20)
+    void aSendCancelTheSocketCouldNotSendIsRefusedAfterTheHold() throws Exception {
+        var listener = new Bodies();
+        var fm = stubbedClient(listener, 50);
+        var stream = fm._orderStream(MP);
+        stream.events().offer(new StreamDropped(new IOException("gone")));
+        settle(stream);
+        var pending = fm.sendCancel(MP, 11, 101);
+        assertThat(cause(pending)).isInstanceOf(ConnectionFailedException.class)
+                .hasMessageContaining("was not sent: the order socket was down");
+        assertThat(((ConnectionFailedException) cause(pending)).statusCode()).isNull();
+        assertThat(listener.bodies).isEmpty();
+    }
+
+    @Test
+    @Timeout(20)
+    void limitsAndCancelsGoInTheOrderSentAndAreSentAgainInIt() throws Exception {
+        var listener = new Bodies();
+        var fm = stubbedClient(listener, OrderStream.HOLD_MS);
+        var first = fm.sendLimit(MP, 11, OrderSide.SELL, 1, 900);
+        var cancel = fm.sendCancel(MP, 11, 101);
+        var second = fm.sendLimit(MP, 11, OrderSide.SELL, 1, 905);
+        var order = List.of(first.submissionId(), cancel.submissionId(), second.submissionId());
+        assertThat(listener.stub.sent).containsExactlyElementsOf(order);
+        assertThat(listener.types()).containsExactly("LIMIT", "CANCEL", "LIMIT");
+
+        var stream = fm._orderStream(MP);
+        stream.events().offer(new StreamDropped(new IOException("gone")));
+        stream.events().offer(new StreamReconnected(MP));
+        settle(stream);
+        var twice = new ArrayList<>(order);
+        twice.addAll(order);
+        assertThat(listener.stub.sent).containsExactlyElementsOf(twice);
     }
 }

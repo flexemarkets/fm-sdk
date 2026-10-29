@@ -1670,6 +1670,40 @@ class Flexemarkets:
         url = _marketplace(self._endpoint, marketplace_id) + f"/orders/{original_id}"
         return _parse_order(_json(self._delete(url)))
 
+    def send_cancel(
+        self, marketplace_id: int, market_id: int, original_id: int,
+    ) -> "PendingOrder":
+        """Cancel what remains of *original_id* without waiting for the answer.
+
+        :meth:`submit_cancel` over the marketplace's socket, as
+        :meth:`send_limit` is :meth:`submit_limit`: the cancel goes on the same
+        socket as the limits sent there, through the same window, and fm-server
+        takes them in the order sent -- a cancel and the limit sent after it
+        reach the book in that order. Its ``result()`` is the CANCEL order the
+        exchange recorded, or the refusal :meth:`submit_cancel` would have
+        raised -- or :class:`~fm.exceptions.OrderOutcomeUnknownError` if the
+        socket closed before the answer came.
+
+        *original_id* is the order's ``original``: for the order a
+        :meth:`send_limit` or :meth:`submit_limit` answered, its ``id``. Unlike
+        :meth:`submit_cancel`'s DELETE, which looks the order up, the socket's
+        CANCEL goes to the exchange as named, and the id of a fragment a split
+        left behind matches nothing -- the CANCEL is recorded, consumed by
+        itself, and nothing is cancelled. An order not yet answered has no id
+        and cannot be cancelled this way. *market_id* goes on the wire: the
+        socket's CANCEL names its market.
+        """
+        cancel: dict[str, Any] = {
+            "marketplaceId": marketplace_id,
+            "marketId": market_id,
+            "type": OrderType.CANCEL,
+            "original": original_id,
+            # Named, as a limit is: a cancel sent again after a reconnect is
+            # answered with the one fm-server already recorded.
+            "submissionId": str(uuid.uuid4()),
+        }
+        return self._order_stream(marketplace_id).submit(cancel)
+
     def active_orders(self, marketplace_id: int) -> "Snapshot[list[Order]]":
         """The active-orders snapshot: every resting limit order on the
         marketplace's current session, plus the ``x-fm-as-of-seq``
