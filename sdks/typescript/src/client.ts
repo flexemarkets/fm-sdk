@@ -1380,7 +1380,6 @@ export class Flexemarkets {
    * delivered to the person they belong to.
    */
   async managerOtpBundle(userIds: number[]): Promise<ManagerOtpBundle> {
-    // Unversioned: fm-server has no V1 route for passcodes.
     const url = this._v1("/otp/manager");
     const data = await this._post(url, { userIds });
     return {
