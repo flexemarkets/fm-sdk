@@ -890,6 +890,12 @@ export class Flexemarkets {
     const config = loadConfig();
 
     if (credential != null) {
+      // A credential the caller names replaces the one ~/.fm/credential holds,
+      // whole: a refresh token left over from it would be the one the client
+      // signs in with, and every client on the machine would present it (#8).
+      for (const key of ["account", "email", "password", "token", REFRESH_TOKEN_PROPERTY]) {
+        delete config[key];
+      }
       if (credential.startsWith(REFRESH_TOKEN_PREFIX) && credential.slice(REFRESH_TOKEN_PREFIX.length).trim()) {
         config[REFRESH_TOKEN_PROPERTY] = credential.slice(REFRESH_TOKEN_PREFIX.length);
       } else if (existsSync(credential)) {

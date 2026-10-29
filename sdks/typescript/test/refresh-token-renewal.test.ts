@@ -13,8 +13,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 
@@ -98,6 +98,32 @@ test("a credential file carries the refresh token too", async () => {
       await fm.close();
     }
     assert.deepEqual(state.renewals, ["rt-2"]);
+  });
+});
+
+function defaultCredential(text: string) {
+  const dir = join(homedir(), ".fm");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "credential"), text);
+}
+
+// The default file's refresh token outlived a credential passed in, and every
+// client on the machine signed in with it (#8).
+test("a credential file passed replaces the default credential whole", async () => {
+  await withServer(async (base, state) => {
+    defaultCredential("refresh-token=rt-1\n");
+    const file = join(mkdtempSync(join(tmpdir(), "fm-refresh-")), "credential");
+    writeFileSync(file, `token=${OLD}\n`);
+    await assert.rejects(Flexemarkets.connect(file, `${base}/marketplaces/1`, "refresh-test"));
+    assert.deepEqual(state.renewals, [], "the default file's refresh token was presented");
+  });
+});
+
+test("a token passed does not sign in with the default credential's refresh token", async () => {
+  await withServer(async (base, state) => {
+    defaultCredential("refresh-token=rt-1\n");
+    await assert.rejects(Flexemarkets.connect(OLD, `${base}/marketplaces/1`, "refresh-test"));
+    assert.deepEqual(state.renewals, [], "the default file's refresh token was presented");
   });
 });
 
