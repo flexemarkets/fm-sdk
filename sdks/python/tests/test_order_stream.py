@@ -316,3 +316,109 @@ class TestFromTheClient:
         with pytest.raises(OrderOutcomeUnknownError):
             first.result(5)
         assert fm._order_streams == {}
+
+
+class _Bodies(_Listener):
+    """A stub listener that keeps the whole of each order it sends."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.bodies: list[dict[str, Any]] = []
+
+    def send(self, destination: str, body: str) -> None:
+        super().send(destination, body)
+        self.bodies.append(json.loads(body))
+
+
+@pytest.fixture
+def client(monkeypatch):
+    """A client whose order socket is a stub: what it sends, and the queue its answers go on."""
+    from test_submission_id import TOKEN, Handler
+    from http.server import HTTPServer
+
+    http = HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=http.serve_forever, daemon=True).start()
+    fm = Flexemarkets.connect(TOKEN, f"http://127.0.0.1:{http.server_address[1]}/api/marketplaces/1",
+                              "order-stream-test")
+    listener = _Bodies()
+
+    def connect(marketplace_id: int, events: "queue.Queue[object]", history: bool = False,
+                reconnect_max_seconds: float | None = None) -> _Bodies:
+        return listener
+
+    monkeypatch.setattr(fm, "_connect_events", connect)
+    try:
+        yield fm, listener
+    finally:
+        fm.close()
+        http.shutdown()
+
+
+class TestSendCancel:
+    """send_cancel: submit_cancel over the socket, through the machinery send_limit uses."""
+
+    def test_a_cancel_names_the_original_and_is_answered_by_its_cancel_row(self, client):
+        fm, listener = client
+        pending = fm.send_cancel(MP, 11, 101)
+        assert isinstance(pending, PendingOrder)
+        assert listener.bodies == [{"marketplaceId": MP, "marketId": 11, "type": "CANCEL", "original": 101,
+                                    "submissionId": pending.submission_id}]
+
+        # fm-server's answer to an accepted cancel: the limit it consumed, which
+        # carries the limit's own submission id, and the CANCEL row with this one's.
+        stream = fm._order_streams[MP]
+        stream._events.put(OrdersUpdate(orders=[
+            Order(id=101, original=101, consumer=102, type="LIMIT", submission_id="the-limit"),
+            Order(id=102, original=101, consumer=None, type="CANCEL", submission_id=pending.submission_id),
+        ], seq=1))
+        cancel = pending.result(5)
+        assert (cancel.id, cancel.original, cancel.type) == (102, 101, "CANCEL")
+
+    def test_a_refused_cancel_raises_what_rest_raises(self, client):
+        fm, _ = client
+        pending = fm.send_cancel(MP, 11, 101)
+        fm._order_streams[MP]._events.put(OrderRejected(
+            submission_id=pending.submission_id, error=InvalidArgumentError("Order 101 is not in the marketplace")))
+        with pytest.raises(InvalidArgumentError, match="not in the marketplace"):
+            pending.result(5)
+
+    def test_a_cancel_is_sent_again_after_a_reconnect_and_its_replay_answers_it(self, client):
+        fm, listener = client
+        pending = fm.send_cancel(MP, 11, 101)
+        stream = fm._order_streams[MP]
+        stream._events.put(StreamDropped(exception=OSError("gone")))
+        stream._events.put(StreamReconnected(marketplace_id=MP))
+        _settle(stream)
+        assert listener.sent == [pending.submission_id, pending.submission_id]
+        assert listener.bodies[0] == listener.bodies[1]
+
+        stream._events.put(OrderAccepted(submission_id=pending.submission_id,
+                                         order=Order(id=102, original=101, type="CANCEL")))
+        assert pending.result(5).id == 102
+
+    def test_a_cancel_the_socket_could_not_send_is_refused_after_the_hold(self, client):
+        fm, listener = client
+        stream = fm._order_stream(MP)
+        stream._hold_seconds = 0.1
+        stream._events.put(StreamDropped(exception=OSError("gone")))
+        _settle(stream)
+        pending = fm.send_cancel(MP, 11, 101)
+        with pytest.raises(ConnectionFailedError, match="was not sent: the order socket was down") as refused:
+            pending.result(5)
+        assert refused.value.status_code is None
+        assert listener.bodies == []
+
+    def test_limits_and_cancels_go_in_the_order_sent_and_are_resent_in_it(self, client):
+        fm, listener = client
+        first = fm.send_limit(MP, 11, "SELL", 1, 900)
+        cancel = fm.send_cancel(MP, 11, 101)
+        second = fm.send_limit(MP, 11, "SELL", 1, 905)
+        order = [first.submission_id, cancel.submission_id, second.submission_id]
+        assert listener.sent == order
+        assert [b["type"] for b in listener.bodies] == ["LIMIT", "CANCEL", "LIMIT"]
+
+        stream = fm._order_streams[MP]
+        stream._events.put(StreamDropped(exception=OSError("gone")))
+        stream._events.put(StreamReconnected(marketplace_id=MP))
+        _settle(stream)
+        assert listener.sent == order + order
