@@ -39,15 +39,18 @@ a client given an access token stopped when that token expired, because it
 held no password to sign in again with.
 
 fm-server accepts each refresh token once. Each renewal returns the next
-one, and the SDK presents that one at the next renewal. If a refresh token is
-presented twice, fm-server ends every token renewed from it. The SDK keeps
-the newest refresh token in memory only and never writes it back to the
-credential file. So:
+one, and the SDK presents that one at the next renewal. Signing in is itself
+a renewal, so a client uses up the refresh token it was given as it connects.
+If a refresh token is presented twice, fm-server ends the whole family: every
+refresh token renewed from the same sign-in, the newest one included.
+Access tokens already issued work until they expire. The SDK keeps the newest
+refresh token in memory only, never writes it back to the credential file, and
+has no way to hand it to you. So:
 
 - give each client its own refresh token, and never share one between two
   processes;
-- do not start a second client from the same `refresh:` credential or file
-  once the first has renewed.
+- never start a client -- a second one, or the same one restarted -- from a
+  `refresh:` credential or file that has already been used.
 
 The SDK's own password sign-in does not ask for a refresh token. Your client
 gets one from fm-server. A robot that fm-server 4.13 or later launches is
@@ -58,8 +61,9 @@ change is built for.
 TypeScript the new fields are `lastSignedIn` and `lastSignInMethod`; in
 Python they are `last_signed_in` and `last_sign_in_method`. The time is an
 `Instant` in Java, a `Date` in TypeScript and a `datetime` in Python. The
-method is spelled as the server spells it: `PASSWORD`, `GOOGLE`, `OTP` and
-so on. Both are null (`None`) for someone who has never signed in.
+method is spelled as the server spells it: `PASSWORD`, `GOOGLE` or `OTP`.
+Both are null (`None`) for someone who has never signed in, and the method
+alone is null for a sign-in recorded before fm-server recorded methods.
 
 ---
 
@@ -67,10 +71,17 @@ so on. Both are null (`None`) for someone who has never signed in.
 
 **A credential that starts with `refresh:` is now a refresh token**, and is
 checked before the credential is tried as a file path. Before, such a string
-was refused unless a file had that name. A non-blank `refresh-token=` line in a credential file is used ahead of an
-`account`/`email`/`password` in the same file. A credential that does not
-start with `refresh:`, and a file with no `refresh-token=` line, are read as
-before.
+was refused unless a file had that name. A non-blank `refresh-token=` line in
+a credential file is used ahead of an `account`/`email`/`password` in the same
+file.
+
+**A `refresh-token=` line in `~/.fm/credential` reaches every client.** The
+SDK reads that default file first and lays the credential you pass over it,
+so its refresh token outlives an access token you pass, or a credential file
+without that line, and is the one the client signs in with. Every client on
+the machine then presents the same refresh token, which ends its family at
+the second sign-in (above). Keep refresh tokens out of `~/.fm/credential`:
+put each in a file of its own and pass that file.
 
 ---
 
@@ -86,8 +97,8 @@ study whose next allotment comes from the last period's close, such as a
 dividend drawn and paid or a short allowance carried forward:
 
 - `Carry carry(parameters, rotation, holdings, carried)`. The host calls
-  this once for each closed period that has a next one in the same
-  marketplace. It receives every participant's holding at close, and
+  this when a manager carries a closed period that has a next one in the same
+  marketplace (below), at most once a period. It receives every participant's holding at close, and
   `carried`, which is what the previous `carry` in that marketplace kept,
   or null before the first. The default throws
   `UnsupportedOperationException` ("plans every period at setup and carries
@@ -121,7 +132,8 @@ The same server as 0.7.0, fm-server 4.6.2 or later (4.7 or later to
 impersonate from Java), unless you use the new parts:
 
 - a `refresh:` credential needs **fm-server 4.7.0 or later** for
-  `/api/tokens/renew`;
+  `/api/tokens/renew`. Java cannot impersonate with one: `impersonate-account`
+  needs a password, and is refused with a `ConfigurationException`;
 - carry and the four-argument `settle` need **fm-server 4.13.0 or later**
   as the study host.
 
