@@ -44,13 +44,15 @@ client.send_limit(mp, market, "BUY", 1, 955)      # then this
 
 Two things it cannot do that `submitCancel` can:
 
-- **It names the order by its original.** `submitCancel`'s DELETE looks the
-  order up and cancels its lineage from any of its ids. The socket's CANCEL
-  goes to the exchange as named, which matches by `original`. For the order a
-  `sendLimit` or `submitLimit` answered, that is its `id`. Pass the `id` of a
-  remainder a split left behind and the CANCEL is recorded, consumed by
-  itself, and nothing is cancelled; pass `order.original` when the order came
-  from the book or the stream.
+- **Before fm-server 4.19, it names the order by its original.**
+  `submitCancel`'s DELETE looks the order up and cancels its lineage from any
+  of its ids. Up to fm-server 4.18 the socket's CANCEL went to the exchange as
+  named, which matches by `original`: the `id` of a remainder a split left
+  behind was recorded, consumed by itself, and cancelled nothing, so pass
+  `order.original` when the order came from the book or the stream. From
+  fm-server 4.19 the socket looks the order up as the DELETE does, so any id
+  of its lineage cancels it, and an id the marketplace does not hold is
+  refused.
 - **It needs an answered order.** An order has no id until fm-server answers
   it, so an order still pending cannot be cancelled this way.
 
