@@ -4,8 +4,8 @@
 
 0.11.0 adds call-auction markets to all three SDKs (fm-server#1036). A
 market's `mechanism` says whether it trades continuously or as a call
-auction, a manager can add a call market, clear one and read its calls, and
-a study can ask for one (study contract 0.4, fm-spi 0.0.18). Code that only
+auction, an administrator can add a call market, a manager can clear one
+and read its calls, and a study can ask for one (study contract 0.4, fm-spi 0.0.18). Code that only
 **calls** the SDK needs nothing to keep working. Code that reads markets
 should still read [What changes in behaviour](#what-changes-in-behaviour):
 from fm-server 4.15.0 on, a market is not necessarily continuous.
@@ -15,7 +15,7 @@ fixtures, mostly) may need changes:
 
 | | What breaks | Fix |
 |---|---|---|
-| Java | a class implementing `Flexemarkets` (or `Administration`, `Management`): four new abstract methods, `createCallMarket(marketplaceId, symbol, name, price, units, Integer intervalSeconds, boolean carry)`, `clearNow(marketplaceId, marketId)`, `calls(marketplaceId)` and `calls(marketplaceId, sessionId)` | implement them; a fake that does not clear can throw |
+| Java | a class implementing `Flexemarkets`: four new abstract methods, `createCallMarket(marketplaceId, symbol, name, price, units, Integer intervalSeconds, boolean carry)`, `clearNow(marketplaceId, marketId)`, `calls(marketplaceId)` and `calls(marketplaceId, sessionId)`. One implementing only `Administration` gains `createCallMarket`; only `Management`, the other three | implement them; a fake that does not clear can throw |
 | Java | record patterns over `Market`: it gains three last components, `String mechanism`, `Integer callIntervalSeconds` and `Boolean callCarry` | add them to the pattern; the twelve-argument constructor is kept and makes a continuous market, so `new Market(...)` compiles unchanged |
 | Java | record patterns over fm-spi's `MarketSpec`: it gains `String mechanism`, `Integer callIntervalSeconds` and `boolean callCarry` | add them to the pattern; the nine-argument constructor is kept and makes a continuous market |
 | TypeScript | an object literal typed `Market`: three new required fields, `mechanism: string`, `callIntervalSeconds: number \| null` and `callCarry: boolean` | add `mechanism: "CONTINUOUS"` (or `MARKET_MECHANISM_CONTINUOUS`), `callIntervalSeconds: null`, `callCarry: true` |
@@ -31,16 +31,17 @@ Earlier releases are covered by their own upgrade notes, listed in the
 **A market may be a call auction.** fm-server 4.15.0 runs a market either
 continuously, where an order trades the moment it crosses, or as a call
 auction: orders collect, crossed or not, and a call clears them all at one
-price. The SDK makes no call auctions itself, but a caller now meets them on
-servers that do. Code that assumed every market is continuous breaks in two
+price. `createMarket` still makes only continuous markets; `createCallMarket`
+makes a call auction. Code that assumed every market is continuous breaks in two
 ways in a call market:
 
 - a crossing order **rests** until the next call, where code built for a
-  continuous market expects it to trade at once. The book can show a bid at
-  or above an ask, and that is normal;
+  continuous market expects it to trade at once. A manager, who sees the
+  whole book, can see a bid at or above an ask, and that is normal;
 - the book is **sealed**. A participant sees their own resting orders and
-  the trades, not anyone else's resting orders. A best bid or ask worked out
-  from the orders on the stream is only the caller's own.
+  the trades, not anyone else's resting orders, so for a participant a best
+  bid or ask worked out from the orders on the stream is only their own. A
+  manager sees every order.
 
 Check the market before treating it as continuous: `market.isCall()` in
 Java, `market.is_call()` in Python, `isCall(market)` in TypeScript.
@@ -74,7 +75,8 @@ In Java the canonical constructor applies these defaults as well, so a
 `Market` built with a null `mechanism` or `callCarry` reads as continuous
 and carrying.
 
-**Call markets can be added, cleared and read.** A manager can call these:
+**Call markets can be added, cleared and read.** An administrator can add
+one; a manager can clear one and read its calls:
 
 | | Add a call market | Clear now | The calls |
 |---|---|---|---|
@@ -119,7 +121,11 @@ change. Its nine-argument `MarketSpec` constructions still compile, and
 rebuilt against fm-spi 0.0.18 it reports contract 0.4 through the default
 `studySpiVersion()`. To ask for a call market, call `.asCall(...)` on the
 spec. Only record patterns over `MarketSpec` need the new components (see
-the table above).
+the table above). A study that calls `asCall` needs a host on fm-spi 0.0.18,
+fm-server 4.15.0 or later; on an older host it fails with
+`NoSuchMethodError`. And a plan that asks for a call market is refused whole
+when a manager sets it up -- nothing is created -- because only an
+administrator can make a call market (below).
 
 ---
 
@@ -130,10 +136,15 @@ read from a server older than fm-server 4.15.0 reads as continuous.
 
 Call auctions need **fm-server 4.15.0 or later**. That release added the
 mechanism fields, `POST .../markets/{marketId}/calls` and `GET .../calls`.
-In fm-server 4.15.0 **only an administrator** can make a market a call
-auction, whether through `createCallMarket` or a study's plan, and a
-manager's request is refused. A manager can still clear and read the call
-markets an administrator made.
+**Only an administrator** can make a market a call auction, whether through
+`createCallMarket` or a study's plan, and a manager's request is refused;
+that holds from 4.15.0 through every release since. A manager can still clear
+and read the call markets an administrator made.
+
+Against fm-server 4.17.0 or later, 0.11.0 also meets what it does not know:
+an indicative call market's `CALL-INDICATIVE` frames, which Java and
+TypeScript drop and Python logs as `Unknown message-type`, as they do
+`CALL-UPDATE`, and a market's `callBook` field, which it ignores.
 
 ---
 
