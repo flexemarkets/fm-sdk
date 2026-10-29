@@ -150,13 +150,28 @@ aiohttp transport 409, the original library with its fixes 188, and fm-sdk
 over REST 146. REST is the fallback while the socket is down, and the route
 for a caller that cannot hold a socket open, so it should not be the slowest.
 
-One at a time it cannot catch up. fm-sdk's REST order takes 6.8 ms to the
-existing transport's 2.9. Of the 3.2 ms between their HTTP stacks, the
-server's part (0.75 ms for the `submissionId`, 0.4 ms for the v1 route) is
-what resubmit protection and the current API cost, and stays. Section 4 takes
-back at most the client's part, about 2 ms, which is enough to pass 188 but
-not 409: a burst sent one at a time is bounded by the round trip, and fm-sdk's
-always carries more server work than the existing transport's.
+One at a time it cannot catch up. Through FMClient, fm-sdk's REST order takes
+6.7 ms to the existing transport's 2.9, in alternating rounds of one sitting.
+Eight runs of `rest_split.py` (comparison bench), every layer interleaved,
+account for the 3.8 ms (medians of the per-run differences):
+
+| Layer | ms |
+| --- | --- |
+| fm-server: the `submissionId` and the v1 route | 1.1 |
+| httpx against aiohttp | 0.6 |
+| fm-sdk's call around httpx | 0.2 |
+| FMClient's loop to an executor thread and back | 1.0 |
+| FMClient's transport: the order in, the answer out | 0.3 |
+| The robot's event stream open (four runs, 0.2-2.0), less ~0.6 B spends above its HTTP stack | 0.7 |
+
+The server's 1.1 ms is what resubmit protection and the current API cost,
+and stays. The stream's share is the threads competing: while the next order
+is sent, fm-sdk's socket thread and FMClient's forwarder handle the last
+one's `ORDERS-UPDATE`, and Python runs one thread at a time. Section 4's
+asyncio client takes back the hop, and with aiohttp the library's 0.6 --
+enough to pass 188 but not 409: a burst sent one at a time is bounded by the
+round trip, and fm-sdk's always carries more server work than the existing
+transport's.
 
 So REST needs several orders in flight, and order kept. Sending several
 requests at once reaches the book out of order (20-49 of 150 above). Ways to
