@@ -539,7 +539,7 @@ public class HttpFlexemarkets implements Flexemarkets {
      *
      * <p>Only the array is read because the V1 route never sent anything else:
      * {@code GET /api/v1/marketplaces/{id}/orders} has always answered a bare
-     * array, and 0.4 requires fm-server 4.6.2. The HAL envelopes earlier SDKs
+     * array, and 0.4 requires fm-server 4.6.3. The HAL envelopes earlier SDKs
      * tolerated belonged to the routes 0.4 no longer calls.
      *
      * <p>Anything else throws rather than reading as empty. An empty snapshot
