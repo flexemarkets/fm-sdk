@@ -51,16 +51,19 @@ public interface Streaming {
     /**
      * {@link #subscribe(long, BlockingQueue)}, asking for the session's history.
      *
-     * <p>With {@code history}, the first {@code OrdersUpdate} is every order of
-     * the current session as this caller may see it -- cancelled and split ones
-     * included, a counterparty's private order named from the caller's side --
-     * stamped with the {@code seq} it was read at, and each reconnect delivers
-     * it again. That is fm-server's original subscribe, and the only whole
-     * history a participant can read: the REST history is a manager's. Without
-     * it the first update is empty and the book comes from
-     * {@code activeOrders}. A history is one frame, so on a session with a very
-     * long one it is a large frame -- fm-server's V1 subscribe exists to avoid
-     * exactly that.
+     * <p>With {@code history}, the first {@code OrdersUpdate} is the current
+     * session's orders as this caller may see them and as fm-server's history
+     * setting keeps them: every resting order, and the orders behind the
+     * marketplace's last N trades ({@code fm.history.trades}, default 2000) --
+     * cancelled and split ones included, a counterparty's private order named
+     * from the caller's side -- stamped with the {@code seq} it was read at, and
+     * each reconnect delivers it again. That is fm-server's original subscribe,
+     * and the only history a participant can read: the REST history is a
+     * manager's. Without it the first update is empty and the book comes from
+     * {@code activeOrders}. fm-server sends a long history in chunks of at most
+     * 1 MB; fm-sdk reassembles them into the one update, and a drop part-way
+     * discards what had arrived, since the reconnect sends the whole history
+     * again.
      *
      * @param marketplaceId the marketplace to stream
      * @param queue         where events are delivered

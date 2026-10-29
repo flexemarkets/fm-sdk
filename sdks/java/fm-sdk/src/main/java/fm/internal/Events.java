@@ -24,6 +24,8 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.net.http.WebSocketHandshakeException;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -38,6 +40,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.LongBinaryOperator;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
@@ -81,6 +84,8 @@ public class Events implements Subscription, OrderStream.Listener {
     private static final String SEQ          = "seq";
     /** fm-server's name for the submission an ORDER-ACCEPTED or ORDER-REJECTED answers. */
     private static final String SUBMISSION_ID = "submission-id";
+    /** fm-server's mark on one chunk of a history: {@code <i>/<n>}, 1-based. */
+    private static final String HISTORY      = "history";
 
     private static final String MESSAGE_TYPE_VERSION        = "VERSION";
     private static final String MESSAGE_TYPE_SESSION_LIST   = "SESSION-LIST";
@@ -614,7 +619,7 @@ public class Events implements Subscription, OrderStream.Listener {
         return sb.toString();
     }
 
-    private void _dispatchStompMessage(String frame) {
+    private void _dispatchStompMessage(String frame, _History history) {
         var lines = frame.split("\n", -1);
         if (lines.length < 2) return;
 
@@ -635,6 +640,7 @@ public class Events implements Subscription, OrderStream.Listener {
 
         String messageType = null;
         String submissionId = null;
+        String historyMark = null;
         long seq = Snapshot.NO_SEQ;
         int bodyStart = -1;
 
@@ -648,6 +654,8 @@ public class Events implements Subscription, OrderStream.Listener {
                 messageType = line.substring(MESSAGE_TYPE.length() + 1).trim();
             } else if (line.startsWith(SUBMISSION_ID + ":")) {
                 submissionId = line.substring(SUBMISSION_ID.length() + 1).trim();
+            } else if (line.startsWith(HISTORY + ":")) {
+                historyMark = line.substring(HISTORY.length() + 1).trim();
             } else if (line.startsWith(SEQ + ":")) {
                 // Per-marketplace ORDERS-UPDATE sequence number stamped
                 // by fm-server (commit c6eea6eca). Used by Desk /
@@ -683,7 +691,8 @@ public class Events implements Subscription, OrderStream.Listener {
                 case MESSAGE_TYPE_SESSION_LIST   -> _mapper.readValue(body, SESSIONS_TYPE);
                 case MESSAGE_TYPE_SESSION_UPDATE -> _mapper.readValue(body, SESSION_TYPE);
                 case MESSAGE_TYPE_HOLDING_UPDATE -> _mapper.readValue(body, HOLDING_TYPE);
-                case MESSAGE_TYPE_ORDERS_UPDATE  -> new OrdersUpdate(_mapper.readValue(body, ORDERS_TYPE), seq);
+                case MESSAGE_TYPE_ORDERS_UPDATE  ->
+                    history.add(new OrdersUpdate(_mapper.readValue(body, ORDERS_TYPE), seq), historyMark);
                 case MESSAGE_TYPE_CALL_UPDATE    -> _mapper.readValue(body, MARKET_CALL_TYPE);
                 case MESSAGE_TYPE_CALL_INDICATIVE -> _mapper.readValue(body, INDICATIVE_TYPE);
                 case MESSAGE_TYPE_ORDER_ACCEPTED -> new OrderAccepted(submissionId, _mapper.readValue(body, ORDER_TYPE));
@@ -715,11 +724,83 @@ public class Events implements Subscription, OrderStream.Listener {
         return HttpFlexemarkets._failureFor(status, body);
     }
 
+    /**
+     * Reassembles a history fm-server sends in chunks.
+     *
+     * <p>fm-server sends a history subscribe's orders as one or more
+     * ORDERS-UPDATE frames of at most 1 MB, each marked
+     * {@code history: <i>/<n>} and all with the same {@code seq}. The caller is
+     * promised the history as one update, so chunks 1 to n-1 are held and the
+     * n-th delivers them all, in the order sent. A frame with no mark -- every
+     * delta, and the whole history from an fm-server older than the chunking --
+     * passes through as it came.
+     *
+     * <p>One per socket: a drop mid-history leaves the part received behind with
+     * the dead socket, and the reconnect brings the whole history again.
+     */
+    static final class _History {
+        private static final Pattern MARK = Pattern.compile("(\\d+)/(\\d+)");
+
+        private List<Order> _orders;
+        private int _received;
+        private int _total;
+        private long _seq = Snapshot.NO_SEQ;
+
+        /**
+         * The update to deliver for this frame, or null while chunks are still
+         * to come.
+         *
+         * @throws IllegalArgumentException for a mark that is not {@code <i>/<n>}
+         *         or a chunk out of turn, discarding the part held
+         */
+        OrdersUpdate add(OrdersUpdate update, String mark) {
+            if (mark == null) return update;
+            var matched = MARK.matcher(mark);
+            int i = 0;
+            int n = 0;
+            if (matched.matches()) {
+                try {
+                    i = Integer.parseInt(matched.group(1));
+                    n = Integer.parseInt(matched.group(2));
+                } catch (NumberFormatException tooLong) { /* leave as 0/0 */ }
+            }
+            if (i < 1 || i > n) {
+                _discard();
+                throw new IllegalArgumentException("history: " + mark + " is not <i>/<n>");
+            }
+            if (i == 1) {
+                _orders = new ArrayList<>();
+                _total = n;
+                _seq = update.seq();
+            } else if (_orders == null || i != _received + 1 || n != _total || update.seq() != _seq) {
+                _discard();
+                throw new IllegalArgumentException("history chunk " + mark + " (seq " + update.seq()
+                        + ") out of turn; the part of the history received is discarded");
+            }
+            Collections.addAll(_orders, update.orders());
+            _received = i;
+            if (i < n) return null;
+            var orders = _orders.toArray(Order[]::new);
+            _discard();
+            return new OrdersUpdate(orders, update.seq());
+        }
+
+        private void _discard() {
+            _orders = null;
+            _received = 0;
+            _total = 0;
+            _seq = Snapshot.NO_SEQ;
+        }
+    }
+
     // --- WebSocket.Listener ---
 
     private class StompListener implements WebSocket.Listener {
         private final CountDownLatch _connectedLatch;
         private final StringBuilder _buffer = new StringBuilder();
+        // Chunks of a history arrive on this socket; a drop takes the part
+        // received with it.
+        private final _History _history = new _History();
 
         StompListener(CountDownLatch connectedLatch) {
             this._connectedLatch = connectedLatch;
@@ -749,7 +830,7 @@ public class Events implements Subscription, OrderStream.Listener {
                 // cancel before the order it cancelled. The listener is called
                 // one message at a time, and dispatch only parses and offers
                 // to the queue, so there is nothing here worth a thread.
-                _dispatchStompMessage(frame);
+                _dispatchStompMessage(frame, _history);
             }
             webSocket.request(1);
             return CompletableFuture.completedFuture(null);

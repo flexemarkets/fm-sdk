@@ -224,6 +224,8 @@ const MESSAGE_TYPE = "message-type";
 const SEQ_HEADER   = "seq";
 /** fm-server's name for the submission an ORDER-ACCEPTED or ORDER-REJECTED answers. */
 const SUBMISSION_ID_HEADER = "submission-id";
+/** fm-server's mark on one chunk of a history: `<i>/<n>`, 1-based. */
+const HISTORY_HEADER = "history";
 
 /** HTTP status codes by the names fm-server spells them in a failure body: BAD_REQUEST, 400. */
 const STATUS_BY_NAME = new Map(
@@ -371,6 +373,64 @@ function parseOrders(
     return data.map((o) => parseOrder(o as Record<string, unknown>));
   }
   return [];
+}
+
+/**
+ * Reassembles a history fm-server sends in chunks.
+ *
+ * fm-server sends a history subscribe's orders as one or more ORDERS-UPDATE
+ * frames of at most 1 MB, each marked `history: <i>/<n>` and all with the
+ * same `seq`. The caller is promised the history as one update, so chunks 1
+ * to n-1 are held and the n-th delivers them all, in the order sent. A frame
+ * with no mark -- every delta, and the whole history from an fm-server older
+ * than the chunking -- passes through as it came.
+ *
+ * One per socket: a drop mid-history leaves the part received behind with the
+ * dead socket, and the reconnect brings the whole history again.
+ */
+class History {
+  private _orders: Order[] | null = null;
+  private _received = 0;
+  private _total = 0;
+  private _seq = NO_SEQ;
+
+  /**
+   * The update to deliver for this frame, or null while chunks are still to
+   * come. Throws for a mark that is not `<i>/<n>` or a chunk out of turn,
+   * discarding the part held.
+   */
+  add(update: OrdersUpdate, mark: string | undefined): OrdersUpdate | null {
+    if (mark === undefined) return update;
+    const match = /^(\d+)\/(\d+)$/.exec(mark.trim());
+    const i = match ? Number(match[1]) : 0;
+    const n = match ? Number(match[2]) : 0;
+    if (!(1 <= i && i <= n)) {
+      this._discard();
+      throw new Error(`history: ${mark} is not <i>/<n>`);
+    }
+    if (i === 1) {
+      this._orders = [];
+      this._total = n;
+      this._seq = update.seq;
+    } else if (this._orders === null || i !== this._received + 1 || n !== this._total || update.seq !== this._seq) {
+      this._discard();
+      throw new Error(`history chunk ${mark} (seq ${update.seq}) out of turn; `
+        + "the part of the history received is discarded");
+    }
+    const orders = this._orders!;
+    orders.push(...update.orders);
+    this._received = i;
+    if (i < n) return null;
+    this._discard();
+    return { kind: "orders-update", orders, seq: update.seq };
+  }
+
+  private _discard(): void {
+    this._orders = null;
+    this._received = 0;
+    this._total = 0;
+    this._seq = NO_SEQ;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -724,6 +784,9 @@ export class EventListener {
   // -- receive loop ----------------------------------------------------------
 
   private _receiveLoop(): void {
+    // Chunks of a history arrive on this socket; a drop takes the part
+    // received with it.
+    const history = new History();
     this._ws!.on("message", (raw) => {
       const data = raw.toString();
       if (!data || data === "\n") return; // STOMP heartbeat
@@ -737,6 +800,9 @@ export class EventListener {
         let event: FmEvent | null;
         try {
           event = parseEvent(frame, this._parseHolding, this._parseOrder, this._refusal);
+          if (event !== null && (event as { kind?: string }).kind === "orders-update") {
+            event = history.add(event as OrdersUpdate, frame.headers[HISTORY_HEADER]);
+          }
         } catch (e) {
           this._callback({
             kind: "frame-unreadable",

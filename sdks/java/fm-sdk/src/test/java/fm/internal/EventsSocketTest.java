@@ -129,6 +129,151 @@ class EventsSocketTest {
         assertThat(update.orders()[0].id()).isEqualTo(5L);
     }
 
+    private Events historyConnected() {
+        events = new Events(server.url(), () -> "Bearer the-token", MP, "fm-sdk-test", HttpFlexemarkets.MAPPER,
+                queue, presented -> false, true);
+        events.connect();
+        return events;
+    }
+
+    private static String chunk(long seq, String mark, long... ids) {
+        var orders = java.util.Arrays.stream(ids)
+                .mapToObj(id -> "{\"id\":" + id + ",\"consumer\":0}")
+                .collect(java.util.stream.Collectors.joining(",", "[", "]"));
+        return message("ORDERS-UPDATE", "seq:" + seq + "\nhistory:" + mark, orders);
+    }
+
+    private static long[] ids(Object update) {
+        return java.util.Arrays.stream(((OrdersUpdate) update).orders()).mapToLong(o -> o.id()).toArray();
+    }
+
+    @Test
+    @Timeout(20)
+    void aHistoryThatFitsOneChunkIsDeliveredAsItCame() throws Exception {
+        historyConnected();
+
+        server.connection(0).send(chunk(8, "1/1", 5, 6));
+
+        OrdersUpdate update = (OrdersUpdate) next();
+        assertThat(update.seq()).isEqualTo(8);
+        assertThat(ids(update)).containsExactly(5, 6);
+    }
+
+    /** An fm-server older than the chunking sends the history as one frame with no mark. */
+    @Test
+    @Timeout(20)
+    void aHistoryWithNoMarkIsDeliveredAsItCame() throws Exception {
+        historyConnected();
+
+        server.connection(0).send(message("ORDERS-UPDATE", "seq:8",
+                "[{\"id\":5,\"consumer\":0},{\"id\":6,\"consumer\":5}]"));
+
+        OrdersUpdate update = (OrdersUpdate) next();
+        assertThat(update.seq()).isEqualTo(8);
+        assertThat(ids(update)).containsExactly(5, 6);
+    }
+
+    /**
+     * fm-server sends a long history as frames of at most 1 MB. The caller is
+     * promised the history as the first update; three updates would hand it a
+     * third of the session and two deltas that are not deltas.
+     */
+    @Test
+    @Timeout(20)
+    void aHistoryInChunksIsDeliveredAsOneUpdateInTheOrderSent() throws Exception {
+        historyConnected();
+        var socket = server.connection(0);
+
+        socket.send(chunk(8, "1/3", 5, 6));
+        socket.send(chunk(8, "2/3", 7));
+        socket.send(chunk(8, "3/3", 8, 9));
+        socket.send(chunk(9, "1/1", 10).replace("\nhistory:1/1", ""));
+
+        OrdersUpdate history = (OrdersUpdate) next();
+        assertThat(history.seq()).isEqualTo(8);
+        assertThat(ids(history)).containsExactly(5, 6, 7, 8, 9);
+        OrdersUpdate delta = (OrdersUpdate) next();
+        assertThat(delta.seq()).isEqualTo(9);
+        assertThat(ids(delta)).containsExactly(10);
+    }
+
+    /**
+     * Every chunk carries the history's seq. Delivered one by one, the second
+     * repeats it -- a Desk skips a repeated seq as already applied, and anything
+     * counting seqs reads it as out of order.
+     */
+    @Test
+    @Timeout(20)
+    void historyChunksReachTheCallerWithNoRepeatedSequenceNumber() throws Exception {
+        historyConnected();
+        var socket = server.connection(0);
+
+        socket.send(chunk(8, "1/2", 5));
+        socket.send(chunk(8, "2/2", 6));
+        socket.send(message("ORDERS-UPDATE", "seq:9", "[{\"id\":7,\"consumer\":0}]"));
+
+        assertThat(((OrdersUpdate) next()).seq()).isEqualTo(8);
+        assertThat(((OrdersUpdate) next()).seq()).isEqualTo(9);
+        assertThat(queue.poll(300, TimeUnit.MILLISECONDS)).as("nothing more").isNull();
+    }
+
+    /**
+     * The reconnect sends the whole history again. Kept, the first socket's
+     * chunks would be prepended to it -- or, with a chunk short, delivered as a
+     * history that is not one.
+     */
+    @Test
+    @Timeout(30)
+    void aDropMidHistoryDiscardsThePartReceived() throws Exception {
+        historyConnected();
+        var first = server.connection(0);
+        first.send(chunk(8, "1/3", 1, 2));
+        first.send(chunk(8, "2/3", 3));
+        Thread.sleep(200); // for the client to have read both before the socket falls
+        first.close();
+
+        assertThat(next()).isInstanceOf(StreamDropped.class);
+        assertThat(next()).isEqualTo(new StreamReconnected(MP));
+        var second = server.connection(1);
+        assertThat(second.awaitReceived(4)).as("the new socket subscribes again").isTrue();
+        second.send(chunk(9, "1/2", 1, 2));
+        second.send(chunk(9, "2/2", 3, 4));
+        second.send(message("ORDERS-UPDATE", "seq:10", "[{\"id\":5,\"consumer\":0}]"));
+
+        OrdersUpdate history = (OrdersUpdate) next();
+        assertThat(history.seq()).isEqualTo(9);
+        assertThat(ids(history)).containsExactly(1, 2, 3, 4);
+        assertThat(ids(next())).containsExactly(5);
+    }
+
+    @Test
+    @Timeout(20)
+    void aHistoryChunkOutOfTurnIsReportedNotDeliveredAsTheHistory() throws Exception {
+        historyConnected();
+        var socket = server.connection(0);
+
+        socket.send(chunk(8, "1/3", 5));
+        socket.send(chunk(8, "3/3", 7));
+        socket.send(chunk(8, "1/1", 5));
+
+        FrameUnreadable unreadable = (FrameUnreadable) next();
+        assertThat(unreadable.failure()).hasMessageContaining("out of turn");
+        assertThat(ids(next())).containsExactly(5);
+    }
+
+    @Test
+    @Timeout(20)
+    void aHistoryMarkThatIsNotIOfNIsReported() throws Exception {
+        historyConnected();
+        var socket = server.connection(0);
+
+        for (var mark : List.of("2/1", "0/1", "one/two", "1", "1/99999999999")) {
+            socket.send(chunk(8, mark, 5));
+            FrameUnreadable unreadable = (FrameUnreadable) next();
+            assertThat(unreadable.failure()).as(mark).hasMessageContaining("is not <i>/<n>");
+        }
+    }
+
     /** A body that spans lines is one body, not its first line. */
     @Test
     @Timeout(20)
