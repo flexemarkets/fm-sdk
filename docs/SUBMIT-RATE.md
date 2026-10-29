@@ -20,6 +20,8 @@ The plan, in order of what it buys:
    rate. Measured: no saving, not taken (section 3).
 4. **fm-sdk: a leaner REST path for one order at a time**: an asyncio client,
    and less work per request.
+5. **fm-server and fm-sdk: several REST orders at once, in order**, as one
+   request (section 5). REST is otherwise held to one order per round trip.
 
 ## What was measured
 
@@ -139,6 +141,91 @@ For callers that place one order at a time and wait for it:
 - Profile `_request`: httpx cost 1.4 ms over the hand-written client in the
   same run (3.7 against 2.3 ms). Measure the timing hooks, header
   validation and response parsing, and cut what is not needed.
+
+## 5. REST: several orders in one request
+
+Where things stand on fm-server 4.18.1, through FMClient (10 rounds each,
+medians): the socket places 879 orders a second in a burst, the existing
+aiohttp transport 409, the original library with its fixes 188, and fm-sdk
+over REST 146. REST is the fallback while the socket is down, and the route
+for a caller that cannot hold a socket open, so it should not be the slowest.
+
+One at a time it cannot catch up. fm-sdk's REST order takes 6.8 ms to the
+existing transport's 2.9. Of the 3.2 ms between their HTTP stacks, the
+server's part (0.75 ms for the `submissionId`, 0.4 ms for the v1 route) is
+what resubmit protection and the current API cost, and stays. Section 4 takes
+back at most the client's part, about 2 ms, which is enough to pass 188 but
+not 409: a burst sent one at a time is bounded by the round trip, and fm-sdk's
+always carries more server work than the existing transport's.
+
+So REST needs several orders in flight, and order kept. Sending several
+requests at once reaches the book out of order (20-49 of 150 above). Ways to
+keep order, from the client side:
+
+- **HTTP/1.1 pipelining** on one connection. Tomcat answers a connection's
+  requests in turn, but neither httpx nor aiohttp pipelines, and nothing
+  between a robot and Heroku -- Cloudflare, Heroku's router -- promises to
+  keep one client's requests on one connection in order. Not something to
+  depend on.
+- **HTTP/2 streams.** Tomcat runs each stream on its own thread: the same
+  race as the socket before W2.
+- **A sequence number per request** (`Order-Sequence: <lane>/<n>`), with
+  fm-server holding a request until the lane's earlier ones have run. This is
+  the design the socket rejected (`SOCKET-ORDERS.md`, "take orders where order
+  still exists"): a request that never arrives stalls its lane until a
+  timeout, and every held request holds a Tomcat thread.
+- **Several orders in one request.** Ordered by construction: the body is a
+  list, and the server runs it in list order, as `SocketOrderSequence` runs a
+  socket's lane. Nothing waits for a request that never comes, and nothing is
+  held between requests.
+
+The last is the one to build.
+
+### fm-server: `POST /api/v1/marketplaces/{id}/orders/batch`
+
+- The body is a list of up to 64 orders, each as `POST .../orders` takes
+  one, each with its own `submissionId`.
+- The orders run one at a time, in list order, each through
+  `OrderHandler.submitOrder` exactly as a single POST does: consent gate,
+  replay check, rate limiter, matching. An order reaches the exchange only
+  once the one before it has been matched.
+- The answer is 200 with a list in the same order: for each order either the
+  placed order (what a single POST answers with 201) or the failure body a
+  single POST answers with its 4xx, and the status it would have had. One
+  refusal does not stop the rest; a robot that wants all-or-nothing sends
+  one at a time.
+- A resend of the whole list is safe: each order already placed is answered
+  with the order it made, as a single resend is.
+- The rate limiter counts orders, not requests.
+- `Server-Timing` gives the whole request's time; the per-order phases are
+  already measured in `OrderHandler`.
+
+### fm-sdk: `submit_limits` and a REST window
+
+- `submit_limits(orders)` (`submitLimits` in TypeScript and Java) posts one
+  list and returns one result per order, in order, each what `submit_limit`
+  would have returned or raised.
+- Behind `send_limit`, when the order route is REST rather than the socket:
+  keep one request in flight; orders sent while it is out wait in a list, and
+  go together as the next request when it is answered. One at a time this is
+  `submit_limit`; in a burst the requests grow to the window. Each order's
+  `PendingOrder` resolves from its entry in the answer. A request that fails
+  without an answer is sent again whole, which the submission ids make safe.
+- One request in flight, not several: two lists in flight could reach the
+  book out of order, the problem this exists to remove.
+
+### What it should buy
+
+The hand-written client reached 2,700 orders a second with 8 requests in
+flight, so the server is far from the limit. Each order still runs through
+the matching thread one at a time, about 1-2 ms of server time with a
+`submissionId`. With 64 in a request and ~6 ms of client and network per
+request, a burst should reach 400-700 orders a second: past the existing
+transport, short of the socket. Estimates, to be measured.
+
+Done when: FMClient's burst benchmark has fm-sdk over REST above the existing
+transport in the same run (B, 409 a second on 4.18.1), with nothing out of
+order.
 
 ## Open
 
