@@ -14,9 +14,9 @@ subscription sees the new one:
 
 | | What breaks | Fix |
 |---|---|---|
-| Java | nothing: the queue given to `subscribe(marketplaceId, queue)` takes `Object`, and now also receives `MarketCall` | ignore it, or handle it |
-| TypeScript | the `FmEvent` union gains `MarketCall`: a switch or type guard that must cover every member no longer does | handle `MarketCall`, or let it fall through |
-| Python | nothing: the queue given to `subscribe(marketplace_id, event_queue)` now also receives `MarketCall` | ignore it, or handle it |
+| Java | nothing at compile time: the queue given to `subscribe` or `listen` takes `Object`, and now also receives `MarketCall` -- a consumer whose default branch throws or logs meets it on every call of a call market | ignore it, or handle it |
+| TypeScript | the `FmEvent` union, delivered by `subscribe` and to `listen`'s callback, gains `MarketCall`: a guard chain ending in a `never` check no longer compiles, and a hand-written guard that tests only `marketplaceId`, `sessionId` or `id` now also matches a `MarketCall` | handle `MarketCall`, and make guards test a field `MarketCall` lacks (`state`, `securities`) |
+| Python | nothing at compile time: the queue given to `subscribe` or `listen` now also receives `MarketCall` -- a consumer whose else branch raises or logs meets it on every call of a call market | ignore it, or handle it |
 
 Earlier releases are covered by their own upgrade notes, listed in the
 [README](../README.md#upgrade-notes), and are not revisited here.
@@ -70,7 +70,7 @@ trades still come as an `ORDERS-UPDATE` of their own.
 
 ```bash
 # Code that reads every event off a subscription
-grep -rnE "\.subscribe\(|FmEvent" src/
+grep -rnE "\.(subscribe|listen)\(|FmEvent" src/
 # Callers of allWidgets that worked around its failure
 grep -rnE "allWidgets|all_widgets" src/
 ```
