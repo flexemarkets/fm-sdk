@@ -3,18 +3,19 @@
 ## How to use this document
 
 0.17.0 is additive for code that only **calls** the SDK. Code that
-**implements** the SDK's types has one method to add:
+**implements** the SDK's types has two methods to add:
 
 | | What breaks | Fix |
 |---|---|---|
-| Java | a class implementing `Writing` (and so `Flexemarkets`) -- a test double, fm-server's in-process client -- no longer compiles: `sendCancel(long, long, long)` is abstract, as `sendLimit` is | implement it, or throw as the class does for other writes it cannot make |
+| Java | a class implementing `Writing` (and so `Flexemarkets`) -- a test double, fm-server's in-process client -- no longer compiles: `sendCancel(long, long, long)` and `submitLimits(long, List<Limit>)` are abstract, as `sendLimit` is | implement them, or throw as the class does for other writes it cannot make |
 | TypeScript | nothing | |
 | Python | nothing | |
 
 One fix changes what a client signs in with, for code that passes a
 credential while `~/.fm/credential` also holds one; see below.
 
-It needs the same server as 0.16.0: fm-server 4.17.
+It needs the same server as 0.16.0, fm-server 4.17, except for
+`submitLimits`, which needs fm-server 4.19.
 
 Earlier releases are covered by their own upgrade notes, listed in the
 [README](../README.md#upgrade-notes), and are not revisited here.
@@ -53,6 +54,26 @@ Two things it cannot do that `submitCancel` can:
 - **It needs an answered order.** An order has no id until fm-server answers
   it, so an order still pending cannot be cancelled this way.
 
+**Several limit orders in one request.** `submitLimits(marketplaceId, limits)`
+(`submit_limits` in Python) posts a list of `Limit` values -- each
+`submitLimit`'s arguments but the marketplace -- to fm-server 4.19's
+`POST .../orders/batch`, up to 64 to a request and a longer list as several,
+one after the other. fm-server matches them in list order, each as its own
+POST would have been, so the book sees them in the order given, for one round
+trip instead of one each. It returns one `PendingOrder` per order, already
+answered: the order, or what `submitLimit` would have thrown for its refusal.
+One refusal does not stop the rest. A request whose answer was lost is sent
+once more, whole, which the orders' submission ids make safe. It is the REST
+route for a burst; `sendLimit` over the socket remains the faster one
+(docs/SUBMIT-RATE.md, section 5).
+
+```python
+from fm import Limit
+
+for pending in client.submit_limits(mp, [Limit(market, "BUY", 1, 950), Limit(market, "BUY", 1, 945)]):
+    order = pending.result()                      # or raises the refusal
+```
+
 ---
 
 ## What changes in behaviour
@@ -86,7 +107,7 @@ delivered for that attempt.
 ## Checking your code
 
 ```bash
-# Java classes implementing Writing or Flexemarkets, which need sendCancel (run from the robot's source root)
+# Java classes implementing Writing or Flexemarkets, which need sendCancel and submitLimits (run from the robot's source root)
 grep -rnE "implements .*(Writing|Flexemarkets)\b" .
 # Calls to connect that pass a credential, which no longer borrow ~/.fm/credential's refresh token
 grep -rnE "Flexemarkets\.connect|\bconnect\(" .

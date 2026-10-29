@@ -198,6 +198,10 @@ The last is the one to build.
 
 ### fm-server: `POST /api/v1/marketplaces/{id}/orders/batch`
 
+Built (fm-server `OrderBatchV1Controller`, for 4.19), with `submitLimits` in
+all three SDKs. The REST window behind `sendLimit` is not built yet, and
+nothing below has been measured.
+
 - The body is a list of up to 64 orders, each as `POST .../orders` takes
   one, each with its own `submissionId`.
 - The orders run one at a time, in list order, each through
