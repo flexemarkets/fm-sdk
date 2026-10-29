@@ -14,7 +14,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any, Optional, TypeVar
 
 from .decimals import Decimals
@@ -60,6 +60,7 @@ from .types import (
     CurrentSession,
     ClientConnection,
     Holding,
+    Limit,
     ManagerOtpBundle,
     ManagerOtpEntry,
     Market,
@@ -105,6 +106,11 @@ def _read_version(version_file: Path = _VERSION_FILE, distribution: str = "fm-sd
         return "0.0.0"
 
 _FM_NETWORK_CLIENT = f"fm-sdk-python/{_read_version()}"
+
+#: The most orders one ``POST .../orders/batch`` carries: fm-server's limit
+#: (OrderBatchV1Controller.MOST_ORDERS). :meth:`Flexemarkets.submit_limits`
+#: sends a longer list as several requests, one after the other.
+MOST_BATCHED = 64
 _DEFAULT_ENDPOINT = "https://api.flexemarkets.com"
 
 # Where a credential carries a refresh token: a ``refresh-token=`` line in a
@@ -1570,6 +1576,50 @@ class Flexemarkets:
         order = self._limit_order(marketplace_id, market_id, side, units, price, owner_target,
                                   owner_target_id, client_description)
         return self._order_stream(marketplace_id).submit(order)
+
+    def submit_limits(self, marketplace_id: int, limits: Sequence[Limit]) -> list["PendingOrder"]:
+        """Place several limit orders in one request, matched in the order given.
+
+        One ``POST .../orders/batch`` of up to :data:`MOST_BATCHED` orders; a
+        longer list goes as several, one after the other. Each order is
+        matched before the next, as if sent one at a time with
+        :meth:`submit_limit`, for one round trip instead of one each. Returns
+        one :class:`~fm.order_stream.PendingOrder` per order, in order, already
+        answered: its ``result()`` is the order, or raises what
+        :meth:`submit_limit` would have raised for it. One refusal does not
+        stop the rest.
+
+        A request whose answer was lost is sent once more, whole: every order
+        names its submission, and fm-server answers one it already placed with
+        the order it made. A failure of the whole request -- the token, the
+        connection -- is raised, as :meth:`submit_limit` raises it. Needs
+        fm-server 4.19. See docs/SUBMIT-RATE.md, section 5.
+        """
+        from .order_stream import PendingOrder
+
+        orders = [self._limit_order(marketplace_id, limit.market_id, limit.side, limit.units, limit.price,
+                                    limit.owner_target, limit.owner_target_id, limit.client_description)
+                  for limit in limits]
+        url = _marketplace(self._endpoint, marketplace_id) + "/orders/batch"
+        answered: list[PendingOrder] = []
+        for start in range(0, len(orders), MOST_BATCHED):
+            batch = orders[start:start + MOST_BATCHED]
+            try:
+                resp = self._post(url, batch)
+            except httpx.TransportError:
+                resp = self._post(url, batch)
+            entries = _json(resp)
+            if not isinstance(entries, list) or len(entries) != len(batch):
+                raise ApiError(f"Expected {len(batch)} answers to a batch of {len(batch)} orders")
+            for order, entry in zip(batch, entries):
+                pending = PendingOrder(order["submissionId"])
+                status = entry.get("status", 0)
+                if 200 <= status < 300:
+                    pending.set_result(_parse_order(entry.get("order")))
+                else:
+                    pending.set_exception(_refused(status, json.dumps(entry.get("failure"))))
+                answered.append(pending)
+        return answered
 
     def _limit_order(
         self, marketplace_id: int, market_id: int, side: str, units: int, price: int,

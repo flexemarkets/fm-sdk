@@ -36,6 +36,7 @@ from .types import (
     CurrentSession,
     ClientConnection,
     Holding,
+    Limit,
     Market,
     MarketCall,
     Marketplace,
@@ -113,6 +114,7 @@ __all__ = [
     "OrderRejected",
     # orders sent without waiting
     "PendingOrder",
+    "Limit",
     # snapshot
     "Snapshot",
     "NO_SEQ",

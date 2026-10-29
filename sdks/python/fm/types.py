@@ -421,6 +421,22 @@ class Order:
     submission_id: str | None = None
 
 
+@dataclass
+class Limit:
+    """A limit order to place: :meth:`~fm.client.Flexemarkets.submit_limit`'s
+    arguments, as one value, for
+    :meth:`~fm.client.Flexemarkets.submit_limits` to take several of. The
+    marketplace is the call's, and the submission id is made when it is sent.
+    """
+    market_id: int
+    side: str
+    units: int
+    price: int
+    owner_target: str | None = None
+    owner_target_id: int | None = None
+    client_description: str | None = None
+
+
 
 @dataclass
 class Allotment:
