@@ -325,7 +325,7 @@ the larger id of its two legs. A full page answers
 `Link: <...?before={key}>; rel="next"`, naming the page before it; a short
 page is the session's first trades. Seed with the newest trades, then follow
 `next` at your own pace. The answer is never cut short by the server's cache
-(fm-server 4.6.2, #1029).
+(fm-server 4.6.3, #1029).
 
 Submit a limit order:
 

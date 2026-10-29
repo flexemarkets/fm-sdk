@@ -128,7 +128,7 @@ gets no `carry` call between periods.
 
 ## What you need
 
-The same server as 0.7.0, fm-server 4.6.2 or later (4.7 or later to
+The same server as 0.7.0, fm-server 4.6.3 or later (4.7 or later to
 impersonate from Java), unless you use the new parts:
 
 - a `refresh:` credential needs **fm-server 4.7.0 or later** for

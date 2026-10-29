@@ -24,7 +24,7 @@ Earlier releases are covered by their own upgrade notes, listed in the
 
 ## What you need
 
-The same server as 0.6.0 -- fm-server 4.6.2 or later, 4.7 or later to
+The same server as 0.6.0 -- fm-server 4.6.3 or later, 4.7 or later to
 impersonate from Java. `ownerTargetId` is null wherever the server does not
 send it.
 

@@ -15,7 +15,7 @@ Earlier releases are covered by their own upgrade notes, listed in the
 
 ## What you need
 
-**fm-server 4.6.2 or later**, as for 0.5.0 -- except to act as another
+**fm-server 4.6.3 or later**, as for 0.5.0 -- except to act as another
 account from Java, which needs **fm-server 4.7 or later** (below).
 
 ---

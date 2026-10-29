@@ -1,6 +1,6 @@
 {
   "why": "0.4.0 is HAL-less and V1-only on fm-server 4.6's model routes. Each case is one client call and the requests it must send, in order. All three SDKs run every case against a loopback server; a request the case does not list -- the API root above all -- fails it.",
-  "server": "4.6.2",
+  "server": "4.6.3",
   "cases": [
     {
       "call": "marketplaces",
@@ -1074,7 +1074,7 @@
       "args": {
         "marketplaceId": 1
       },
-      "why": "Added to V1 in fm-server 4.6.2 for this release: before it only V0 could delete one.",
+      "why": "Added to V1 in fm-server 4.6.3 for this release: before it only V0 could delete one.",
       "requests": [
         {
           "method": "DELETE",

@@ -16,7 +16,7 @@ Earlier releases are covered by their own upgrade notes, listed in the
 
 ## What you need
 
-**fm-server 4.6.2 or later** -- the same as 0.4.0. The two new robot calls
+**fm-server 4.6.3 or later** -- the same as 0.4.0. The two new robot calls
 use routes fm-server has served since 4.1.0; reading the catalogue asks the
 robot host behind fm-server, so it fails while that host is down.
 

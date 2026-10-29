@@ -15,10 +15,10 @@ Earlier releases are covered by their own upgrade notes, listed in the
 
 ## What you need
 
-**fm-server 4.6.2 or later.** 0.4.0 calls only `/api/v1` routes, in the
+**fm-server 4.6.3 or later.** 0.4.0 calls only `/api/v1` routes, in the
 model-REST forms of fm-server's `docs/API-V1.md` §4, and two of them —
 `DELETE /api/v1/marketplaces/{id}` and `GET orders?cancelled=false` — first
-shipped in 4.6.2. Against an older server those two calls answer 404 or 400;
+shipped in 4.6.3. Against an older server those two calls answer 404 or 400;
 everything else works from 4.6.0.
 
 0.3.x keeps working against 4.6.x: every route it calls is still served.
