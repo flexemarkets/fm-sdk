@@ -11,14 +11,16 @@ SDKs: Python and TypeScript have no study SPI, and in Java only fm-spi's
 `fm.study` package changed.
 
 Code that only **calls** the SDK needs nothing. A study that **implements**
-`StudyProvider` needs nothing either: every addition has a default, and a
-study without robots plans as it did. Code that **builds** or **matches** the
-study types may need a change:
+`StudyProvider` needs nothing either until it names robots: every addition has
+a default, and a study without robots plans as it did. Code that **builds** or
+**matches** the study types may need a change, and a study that adds robots
+must not pay them:
 
 | | What breaks | Fix |
 |---|---|---|
 | Java | a record pattern over `Close`: the record gains a last component, `Map<String, String> robots` | add the component to the pattern; `new Close(holdings, orders)` is kept and gives no robots |
 | Java | a test asserting `studySpiVersion()` is `"0.2"`: `StudyProvider.STUDY_SPI_VERSION` is `"0.3"` | expect `"0.3"` |
+| Java | a `settle` that pays every holding, once the study has `OWN` robots: fm-server refuses a settlement that pays a robot | skip owners for whom `close.isRobot(email)` |
 | TypeScript | nothing | |
 | Python | nothing | |
 
@@ -63,9 +65,24 @@ rows into the rotations' holdings as it writes anyone's.
 **Close says which owners are the study's robots.** `Close.robots()` maps each
 `OWN` robot's key to its email; it is empty for a study without any, and a
 null map is empty. `Close.isRobot(email)` matches an owner's email from a
-holding or an order, ignoring case. The robots' rows are in `holdings`,
-because they hold what they trade; a study pays them nothing. `SessionOrder`
-is unchanged.
+holding or an order, ignoring case. `SessionOrder` is unchanged.
+
+The robots' orders are always in `orders`. Their holdings are in `holdings`
+only if the study allotted them one: the host closes on the owners in the
+rotations' holdings, so a study that keeps the default `setup` sees its
+robots' orders but no robot holdings. **A study must not pay its robots.**
+fm-server refuses a settlement with a payoff to one (`<study> paid its own
+robot <email>; a study's robots are never paid`), so a `settle` that pays every
+holding must skip the owners `close.isRobot(email)` names.
+
+Two more things the host does that a study's robots must allow for:
+
+- It calls `robots(Map.of())` once when it loads the study, every parameter at
+  its default, to keep the study's own robots out of each marketplace's robot
+  catalogue. A `robots` override must answer at the defaults; if it throws, the
+  host logs a warning and those robots stay listed for anyone to launch.
+- It launches an `OWN` robot in its own process, so the robot must be one the
+  host carries.
 
 ---
 
@@ -73,10 +90,13 @@ is unchanged.
 
 Nothing new of the server for code that only calls the SDK.
 
-For a study, a host built on fm-spi 0.0.17 or later. A host compares only the
-contract's major, which is still 0, so a 0.2 host loads a 0.3 study -- but it
-does not call `robots` or the four-argument `setup`, and hands `settle` a
-`Close` with no robots.
+For a study, **fm-server 4.14.0 or later**: the first release to host study
+contract 0.3, on fm-spi 0.0.17 (it is also the first to host 0.2; 4.13.0 hosts
+0.1). An older host still loads a 0.3 study -- a study builds against fm-spi as
+`provided`, so it reports the host's contract version -- and the study then
+fails when it reaches what the old fm-spi lacks: `NoSuchMethodError` on
+`Close.robots()` or `Close.isRobot(...)`, `NoClassDefFoundError` on
+`RobotSpec`.
 
 ---
 
