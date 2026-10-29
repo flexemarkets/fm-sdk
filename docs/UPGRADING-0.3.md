@@ -127,11 +127,3 @@ TypeScript is unaffected: it keeps `console.warn`, which is the Node idiom.
 **None of this is the interface.** These lines are the fallback for a caller who
 subscribed to nothing. `onGap`/`on_gap` and `onRecovery`/`on_recovery` carry the
 same events as typed records, in all three SDKs, and are what you should act on.
-
----
-
-## If you are moving from 0.1.x
-
-Go through [UPGRADING-0.1.md](UPGRADING-0.1.md) and
-[UPGRADING-0.2.md](UPGRADING-0.2.md) in order first. 0.2.0 is the release that
-will cost you work; this one will not add to it.
