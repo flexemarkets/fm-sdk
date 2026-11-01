@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+#
+# Refuse a hand-rolled deploy.
+#
+# Deploying is `git push heroku`, which is one tab-complete away from
+# shipping whatever happens to be checked out -- unreleased work, a branch
+# mid-review, a tree with local edits. fm-release deploy exists so that does
+# not happen: it refuses an untagged tip, refuses while a session looks
+# live, and asks the deployed service afterwards to prove it came up. None
+# of that is reachable from `git push heroku main`, and the push looks
+# identical to a successful deploy while skipping every one of those checks.
+#
+# So this hook makes the difference visible at the only moment it matters.
+# It allows exactly what fm-release pushes -- a release tag's commit -- and
+# refuses everything else bound for a heroku remote. Pushes to origin and
+# upstream are not this check's business and pass it untouched.
+#
+# Installed by `git config core.hooksPath .githooks` (fm-develop-setup does
+# this; scripts/fm-deploy-hook-test.sh holds it to the behaviour above).
+#
+# It also scans what is about to leave the machine for secrets, on every
+# remote. CI runs the same gitleaks scan, but CI stops when the month's
+# Actions allowance is spent, and a secret pushed while it is stopped is
+# public before anything reads it. So the scan that always runs is this one:
+# the commits this push adds -- not the whole history, which fm-release tag
+# scans -- against the repository's own .gitleaks.toml and baseline, so it
+# reaches the verdict CI would. A repository without .gitleaks.toml is not
+# scanned. A machine without gitleaks is warned, not refused: the hook is
+# shared by every clone, and one that blocks all pushes until a tool is
+# installed is one that gets switched off.
+#
+# Bypassing it is `git push --no-verify`, deliberately: a hook that cannot
+# be got past when something has genuinely gone wrong is a hook people
+# uninstall. Reach for fm-release deploy --untagged first, which records
+# what it did.
+
+set -uo pipefail
+
+remote_name="${1:-}"
+remote_url="${2:-}"
+
+# stdin is read once and both checks need it.
+updates=$(cat)
+
+# --- secrets, on every remote ------------------------------------------------
+
+scan_secrets() {
+    local top config baseline=()
+    top=$(git rev-parse --show-toplevel) || return 0
+    config="$top/.gitleaks.toml"
+    [[ -f "$config" ]] || return 0
+    if ! command -v gitleaks >/dev/null 2>&1; then
+        echo "pre-push: gitleaks is not installed, so this push was NOT scanned for secrets." >&2
+        echo "          (CI pins 8.30.1: https://github.com/gitleaks/gitleaks/releases)" >&2
+        return 0
+    fi
+    [[ -f "$top/.gitleaks-baseline.json" ]] && baseline=(--baseline-path "$top/.gitleaks-baseline.json")
+
+    local found=0 local_ref local_sha remote_ref remote_sha commit range out
+    while read -r local_ref local_sha remote_ref remote_sha; do
+        [[ -z "$local_sha" || "$local_sha" =~ ^0+$ ]] && continue
+        commit=$(git rev-parse --verify --quiet "${local_sha}^{commit}") || continue
+        # The commits the remote does not have yet. Against the ref being
+        # replaced when this clone knows it; otherwise (a new branch, or a
+        # force over work never fetched) against everything the remote is
+        # known to hold -- which, for a remote this clone has never fetched,
+        # is the whole history, and the baseline is what keeps that quiet.
+        if [[ ! "$remote_sha" =~ ^0+$ ]] && git cat-file -e "${remote_sha}^{commit}" 2>/dev/null; then
+            range="$remote_sha..$commit"
+        elif [[ -n "$remote_name" ]] && git remote get-url "$remote_name" >/dev/null 2>&1; then
+            range="$commit --not --remotes=$remote_name"
+        else
+            range="$commit"
+        fi
+        if ! out=$(cd "$top" && gitleaks git --redact --verbose --no-banner --config "$config" \
+                       "${baseline[@]}" --log-opts="$range" --exit-code 1 . 2>&1); then
+            found=1
+            echo "" >&2
+            echo "REFUSING to push $local_ref to $remote_name: gitleaks found a secret" >&2
+            echo "in the commits it would send ($range)." >&2
+            echo "" >&2
+            printf '%s\n' "$out" | sed 's/^/  /' >&2
+        fi
+    done <<< "$updates"
+
+    if (( found )); then
+        echo "" >&2
+        echo "  A real secret: take it out of those commits (rewrite them before they" >&2
+        echo "  leave -- once pushed it is public) and rotate it if it was ever live." >&2
+        echo "  A false positive: allowlist it in .gitleaks.toml, or add it to the" >&2
+        echo "  baseline, in a commit of its own that says why." >&2
+        echo "" >&2
+    fi
+    return $found
+}
+
+scan_secrets || exit 1
+
+# --- deploys, on heroku remotes only ----------------------------------------
+
+case "$remote_url" in
+    *git.heroku.com*|*heroku.com*) ;;
+    *) exit 0 ;;
+esac
+
+# stdin carries: <local ref> <local sha> <remote ref> <remote sha>
+refused=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+    [[ -z "$local_sha" ]] && continue
+    # A delete (all-zero local sha) is not a deploy.
+    [[ "$local_sha" =~ ^0+$ ]] && continue
+
+    # fm-release pushes <tag>:refs/heads/main, so the commit being deployed
+    # is the one a release tag names. Peel first: for an annotated tag the
+    # sha on this line is the tag OBJECT, and --points-at on that matches
+    # nothing -- which refused precisely the push fm-release makes.
+    commit=$(git rev-parse --verify --quiet "${local_sha}^{commit}") || commit="$local_sha"
+    tags=$(git tag --points-at "$commit" --list 'v[0-9]*' 2>/dev/null)
+    if [[ -n "$tags" ]]; then
+        continue
+    fi
+
+    refused=1
+    echo "" >&2
+    echo "REFUSING to push $local_ref to $remote_name ($remote_url)." >&2
+    echo "  ${local_sha:0:9} carries no release tag, so this would deploy" >&2
+    echo "  unreleased work -- the one thing fm-release deploy checks that" >&2
+    echo "  a direct push cannot." >&2
+    echo "" >&2
+    echo "  Deploy a release instead:" >&2
+    echo "    cd ~/src/ahm/fm-administration" >&2
+    echo "    ./fm-release status                 # what is unreleased" >&2
+    echo "    ./fm-release tag <version>          # cut one, tests and all" >&2
+    echo "    ./fm-release deploy v<version>      # gated, and verified after" >&2
+    echo "" >&2
+    echo "  Deploying something deliberately untagged is" >&2
+    echo "    ./fm-release deploy --untagged" >&2
+    echo "  which runs the rest of the checks and says what it did." >&2
+    echo "" >&2
+done <<< "$updates"
+
+exit $refused
