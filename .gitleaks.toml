@@ -1,0 +1,23 @@
+# gitleaks configuration for fm-sdk. Extends the maintained default ruleset.
+# Read by fm-release tag (whole history) and the pre-push hook (each push's
+# new commits); CI does not scan fm-sdk.
+#
+# Allowlist by VALUE, not by path, so a real token pasted into a test or a
+# README still fails the scan:
+# - the Java, TypeScript and Python tests share one fixture JWT whose
+#   signature segment is base64 for the word "signature" (c2lnbmF0dXJl);
+# - the READMEs show a truncated placeholder, token=eyJhbGciOiJIUzI1NiJ9...
+title = "fm-sdk"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Test fixture JWT whose signature is the word 'signature'"
+regexTarget = "line"
+regexes = ['''eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.c2lnbmF0dXJl\b''']
+
+[[allowlists]]
+description = "README placeholder token, truncated with an ellipsis"
+regexTarget = "line"
+regexes = ['''token=eyJhbGciOiJIUzI1NiJ9\.\.\.''']
