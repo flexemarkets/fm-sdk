@@ -234,8 +234,8 @@ public interface Writing {
      * <p>It completes as {@link #sendCancel(long, long, long)} does. Only the
      * caller's own LIMIT orders are found. One it has none of in the marketplace,
      * which includes a limit that was itself refused, is refused as not found:
-     * 404 {@code ORDER_NOT_IN_MARKETPLACE} on the REST route, 400
-     * {@code ORDER_INVALID} on the socket.
+     * 404 {@code ORDER_NOT_IN_MARKETPLACE} on either route. fm-server 4.23 and
+     * earlier answer it 400 {@code ORDER_INVALID} on the socket.
      *
      * @param marketplaceId        the marketplace the order rests in
      * @param marketId             the market within it; not on the wire, as the
