@@ -715,8 +715,12 @@ with the client, in the order sent:
 - one sent and unanswered when the client closes fails with
   `OrderOutcomeUnknown`: it may have been placed.
 
-A cancel needs the order's id, so an order cannot be cancelled until it is
-answered. See [`SUBMIT-RATE.md`](SUBMIT-RATE.md) for the rates this reaches.
+A cancel names its order by its id or, since fm-server 4.20, by the submission
+id it was sent with, so an order can be cancelled before it is answered:
+`sendCancel(marketplaceId, marketId, pending.submissionId())`, or
+`originalSubmissionId` on the CANCEL on the wire, in place of `original`. Only
+the caller's own LIMIT orders are found. See [`SUBMIT-RATE.md`](SUBMIT-RATE.md)
+for the rates this reaches.
 
 ### Message types
 
