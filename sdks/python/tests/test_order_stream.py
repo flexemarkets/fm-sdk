@@ -374,6 +374,23 @@ class TestSendCancel:
         cancel = pending.result(5)
         assert (cancel.id, cancel.original, cancel.type) == (102, 101, "CANCEL")
 
+    def test_a_cancel_by_submission_id_goes_behind_its_unanswered_limit_naming_it_by_that_alone(self, client):
+        fm, listener = client
+        limit = fm.send_limit(MP, 11, "SELL", 1, 900)
+        pending = fm.send_cancel(MP, 11, limit.submission_id)
+
+        assert not limit.done(), "nothing has answered the limit"
+        assert [b["type"] for b in listener.bodies] == ["LIMIT", "CANCEL"]
+        assert listener.bodies[1] == {"marketplaceId": MP, "type": "CANCEL",
+                                      "originalSubmissionId": limit.submission_id,
+                                      "submissionId": pending.submission_id}
+        assert pending.submission_id != limit.submission_id, "the cancel's own id stays its own"
+
+        fm._order_streams[MP]._events.put(OrdersUpdate(orders=[
+            Order(id=102, original=101, consumer=None, type="CANCEL", submission_id=pending.submission_id),
+        ], seq=1))
+        assert pending.result(5).original == 101
+
     def test_a_refused_cancel_raises_what_rest_raises(self, client):
         fm, _ = client
         pending = fm.send_cancel(MP, 11, 101)

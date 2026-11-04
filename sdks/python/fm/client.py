@@ -1759,7 +1759,7 @@ class Flexemarkets:
         return _parse_order(_json(self._delete(url)))
 
     def send_cancel(
-        self, marketplace_id: int, market_id: int, original_id: int,
+        self, marketplace_id: int, market_id: int, original_id: "int | str",
     ) -> "PendingOrder":
         """Cancel what remains of *original_id* without waiting for the answer.
 
@@ -1779,10 +1779,32 @@ class Flexemarkets:
         :meth:`submit_cancel`'s DELETE, which looks the order up, the socket's
         CANCEL goes to the exchange as named, and the id of a fragment a split
         left behind matches nothing -- the CANCEL is recorded, consumed by
-        itself, and nothing is cancelled. An order not yet answered has no id
-        and cannot be cancelled this way. *market_id* goes on the wire: the
+        itself, and nothing is cancelled. *market_id* goes on the wire: the
         socket's CANCEL names its market.
+
+        An order not yet answered has no id, but it has its
+        :attr:`~fm.order_stream.PendingOrder.submission_id` from the moment it
+        is sent. Given that string in place of an id, which needs fm-server
+        4.20, the cancel names the order by it alone and can go right behind its
+        :meth:`send_limit`: it goes through the same window, and fm-server takes
+        them in the order sent, on the socket and on the REST route alike. A
+        split is no concern, as fm-server finds the order and cancels through
+        its original, and *market_id* is not on the wire, as the order names its
+        own market. Only the caller's own LIMIT orders are found. One it has
+        none of in the marketplace, which includes a limit that was itself
+        refused, is refused as not found: 404 ``ORDER_NOT_IN_MARKETPLACE`` on
+        the REST route, 400 ``ORDER_INVALID`` on the socket.
         """
+        if isinstance(original_id, str):
+            # By this alone, on either route: fm-server refuses a CANCEL naming
+            # its order both ways, and fills in the ids and the market from what
+            # it finds.
+            return self._order_stream(marketplace_id).submit({
+                "marketplaceId": marketplace_id,
+                "type": OrderType.CANCEL,
+                "originalSubmissionId": original_id,
+                "submissionId": str(uuid.uuid4()),
+            })
         cancel: dict[str, Any] = {
             "marketplaceId": marketplace_id,
             "marketId": market_id,
