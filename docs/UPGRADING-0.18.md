@@ -67,6 +67,14 @@ One it has none of in the marketplace, which includes a limit that was itself
 refused, is refused as not found: 404 `ORDER_NOT_IN_MARKETPLACE` on either
 route. fm-server 4.23 and earlier answer it 400 `ORDER_INVALID` on the socket.
 
+**A failed socket order may have gone through.** From the fm-server release
+after 4.23, an order on the socket fails with the status, `error` and message
+REST would answer. No SDK code changes for this, but a server fault is now
+answered as one: 500 `SERVER_ERROR`, or 503 `SERVER_SUPERSEDED` while a server
+is being replaced. Both come as a `ConnectionFailed` carrying that status, not
+as a refusal, and the order may have been placed. Before sending it again, look
+for its `submissionId` among your orders, or the same trade can happen twice.
+
 ---
 
 ## Checking your code
