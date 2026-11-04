@@ -209,7 +209,7 @@ public interface Writing {
      * order up, the socket's CANCEL goes to the exchange as named, and the id of
      * a fragment a split left behind matches nothing -- the CANCEL is recorded,
      * consumed by itself, and nothing is cancelled. An order not yet answered has
-     * no id and cannot be cancelled this way.
+     * no id: cancel it with {@link #sendCancel(long, long, String)}.
      *
      * @param marketplaceId the marketplace the order rests in
      * @param marketId      the market within it; on the wire, as the socket's
@@ -218,6 +218,33 @@ public interface Writing {
      * @return the cancel, sent and not yet answered
      */
     PendingOrder sendCancel(long marketplaceId, long marketId, long originalId);
+
+    /**
+     * Cancel what remains of one of this participant's orders, named by the
+     * submission id it was sent with, without waiting for the answer to either.
+     * Needs fm-server 4.20.
+     *
+     * <p>An order has no id until it is answered, but it has its
+     * {@link PendingOrder#submissionId()} from the moment it is sent, so this
+     * can go right behind its {@link #sendLimit(long, long, OrderSide, long, long)}.
+     * The cancel goes through the same window as the limit, and fm-server takes
+     * them in the order sent, on the socket and on the REST route alike. A split
+     * is no concern: fm-server finds the order and cancels through its original.
+     *
+     * <p>It completes as {@link #sendCancel(long, long, long)} does. Only the
+     * caller's own LIMIT orders are found. One it has none of in the marketplace,
+     * which includes a limit that was itself refused, is refused as not found:
+     * 404 {@code ORDER_NOT_IN_MARKETPLACE} on the REST route, 400
+     * {@code ORDER_INVALID} on the socket.
+     *
+     * @param marketplaceId        the marketplace the order rests in
+     * @param marketId             the market within it; not on the wire, as the
+     *                             order names its own market, and an argument so
+     *                             that this reads as the other form does
+     * @param originalSubmissionId the submission id the order was sent with
+     * @return the cancel, sent and not yet answered
+     */
+    PendingOrder sendCancel(long marketplaceId, long marketId, String originalSubmissionId);
 
     /**
      * Cross the book: buy at the highest price this market allows, sell at the
