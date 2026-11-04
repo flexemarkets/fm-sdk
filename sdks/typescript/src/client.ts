@@ -1912,8 +1912,8 @@ export class Flexemarkets {
    * cancels through its original, and `marketId` is not on the wire, as the order
    * names its own market. Only the caller's own LIMIT orders are found. One it has
    * none of in the marketplace, which includes a limit that was itself refused, is
-   * refused as not found: 404 `ORDER_NOT_IN_MARKETPLACE` on the REST route, 400
-   * `ORDER_INVALID` on the socket.
+   * refused as not found: 404 `ORDER_NOT_IN_MARKETPLACE` on either route. fm-server
+   * 4.23 and earlier answer it 400 `ORDER_INVALID` on the socket.
    */
   async sendCancel(
     marketplaceId: number,
