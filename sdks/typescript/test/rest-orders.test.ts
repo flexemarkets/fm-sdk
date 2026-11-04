@@ -270,6 +270,24 @@ test("a REST client sends sendLimit and sendCancel as batches", async () => {
             "a REST cancel names its order as a REST CANCEL always has");
 });
 
+test("a REST sendCancel by submission id names its order by that alone", async () => {
+  const { url, requests, stop } = await serving();
+  const fm = await Flexemarkets.connect(TOKEN, url, "rest-orders-test", { orderRoute: "REST" });
+  const limit = await fm.sendLimit(1, 11, "BUY", 1, 150);
+  try {
+    const cancel = await (await fm.sendCancel(1, 11, limit.submissionId)).result();
+    assert.equal(cancel.type, "CANCEL");
+  } finally {
+    fm.close();
+    stop();
+  }
+  const sent = requests.flatMap((r) => r.body);
+  assert.deepEqual(sent.map((o) => o.type), ["LIMIT", "CANCEL"]);
+  assert.equal(sent[1].originalSubmissionId, limit.submissionId);
+  assert.deepEqual(["id", "original", "supplier"].filter((k) => k in sent[1]), [],
+                   "fm-server refuses a CANCEL naming its order both ways");
+});
+
 test("the route is named either way, and nothing else", async () => {
   const { url, requests, stop } = await serving();
   try {
