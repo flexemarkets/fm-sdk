@@ -375,6 +375,50 @@ class RestOrderWindowTest {
     }
 
     @Test
+    void aRestCancelBySubmissionIdNamesItsOrderByThatAlone() throws Exception {
+        var requests = Collections.synchronizedList(new ArrayList<ArrayNode>());
+        var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/api/v1/tokens", exchange -> respond(exchange, """
+            {"token":"%s","person":{"id":7,"accountId":1,"email":"dev@dev"},"account":{"id":1,"name":"dev"}}
+            """.formatted(TOKEN)));
+        server.createContext("/api/v1/marketplaces/1/orders/batch", exchange -> {
+            var body = (ArrayNode) HttpFlexemarkets.MAPPER.readTree(exchange.getRequestBody().readAllBytes());
+            requests.add(body);
+            var answers = HttpFlexemarkets.MAPPER.createArrayNode();
+            for (JsonNode o : body) {
+                var entry = answers.addObject();
+                entry.put("status", 201);
+                var placed = entry.putObject("order");
+                placed.put("id", 500);
+                placed.set("type", o.get("type"));
+                placed.set("submissionId", o.get("submissionId"));
+            }
+            respond(exchange, answers.toString());
+        });
+        server.start();
+        Flexemarkets fm = Flexemarkets.connect(TOKEN,
+                "http://127.0.0.1:" + server.getAddress().getPort() + "/api/marketplaces/1",
+                "rest-order-window-test", OrderRoute.REST);
+        try {
+            var limit = fm.sendLimit(1L, 11L, OrderSide.BUY, 1L, 150L);
+            var cancel = fm.sendCancel(1L, 11L, limit.submissionId());
+            assertThat(cancel.get(TIMEOUT_S, TimeUnit.SECONDS).type()).hasToString("CANCEL");
+
+            var sent = requests.stream().flatMap(batch -> batch.valueStream()).toList();
+            assertThat(sent).hasSize(2);
+            assertThat(sent.get(0).get("type").asString()).isEqualTo("LIMIT");
+            var named = sent.get(1);
+            assertThat(named.get("originalSubmissionId").asString()).isEqualTo(limit.submissionId());
+            assertThat(List.of(named.has("id"), named.has("original"), named.has("supplier")))
+                    .as("fm-server refuses a CANCEL naming its order both ways")
+                    .containsOnly(false);
+        } finally {
+            fm.close();
+            server.stop(0);
+        }
+    }
+
+    @Test
     void anUnknownExceptionTypeFromThePostIsStillUnknown() throws Exception {
         // Not a FlexemarketsException at all: whatever broke, the order's fate is not known.
         var post = new FakePost();

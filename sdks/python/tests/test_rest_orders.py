@@ -269,6 +269,19 @@ def test_a_rest_client_sends_send_limit_and_send_cancel_as_batches(base_url):
         "a REST cancel names its order as a REST CANCEL always has"
 
 
+def test_a_rest_cancel_by_submission_id_names_its_order_by_that_alone(base_url):
+    with Flexemarkets.connect(TOKEN, base_url, "rest-orders-test", order_route=OrderRoute.REST) as fm:
+        limit = fm.send_limit(1, 11, "BUY", 1, 150)
+        cancel = fm.send_cancel(1, 11, limit.submission_id).result(TIMEOUT)
+
+    assert cancel.type == "CANCEL"
+    sent = [order for _, batch in requests for order in batch]
+    assert [o["type"] for o in sent] == ["LIMIT", "CANCEL"]
+    assert sent[1]["originalSubmissionId"] == limit.submission_id
+    assert not {"id", "original", "supplier"} & set(sent[1]), \
+        "fm-server refuses a CANCEL naming its order both ways"
+
+
 def test_the_route_is_named_either_way_and_nothing_else(base_url):
     with Flexemarkets.connect(TOKEN, base_url, "rest-orders-test", order_route="rest") as fm:
         fm.send_limit(1, 11, "BUY", 1, 150).result(TIMEOUT)

@@ -526,6 +526,28 @@ class OrderStreamTest {
 
     @Test
     @Timeout(20)
+    void aCancelBySubmissionIdGoesBehindItsUnansweredLimitNamingItByThatAlone() throws Exception {
+        var listener = new Bodies();
+        var fm = stubbedClient(listener, OrderStream.HOLD_MS);
+        var limit = fm.sendLimit(MP, 11, OrderSide.SELL, 1, 900);
+        var pending = fm.sendCancel(MP, 11, limit.submissionId());
+
+        assertThat(limit).as("nothing has answered the limit").isNotDone();
+        assertThat(listener.types()).containsExactly("LIMIT", "CANCEL");
+        assertThat(HttpFlexemarkets.MAPPER.readTree(listener.bodies.get(1))).isEqualTo(HttpFlexemarkets.MAPPER.readTree(
+                "{\"marketplaceId\":7,\"type\":\"CANCEL\",\"originalSubmissionId\":\"" + limit.submissionId() + "\","
+                + "\"submissionId\":\"" + pending.submissionId() + "\"}"));
+        assertThat(pending.submissionId()).as("the cancel's own id stays its own").isNotEqualTo(limit.submissionId());
+
+        var cancelRow = HttpFlexemarkets.MAPPER.readValue("{\"id\":102,\"original\":101,\"supplier\":102,"
+                + "\"consumer\":null,\"type\":\"CANCEL\",\"side\":null,\"units\":1,\"price\":900,"
+                + "\"submissionId\":\"" + pending.submissionId() + "\"}", Order.class);
+        fm._orderStream(MP).events().offer(new OrdersUpdate(new Order[] {cancelRow}, 1));
+        assertThat(pending.get(5, TimeUnit.SECONDS).original()).isEqualTo(101);
+    }
+
+    @Test
+    @Timeout(20)
     void aRefusedSendCancelFailsWithWhatRestThrows() throws Exception {
         var fm = stubbedClient(new Bodies(), OrderStream.HOLD_MS);
         var pending = fm.sendCancel(MP, 11, 101);

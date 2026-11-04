@@ -950,6 +950,19 @@ public class HttpFlexemarkets implements Flexemarkets {
         return _send(marketplaceId, submissionId, cancel);
     }
 
+    @Override
+    public fm.PendingOrder sendCancel(long marketplaceId, long marketId, String originalSubmissionId) {
+        var cancel = new LinkedHashMap<String, Object>();
+        cancel.put("marketplaceId",        marketplaceId);
+        cancel.put("type",                 OrderType.CANCEL);
+        // By this alone, on either route: fm-server refuses a CANCEL naming its
+        // order both ways, and fills in the ids and the market from what it finds.
+        cancel.put("originalSubmissionId", originalSubmissionId);
+        var submissionId = UUID.randomUUID().toString();
+        cancel.put("submissionId", submissionId);
+        return _send(marketplaceId, submissionId, cancel);
+    }
+
     /** The most orders one {@code POST .../orders/batch} carries: fm-server's OrderBatchV1Controller.MOST_ORDERS. */
     static final int MOST_BATCHED = 64;
 

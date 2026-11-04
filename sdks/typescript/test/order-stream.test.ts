@@ -457,6 +457,25 @@ test("sendCancel names the original and is answered by its cancel row", async ()
   } finally { done(); }
 });
 
+test("a sendCancel by submission id goes behind its unanswered limit, naming it by that alone", async () => {
+  const { fm, listener, bodies, done } = await stubbedClient();
+  try {
+    const limit = await fm.sendLimit(MP, 11, "SELL", 1, 900);
+    const pending = await fm.sendCancel(MP, 11, limit.submissionId);
+    assert.equal(limit.done, false, "nothing has answered the limit");
+    assert.deepEqual(bodies.map((b) => b.type), ["LIMIT", "CANCEL"]);
+    assert.deepEqual(bodies[1], { marketplaceId: MP, type: "CANCEL", originalSubmissionId: limit.submissionId,
+                                  submissionId: pending.submissionId });
+    assert.notEqual(pending.submissionId, limit.submissionId, "the cancel's own id stays its own");
+
+    listener.callback({ kind: "orders-update", seq: 1, orders: [
+      parseOrder({ id: 102, original: 101, supplier: 102, consumer: null, type: "CANCEL", side: null,
+                   units: 1, price: 900, submissionId: pending.submissionId } as never),
+    ] });
+    assert.equal((await pending.result()).original, 101);
+  } finally { done(); }
+});
+
 test("a refused sendCancel rejects with what REST throws", async () => {
   const { fm, listener, done } = await stubbedClient();
   try {

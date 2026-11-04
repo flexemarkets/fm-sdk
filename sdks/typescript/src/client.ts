@@ -1900,15 +1900,36 @@ export class Flexemarkets {
    * {@link submitLimit} answered, its `id`. Unlike {@link submitCancel}'s DELETE,
    * which looks the order up, the socket's CANCEL goes to the exchange as named,
    * and the id of a fragment a split left behind matches nothing -- the CANCEL is
-   * recorded, consumed by itself, and nothing is cancelled. An order not yet
-   * answered has no id and cannot be cancelled this way. `marketId` goes on the
+   * recorded, consumed by itself, and nothing is cancelled. `marketId` goes on the
    * wire: the socket's CANCEL names its market.
+   *
+   * An order not yet answered has no id, but it has its
+   * {@link PendingOrder.submissionId} from the moment it is sent. Given that string
+   * in place of an id, which needs fm-server 4.20, the cancel names the order by it
+   * alone and can go right behind its {@link sendLimit}: it goes through the same
+   * window, and fm-server takes them in the order sent, on the socket and on the
+   * REST route alike. A split is no concern, as fm-server finds the order and
+   * cancels through its original, and `marketId` is not on the wire, as the order
+   * names its own market. Only the caller's own LIMIT orders are found. One it has
+   * none of in the marketplace, which includes a limit that was itself refused, is
+   * refused as not found: 404 `ORDER_NOT_IN_MARKETPLACE` on either route. fm-server
+   * 4.23 and earlier answer it 400 `ORDER_INVALID` on the socket.
    */
   async sendCancel(
     marketplaceId: number,
     marketId: number,
-    originalId: number,
+    originalId: number | string,
   ): Promise<PendingOrder> {
+    if (typeof originalId === "string") {
+      // By this alone, on either route: fm-server refuses a CANCEL naming its
+      // order both ways, and fills in the ids and the market from what it finds.
+      return (await this._orderStream(marketplaceId)).submit({
+        marketplaceId,
+        type: "CANCEL",
+        originalSubmissionId: originalId,
+        submissionId: randomUUID(),
+      });
+    }
     const cancel: JsonObject = {
       marketplaceId,
       marketId,
