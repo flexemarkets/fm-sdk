@@ -1793,7 +1793,8 @@ class Flexemarkets:
         own market. Only the caller's own LIMIT orders are found. One it has
         none of in the marketplace, which includes a limit that was itself
         refused, is refused as not found: 404 ``ORDER_NOT_IN_MARKETPLACE`` on
-        the REST route, 400 ``ORDER_INVALID`` on the socket.
+        either route. fm-server 4.23 and earlier answer it 400 ``ORDER_INVALID``
+        on the socket.
         """
         if isinstance(original_id, str):
             # By this alone, on either route: fm-server refuses a CANCEL naming
