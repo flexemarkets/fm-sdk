@@ -1002,6 +1002,12 @@ class Flexemarkets:
             self._token_obj = token
             return True
 
+    def _request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+        """:meth:`_send`, with a refusal raised as the error it means."""
+        resp = self._send(method, url, **kwargs)
+        _check_response(resp)
+        return resp
+
     def _exchange(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         """One request and its answer, or :class:`ApiError` if the exchange was lost.
 
@@ -1017,14 +1023,17 @@ class Flexemarkets:
         except httpx.TransportError as lost:
             raise ApiError(f"HTTP request failed: {lost!r}") from lost
 
-    def _request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
-        """Send with this client's token; if it has expired, renew it once and send again."""
+    def _send(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+        """Send with this client's token; if it has expired, renew it once and send again.
+
+        Whatever the answer, for a caller that reads a refusal itself. Every
+        request but a sign-in comes through here, or a token 24 hours old ends it.
+        """
         extra = kwargs.pop("headers", {})
         presented = self._bearer_token()
         resp = self._exchange(method, url, headers={**self._auth_headers(), **extra}, **kwargs)
         if _token_expired(resp) and self._renew_token(presented):
             resp = self._exchange(method, url, headers={**self._auth_headers(), **extra}, **kwargs)
-        _check_response(resp)
         return resp
 
     def _get(self, url: str) -> httpx.Response:
@@ -1074,17 +1083,14 @@ class Flexemarkets:
         self, method: str, url: str, content: bytes, headers: dict[str, str] | None = None,
     ) -> httpx.Response:
         """CSV bytes as the request body, declared text/csv; see :meth:`_send_csv`."""
-        resp = self._exchange(
+        return self._request(
             method, url, content=content,
             headers={
-                **self._auth_headers(),
                 "Content-Type": "text/csv",
                 "Accept": "application/json",
                 **(headers or {}),
             },
         )
-        _check_response(resp)
-        return resp
 
     # -- round-trip timing -------------------------------------------------
 
@@ -1315,7 +1321,7 @@ class Flexemarkets:
 
     def delete_user(self, user_id: int) -> None:
         url = _v1(self._endpoint, f"/users/{user_id}")
-        resp = self._exchange("DELETE", url, headers=self._auth_headers())
+        resp = self._send("DELETE", url)
         _check_conflict_user(resp, user_id)
 
     # -- marketplaces ------------------------------------------------------
@@ -1900,14 +1906,7 @@ class Flexemarkets:
         ``x-fm-as-of-seq`` response header value. Returns
         :data:`NO_SEQ` when the header is absent.
         """
-        resp = self._exchange(
-            "GET", url,
-            headers={
-                **self._auth_headers(),
-                "Accept": "application/json",
-            },
-        )
-        _check_response(resp)
+        resp = self._get(url)
         raw = resp.headers.get("x-fm-as-of-seq")
         try:
             as_of_seq = int(raw) if raw is not None else NO_SEQ
@@ -2016,10 +2015,7 @@ class Flexemarkets:
         url = _marketplace(self._endpoint, marketplace_id) + "/holdings"
         if session_ids:
             url += f"?sessions={_ids_param(session_ids)}"
-        resp = self._exchange(
-            "GET", url, headers={**self._auth_headers(), "Accept": "text/csv, */*"})
-        _check_response(resp)
-        return resp.text
+        return self._request("GET", url, headers={"Accept": "text/csv, */*"}).text
 
     def upload_holdings(self, marketplace_id: int, filename: str) -> list[Holding]:
         """Stage an allocation from a holdings CSV: ``POST allocations`` with
@@ -2105,7 +2101,7 @@ class Flexemarkets:
             # A participant's widget is theirs, under the participant.
             url += f"/participants/{user_id}"
         url += f"/widgets/{_segment(key)}"
-        resp = self._exchange("DELETE", url, headers=self._auth_headers())
+        resp = self._send("DELETE", url)
         if resp.status_code == 404 and not resp.text.strip():
             return False
         _check_response(resp)

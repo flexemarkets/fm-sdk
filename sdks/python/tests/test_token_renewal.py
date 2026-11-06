@@ -50,6 +50,9 @@ def _handler(state: Server):
         def do_POST(self):
             length = int(self.headers.get("Content-Length") or 0)
             self.rfile.read(length)
+            if self.path.startswith("/api/v1/marketplaces"):
+                self._answer_call(b"[]")
+                return
             if self.path in ("/api/v1/tokens", "/api/v1/tokens/refresh"):
                 state.sign_ins += 1
                 if state.sign_in_fails_after is not None and state.sign_ins > state.sign_in_fails_after:
@@ -61,6 +64,19 @@ def _handler(state: Server):
                             "account": {"id": 1, "name": "dev"}})
                 return
             self._send({"error": "NOT_FOUND"}, status=404)
+
+        def _answer_call(self, answer: bytes) -> None:
+            state.requests.append(self.headers.get("Authorization", ""))
+            if self.headers.get("Authorization") != f"Bearer {NEW}":
+                self._send({"error": state.expired_reason, "message": "JWT expired for dev@dev"}, status=401)
+                return
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(answer)))
+            self.end_headers()
+            self.wfile.write(answer)
+
+        def do_DELETE(self):
+            self._answer_call(b"")
 
         def do_GET(self):
             state.requests.append(self.headers.get("Authorization", ""))
@@ -104,6 +120,29 @@ def test_an_expired_token_is_renewed_once_and_the_request_repeated(server, tmp_p
         client.close()
 
     assert [m.symbol for m in markets] == ["A"]
+    assert server.sign_ins == 2
+    assert server.requests == [f"Bearer {OLD}", f"Bearer {NEW}"]
+
+
+@pytest.mark.parametrize("call", [
+    lambda c: c.active_orders(1),
+    lambda c: c.recent_trades(1),
+    lambda c: c.download_holdings(1),
+    lambda c: c.delete_user(9),
+    lambda c: c.remove_widget(1, "layout"),
+    lambda c: c.upload_holdings_csv(1, "a,b\n"),
+], ids=["active_orders", "recent_trades", "download_holdings", "delete_user", "remove_widget", "csv_upload"])
+def test_every_call_that_does_not_go_through_request_renews_too(server, tmp_path, call):
+    """These sent through httpx directly, so an expired token ended them where it
+    renewed everything else. A desk's reseed is active_orders and recent_trades:
+    a robot past its 24 hours could not recover from a gap or a reconnect."""
+    client = Flexemarkets.connect(_credential(tmp_path), f"{server.base}/marketplaces/1", "renewal-test")
+    try:
+        call(client)
+        assert client.token().token == NEW
+    finally:
+        client.close()
+
     assert server.sign_ins == 2
     assert server.requests == [f"Bearer {OLD}", f"Bearer {NEW}"]
 
