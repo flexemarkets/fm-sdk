@@ -68,7 +68,7 @@ class FirstRobot:
         if session is None or session.state != Session.STATE_OPEN:
             return
         holding = self.desk.holding()
-        for market in self.desk.markets():
+        for market in self.desk.markets:
             security = holding.security(market.id) if holding is not None else None
             if security is None:
                 continue

@@ -12,6 +12,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from fm import InvalidArgumentError, Market, Session
+from fm.desk import DeskHandle
 
 _spec = importlib.util.spec_from_file_location("first_robot", Path(__file__).parent.parent / "first_robot.py")
 first_robot = importlib.util.module_from_spec(_spec)
@@ -29,6 +30,7 @@ class Desk:
         self.sent: list[str] = []
         self.refuse: str | None = None
         self._next = 100
+        self.markets = [A]   # a list, as DeskHandle.markets is: not a method
 
     def session(self):
         return Session(id=1, original=1, state=self.state)
@@ -36,13 +38,10 @@ class Desk:
     def holding(self):
         return SimpleNamespace(security=lambda market_id: self.security if market_id == A.id else None)
 
-    def markets(self):
-        return [A]
-
     def book(self, market_id):
         return SimpleNamespace(best_buy_price=lambda: self.bid, best_sell_price=lambda: self.ask)
 
-    def submit_limit(self, market_id, side, units, price):
+    def submit_limit(self, market_id, side, units, price, *, refuse_locally=True):
         if self.refuse:
             raise InvalidArgumentError(self.refuse)
         self.sent.append(f"{side} {units}@{price}")
@@ -51,6 +50,16 @@ class Desk:
 
     def submit_cancel(self, market_id, original_id):
         self.sent.append(f"CANCEL {original_id}")
+
+
+def test_it_ticks_on_the_handle_a_real_client_gives_it():
+    """The fake above is only as right as whoever wrote it: it had a markets()
+    method, where the real handle has a property, so these all passed while the
+    example raised TypeError the moment a session opened."""
+    desk = Desk()
+    handle = DeskHandle(desk, lambda: None, refuse_locally=False)
+    first_robot.FirstRobot(handle).tick()
+    assert desk.sent == ["BUY 1@405", "SELL 1@595"]
 
 
 def test_it_quotes_one_tick_inside_the_spread_on_both_sides():
