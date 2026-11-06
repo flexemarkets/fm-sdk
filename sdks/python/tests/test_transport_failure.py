@@ -8,6 +8,7 @@ Java SDK's TransportFailureTest, which has always answered ``ApiException``.
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -16,7 +17,7 @@ import pytest
 
 import fm.client as client_module
 from fm.client import Flexemarkets
-from fm.exceptions import ApiError
+from fm.exceptions import ApiError, ConnectionFailedError, FlexemarketsError
 
 TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl"
 SIGNED_IN = {"token": TOKEN, "person": {"id": 7, "accountId": 1, "email": "dev@dev"},
@@ -110,4 +111,95 @@ def test_an_unreadable_answer_is_not_sent_again(monkeypatch, tmp_path):
 def test_nothing_sends_around_the_one_place_that_catches():
     """A call sending through httpx directly would let its error past, as all of them did."""
     source = Path(client_module.__file__).read_text()
-    assert re.findall(r"self\._http\.(\w+)", source) == ["request", "close"]
+    assert re.findall(r"self\._http\.(\w+)", source) == ["is_closed", "request", "close"]
+
+
+@pytest.mark.parametrize("call", CALLS.values(), ids=CALLS.keys())
+def test_an_answer_that_cannot_be_decompressed_is_an_api_error(monkeypatch, tmp_path, call):
+    """httpx.DecodingError is not a TransportError: it passed the catch, from every call."""
+    def answer(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, headers={"Content-Encoding": "gzip"}, content=b"not gzip at all")
+
+    with _client(monkeypatch, tmp_path, answer) as client:
+        with pytest.raises(ApiError) as lost:
+            call(client)
+    assert isinstance(lost.value.__cause__, httpx.DecodingError)
+
+
+def test_a_closed_client_fails_as_the_sdk_fails(monkeypatch, tmp_path):
+    client = _client(monkeypatch, tmp_path, lambda request: httpx.Response(200, json=[]))
+    client.close()
+
+    with pytest.raises(ConnectionFailedError):
+        client.markets(1)
+
+
+ONE_THING = {
+    "submit_limit": lambda c: c.submit_limit(1, 11, "BUY", 1, 100),
+    "submit_cancel": lambda c: c.submit_cancel(1, 11, 99),
+    "marketplace": lambda c: c.marketplace(1),
+    "session": lambda c: c.session(1),
+    "holding": lambda c: c.holding(1),
+}
+A_LIST = {
+    "markets": lambda c: c.markets(1),
+    "accounts": lambda c: c.accounts(),
+    "active_orders": lambda c: c.active_orders(1),
+    "recent_trades": lambda c: c.recent_trades(1),
+    "sessions": lambda c: c.sessions(1),
+}
+
+
+@pytest.mark.parametrize("body", [[], 1, "x", None], ids=["list", "number", "text", "null"])
+@pytest.mark.parametrize("call", ONE_THING.values(), ids=ONE_THING.keys())
+def test_valid_json_that_is_not_the_object_asked_for_is_an_api_error(monkeypatch, tmp_path, call, body):
+    """A caller catching FlexemarketsError met AttributeError and TypeError instead."""
+    with _client(monkeypatch, tmp_path, lambda request: httpx.Response(200, content=json.dumps(body))) as client:
+        with pytest.raises(ApiError):
+            call(client)
+
+
+def test_a_read_of_an_object_it_then_reaches_into_answered_with_the_wrong_shape_is_an_api_error(monkeypatch, tmp_path):
+    with _client(monkeypatch, tmp_path, lambda request: httpx.Response(200, content="1")) as client:
+        with pytest.raises(ApiError):
+            client.manager_otp_bundle([1])
+
+
+@pytest.mark.parametrize("body", [{}, 1, "x", None, [1]], ids=["object", "number", "text", "null", "list-of-numbers"])
+@pytest.mark.parametrize("call", A_LIST.values(), ids=A_LIST.keys())
+def test_valid_json_that_is_not_the_list_asked_for_is_an_api_error(monkeypatch, tmp_path, call, body):
+    with _client(monkeypatch, tmp_path, lambda request: httpx.Response(200, content=json.dumps(body))) as client:
+        with pytest.raises(ApiError):
+            call(client)
+
+
+@pytest.mark.parametrize("body", [[], 1, "x", None], ids=["list", "number", "text", "null"])
+def test_a_sign_in_answered_with_the_wrong_shape_is_an_api_error(monkeypatch, tmp_path, body):
+    with pytest.raises(ApiError):
+        _connect(monkeypatch, tmp_path, lambda request: httpx.Response(200, content=json.dumps(body)))
+
+
+def test_a_renewal_answered_with_the_wrong_shape_is_no_renewal(monkeypatch, tmp_path):
+    """It leaked out of the reconnect thread, which died with nothing said."""
+    sign_ins = {"n": 0}
+
+    def route(request: httpx.Request) -> httpx.Response:
+        if "/tokens" in request.url.path:
+            sign_ins["n"] += 1
+            return httpx.Response(200, json=SIGNED_IN if sign_ins["n"] == 1 else [])
+        return httpx.Response(200, json=[])
+
+    with _connect(monkeypatch, tmp_path, route) as client:
+        assert client._renew_token(client._bearer_token()) is False
+
+
+@pytest.mark.parametrize("name", sorted(n for n in vars(client_module) if n.startswith("_parse_")))
+def test_every_parser_answers_a_wrong_shape_with_an_api_error(name):
+    """So one added later cannot let AttributeError past a caller."""
+    with pytest.raises(FlexemarketsError):
+        getattr(client_module, name)(1)
+
+
+def test_every_list_answer_is_checked_for_being_one():
+    source = Path(client_module.__file__).read_text()
+    assert not re.findall(r"for \w+ in (?:_json\(|data\])", source)

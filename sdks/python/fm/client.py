@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import importlib.metadata
 import json
 import logging
@@ -133,6 +134,23 @@ T = TypeVar("T")
 # JSON ↔ dataclass helpers
 # ---------------------------------------------------------------------------
 
+def _reads_an_answer(parse: Callable[[Any], T]) -> Callable[[Any], T]:
+    """A parser whose failure is an :class:`ApiError`, as a caller is promised.
+
+    Each reads what it is given as an object: a list, a number or a bad field in
+    it raised AttributeError, TypeError or ValueError past anyone catching
+    :class:`FlexemarketsError`. The stream reports the error as FrameUnreadable.
+    """
+    @functools.wraps(parse)
+    def reading(data: Any) -> T:
+        try:
+            return parse(data)
+        except (AttributeError, KeyError, TypeError, ValueError) as e:
+            raise ApiError(f"Failed to parse the response body: {e!r}") from e
+    return reading
+
+
+@_reads_an_answer
 def _parse_person(data: dict[str, Any] | None) -> Person | None:
     if data is None:
         return None
@@ -151,6 +169,7 @@ def _parse_person(data: dict[str, Any] | None) -> Person | None:
     )
 
 
+@_reads_an_answer
 def _parse_account(data: dict[str, Any] | None) -> Account | None:
     if data is None:
         return None
@@ -166,6 +185,7 @@ def _parse_account(data: dict[str, Any] | None) -> Account | None:
     )
 
 
+@_reads_an_answer
 def _parse_token(data: dict[str, Any]) -> Token:
     return Token(
         request_url=data.get("requestUrl"),
@@ -175,6 +195,7 @@ def _parse_token(data: dict[str, Any]) -> Token:
     )
 
 
+@_reads_an_answer
 def _parse_security(data: dict[str, Any]) -> Security:
     return Security(
         market_id=data.get("marketId", 0),
@@ -188,6 +209,7 @@ def _parse_security(data: dict[str, Any]) -> Security:
     )
 
 
+@_reads_an_answer
 def _parse_market(data: dict[str, Any]) -> Market:
     return Market(
         id=data.get("id", 0),
@@ -220,6 +242,7 @@ def _or_default(value: Any, default: int) -> int:
     return default if value is None else value
 
 
+@_reads_an_answer
 def _parse_current_session(data: dict[str, Any]) -> CurrentSession:
     return CurrentSession(
         marketplace_id=data.get("marketplaceId", 0),
@@ -228,6 +251,7 @@ def _parse_current_session(data: dict[str, Any]) -> CurrentSession:
     )
 
 
+@_reads_an_answer
 def _parse_call_indicative(data: dict[str, Any]) -> CallIndicative:
     return CallIndicative(
         marketplace_id=data.get("marketplaceId", 0),
@@ -240,6 +264,7 @@ def _parse_call_indicative(data: dict[str, Any]) -> CallIndicative:
     )
 
 
+@_reads_an_answer
 def _parse_market_call(data: dict[str, Any]) -> MarketCall:
     return MarketCall(
         id=data.get("id", 0),
@@ -258,6 +283,7 @@ def _parse_market_call(data: dict[str, Any]) -> MarketCall:
     )
 
 
+@_reads_an_answer
 def _parse_marketplace(data: dict[str, Any]) -> Marketplace:
     return Marketplace(
         id=data.get("id", 0),
@@ -268,6 +294,7 @@ def _parse_marketplace(data: dict[str, Any]) -> Marketplace:
     )
 
 
+@_reads_an_answer
 def _parse_session(data: dict[str, Any]) -> Session:
     return Session(
         marketplace_id=data.get("marketplaceId", 0),
@@ -284,6 +311,7 @@ def _parse_session(data: dict[str, Any]) -> Session:
     )
 
 
+@_reads_an_answer
 def _parse_order(data: dict[str, Any]) -> Order:
     return Order(
         id=data.get("id", 0),
@@ -310,6 +338,7 @@ def _parse_order(data: dict[str, Any]) -> Order:
     )
 
 
+@_reads_an_answer
 def _parse_holding(data: dict[str, Any]) -> Holding:
     securities_raw = data.get("securities") or data.get("assets") or []
     return Holding(
@@ -325,6 +354,7 @@ def _parse_holding(data: dict[str, Any]) -> Holding:
     )
 
 
+@_reads_an_answer
 def _parse_allotment(data: dict[str, Any]) -> Allotment:
     assets_raw = data.get("assets") or data.get("capital")
     assets = None
@@ -347,6 +377,7 @@ def _parse_allotment(data: dict[str, Any]) -> Allotment:
     )
 
 
+@_reads_an_answer
 def _parse_participant_state(data: dict[str, Any]) -> ParticipantState:
     return ParticipantState(
         marketplace_id=data.get("marketplaceId"),
@@ -361,6 +392,7 @@ def _number(value: Any) -> float | None:
     return None if value is None else float(value)
 
 
+@_reads_an_answer
 def _parse_robot_parameter(data: dict[str, Any]) -> RobotParameter:
     return RobotParameter(
         name=data.get("name") or "",
@@ -377,6 +409,7 @@ def _parse_robot_parameter(data: dict[str, Any]) -> RobotParameter:
     )
 
 
+@_reads_an_answer
 def _parse_robot_parameter_config(data: dict[str, Any]) -> RobotParameterConfig:
     control = data.get("control")
     return RobotParameterConfig(
@@ -390,6 +423,7 @@ def _parse_robot_parameter_config(data: dict[str, Any]) -> RobotParameterConfig:
     )
 
 
+@_reads_an_answer
 def _parse_marketplace_robot(data: dict[str, Any]) -> MarketplaceRobot:
     manifest = data.get("manifest") or {}
     groups = manifest.get("parameters") or {}
@@ -408,6 +442,7 @@ def _parse_marketplace_robot(data: dict[str, Any]) -> MarketplaceRobot:
     )
 
 
+@_reads_an_answer
 def _parse_widget(data: dict[str, Any]) -> Widget:
     return Widget(
         id=data.get("id"),
@@ -443,6 +478,7 @@ def _widget_push_json(push: WidgetPush) -> dict[str, Any]:
     return body
 
 
+@_reads_an_answer
 def _parse_connection(data: dict[str, Any]) -> ClientConnection:
     return ClientConnection(
         marketplace_id=data.get("marketplaceId", 0),
@@ -688,6 +724,24 @@ def _json(response: httpx.Response) -> Any:
         return response.json()
     except ValueError as e:
         raise ApiError("Failed to parse the response body") from e
+
+
+def _rows(data: Any) -> list[dict[str, Any]]:
+    """A list answer, or :class:`ApiError` if this one is not a list of objects.
+
+    Valid JSON of the wrong shape is as unreadable as JSON that is not valid,
+    and a caller catching :class:`FlexemarketsError` is told so either way.
+    """
+    if not isinstance(data, list) or not all(isinstance(row, dict) for row in data):
+        raise ApiError(f"Failed to parse the response body: expected a list of objects, got {type(data).__name__}")
+    return data
+
+
+def _object(data: Any) -> dict[str, Any]:
+    """An object answer, or :class:`ApiError` if this one is not; see :func:`_rows`."""
+    if not isinstance(data, dict):
+        raise ApiError(f"Failed to parse the response body: expected an object, got {type(data).__name__}")
+    return data
 
 
 def _token_expired(response: httpx.Response) -> bool:
@@ -1012,15 +1066,18 @@ class Flexemarkets:
         """One request and its answer, or :class:`ApiError` if the exchange was lost.
 
         Every request this SDK sends goes through here, so no call can let an
-        ``httpx`` transport error past a caller catching ``FlexemarketsError``,
-        which is what the Java and TypeScript SDKs answer too. The transport error
-        stays the ``__cause__``. The resends of an order or a create rely on this:
-        reading an answer happens after they send, so from the send itself
-        ``ApiError`` can only mean the answer was lost.
+        ``httpx`` error past a caller catching ``FlexemarketsError``, which is what
+        the Java and TypeScript SDKs answer too. The ``httpx`` error stays the
+        ``__cause__``. The resends of an order or a create rely on this: reading
+        an answer happens after they send, so from the send itself ``ApiError``
+        can only mean the answer was lost -- or, for one that could not be
+        decompressed, arrived in no state to read, which is the same to a caller.
         """
+        if self._http.is_closed:
+            raise ConnectionFailedError("The client is closed; the request was not sent.")
         try:
             return self._http.request(method, url, **kwargs)
-        except httpx.TransportError as lost:
+        except httpx.RequestError as lost:
             raise ApiError(f"HTTP request failed: {lost!r}") from lost
 
     def _send(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
@@ -1146,7 +1203,7 @@ class Flexemarkets:
             headers={"Accept": "application/json"},
         )
         _check_response(resp)
-        data = _json(resp)
+        data = _object(_json(resp))
         if data.get("refreshToken"):
             self._refresh_token = data["refreshToken"]
         return _parse_token(data)
@@ -1208,7 +1265,7 @@ class Flexemarkets:
     def accounts(self) -> list[Account]:
         url = _v1(self._endpoint, "/accounts")
         data = _json(self._get(url))
-        return [_parse_account(a) for a in data]
+        return [_parse_account(a) for a in _rows(data)]
 
     def accounts_page(self, limit: int, before: int | None = None) -> Page[Account]:
         """A page of :meth:`accounts`: the newest *limit*, or of those whose id is
@@ -1258,7 +1315,7 @@ class Flexemarkets:
         if account is None:
             raise InvalidArgumentError(f"No account named '{account_name}'")
         url = _v1(self._endpoint, f"/accounts/{account.id}/approvals")
-        approval_data = _json(self._post(url, {"approve": True}))
+        approval_data = _object(_json(self._post(url, {"approve": True})))
         return _parse_account(approval_data.get("account"))  # type: ignore[return-value]
 
     def delete_account(self, account_id: int) -> None:
@@ -1271,7 +1328,7 @@ class Flexemarkets:
         delivered to the person they belong to.
         """
         url = _v1(self._endpoint, "/otp/manager")
-        data = _json(self._post(url, {"userIds": user_ids}))
+        data = _object(_json(self._post(url, {"userIds": user_ids})))
         return ManagerOtpBundle(
             expires_at=_timestamp(data.get("expiresAt")),
             otps=[
@@ -1280,7 +1337,7 @@ class Flexemarkets:
                     email=o.get("email"),
                     otp=o.get("otp"),
                 )
-                for o in data.get("otps") or []
+                for o in _rows(data.get("otps") or [])
             ],
         )
 
@@ -1292,7 +1349,7 @@ class Flexemarkets:
     def users(self) -> list[Person]:
         url = _v1(self._endpoint, "/users")
         data = _json(self._get(url))
-        return [_parse_person(u) for u in data]  # type: ignore[misc]
+        return [_parse_person(u) for u in _rows(data)]  # type: ignore[misc]
 
     def users_page(self, limit: int, before: int | None = None) -> Page[Person]:
         """A page of :meth:`users`: the newest *limit*, or of those whose id is
@@ -1329,7 +1386,7 @@ class Flexemarkets:
     def marketplaces(self) -> list[Marketplace]:
         url = _v1(self._endpoint, "/marketplaces")
         data = _json(self._get(url))
-        return [_parse_marketplace(m) for m in data]
+        return [_parse_marketplace(m) for m in _rows(data)]
 
     def marketplaces_page(self, limit: int, before: int | None = None) -> Page[Marketplace]:
         """A page of :meth:`marketplaces`: the newest *limit*, or of those whose id is
@@ -1343,7 +1400,7 @@ class Flexemarkets:
         marketplace that has never opened a session is left out.
         """
         url = _v1(self._endpoint, "/marketplaces/current-sessions")
-        return [_parse_current_session(s) for s in _json(self._get(url))]
+        return [_parse_current_session(s) for s in _rows(_json(self._get(url)))]
 
     def current_sessions_page(self, limit: int, before: int | None = None) -> Page[CurrentSession]:
         """A page of :meth:`current_sessions`, paged by marketplace as
@@ -1387,7 +1444,7 @@ class Flexemarkets:
     def markets(self, marketplace_id: int) -> list[Market]:
         url = _marketplace(self._endpoint, marketplace_id) + "/markets"
         data = _json(self._get(url))
-        return [_parse_market(m) for m in data]
+        return [_parse_market(m) for m in _rows(data)]
 
     def symbols(self, marketplace_id: int) -> list[str]:
         """The markets' own symbols: V1 has no ``/symbols``, which was this
@@ -1504,7 +1561,7 @@ class Flexemarkets:
         avoid HAL.
         """
         url = _marketplace(self._endpoint, marketplace_id) + "/sessions"
-        return [_parse_session(s) for s in _json(self._get(url))]
+        return [_parse_session(s) for s in _rows(_json(self._get(url)))]
 
     def sessions_page(self, marketplace_id: int, limit: int, before: int | None = None) -> Page[Session]:
         """A page of :meth:`sessions`: the newest *limit*, or of those whose id is
@@ -1535,7 +1592,7 @@ class Flexemarkets:
         participants``, names only. A row is an object -- a name, and for a
         manager the user id, not needed here."""
         url = _marketplace(self._endpoint, marketplace_id) + "/participants"
-        return [p.get("name") for p in _json(self._get(url))]
+        return [p.get("name") for p in _rows(_json(self._get(url)))]
 
     def open_session(self, marketplace_id: int) -> Session:
         return self._session_state(marketplace_id, "OPEN")
@@ -1671,7 +1728,7 @@ class Flexemarkets:
         if not isinstance(entries, list) or len(entries) != len(batch):
             raise ApiError(f"Expected {len(batch)} answers to a batch of {len(batch)} orders")
         outcomes: list[Order | FlexemarketsError] = []
-        for entry in entries:
+        for entry in _rows(entries):
             status = entry.get("status", 0)
             outcomes.append(_parse_order(entry.get("order")) if 200 <= status < 300
                             else _refused(status, json.dumps(entry.get("failure"))))
@@ -1899,7 +1956,7 @@ class Flexemarkets:
             url += f"&before={before}"
         resp = self._get(url)
         nxt = _NEXT_LINK.search(",".join(resp.headers.get_list("link")))
-        return Page(rows=[parse(row) for row in _json(resp)], next=int(nxt.group(1)) if nxt else None)
+        return Page(rows=[parse(row) for row in _rows(_json(resp))], next=int(nxt.group(1)) if nxt else None)
 
     def _get_snapshot(self, url: str) -> tuple[dict[str, Any], int]:
         """GET helper that returns the parsed body alongside the
@@ -1932,16 +1989,16 @@ class Flexemarkets:
         if symbol is not None:
             url = f"{base}?state=ACTIVE&symbol={quote(symbol, safe='')}"
             data = _json(self._get(url))
-            orders = [_parse_order(o) for o in data]
+            orders = [_parse_order(o) for o in _rows(data)]
             for o in orders:
                 o.symbol = symbol
             return orders
         if session_ids is not None:
             url = f"{base}?sessions={_ids_param(session_ids)}"
             data = _json(self._get(url))
-            return [_parse_order(o) for o in data]
+            return [_parse_order(o) for o in _rows(data)]
         data = _json(self._get(f"{base}?cancelled=false"))
-        return [_parse_order(o) for o in data]
+        return [_parse_order(o) for o in _rows(data)]
 
     def orders_page(self, marketplace_id: int, limit: int, before: int | None = None) -> Page[Order]:
         """A page of :meth:`orders` with no filter -- cancellations left out,
@@ -1970,7 +2027,7 @@ class Flexemarkets:
             + f"/orders?state=TRADED&symbol={quote(symbol, safe='')}&limit={_MAX_TRADED_LEGS}"
         )
         data = _json(self._get(url))
-        orders = [_parse_order(o) for o in data]
+        orders = [_parse_order(o) for o in _rows(data)]
         for o in orders:
             # The trade id is the original order's, and the query already
             # fixed the symbol. Filling both in is what makes the result a
@@ -1990,7 +2047,7 @@ class Flexemarkets:
         if session_ids:
             url += f"?sessions={_ids_param(session_ids)}"
         data = _json(self._get(url))
-        return [_parse_holding(h) for h in data]
+        return [_parse_holding(h) for h in _rows(data)]
 
     def holding(self, marketplace_id: int) -> Holding:
         """The caller's own holding in *marketplace_id*.
@@ -2023,7 +2080,7 @@ class Flexemarkets:
         """
         url = _marketplace(self._endpoint, marketplace_id) + "/allocations"
         resp = self._create(lambda key: self._send_csv("POST", url, filename, key))
-        allotments = [_parse_allotment(a) for a in _json(resp)]
+        allotments = [_parse_allotment(a) for a in _rows(_json(resp))]
         return _allotments_to_holdings(allotments)
 
     def upload_holdings_csv(self, marketplace_id: int, csv: str) -> list[Holding]:
@@ -2039,7 +2096,7 @@ class Flexemarkets:
         url = _marketplace(self._endpoint, marketplace_id) + "/allocations"
         content = csv.encode("utf-8")
         resp = self._create(lambda key: self._send_csv_content("POST", url, content, key))
-        allotments = [_parse_allotment(a) for a in _json(resp)]
+        allotments = [_parse_allotment(a) for a in _rows(_json(resp))]
         return _allotments_to_holdings(allotments)
 
     def upload_state(self, marketplace_id: int, filename: str) -> list[ParticipantState]:
@@ -2059,7 +2116,7 @@ class Flexemarkets:
         """
         url = _marketplace(self._endpoint, marketplace_id) + "/state"
         resp = self._send_csv("PUT", url, filename)
-        return [_parse_participant_state(s) for s in _json(resp)]
+        return [_parse_participant_state(s) for s in _rows(_json(resp))]
 
     def push_widgets(self, marketplace_id: int, widgets: list[WidgetPush]) -> list[Widget]:
         """Push widgets to participants' screens, returning them as stored.
@@ -2081,7 +2138,7 @@ class Flexemarkets:
         url = _marketplace(self._endpoint, marketplace_id) + "/widgets"
         pushes = [_widget_push_json(w) for w in widgets]
         resp = self._create(lambda key: self._post(url, pushes, key))
-        return [_parse_widget(w) for w in _json(resp)]
+        return [_parse_widget(w) for w in _rows(_json(resp))]
 
     def remove_widget(
         self, marketplace_id: int, key: str, user_id: int | None = None,
@@ -2116,8 +2173,8 @@ class Flexemarkets:
         answered and 0.4.0 to 0.11.0 expected here, is read too."""
         url = _marketplace(self._endpoint, marketplace_id) + "/widgets?participant=all"
         body = _json(self._get(url))
-        widgets = body if isinstance(body, list) else body.get("widgets") or []
-        return [_parse_widget(w) for w in widgets]
+        widgets = body if isinstance(body, list) else _object(body).get("widgets") or []
+        return [_parse_widget(w) for w in _rows(widgets)]
 
     def clear_now(self, marketplace_id: int, market_id: int) -> MarketCall:
         """Clear a call-auction market now: every crossing order trades at one
@@ -2137,7 +2194,7 @@ class Flexemarkets:
         url = _marketplace(self._endpoint, marketplace_id) + "/calls"
         if session_id is not None:
             url += f"?sessions={session_id}"
-        return [_parse_market_call(c) for c in _json(self._get(url))]
+        return [_parse_market_call(c) for c in _rows(_json(self._get(url)))]
 
     def calls_page(self, marketplace_id: int, limit: int, before: int | None = None) -> Page[MarketCall]:
         """A page of :meth:`calls`: the newest *limit*, or of those whose id is
@@ -2154,7 +2211,7 @@ class Flexemarkets:
         the host cannot be reached.
         """
         url = _marketplace(self._endpoint, marketplace_id) + "/robots"
-        return [_parse_marketplace_robot(r) for r in _json(self._get(url))]
+        return [_parse_marketplace_robot(r) for r in _rows(_json(self._get(url)))]
 
     def configure_robot_parameter(
         self, marketplace_id: int, robot_id: str, param_name: str, value: str,
@@ -2188,7 +2245,7 @@ class Flexemarkets:
             _marketplace(self._endpoint, marketplace_id)
             + f"/allocations/{allocation_id}/allotments"
         )
-        return [_parse_allotment(a) for a in _json(self._get(url))]
+        return [_parse_allotment(a) for a in _rows(_json(self._get(url)))]
 
     def allocate(self, marketplace_id: int, holdings: list[Holding]) -> list[Holding]:
         """Stage the opening positions for the next session.
@@ -2205,7 +2262,7 @@ class Flexemarkets:
         url = _marketplace(self._endpoint, marketplace_id) + "/allocations"
         body = [_holding_to_allotment(marketplace_id, h) for h in holdings]
         resp = self._create(lambda key: self._post(url, body, key))
-        return _allotments_to_holdings([_parse_allotment(a) for a in _json(resp)])
+        return _allotments_to_holdings([_parse_allotment(a) for a in _rows(_json(resp))])
 
     # -- connections -------------------------------------------------------
 
@@ -2217,7 +2274,7 @@ class Flexemarkets:
         that run" is a filter on the result.
         """
         url = _marketplace(self._endpoint, marketplace_id) + "/connections"
-        return [_parse_connection(c) for c in _json(self._get(url))]
+        return [_parse_connection(c) for c in _rows(_json(self._get(url)))]
 
     def connections_page(self, marketplace_id: int, limit: int, before: int | None = None) -> Page[ClientConnection]:
         """A page of :meth:`connections`: the newest *limit*, or of those whose id is
