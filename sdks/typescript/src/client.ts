@@ -208,6 +208,7 @@ type JsonObject = Record<string, unknown>;
 
 export function parsePerson(data: JsonObject | null | undefined): Person | null {
   if (!data) return null;
+  requireObject(data);
   return {
     id: (data.id as number) ?? 0,
     accountId: (data.accountId as number) ?? 0,
@@ -225,6 +226,7 @@ export function parsePerson(data: JsonObject | null | undefined): Person | null 
 
 export function parseAccount(data: JsonObject | null | undefined): Account | null {
   if (!data) return null;
+  requireObject(data);
   return {
     id: (data.id as number) ?? null,
     name: (data.name as string) ?? null,
@@ -238,6 +240,7 @@ export function parseAccount(data: JsonObject | null | undefined): Account | nul
 }
 
 export function parseToken(data: JsonObject): Token {
+  requireObject(data);
   return {
     requestUrl: (data.requestUrl as string) ?? null,
     person: parsePerson(data.person as JsonObject),
@@ -247,6 +250,7 @@ export function parseToken(data: JsonObject): Token {
 }
 
 export function parseSecurity(data: JsonObject): Security {
+  requireObject(data);
   return {
     marketId: (data.marketId as number) ?? 0,
     units: (data.units as number) ?? 0,
@@ -260,6 +264,7 @@ export function parseSecurity(data: JsonObject): Security {
 }
 
 export function parseMarket(data: JsonObject): Market {
+  requireObject(data);
   return {
     id: (data.id as number) ?? 0,
     marketplaceId: (data.marketplaceId as number) ?? 0,
@@ -283,6 +288,7 @@ export function parseMarket(data: JsonObject): Market {
 }
 
 export function parseCurrentSession(data: JsonObject): CurrentSession {
+  requireObject(data);
   return {
     marketplaceId: (data.marketplaceId as number) ?? 0,
     sessionId: (data.sessionId as number) ?? 0,
@@ -291,6 +297,7 @@ export function parseCurrentSession(data: JsonObject): CurrentSession {
 }
 
 export function parseCallIndicative(data: JsonObject): CallIndicative {
+  requireObject(data);
   return {
     marketplaceId: (data.marketplaceId as number) ?? 0,
     marketId: (data.marketId as number) ?? 0,
@@ -303,6 +310,7 @@ export function parseCallIndicative(data: JsonObject): CallIndicative {
 }
 
 export function parseMarketCall(data: JsonObject): MarketCall {
+  requireObject(data);
   return {
     id: (data.id as number) ?? 0,
     marketplaceId: (data.marketplaceId as number) ?? 0,
@@ -321,16 +329,18 @@ export function parseMarketCall(data: JsonObject): MarketCall {
 }
 
 export function parseMarketplace(data: JsonObject): Marketplace {
+  requireObject(data);
   return {
     id: (data.id as number) ?? 0,
     name: (data.name as string) ?? null,
     description: (data.description as string) ?? null,
-    markets: ((data.markets as JsonObject[]) ?? []).map(parseMarket),
+    markets: rows(data.markets ?? []).map(parseMarket),
     cashDecimals: (data.cashDecimals as number) ?? Decimals.DEFAULT_CASH_DECIMALS,
   };
 }
 
 export function parseSession(data: JsonObject): Session {
+  requireObject(data);
   return {
     marketplaceId: (data.marketplaceId as number) ?? 0,
     allocationId: (data.allocationId as number) ?? 0,
@@ -347,6 +357,7 @@ export function parseSession(data: JsonObject): Session {
 }
 
 export function parseOrder(data: JsonObject): Order {
+  requireObject(data);
   return {
     id: (data.id as number) ?? 0,
     original: (data.original as number) ?? 0,
@@ -373,6 +384,7 @@ export function parseOrder(data: JsonObject): Order {
 }
 
 export function parseParticipantState(data: JsonObject): ParticipantState {
+  requireObject(data);
   return {
     marketplaceId: (data.marketplaceId as number) ?? null,
     allocationId: (data.allocationId as number) ?? null,
@@ -387,6 +399,7 @@ function numberOrNull(value: unknown): number | null {
 }
 
 function parseRobotParameter(data: JsonObject): RobotParameter {
+  requireObject(data);
   return {
     name: (data.name as string) ?? "",
     label: (data.label as string) ?? null,
@@ -403,6 +416,7 @@ function parseRobotParameter(data: JsonObject): RobotParameter {
 }
 
 export function parseRobotParameterConfig(data: JsonObject): RobotParameterConfig {
+  requireObject(data);
   const control = (data.control as JsonObject | null | undefined) ?? null;
   return {
     marketplaceId: (data.marketplaceId as number) ?? null,
@@ -417,9 +431,10 @@ export function parseRobotParameterConfig(data: JsonObject): RobotParameterConfi
 }
 
 export function parseMarketplaceRobot(data: JsonObject): MarketplaceRobot {
+  requireObject(data);
   const manifest = (data.manifest as JsonObject) ?? {};
   const groups = (manifest.parameters as JsonObject) ?? {};
-  const group = (name: string) => ((groups[name] as JsonObject[]) ?? []).map(parseRobotParameter);
+  const group = (name: string) => rows(groups[name] ?? []).map(parseRobotParameter);
   return {
     manifest: {
       id: (manifest.id as string) ?? "",
@@ -429,11 +444,12 @@ export function parseMarketplaceRobot(data: JsonObject): MarketplaceRobot {
       parameters: { manager: group("manager"), user: group("user"), platform: group("platform") },
     },
     enabled: data.enabled === true,
-    configuration: ((data.configuration as JsonObject[]) ?? []).map(parseRobotParameterConfig),
+    configuration: rows(data.configuration ?? []).map(parseRobotParameterConfig),
   };
 }
 
 export function parseWidget(data: JsonObject): Widget {
+  requireObject(data);
   return {
     id: (data.id as number) ?? null,
     marketplaceId: (data.marketplaceId as number) ?? null,
@@ -469,6 +485,7 @@ function widgetPushJson(push: WidgetPush): JsonObject {
 }
 
 function parseAllotment(data: JsonObject): Allotment {
+  requireObject(data);
   // The server spells the nested capital "capital" on some responses and
   // "assets" on others, and the positions inside it "grants" or "securities".
   const assetsRaw = (data.assets as JsonObject) ?? (data.capital as JsonObject) ?? null;
@@ -480,7 +497,7 @@ function parseAllotment(data: JsonObject): Allotment {
       id: (assetsRaw.id as number) ?? null,
       name: (assetsRaw.name as string) ?? null,
       cash: (assetsRaw.cash as number) ?? 0,
-      securities: orderedSecurities(securitiesRaw.map(parseSecurity)),
+      securities: orderedSecurities(rows(securitiesRaw).map(parseSecurity)),
     };
   }
   return {
@@ -544,6 +561,7 @@ function allotmentsToHoldings(allotments: Allotment[]): Holding[] {
 }
 
 export function parseHolding(data: JsonObject): Holding {
+  requireObject(data);
   const securitiesRaw =
     (data.securities as JsonObject[]) ?? (data.assets as JsonObject[]) ?? [];
   return {
@@ -554,12 +572,13 @@ export function parseHolding(data: JsonObject): Holding {
     name: (data.name as string) ?? null,
     cash: (data.cash as number) ?? 0,
     availableCash: (data.availableCash as number) ?? 0,
-    securities: orderedSecurities(securitiesRaw.map(parseSecurity)),
+    securities: orderedSecurities(rows(securitiesRaw).map(parseSecurity)),
     initialCash: (data.initialCash as number | null) ?? null,
   };
 }
 
 export function parseConnection(data: JsonObject): ClientConnection {
+  requireObject(data);
   return {
     marketplaceId: (data.marketplaceId as number) ?? 0,
     connectionId: (data.id as number) ?? (data.connectionId as number) ?? 0,
@@ -756,6 +775,31 @@ function readBody(body: string): any {
   } catch {
     throw new ApiError("Failed to parse the response body");
   }
+}
+
+/**
+ * A list answer, or {@link ApiError} if this one is not a list of objects. Valid
+ * JSON of the wrong shape is as unreadable as JSON that is not valid, and a
+ * caller catching FlexemarketsError is told so either way.
+ */
+function rows(data: unknown): JsonObject[] {
+  if (!Array.isArray(data) || !data.every(isObject)) {
+    throw new ApiError("Failed to parse the response body: expected a list of objects");
+  }
+  return data as JsonObject[];
+}
+
+function isObject(data: unknown): boolean {
+  return typeof data === "object" && data !== null && !Array.isArray(data);
+}
+
+/**
+ * Every parser starts here. Reading a field of null threw a TypeError past a
+ * caller catching FlexemarketsError; of a number, a string or a list it read
+ * undefined, and handed back an order with nothing in it.
+ */
+function requireObject(data: unknown): void {
+  if (!isObject(data)) throw new ApiError("Failed to parse the response body: expected an object");
 }
 
 /** The `error` a failure body names, or null when it names none. */
@@ -1149,7 +1193,7 @@ export class Flexemarkets {
     const paged = `${url}${url.includes("?") ? "&" : "?"}limit=${limit}${before === undefined ? "" : `&before=${before}`}`;
     const { data, headers } = await this._getRead(paged);
     const next = NEXT_LINK.exec(headers.get("link") ?? "");
-    return new Page((data as unknown as JsonObject[]).map(parse), next === null ? null : Number.parseInt(next[1], 10));
+    return new Page(rows(data).map(parse), next === null ? null : Number.parseInt(next[1], 10));
   }
 
   /** PATCH with a JSON body -- the shape every session transition takes. */
@@ -1296,8 +1340,7 @@ export class Flexemarkets {
    * names only. A row carries the user id too, for a manager; not needed here.
    */
   async identifiers(marketplaceId: number): Promise<string[]> {
-    const rows = (await this._get(`${this._marketplace(marketplaceId)}/participants`)) as unknown as JsonObject[];
-    return rows.map((r) => r.name as string);
+    return rows(await this._get(`${this._marketplace(marketplaceId)}/participants`)).map((r) => r.name as string);
   }
 
   /** Delete the caller's own account. Its own route, not accounts/{yourId}. */
@@ -1308,7 +1351,7 @@ export class Flexemarkets {
   /** Every account on the server. Admin-only. */
   async accounts(): Promise<Account[]> {
     const data = await this._get(this._v1("/accounts"));
-    return (data as unknown as JsonObject[]).map(parseAccount) as Account[];
+    return rows(data).map(parseAccount) as Account[];
   }
 
   /**
@@ -1445,7 +1488,7 @@ export class Flexemarkets {
     const data = await this._post(url, { userIds });
     return {
       expiresAt: toInstant(data.expiresAt as string),
-      otps: ((data.otps as JsonObject[]) ?? []).map((o) => ({
+      otps: rows(data.otps ?? []).map((o) => ({
         userId: (o.userId as number) ?? 0,
         email: (o.email as string) ?? null,
         otp: (o.otp as string) ?? null,
@@ -1547,7 +1590,7 @@ export class Flexemarkets {
 
   async marketplaces(): Promise<Marketplace[]> {
     const data = await this._get(this._v1("/marketplaces"));
-    return (data as unknown as JsonObject[]).map(parseMarketplace);
+    return rows(data).map(parseMarketplace);
   }
 
   /**
@@ -1565,7 +1608,7 @@ export class Flexemarkets {
    */
   async currentSessions(): Promise<CurrentSession[]> {
     const data = await this._get(this._v1("/marketplaces/current-sessions"));
-    return (data as unknown as JsonObject[]).map(parseCurrentSession);
+    return rows(data).map(parseCurrentSession);
   }
 
   /**
@@ -1586,7 +1629,7 @@ export class Flexemarkets {
 
   async markets(marketplaceId: number): Promise<Market[]> {
     const data = await this._get(`${this._marketplace(marketplaceId)}/markets`);
-    return (data as unknown as JsonObject[]).map(parseMarket);
+    return rows(data).map(parseMarket);
   }
 
   /**
@@ -1647,7 +1690,7 @@ export class Flexemarkets {
    */
   async sessions(marketplaceId: number): Promise<Session[]> {
     const url = `${this._marketplace(marketplaceId)}/sessions`;
-    return ((await this._get(url)) as unknown as JsonObject[]).map(parseSession);
+    return rows(await this._get(url)).map(parseSession);
   }
 
   /**
@@ -1778,8 +1821,7 @@ export class Flexemarkets {
     if (!Array.isArray(data) || data.length !== batch.length) {
       throw new ApiError(`Expected ${batch.length} answers to a batch of ${batch.length} orders`);
     }
-    return data.map((raw) => {
-      const entry = raw as JsonObject;
+    return rows(data).map((entry) => {
       const status = typeof entry.status === "number" ? entry.status : 0;
       return status >= 200 && status < 300
         ? parseOrder(entry.order as JsonObject)
@@ -2037,14 +2079,14 @@ export class Flexemarkets {
     if (options?.symbol != null) {
       const symbol = options.symbol;
       const data = await this._get(`${base}?state=ACTIVE&symbol=${encodeURIComponent(symbol)}`);
-      const orders = (data as unknown as JsonObject[]).map(parseOrder);
+      const orders = rows(data).map(parseOrder);
       for (const o of orders) o.symbol = symbol;
       return orders;
     }
     const url = options?.sessionIds != null && options.sessionIds.length > 0
       ? `${base}?sessions=${options.sessionIds.join(",")}`
       : `${base}?cancelled=false`;
-    return ((await this._get(url)) as unknown as JsonObject[]).map(parseOrder);
+    return rows(await this._get(url)).map(parseOrder);
   }
 
   /**
@@ -2070,7 +2112,7 @@ export class Flexemarkets {
       `${this._marketplace(marketplaceId)}/orders?state=TRADED` +
       `&symbol=${encodeURIComponent(symbol)}&limit=${MAX_TRADED_LEGS}`;
     const data = await this._get(url);
-    const orders = (data as unknown as JsonObject[]).map(parseOrder);
+    const orders = rows(data).map(parseOrder);
     for (const o of orders) {
       o.id = o.original;
       o.symbol = symbol;
@@ -2088,7 +2130,7 @@ export class Flexemarkets {
     let url = `${this._marketplace(marketplaceId)}/holdings`;
     if (sessionIds && sessionIds.length > 0) url += `?sessions=${sessionIds.join(",")}`;
     const data = await this._get(url);
-    return (data as unknown as JsonObject[]).map(parseHolding);
+    return rows(data).map(parseHolding);
   }
 
   async holding(marketplaceId: number): Promise<Holding> {
@@ -2106,7 +2148,7 @@ export class Flexemarkets {
    */
   async connections(marketplaceId: number): Promise<ClientConnection[]> {
     const url = `${this._marketplace(marketplaceId)}/connections`;
-    return ((await this._get(url)) as unknown as JsonObject[]).map(parseConnection);
+    return rows(await this._get(url)).map(parseConnection);
   }
 
   /**
@@ -2178,7 +2220,7 @@ export class Flexemarkets {
   /** Everyone in the caller's account. */
   async users(): Promise<Person[]> {
     const data = await this._get(this._v1("/users"));
-    return (data as unknown as JsonObject[]).map((u) => parsePerson(u) as Person);
+    return rows(data).map((u) => parsePerson(u) as Person);
   }
 
   /**
@@ -2193,7 +2235,7 @@ export class Flexemarkets {
   async allotments(marketplaceId: number, allocationId: number): Promise<Allotment[]> {
     const url = `${this._marketplace(marketplaceId)}/allocations/${allocationId}/allotments`;
     const data = await this._get(url);
-    return (data as unknown as JsonObject[]).map(parseAllotment);
+    return rows(data).map(parseAllotment);
   }
 
   /**
@@ -2210,7 +2252,7 @@ export class Flexemarkets {
     const url = `${this._marketplace(marketplaceId)}/allocations`;
     const body = holdings.map((h) => holdingToAllotment(marketplaceId, h));
     const data = await this._create((key) => this._post(url, body, key));
-    return allotmentsToHoldings((data as unknown as JsonObject[]).map(parseAllotment));
+    return allotmentsToHoldings(rows(data).map(parseAllotment));
   }
 
   /**
@@ -2231,8 +2273,8 @@ export class Flexemarkets {
    */
   async uploadHoldings(marketplaceId: number, filename: string): Promise<Holding[]> {
     const url = `${this._marketplace(marketplaceId)}/allocations`;
-    const data = (await this._create((key) => this._sendCsv("POST", url, filename, key))) as JsonObject[];
-    return allotmentsToHoldings(data.map(parseAllotment));
+    const data = await this._create((key) => this._sendCsv("POST", url, filename, key));
+    return allotmentsToHoldings(rows(data).map(parseAllotment));
   }
 
   /**
@@ -2247,8 +2289,8 @@ export class Flexemarkets {
    */
   async uploadHoldingsCsv(marketplaceId: number, csv: string): Promise<Holding[]> {
     const url = `${this._marketplace(marketplaceId)}/allocations`;
-    const data = (await this._create((key) => this._sendCsvContent("POST", url, csv, key))) as JsonObject[];
-    return allotmentsToHoldings(data.map(parseAllotment));
+    const data = await this._create((key) => this._sendCsvContent("POST", url, csv, key));
+    return allotmentsToHoldings(rows(data).map(parseAllotment));
   }
 
   /**
@@ -2267,8 +2309,8 @@ export class Flexemarkets {
    */
   async uploadState(marketplaceId: number, filename: string): Promise<ParticipantState[]> {
     const url = `${this._marketplace(marketplaceId)}/state`;
-    const data = (await this._sendCsv("PUT", url, filename)) as JsonObject[];
-    return data.map(parseParticipantState);
+    const data = await this._sendCsv("PUT", url, filename);
+    return rows(data).map(parseParticipantState);
   }
 
   /**
@@ -2291,7 +2333,7 @@ export class Flexemarkets {
     const url = `${this._marketplace(marketplaceId)}/widgets`;
     const pushes = widgets.map(widgetPushJson);
     const data = await this._create((key) => this._post(url, pushes, key));
-    return (data as unknown as JsonObject[]).map(parseWidget);
+    return rows(data).map(parseWidget);
   }
 
   /**
@@ -2328,8 +2370,9 @@ export class Flexemarkets {
    */
   async allWidgets(marketplaceId: number): Promise<Widget[]> {
     const data: unknown = await this._get(`${this._marketplace(marketplaceId)}/widgets?participant=all`);
+    requireObject(Array.isArray(data) ? {} : data);
     const widgets = Array.isArray(data) ? data : ((data as JsonObject).widgets ?? []);
-    return (widgets as JsonObject[]).map(parseWidget);
+    return rows(widgets).map(parseWidget);
   }
 
   /**
@@ -2350,7 +2393,7 @@ export class Flexemarkets {
   async calls(marketplaceId: number, sessionId?: number): Promise<MarketCall[]> {
     const query = sessionId === undefined ? "" : `?sessions=${sessionId}`;
     const data = await this._get(`${this._marketplace(marketplaceId)}/calls${query}`);
-    return (data as unknown as JsonObject[]).map(parseMarketCall);
+    return rows(data).map(parseMarketCall);
   }
 
   /**
@@ -2371,7 +2414,7 @@ export class Flexemarkets {
    */
   async marketplaceRobots(marketplaceId: number): Promise<MarketplaceRobot[]> {
     const data = await this._get(`${this._marketplace(marketplaceId)}/robots`);
-    return (data as unknown as JsonObject[]).map(parseMarketplaceRobot);
+    return rows(data).map(parseMarketplaceRobot);
   }
 
   /**

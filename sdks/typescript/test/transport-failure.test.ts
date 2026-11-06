@@ -113,3 +113,70 @@ test("an unreadable answer is not sent again", async () => {
   }
   assert.equal(seen.length, 1);
 });
+
+// -- valid JSON of the wrong shape ------------------------------------------
+
+/** A client whose every request, sign-in aside, is answered 200 with `body`. */
+async function answeringWith(body: string, signIn?: string) {
+  const server = http.createServer((req, res) => {
+    req.resume();
+    res.writeHead(200, { "Content-Type": "application/json" });
+    if ((req.url ?? "").startsWith("/api/v1/tokens")) {
+      res.end(signIn ?? JSON.stringify({ token: TOKEN, person: { id: 7, accountId: 1 }, account: { id: 1, name: "dev" } }));
+      return;
+    }
+    res.end(body);
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`;
+  const done = () => { server.closeAllConnections(); server.close(); };
+  return { base, done };
+}
+
+const ONE_THING: Record<string, (fm: Flexemarkets) => Promise<unknown>> = {
+  submitLimit: (fm) => fm.submitLimit(1, 11, "BUY", 1, 100),
+  submitCancel: (fm) => fm.submitCancel(1, 11, 99),
+  marketplace: (fm) => fm.marketplace(1),
+};
+const A_LIST: Record<string, (fm: Flexemarkets) => Promise<unknown>> = {
+  markets: (fm) => fm.markets(1),
+  accounts: (fm) => fm.accounts(),
+  activeOrders: (fm) => fm.activeOrders(1),
+  recentTrades: (fm) => fm.recentTrades(1),
+  sessions: (fm) => fm.sessions(1),
+  identifiers: (fm) => fm.identifiers(1),
+};
+
+for (const [name, call] of Object.entries(ONE_THING)) {
+  for (const body of ["[]", "1", '"x"', "null"]) {
+    test(`${name}: ${body}, when it asked for an object, is an ApiError`, async () => {
+      // null was a TypeError past anyone catching FlexemarketsError; the others read as an empty object.
+      const { base, done } = await answeringWith(body);
+      const fm = await Flexemarkets.connect(TOKEN, `${base}/marketplaces/1`, "transport-failure-test");
+      try {
+        await assert.rejects(call(fm), ApiError);
+      } finally { await fm.close(); done(); }
+    });
+  }
+}
+
+for (const [name, call] of Object.entries(A_LIST)) {
+  for (const body of ["{}", "1", '"x"', "null", "[1]"]) {
+    test(`${name}: ${body}, when it asked for a list, is an ApiError`, async () => {
+      const { base, done } = await answeringWith(body);
+      const fm = await Flexemarkets.connect(TOKEN, `${base}/marketplaces/1`, "transport-failure-test");
+      try {
+        await assert.rejects(call(fm), ApiError);
+      } finally { await fm.close(); done(); }
+    });
+  }
+}
+
+for (const body of ["[]", "1", '"x"', "null"]) {
+  test(`a sign-in answered with ${body} is an ApiError`, async () => {
+    const { base, done } = await answeringWith("[]", body);
+    try {
+      await assert.rejects(Flexemarkets.connect(TOKEN, `${base}/marketplaces/1`, "transport-failure-test"), ApiError);
+    } finally { done(); }
+  });
+}
