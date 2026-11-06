@@ -6,7 +6,7 @@ moving to, oldest first: from the bottom up.
 
 | Version | Covers |
 |---------|--------|
-| [0.19](#019-from-018x) | a lost connection is an `ApiError` in Python and TypeScript; a desk that cannot reseed after a gap goes on and says so |
+| [0.19](#019-from-018x) | a lost connection is an `ApiError` in Python and TypeScript; a desk that cannot reseed or apply a frame goes on and says so; a stream connect fails after 10 s; a `PendingOrder` cannot be cancelled |
 | [0.18](#018-from-017x) | additive: `sendLimit` and `sendCancel` can go over REST, in batches, with one request in flight (fm-server 4.19) |
 | [0.17](#017-from-016x) | additive for callers: `sendCancel` over the socket, in order with `sendLimit`; Java implementers have a method to add; a credential passed replaces `~/.fm/credential`'s whole |
 | [0.16](#016-from-015x) | no signature changes; `sendLimit`'s socket comes back within 5 s, and an order it cannot send is refused after 5 s instead of placed late |
@@ -30,9 +30,10 @@ moving to, oldest first: from the bottom up.
 
 ## 0.19: from 0.18.x
 
-No signatures change, and it needs the same server as 0.18.0. Two things change
-for a robot: what a lost connection raises in Python and TypeScript, and what a
-desk does when it cannot reseed, in all three.
+No signatures change, and it needs the same server as 0.18.0. What changes for a
+robot: what a lost connection or an unreadable answer raises, what a desk does
+when it cannot reseed or apply a frame, how long a stream connect may take, and
+what `cancel()` on a `PendingOrder` answers.
 
 ### A lost connection is an `ApiError` (Python, TypeScript)
 
@@ -90,13 +91,70 @@ and the example called it. Anything copied from it needs the same change.
 `ACCOUNT_TOKEN_EXPIRED`, as the SDKs have always read it. Code branching on the
 name in the document never matched.
 
+### An answer that cannot be read is a `FlexemarketsError` (all three)
+
+Valid JSON of the wrong shape, or an answer that would not decompress, escaped as
+whatever the language threw on reading it. Each is now an `ApiError`, with the
+original as its cause. Code catching those types no longer catches this.
+
+| | Before | Now |
+|---|---|---|
+| Python | `AttributeError`, `TypeError`, `httpx.DecodingError` | `ApiError` |
+| TypeScript | `TypeError`; a number, string or list read as an empty object | `ApiError` |
+| Java | a Jackson exception, from snapshot and page reads and sign-in; `null` read as no answer | `ApiException` |
+
+A request on a closed Python client is a `ConnectionFailedError`, where it was a
+`RuntimeError`. Python's `signup` now renews an expired token, as every other call
+does.
+
+### A frame a desk cannot apply reseeds it (all three)
+
+An `ORDERS-UPDATE` whose orders the book could not apply ended the desk's thread
+in Python and Java, and in TypeScript threw out of the socket's listener, which
+ends a Node process unless something handles it. In Python and TypeScript a price
+or units that were not whole numbers went in quietly, and in Python made every
+later read of the book raise.
+
+The desk now treats such a frame as a gap: it reads the snapshot again, and if
+that fails `onRecovery` hears `success: false`. Opening a desk on a snapshot it
+cannot apply raises `ApiError`.
+
+### A stream connect has a limit (all three)
+
+A server that stalled could hold a connect for good, and a reconnect too, which
+then neither retried nor said anything. In Python and TypeScript `CONNECTED` had
+no limit; in TypeScript and Java neither had the upgrade. Each wait is now 10 s;
+in TypeScript the 10 s covers both, and in Java each has its own.
+
+- A first connect that fails, including opening a desk, raises
+  `ConnectionFailedError` in Python and TypeScript, where it raised the socket
+  library's own error, and `ApiException` in Java, as before.
+- A reconnect that fails tries again, with the usual back-off.
+- A STOMP `ERROR` in answer to `CONNECT` now fails the connect at once, with the
+  server's message. Python and TypeScript took it as connected, and read nothing
+  from then on.
+
+If your server can take longer than 10 s to accept a connection, as one under
+a burst of connecting robots can, stagger the robots.
+
+### A `PendingOrder` cannot be cancelled (Python, Java)
+
+`cancel()` now answers false and does nothing: the order has been handed over, and
+nothing here can call it back. To take one off the book, cancel the order it made.
+
+In Python, cancelling one ended the thread delivering answers, so no later order
+on that marketplace was answered. In Java the caller got a
+`CancellationException` for an order that went on to be placed.
+
 ### Checking your code (0.19)
 
 ```bash
 # Python
-grep -rnE "httpx\.[A-Za-z]*(Error|Timeout)" .
+grep -rnE "httpx\.[A-Za-z]*(Error|Timeout)|websockets\.|\.cancel\(\)" .
 # TypeScript: catch blocks that test for these
 grep -rnE "instanceof TypeError|TimeoutError" .
+# Java
+grep -rnE "JacksonException|CancellationException" .
 # The name that never matched, and threads watched by name
 grep -rnE "AUTHENTICATION_TOKEN_EXPIRED|fm-desk-" .
 ```
