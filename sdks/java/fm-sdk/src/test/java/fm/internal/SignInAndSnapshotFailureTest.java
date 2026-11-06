@@ -48,6 +48,8 @@ class SignInAndSnapshotFailureTest {
      * fails rather than reading a plausible answer.
      */
     private final Map<String, Object[]> _answers = new ConcurrentHashMap<>();
+    /** When set, the body of a 200 to everything but a sign-in. */
+    private volatile String _everythingElse;
 
     @BeforeEach
     void startServer() throws IOException {
@@ -58,6 +60,10 @@ class SignInAndSnapshotFailureTest {
         _answers.put("/api/v1/tokens/refresh", _answers.get("/api/v1/tokens"));
         _server.createContext("/", exchange -> {
             var uri = exchange.getRequestURI();
+            if (_everythingElse != null && !uri.getPath().startsWith("/api/v1/tokens")) {
+                _respond(exchange, 200, _everythingElse, "1");
+                return;
+            }
             Object[] answer = _answers.get(uri.getRawQuery() == null
                                            ? uri.getPath() : uri.getPath() + "?" + uri.getRawQuery());
             if (answer == null) {
@@ -157,6 +163,43 @@ class SignInAndSnapshotFailureTest {
             assertThatExceptionOfType(ApiException.class)
                     .isThrownBy(() -> fm.submitLimit(1L, 11L, OrderSide.BUY, 1L, 100L))
                     .withMessage("Failed to parse the response body");
+        }
+    }
+
+    /**
+     * Only the call that went through _send was guarded: the snapshot and page
+     * reads and sign-in let a raw Jackson exception past a caller catching
+     * FlexemarketsException, and {@code null} read as no answer at all.
+     */
+    @Test
+    void anAnswerThatCannotBeReadIsAnApiExceptionFromEveryRead() throws Exception {
+        Map<String, org.junit.jupiter.api.function.ThrowingConsumer<Flexemarkets>> calls = Map.of(
+            "activeOrders", fm -> fm.activeOrders(1L),
+            "recentTrades", fm -> fm.recentTrades(1L),
+            "marketsPage", fm -> fm.marketplacesPage(10, null),
+            "allWidgets", fm -> fm.allWidgets(1L),
+            "markets", fm -> fm.markets(1L),
+            "marketplace", fm -> fm.marketplace(1L),
+            "submitLimit", fm -> fm.submitLimit(1L, 11L, OrderSide.BUY, 1L, 100L));
+
+        try (var fm = _connect()) {
+            for (var call : calls.entrySet()) {
+                for (String body : new String[] {"<html>a proxy's page</html>", "[1]", "1", "null"}) {
+                    _everythingElse = body;
+                    assertThatExceptionOfType(ApiException.class)
+                        .as("%s answered %s", call.getKey(), body)
+                        .isThrownBy(() -> call.getValue().accept(fm));
+                }
+            }
+        }
+    }
+
+    @Test
+    void aSignInAnsweredWithWhatCannotBeReadIsAnApiException() {
+        for (String body : new String[] {"<html>a proxy's page</html>", "[]", "1", "null"}) {
+            _answers.put("/api/v1/tokens/refresh", new Object[] {200, body, null});
+            assertThatExceptionOfType(ApiException.class).as("sign-in answered %s", body)
+                .isThrownBy(this::_connect);
         }
     }
 }

@@ -585,8 +585,11 @@ public class HttpFlexemarkets implements Flexemarkets {
                     + (body == null || body.isMissingNode() ? "null"
                        : body.getNodeType().name().toLowerCase(Locale.ROOT)));
         }
-        List<Order> orders = List.of(MAPPER.treeToValue(body, Order[].class));
-        return new Snapshot<>(orders, raw.asOfSeq());
+        try {
+            return new Snapshot<>(List.of(MAPPER.treeToValue(body, Order[].class)), raw.asOfSeq());
+        } catch (JacksonException e) {
+            throw new ApiException("Failed to parse the response body", e);
+        }
     }
 
     private static final TypeReference<JsonNode> SNAPSHOT_TYPE = new TypeReference<>() {};
@@ -1288,8 +1291,15 @@ public class HttpFlexemarkets implements Flexemarkets {
     @Override
     public List<Widget> allWidgets(long marketplaceId) {
         JsonNode body = _get(_marketplace(marketplaceId) + "/widgets?participant=all", SNAPSHOT_TYPE);
+        if (!body.isArray() && !body.isObject()) {
+            throw new ApiException("Failed to parse the response body");
+        }
         JsonNode widgets = body.isArray() ? body : body.path("widgets");
-        return widgets.isArray() ? List.of(MAPPER.treeToValue(widgets, Widget[].class)) : List.of();
+        try {
+            return widgets.isArray() ? List.of(MAPPER.treeToValue(widgets, Widget[].class)) : List.of();
+        } catch (JacksonException e) {
+            throw new ApiException("Failed to parse the response body", e);
+        }
     }
 
     @Override
@@ -1801,11 +1811,13 @@ public class HttpFlexemarkets implements Flexemarkets {
             var response = _exchange(request);
             var statusCode = response.statusCode();
             if (statusCode >= 200 && statusCode < 300) {
-                return answer.apply(MAPPER.readValue(response.body(), type), response.headers());
+                return answer.apply(_read(response.body(), type), response.headers());
             }
             throw _failureFor(statusCode, response.body());
         } catch (FlexemarketsException e) {
             throw e;
+        } catch (JacksonException e) {
+            throw new ApiException("Failed to parse the response body", e);
         } catch (IOException e) {
             throw transportFailure(what + " request failed", request, e);
         } catch (InterruptedException e) {
@@ -1964,13 +1976,22 @@ public class HttpFlexemarkets implements Flexemarkets {
         return _send(request.build(), type);
     }
 
+    /** The body of a successful answer: {@code null} there is no answer, and reads as a caller's NullPointerException. */
+    private static <T> T _read(String body, TypeReference<T> type) {
+        T value = MAPPER.readValue(body, type);
+        if (value == null) {
+            throw new ApiException("Failed to parse the response body");
+        }
+        return value;
+    }
+
     private <T> T _send(HttpRequest request, TypeReference<T> type) {
         try {
             var response = _exchange(request);
             var statusCode = response.statusCode();
 
             if (statusCode >= 200 && statusCode < 300) {
-                return MAPPER.readValue(response.body(), type);
+                return _read(response.body(), type);
             }
 
             throw _failureFor(statusCode, response.body());
@@ -2114,9 +2135,11 @@ public class HttpFlexemarkets implements Flexemarkets {
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw _failureFor(response.statusCode(), response.body());
             }
-            return MAPPER.readValue(response.body(), type);
+            return _read(response.body(), type);
         } catch (FlexemarketsException e) {
             throw e;
+        } catch (JacksonException e) {
+            throw new ApiException("Failed to parse the response body", e);
         } catch (IOException e) {
             throw transportFailure(what + " request failed", request, e);
         } catch (InterruptedException e) {
