@@ -293,6 +293,151 @@ class DeskTest {
         }
     }
 
+    /** A marker through the dispatcher: what was posted before it has been handled. */
+    private static void _dispatcherHasSeenEverythingPosted(DefaultDesk desk, FakeFlexemarkets fake) throws Exception {
+        var marker = new fm.model.Session(MP, 3L, 99L, 99L, fm.model.Session.STATE_OPEN, "s", null, null, null);
+        fake.post(marker);
+        _await("the marker", () -> marker.equals(desk.session()));
+    }
+
+    /**
+     * The read was unguarded here, where the reconnect path guards the same
+     * one: it escaped _drain, which catches only interruption, and ended the
+     * dispatcher with nothing said, so the books froze as they stood.
+     */
+    @Test
+    @Timeout(20)
+    void aReseedThatFailsAfterAGapDoesNotEndTheDesk() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha),
+            new Snapshot<>(List.of(_limit(alpha, 101L, OrderSide.BUY, 5, 1000)), 4L),
+            new Snapshot<>(List.of(), 4L));
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha), java.time.Duration.ZERO)) {
+            var recoveries = new java.util.concurrent.CopyOnWriteArrayList<fm.event.DeskRecovery>();
+            desk.onRecovery(recoveries::add);
+            fake.failActiveOrders(new IllegalStateException("503 from the server"));
+
+            fake.post(new OrdersUpdate(new Order[] { _limit(alpha, 301L, OrderSide.BUY, 2, 3000) }, 41L));
+            _await("the failure to be told", () -> recoveries.size() == 1);
+
+            assertThat(recoveries.get(0).success()).isFalse();
+            assertThat(recoveries.get(0).reason()).contains("503");
+            assertThat(desk.book(alpha.id()).bestBuyPrice())
+                .as("not applied over the frames it missed").isEqualTo(1000L);
+
+            // The next frame is still a gap, so it asks again, and this read works.
+            fake.failActiveOrders(null);
+            fake.nextActiveOrders(new Snapshot<>(List.of(_limit(alpha, 201L, OrderSide.BUY, 9, 1500)), 42L));
+            fake.post(new OrdersUpdate(new Order[0], 42L));
+
+            _await("the reseeded book", () -> desk.book(alpha.id()).bestBuyPrice() == 1500L);
+            _await("the recovery to be told", () -> recoveries.size() == 2);
+            assertThat(recoveries.get(1)).isEqualTo(new fm.event.DeskRecovery(MP, true, null));
+        }
+    }
+
+    /**
+     * A busy market sends many frames a second, and a server that cannot answer
+     * the read is the last one to want a snapshot read for each.
+     */
+    @Test
+    @Timeout(20)
+    void aFailedReseedIsNotTriedAgainOnEveryFrame() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha), new Snapshot<>(List.of(), 4L), new Snapshot<>(List.of(), 4L));
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha), java.time.Duration.ofMinutes(1))) {
+            var recoveries = new java.util.concurrent.CopyOnWriteArrayList<fm.event.DeskRecovery>();
+            var gaps = new AtomicInteger();
+            desk.onRecovery(recoveries::add);
+            desk.onGap(g -> gaps.incrementAndGet());
+            fake.failActiveOrders(new IllegalStateException("503 from the server"));
+
+            fake.post(new OrdersUpdate(new Order[0], 41L));
+            fake.post(new OrdersUpdate(new Order[0], 42L));
+            fake.post(new OrdersUpdate(new Order[0], 43L));
+            _dispatcherHasSeenEverythingPosted(desk, fake);
+
+            assertThat(fake.activeReads())
+                .as("one seed at open, one for the gap, none for the frames behind it").isEqualTo(2);
+            assertThat(gaps.get()).isEqualTo(1);
+            assertThat(recoveries).hasSize(1);
+        }
+    }
+
+    @Test
+    @Timeout(20)
+    void aReconnectReseedsADeskAGapLeftStaleAtOnce() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha), new Snapshot<>(List.of(), 4L), new Snapshot<>(List.of(), 4L));
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha), java.time.Duration.ofMinutes(1))) {
+            var recoveries = new java.util.concurrent.CopyOnWriteArrayList<fm.event.DeskRecovery>();
+            desk.onRecovery(recoveries::add);
+            fake.failActiveOrders(new IllegalStateException("503 from the server"));
+            fake.post(new OrdersUpdate(new Order[0], 41L));
+            _await("the failure to be told", () -> recoveries.size() == 1);
+
+            fake.failActiveOrders(null);
+            fake.nextActiveOrders(new Snapshot<>(List.of(), 50L));
+            fake.post(new fm.event.StreamReconnected(MP));
+            _await("the recovery to be told", () -> recoveries.size() == 2);
+            assertThat(recoveries.get(1).success()).isTrue();
+
+            // And it has forgotten the wait: the next gap reads straight away.
+            fake.nextActiveOrders(new Snapshot<>(List.of(_limit(alpha, 202L, OrderSide.BUY, 9, 1600)), 60L));
+            fake.post(new OrdersUpdate(new Order[0], 60L));
+            _await("the book the next gap read", () -> desk.book(alpha.id()).bestBuyPrice() == 1600L);
+        }
+    }
+
+    /** Told the desk is stale, a caller stops trading on it; it has to hear when that ends. */
+    @Test
+    @Timeout(20)
+    void aGapThatHealsWhatAFailedReconnectLeftStaleSaysSo() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha), new Snapshot<>(List.of(), 4L), new Snapshot<>(List.of(), 4L));
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            var recoveries = new java.util.concurrent.CopyOnWriteArrayList<fm.event.DeskRecovery>();
+            desk.onRecovery(recoveries::add);
+            fake.failActiveOrders(new IllegalStateException("503 from the server"));
+            fake.post(new fm.event.StreamReconnected(MP));
+            _await("the failure to be told", () -> recoveries.size() == 1);
+
+            fake.failActiveOrders(null);
+            fake.nextActiveOrders(new Snapshot<>(List.of(), 41L));
+            fake.post(new OrdersUpdate(new Order[0], 41L));
+
+            _await("the recovery to be told", () -> recoveries.size() == 2);
+            assertThat(recoveries.get(1).success()).isTrue();
+        }
+    }
+
+    @Test
+    @Timeout(20)
+    void anOrdinaryGapSaysNothingOfRecovery() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha), new Snapshot<>(List.of(), 4L), new Snapshot<>(List.of(), 4L));
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            var recoveries = new java.util.concurrent.CopyOnWriteArrayList<fm.event.DeskRecovery>();
+            desk.onRecovery(recoveries::add);
+            fake.nextActiveOrders(new Snapshot<>(List.of(), 41L));
+            fake.post(new OrdersUpdate(new Order[0], 41L));
+            _dispatcherHasSeenEverythingPosted(desk, fake);
+
+            assertThat(fake.activeReads()).isEqualTo(2);
+            assertThat(recoveries).isEmpty();
+        }
+    }
+
     /**
      * A caller's handler is the caller's code, run on the desk's dispatcher.
      * One that throws must not end it: gap and recovery handlers were already

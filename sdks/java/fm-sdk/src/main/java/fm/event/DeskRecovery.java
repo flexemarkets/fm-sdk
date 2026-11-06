@@ -9,13 +9,16 @@ package fm.event;
  * own {@link StreamReconnected} carries nothing -- a socket is either back or it
  * is not, but a recovery can complete and still leave the desk stale.
  *
+ * <p>Fires after a reconnect, whether its re-seed worked or not. After a
+ * sequence gap, when its re-seed fails and so when a later one ends that; a gap
+ * that re-seeds first time is only a {@link GapEvent}.
+ *
  * <p>Subscribe via {@link fm.Desk#onRecovery(java.util.function.Consumer)}.
  *
- * @param marketplaceId the marketplace the reconnect ran for
- * @param success       {@code true} if the reconnect + REST snapshot
- *                      re-seed both completed; {@code false} if any
- *                      step threw — caller must close() and desk()
- *                      again to recover
+ * @param marketplaceId the marketplace the recovery ran for
+ * @param success       {@code true} if the REST snapshot re-seed completed;
+ *                      {@code false} if it threw, and the books are stale until
+ *                      a later one reports {@code true}: the desk goes on trying
  * @param reason        a short description of the failure, or
  *                      {@code null} on success
  */

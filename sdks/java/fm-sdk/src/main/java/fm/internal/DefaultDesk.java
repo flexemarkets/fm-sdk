@@ -22,6 +22,7 @@ import fm.Snapshot;
 import fm.Subscription;
 import fm.Tape;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -128,6 +129,15 @@ public class DefaultDesk implements Desk {
      */
     private long _lastAppliedSeq;
 
+    /** A reseed failed and none has worked since; a {@link DeskRecovery} said so. Dispatcher only. */
+    private boolean _stale;
+
+    /** When a frame past a gap may next ask for a reseed, on the nanoTime clock. Dispatcher only. */
+    private long _noReseedBefore;
+
+    /** Whether {@link #_noReseedBefore} is set: nanoTime has no value that means "not yet". */
+    private boolean _reseedWaiting;
+
     /**
      * A desk on one marketplace's markets, seeded but not yet listening.
      *
@@ -138,7 +148,31 @@ public class DefaultDesk implements Desk {
     /** Trades each tape keeps; the seed asks each market for two legs a trade. */
     static final int TAPE_CAPACITY = 100;
 
+    /**
+     * How long after a reseed fails before a frame may ask for another. Each
+     * frame past the gap reads as one, and a busy market sends many a second,
+     * to a server that has just shown it cannot answer the read. Chosen, not
+     * measured.
+     */
+    static final Duration RESEED_RETRY = Duration.ofSeconds(5);
+
+    private final long _reseedRetryNanos;
+
     public DefaultDesk(Flexemarkets flexemarkets, long marketplaceId, List<Market> markets) {
+        this(flexemarkets, marketplaceId, markets, RESEED_RETRY);
+    }
+
+    /**
+     * A desk that waits {@code reseedRetry} after a failed reseed before a
+     * frame may ask for another, where a test cannot wait the usual time.
+     *
+     * @param flexemarkets  the connection to read and stream through
+     * @param marketplaceId the marketplace to follow
+     * @param markets       its markets, which fix the books and tapes kept
+     * @param reseedRetry   the wait after a failed reseed
+     */
+    public DefaultDesk(Flexemarkets flexemarkets, long marketplaceId, List<Market> markets, Duration reseedRetry) {
+        this._reseedRetryNanos = reseedRetry.toNanos();
         this._flexemarkets = flexemarkets;
         this._marketplaceId = marketplaceId;
         this._markets = List.copyOf(markets);
@@ -473,6 +507,36 @@ public class DefaultDesk implements Desk {
                     _marketplaceId, _describe(t));
             event = new DeskRecovery(_marketplaceId, false, t.getMessage());
         }
+        _announceRecovery(event);
+    }
+
+    /**
+     * Whether the desk reseeded. If not it is left stale and the dispatcher
+     * continues, and the DeskRecovery says so, as after a reconnect.
+     */
+    private boolean _reseedAfterGap() {
+        try {
+            _seedFromSnapshot();
+        } catch (RuntimeException e) {
+            LOG.log(System.Logger.Level.ERROR,
+                    "Reseed after a gap failed on marketplace {0}; the desk is stale: {1}",
+                    _marketplaceId, _describe(e));
+            _noReseedBefore = System.nanoTime() + _reseedRetryNanos;
+            _reseedWaiting = true;
+            _announceRecovery(new DeskRecovery(_marketplaceId, false, e.getMessage()));
+            return false;
+        }
+        if (_stale) {
+            _announceRecovery(new DeskRecovery(_marketplaceId, true, null));
+        }
+        return true;
+    }
+
+    private void _announceRecovery(DeskRecovery event) {
+        _stale = !event.success();
+        if (event.success()) {
+            _reseedWaiting = false;
+        }
         for (var h : _reconnectHandlers) {
             try { h.accept(event); } catch (Throwable ignored) { /* don't let one bad handler stop dispatch */ }
         }
@@ -484,11 +548,18 @@ public class DefaultDesk implements Desk {
      * dropped between us and fm-server: re-fetch the V1 snapshot,
      * clear local state, reseed, then let the filter below skip the
      * triggering delta if the new {@code asOfSeq} already covers it.
+     *
+     * <p>A delta past a gap that has not been reseeded is dropped, not applied:
+     * {@code lastAppliedSeq} has not moved, so the next one reads as the gap
+     * again, and the snapshot that ends it covers both.
      */
     private void _processOrdersUpdate(OrdersUpdate update) {
         if (update.seq() != Snapshot.NO_SEQ
                 && _lastAppliedSeq != Snapshot.NO_SEQ
                 && update.seq() > _lastAppliedSeq + 1) {
+            if (_reseedWaiting && System.nanoTime() - _noReseedBefore < 0) {
+                return;
+            }
             long expectedSeq = _lastAppliedSeq + 1;
             LOG.log(System.Logger.Level.WARNING,
                     "ORDERS-UPDATE seq gap on marketplace {0}: expected {1}, got {2}; resyncing from snapshot",
@@ -497,7 +568,9 @@ public class DefaultDesk implements Desk {
             for (var h : _gapHandlers) {
                 try { h.accept(event); } catch (Throwable ignored) { /* don't let one bad handler stop recovery */ }
             }
-            _seedFromSnapshot();
+            if (!_reseedAfterGap()) {
+                return;
+            }
         }
 
         if (update.seq() != Snapshot.NO_SEQ
