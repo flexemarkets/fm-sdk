@@ -154,13 +154,13 @@ silently miss every failure kind.
 Failure kinds are grouped by domain: `ACCOUNT_*`, `PERSON_*`, `MARKETPLACE_*`,
 `MARKET_*`, `SESSION_*`, `ORDER_*`, `ALLOTMENT_*`, `GRANT_*`,
 `OWNERSHIP_TRANSFER_*`, plus `ACCESS_DENIED`, `RESOURCE_NOT_FOUND`,
-`MISSING_REQUIRED_PARAMETER`, `AUTHENTICATION_TOKEN_EXPIRED` and
+`MISSING_REQUIRED_PARAMETER` and
 `UNSUPPORTED_MEDIA_TYPE`. The ones a trading client meets most:
 
 | `error` | Typical status | Cause |
 |---------|----------------|-------|
 | `ACCOUNT_INVALID_CREDENTIALS` | `UNAUTHORIZED` | bad account/email/password |
-| `AUTHENTICATION_TOKEN_EXPIRED` | `UNAUTHORIZED` | refresh or re-authenticate |
+| `ACCOUNT_TOKEN_EXPIRED` | `UNAUTHORIZED` | refresh or re-authenticate |
 | `ACCESS_DENIED` | `FORBIDDEN` | authenticated but lacking the role |
 | `ORDER_INSUFFICIENT_ASSETS` | `BAD_REQUEST` | not enough cash or units to back the order |
 | `ORDER_INVALID` | `BAD_REQUEST` | price off tick, outside bounds, bad units |
