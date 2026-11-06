@@ -33,4 +33,16 @@ public final class PendingOrder extends CompletableFuture<Order> {
     public String submissionId() {
         return _submissionId;
     }
+
+    /**
+     * Does nothing: the order has been handed over, and nothing here can call
+     * it back. To take one off the book, cancel the order it made.
+     *
+     * @param mayInterruptIfRunning ignored
+     * @return false, always
+     */
+    @Override
+    public boolean cancel(boolean mayInterruptIfRunning) {
+        return false;
+    }
 }

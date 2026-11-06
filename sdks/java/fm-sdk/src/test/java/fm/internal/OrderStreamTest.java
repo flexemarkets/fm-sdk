@@ -611,4 +611,19 @@ class OrderStreamTest {
         twice.addAll(order);
         assertThat(listener.stub.sent).containsExactlyElementsOf(twice);
     }
+
+    /**
+     * It has gone out, so there is nothing to call back. cancel() said yes all
+     * the same, and gave the caller a CancellationException for an order that
+     * went on to be placed, freeing its place in the window while it was still
+     * unanswered.
+     */
+    @Test
+    void aPendingOrderCannotBeCancelledAndIsStillAnswered() {
+        var pending = new fm.PendingOrder("s-1");
+
+        assertThat(pending.cancel(true)).isFalse();
+        assertThat(pending.isCancelled()).isFalse();
+        assertThat(pending.isDone()).isFalse();
+    }
 }
