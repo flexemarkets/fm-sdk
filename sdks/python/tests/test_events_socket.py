@@ -20,6 +20,7 @@ import pytest
 from websockets.sync.server import ServerConnection, serve
 
 from fm import events as fm_events
+from fm.exceptions import ConnectionFailedError
 from fm.events import (
     NO_SEQ,
     EventListener,
@@ -44,7 +45,9 @@ class _Server:
 
     def __init__(self) -> None:
         self.refuse_with: int | None = None
-        self.connect_reply = "CONNECTED\nversion:1.2\nheart-beat:0,0\n\n\0"
+        # None: the upgrade is answered and CONNECT never is.
+        self.connect_reply: str | None = "CONNECTED\nversion:1.2\nheart-beat:0,0\n\n\0"
+        self.hang_up_on_connect = False
         self.heartbeats = 0
         self.handshakes = 0
         self.connections: list[ServerConnection] = []
@@ -78,7 +81,10 @@ class _Server:
                     self.heartbeats += 1
                     continue
                 self.received[index].append(text)
-                if text.startswith("CONNECT\n"):
+                if text.startswith("CONNECT\n") and self.hang_up_on_connect:
+                    connection.close()
+                    return
+                if text.startswith("CONNECT\n") and self.connect_reply is not None:
                     connection.send(self.connect_reply)
         except Exception:
             pass
@@ -411,13 +417,92 @@ def test_an_empty_frame_is_a_heartbeat_not_a_drop(server, events, listener):
     assert server.handshakes == 1
 
 
-def test_a_connect_answered_with_anything_but_connected_is_logged(server, listener, caplog):
+def _start_within(l: EventListener, seconds: float = 5.0) -> BaseException | None:
+    """What start() raised, on a thread: one that hangs fails here rather than hanging the run."""
+    raised: list[BaseException | None] = []
+
+    def run() -> None:
+        try:
+            l.start()
+            raised.append(None)
+        except BaseException as e:
+            raised.append(e)
+
+    worker = threading.Thread(target=run, daemon=True)
+    worker.start()
+    worker.join(seconds)
+    assert raised, f"start() was still blocked after {seconds} s"
+    return raised[0]
+
+
+def _unstarted(server: _Server, events: "queue.Queue[object]") -> EventListener:
+    return EventListener(server.url, "Bearer the-token", MP, events, "fm-sdk-test")
+
+
+def test_a_connect_answered_with_a_stomp_error_fails_and_says_why(server, events):
+    """It used to count as connected: the stream subscribed on a socket the
+    server had refused, and read nothing from then on."""
     server.connect_reply = "ERROR\nmessage:bad credentials\n\n\0"
 
-    with caplog.at_level(logging.DEBUG, logger="fm.events"):
-        listener()
+    failure = _start_within(_unstarted(server, events))
 
-    assert "STOMP CONNECT reply: ERROR" in caplog.text
+    assert isinstance(failure, ConnectionFailedError)
+    assert "bad credentials" in str(failure)
+    time.sleep(0.1)
+    assert not any("SUBSCRIBE" in frame for frame in server.received[0])
+
+
+def test_a_server_that_never_says_connected_fails_the_connect(server, events, monkeypatch):
+    """recv() had no limit, so a stalled server held the caller, or a reconnect, for good."""
+    monkeypatch.setattr(fm_events, "_CONNECTED_TIMEOUT_SECONDS", 0.2)
+    server.connect_reply = None
+    l = _unstarted(server, events)
+
+    failure = _start_within(l)
+
+    assert isinstance(failure, ConnectionFailedError)
+    assert "CONNECTED" in str(failure)
+    assert l._ws is None, "the socket that failed is let go"
+
+
+def test_a_heartbeat_before_connected_is_not_taken_for_it(server, events, monkeypatch):
+    monkeypatch.setattr(fm_events, "_CONNECTED_TIMEOUT_SECONDS", 0.2)
+    server.connect_reply = "\n"
+
+    assert isinstance(_start_within(_unstarted(server, events)), ConnectionFailedError)
+
+
+def test_a_server_that_hangs_up_before_connected_fails_as_the_sdk_fails(server, events):
+    server.hang_up_on_connect = True
+
+    assert isinstance(_start_within(_unstarted(server, events)), ConnectionFailedError)
+
+
+def test_a_handshake_refused_at_the_first_connect_fails_as_the_sdk_fails(server, events):
+    server.refuse_with = 503
+
+    failure = _start_within(_unstarted(server, events))
+
+    assert isinstance(failure, ConnectionFailedError)
+    assert failure.__cause__ is not None
+
+
+def test_a_reconnect_that_never_hears_connected_tries_again(server, events, listener, monkeypatch):
+    monkeypatch.setattr(fm_events, "_CONNECTED_TIMEOUT_SECONDS", 0.2)
+    monkeypatch.setattr(fm_events, "_reconnect_pause", lambda *_, **__: 0.05)
+    listener()
+    _await("the first socket subscribes", lambda: len(server.received[0]) >= 4)
+
+    server.connect_reply = None
+    server.connection(0).close()
+    _await("a second attempt, past the silent one", lambda: len(server.connections) >= 3)
+
+    server.connect_reply = "CONNECTED\nversion:1.2\nheart-beat:0,0\n\n\0"
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        if isinstance(events.get(timeout=5), StreamReconnected):
+            return
+    raise AssertionError("the stream never came back")
 
 
 def test_a_reconnect_the_caller_asks_for_replaces_the_socket_once(server, events, listener):

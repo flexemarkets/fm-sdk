@@ -19,7 +19,7 @@ from typing import Any, Callable
 
 import websockets.sync.client as ws_sync
 
-from .exceptions import ConnectionFailedError
+from .exceptions import ConnectionFailedError, FlexemarketsError
 from .types import CallIndicative, Holding, MarketCall, Order, Session, Version
 
 log = logging.getLogger(__name__)
@@ -34,6 +34,11 @@ _HEARTBEAT_MS = 30_000
 _HEARTBEAT_INTERVAL_SECONDS = 25.0
 _HEROKU_IDLE_TIMEOUT_MS = 55_000
 _INBOUND_MESSAGE_SIZE = 128 * 1024 * 1024  # 128 MB
+
+# How long a connect waits for the server's CONNECTED, as in the Java SDK. There
+# was no limit: a server that stalled after the upgrade held the caller for good,
+# and a reconnect too, which then neither retried nor said anything.
+_CONNECTED_TIMEOUT_SECONDS = 10.0
 
 # Reconnecting after a drop. The first attempt is at once; each that fails
 # waits longer, doubling from 2 s to a minute, and each wait is drawn from the
@@ -487,10 +492,20 @@ class EventListener:
     # -- public API --------------------------------------------------------
 
     def start(self) -> None:
-        """Connect and begin receiving events in a background thread."""
-        self._ws = self._connect()
-        self._stomp_connect()
-        self._subscribe()
+        """Connect and begin receiving events in a background thread.
+
+        Raises :class:`~fm.exceptions.ConnectionFailedError` if it cannot, with
+        what went wrong as its ``__cause__``, and lets go of the socket.
+        """
+        try:
+            self._ws = self._connect()
+            self._stomp_connect()
+            self._subscribe()
+        except Exception as exc:
+            self._disconnect()
+            if isinstance(exc, FlexemarketsError):
+                raise
+            raise ConnectionFailedError(f"The event stream could not connect: {exc}") from exc
         self._start_heartbeats()
         self._connected_at = time.monotonic()
 
@@ -725,11 +740,21 @@ class EventListener:
         )
         self._ws.send(_encode_frame(frame))  # type: ignore[union-attr]
 
-        # Wait for CONNECTED frame
-        raw = self._ws.recv()  # type: ignore[union-attr]
-        reply = _decode_frame(raw)
-        if reply.command not in ("CONNECTED", ""):
-            log.debug("STOMP CONNECT reply: %s", reply.command)
+        # Wait for CONNECTED: what else comes first, a heartbeat, is not it. An
+        # ERROR is the server's refusal, and subscribing on anyway read nothing
+        # from then on.
+        deadline = time.monotonic() + _CONNECTED_TIMEOUT_SECONDS
+        while True:
+            try:
+                raw = self._ws.recv(timeout=max(0.0, deadline - time.monotonic()))  # type: ignore[union-attr]
+            except TimeoutError:
+                raise ConnectionFailedError("STOMP CONNECTED frame not received within timeout") from None
+            reply = _decode_frame(raw)
+            if reply.command == "CONNECTED":
+                return
+            if reply.command == "ERROR":
+                raise ConnectionFailedError(
+                    f"STOMP CONNECT refused: {reply.headers.get('message') or reply.body}")
 
     def _subscribe(self) -> None:
         # fm-server publishes broadcasts on the V0 destination paths
