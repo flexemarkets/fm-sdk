@@ -289,3 +289,21 @@ def test_the_route_is_named_either_way_and_nothing_else(base_url):
 
     with pytest.raises(InvalidArgumentError):
         Flexemarkets.connect(TOKEN, base_url, "rest-orders-test", order_route="carrier-pigeon")
+
+
+def test_a_pending_order_cannot_be_cancelled_and_the_next_is_still_answered():
+    """As on the socket: cancel() said yes, the answer killed the sending thread
+    with _sending stuck, and no later order on the marketplace went out."""
+    post = FakePost()
+    window = RestOrderWindow(post, 1)
+
+    first = window.submit(_order(100))
+    assert first.cancel() is False
+    post.wait_for(1)
+    post.release()
+    assert first.result(TIMEOUT).price == 100
+
+    second = window.submit(_order(101))
+    post.wait_for(1)
+    post.release()
+    assert second.result(TIMEOUT).price == 101

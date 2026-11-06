@@ -67,11 +67,18 @@ class PendingOrder(Future):  # type: ignore[type-arg]
     raised for its refusal -- or :class:`~fm.exceptions.OrderOutcomeUnknownError`
     if the stream closed before the answer came. An asyncio caller awaits
     ``asyncio.wrap_future(pending)``.
+
+    Running from the start, so ``cancel()`` answers False: the order has been
+    handed over, and nothing here can call it back. To take one off the book,
+    cancel the order it made. A cancellable future said yes, and the answer
+    arriving later raised InvalidStateError on the thread delivering answers,
+    which ended it: no later order on the marketplace was answered.
     """
 
     def __init__(self, submission_id: str) -> None:
         super().__init__()
         self.submission_id = submission_id
+        self.set_running_or_notify_cancel()
 
 
 @dataclass

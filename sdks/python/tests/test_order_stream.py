@@ -179,6 +179,21 @@ def _settle(s: OrderStream) -> None:
 
 class TestStubbed:
 
+    def test_a_pending_order_cannot_be_cancelled_and_the_next_is_still_answered(self, stub):
+        """It has gone out, so cancel() has nothing to call back. It used to say
+        it had, and the answer then killed the dispatcher with InvalidStateError:
+        no order on this marketplace was answered again."""
+        s, _ = stub()
+        first = s.submit(_order("s-1"))
+        assert first.cancel() is False
+        assert not first.cancelled()
+
+        s._events.put(OrdersUpdate(orders=[Order(id=101, submission_id="s-1")], seq=1))
+        assert first.result(5).id == 101
+        second = s.submit(_order("s-2"))
+        s._events.put(OrdersUpdate(orders=[Order(id=102, submission_id="s-2")], seq=2))
+        assert second.result(5).id == 102
+
     def test_the_window_holds_the_next_order_until_one_is_answered(self, stub):
         s, listener = stub(max_in_flight=2)
         first = s.submit(_order("s-1"))
