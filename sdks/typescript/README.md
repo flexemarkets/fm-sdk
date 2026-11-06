@@ -13,7 +13,7 @@ TypeScript / JavaScript SDK for the [Flexemarkets](https://api.flexemarkets.com)
 >
 > Pin an exact version rather than a range (`"@flexemarkets/fm-sdk": "0.2.0"`,
 > not `^0.2.0`), read the
-> [upgrade notes](https://github.com/flexemarkets/fm-sdk/tree/main/docs) for the
+> [upgrade notes](https://github.com/flexemarkets/fm-sdk/blob/main/docs/UPGRADING.md) for the
 > release you are moving to, and expect to change code when you move.
 >
 > Not recommended for production use.

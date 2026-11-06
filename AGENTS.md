@@ -87,10 +87,13 @@ A tag matching `v*.*.*` pushed to the repository publishes to **PyPI, npm and
 Maven Central** — `.github/workflows/release.yml`. There is no staging step and
 no undo. Do not create or push a tag as part of ordinary work.
 
+Each minor release adds a section at the top of `docs/UPGRADING.md`, headed
+`## x.y: from x.(y-1).x`. `fm-release --sdk publish` refuses a minor without one.
+
 ## Two habits this codebase expects
 
 - **No compatibility shims.** 0.1.0 removed accreted API on purpose;
-  re-adding it under another name puts it back. See `docs/UPGRADING-0.1.md`.
+  re-adding it under another name puts it back. See `docs/UPGRADING.md`, 0.1.
 - **No test that cannot fail.** If you fix something, the test you add should
   fail against the code you just changed. Several bugs here survived for years
   under tests that passed either way — a cancel that removed twice, under a test

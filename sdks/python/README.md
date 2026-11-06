@@ -12,7 +12,7 @@ Python SDK for the [Flexemarkets](https://api.flexemarkets.com) API.
 > treat every `0.x` bump as potentially breaking.
 >
 > Pin an exact version rather than a range (`fm-sdk==0.2.0`, not `>=0.2`),
-> read the [upgrade notes](https://github.com/flexemarkets/fm-sdk/tree/main/docs)
+> read the [upgrade notes](https://github.com/flexemarkets/fm-sdk/blob/main/docs/UPGRADING.md)
 > for the release you are moving to, and expect to change code when you move.
 >
 > Not recommended for production use.

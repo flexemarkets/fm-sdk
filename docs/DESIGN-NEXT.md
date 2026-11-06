@@ -21,7 +21,7 @@ so a later reader can tell what has not been got to from what was looked at and
 declined. Nothing here is scheduled, and everything under **Open** breaks a
 consumer, which is why none of it fits a patch release.
 
-What 0.3.0 *settled* is in [UPGRADING-0.3.md](UPGRADING-0.3.md) and is not
+What 0.3.0 *settled* is in [UPGRADING.md](UPGRADING.md#03-from-02x) and is not
 revisited. This file replaces `DESIGN-0.3.md`: 0.3.0 shipped without taking any
 of it, so both of that file's items carry forward unchanged in substance, with
 their status brought up to date. Items 2, 3 and 4 are new.
@@ -32,7 +32,7 @@ their status brought up to date. Items 2, 3 and 4 are new.
 
 ### 1. HAL-less and V1-only — done in 0.4.0
 
-*Shipped: see [UPGRADING-0.4.md](UPGRADING-0.4.md) for the route each call
+*Shipped: see [UPGRADING.md](UPGRADING.md#04-from-03x) for the route each call
 moved to and the four calls that answer differently. Three decisions taken
 while building it, 2026-10-08: `deleteMarketplace` needed a V1 route and
 `orders(marketplaceId)` a server-side filter, both added in fm-server 4.6.3
@@ -274,5 +274,5 @@ Neither has happened since this was written for 0.3.
 **Study views staying Java-only.** Asked and answered in 0.3: the two readers
 are the study CLI and fm-server, both JVM, and a copy on PyPI or npm would be a
 third copy to keep level with no reader for it. See
-[UPGRADING-0.3.md](UPGRADING-0.3.md). Revisit only if a study is written in
+[UPGRADING.md](UPGRADING.md#03-from-02x). Revisit only if a study is written in
 Python or TypeScript.
