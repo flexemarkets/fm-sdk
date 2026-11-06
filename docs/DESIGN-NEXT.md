@@ -133,12 +133,12 @@ that way.
 
 *New in 0.4. Raised while reviewing the Desk surface on 2026-09-23.*
 
-The six subscriptions split two ways, and the split is clean:
+The seven subscriptions split two ways, and the split is clean:
 
 | Scope | Subscriptions | Bulk read |
 |---|---|---|
 | Per market | `onBookChange(marketId, ...)`, `onTrade(marketId, ...)` | `books()`, `tapes()` |
-| Marketplace-wide | `onSessionChange`, `onHoldingChange`, `onGap`, `onRecovery` | — |
+| Marketplace-wide | `onSessionChange`, `onHoldingChange`, `onGap`, `onRecovery`, `onStreamDropped` | — |
 
 So a caller watching a whole marketplace loops:
 
@@ -197,6 +197,7 @@ thing:
 |---|---|---|
 | the listen queue | `StreamDropped`, `StreamReconnected`, `FrameUnreadable` | anyone who drains the queue |
 | `Desk.onRecovery` | `DeskRecovery` — re-seeded, or **stale** | only a Desk subscriber |
+| `Desk.onStreamDropped` | `StreamDropped` — being restored, or **lost for good** | only a Desk subscriber |
 
 `DeskRecovery` is built inside `DefaultDesk._reseedAfterReconnect` and
 dispatched to its own handlers; it never reaches a queue. That matters,

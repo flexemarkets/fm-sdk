@@ -6,7 +6,7 @@ moving to, oldest first: from the bottom up.
 
 | Version | Covers |
 |---------|--------|
-| [0.19](#019-from-018x) | a lost connection is an `ApiError` in Python and TypeScript; a desk that cannot reseed or apply a frame goes on and says so; a stream connect fails after 10 s; a `PendingOrder` cannot be cancelled |
+| [0.19](#019-from-018x) | a lost connection is an `ApiError` in Python and TypeScript; a desk that cannot reseed or apply a frame goes on and says so; a stream connect fails after 10 s; a `PendingOrder` cannot be cancelled; a desk says when its stream drops, and `StreamDropped` gains `permanent`, which Java callers that build or destructure it must handle |
 | [0.18](#018-from-017x) | additive: `sendLimit` and `sendCancel` can go over REST, in batches, with one request in flight (fm-server 4.19) |
 | [0.17](#017-from-016x) | additive for callers: `sendCancel` over the socket, in order with `sendLimit`; Java implementers have a method to add; a credential passed replaces `~/.fm/credential`'s whole |
 | [0.16](#016-from-015x) | no signature changes; `sendLimit`'s socket comes back within 5 s, and an order it cannot send is refused after 5 s instead of placed late |
@@ -32,8 +32,9 @@ moving to, oldest first: from the bottom up.
 
 No signatures change, and it needs the same server as 0.18.0. What changes for a
 robot: what a lost connection or an unreadable answer raises, what a desk does
-when it cannot reseed or apply a frame, how long a stream connect may take, and
-what `cancel()` on a `PendingOrder` answers.
+when it cannot reseed or apply a frame, how long a stream connect may take, what
+`cancel()` on a `PendingOrder` answers, and how a desk reports a dropped stream.
+Java has one signature change: see `StreamDropped` below.
 
 ### A lost connection is an `ApiError` (Python, TypeScript)
 
@@ -146,6 +147,41 @@ In Python, cancelling one ended the thread delivering answers, so no later order
 on that marketplace was answered. In Java the caller got a
 `CancellationException` for an order that went on to be placed.
 
+### A desk says when its stream drops (all three)
+
+A drop reached only the log, so a robot went on quoting from books that had
+stopped. Worse, a stream lost for good, its token refused twice, looked the same:
+the books froze, `onRecovery` never fired, and nothing said so.
+
+`onStreamDropped` / `on_stream_dropped` now hears every drop, and `permanent` on
+the event says what happens next:
+
+| `permanent` | What it means | What follows |
+|---|---|---|
+| false | the stream is being restored | `onRecovery`, once the desk has reseeded |
+| true | it has given up, and the books will not update again | nothing; a new desk is what starts over |
+
+A robot that has seen a drop should stop trusting the books until `onRecovery`
+says `success: true`, and stop for good on `permanent`. One drop that ends for good
+arrives as two events: the drop, then the refusal with `permanent` true. A handler
+registered after that hears of it at once, because a desk is shared and may have
+lost its stream before this robot opened it. The desk stays open either way, so
+what it holds can still be read.
+
+Readers of the raw stream get the same field. `StreamDropped` was told apart by
+`PermissionError` in Python and the listener's closed state elsewhere; use
+`permanent` in all three.
+
+**Java:** `StreamDropped` is a record, so it changes shape:
+
+| | Before | Now |
+|---|---|---|
+| Building one, usually in a test | `new StreamDropped(failure)` | `new StreamDropped(failure, false)` |
+| A record pattern | `StreamDropped(var failure)` | `StreamDropped(var failure, var permanent)` |
+
+`Desk` gains `onStreamDropped`, which code implementing it must add. In Python
+`permanent` is required too: `StreamDropped(exception=e, permanent=False)`.
+
 ### Checking your code (0.19)
 
 ```bash
@@ -154,7 +190,7 @@ grep -rnE "httpx\.[A-Za-z]*(Error|Timeout)|websockets\.|\.cancel\(\)" .
 # TypeScript: catch blocks that test for these
 grep -rnE "instanceof TypeError|TimeoutError" .
 # Java
-grep -rnE "JacksonException|CancellationException" .
+grep -rnE "JacksonException|CancellationException|new StreamDropped\(|StreamDropped\(var|implements .*\bDesk\b" .
 # The name that never matched, and threads watched by name
 grep -rnE "AUTHENTICATION_TOKEN_EXPIRED|fm-desk-" .
 ```
