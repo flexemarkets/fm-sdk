@@ -20,12 +20,14 @@ import logging
 import queue
 import threading
 import time
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 import pytest
 
 from fm.desk import Desk, DeskRecovery
+from fm.exceptions import ApiError
 from fm.orderbook import Book
 from fm.snapshot import Snapshot
 from fm.events import FrameUnreadable, OrdersUpdate, StreamDropped, StreamReconnected
@@ -678,3 +680,52 @@ def test_a_desk_that_has_heard_nothing_for_a_while_still_applies_the_next_delta(
         _await("the delta after a quiet spell", lambda: desk.book(alpha.id).best_buy_price() == 950)
     finally:
         desk.close()
+
+
+@pytest.mark.parametrize("bad", [
+    {"side": None}, {"side": "SIDEWAYS"}, {"units": None}, {"units": "3"}, {"price": None}, {"price": "10"},
+], ids=["no-side", "unknown-side", "no-units", "text-units", "no-price", "text-price"])
+def test_a_frame_the_book_cannot_apply_reseeds_and_the_desk_carries_on(bad):
+    """It ended the dispatcher with nothing to say so, or -- a price the book
+    took and could not sort -- made every later read of it raise."""
+    alpha = _market(1, "ALPHA")
+    fake = FakeClient([alpha],
+                      Snapshot(body=[_limit(alpha, 101, "BUY", 5, 1000)], as_of_seq=4),
+                      Snapshot(body=[], as_of_seq=4))
+    desk = _desk(fake, [alpha])
+    try:
+        fake.next_active_orders(Snapshot(body=[_limit(alpha, 201, "BUY", 9, 1500)], as_of_seq=5))
+
+        fake.post(OrdersUpdate(orders=[replace(_limit(alpha, 102, "BUY", 1, 1100), **bad)], seq=5))
+
+        _await("the reseeded book", lambda: desk.book(alpha.id).best_buy_price() == 1500)
+        fake.post(OrdersUpdate(orders=[_limit(alpha, 103, "BUY", 2, 1600)], seq=6))
+        _await("the next frame applied", lambda: desk.book(alpha.id).best_buy_price() == 1600)
+    finally:
+        desk.close()
+
+
+def test_a_frame_the_book_cannot_apply_and_a_reseed_that_fails_says_the_desk_is_stale():
+    alpha = _market(1, "ALPHA")
+    fake = FakeClient([alpha], Snapshot(body=[], as_of_seq=4), Snapshot(body=[], as_of_seq=4))
+    desk = _desk(fake, [alpha])
+    try:
+        recoveries: list[Any] = []
+        desk.on_recovery(recoveries.append)
+        fake.active_failure = ApiError("the snapshot read failed too")
+
+        fake.post(OrdersUpdate(orders=[_limit(alpha, 102, None, 1, 1100)], seq=5))
+
+        _await("the desk says it is stale", lambda: len(recoveries) == 1)
+        assert not recoveries[0].success
+    finally:
+        desk.close()
+
+
+def test_a_snapshot_the_book_cannot_apply_fails_the_open_as_the_sdk_fails():
+    alpha = _market(1, "ALPHA")
+    fake = FakeClient([alpha], Snapshot(body=[_limit(alpha, 101, None, 5, 1000)], as_of_seq=4),
+                      Snapshot(body=[], as_of_seq=4))
+
+    with pytest.raises(ApiError):
+        _desk(fake, [alpha])

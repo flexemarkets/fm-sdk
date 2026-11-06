@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 from .events import NO_SEQ, OrdersUpdate, FrameUnreadable, StreamReconnected, StreamDropped
 from .orderbook import Book, BookIndex
 from .trades import TapeIndex, Trade, Tape
-from .exceptions import OrderRefusedLocallyError
+from .exceptions import ApiError, OrderRefusedLocallyError
 from .types import Holding, Market, Order, Session
 
 if TYPE_CHECKING:
@@ -168,10 +168,13 @@ class Desk:
         self._books.clear()
         self._trades.clear()
 
-        if orders.body:
-            self._books.update(orders.body)
-        if legs:
-            self._trades.update(legs)
+        try:
+            if orders.body:
+                self._books.update(orders.body)
+            if legs:
+                self._trades.update(legs)
+        except Exception as e:
+            raise ApiError(f"The snapshot could not be applied: {e!r}") from e
 
         # Orders and trades flow through the same delta stream so
         # they share a single seq. Use the orders snapshot's value
@@ -534,8 +537,18 @@ class Desk:
 
         orders = event.orders
         touched = _market_ids_touched(orders)
-        self._books.update(orders)
-        traded = self._trades.update(orders)
+        try:
+            self._books.update(orders)
+            traded = self._trades.update(orders)
+        except Exception as e:
+            # Nothing else on this thread would catch it, and it ending is a
+            # desk that stops with nothing to say so. Some of the frame may have
+            # gone in, so the books are not to be trusted; the snapshot puts that
+            # right, and if it cannot the DeskRecovery says so.
+            log.error("ORDERS-UPDATE could not be applied on marketplace %d; resyncing from snapshot: %s",
+                      self.marketplace_id, e)
+            self._reseed_after_gap()
+            return
 
         # Tape first: the more specific event, and a book handler that then
         # reads the tape sees the same trade the trade handler was just given.

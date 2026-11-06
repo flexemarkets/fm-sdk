@@ -99,6 +99,10 @@ class Book:
             self._initialized = True
 
     def _add(self, side: str, price: int, units: int) -> None:
+        # Refused here because nothing else would: a level that is not a whole
+        # number goes in quietly and every later read of the book raises.
+        if not isinstance(price, int) or not isinstance(units, int):
+            raise ValueError(f"An order's price and units must be whole numbers; got: {price!r}, {units!r}")
         levels = self._price_levels(side)
         levels[price] += units
 
