@@ -327,6 +327,134 @@ def test_a_reseed_that_fails_says_the_desk_is_stale_and_keeps_going():
         desk.close()
 
 
+def _dispatcher_has_seen_everything_posted(desk: Desk, fake: FakeClient) -> None:
+    """A marker through the dispatcher: what was posted before it has been handled."""
+    marker = Session(marketplace_id=MP, id=99, original=99, state="OPEN")
+    fake.post(marker)
+    _await("the marker", lambda: desk.session() is marker)
+
+
+def test_a_reseed_that_fails_after_a_gap_does_not_end_the_desk(monkeypatch):
+    """The read was unguarded here, where the reconnect path guards the same one:
+    it ended the dispatcher with nothing said, and the books froze as they stood."""
+    monkeypatch.setattr("fm.desk.RESEED_RETRY_SECONDS", 0.0)
+    alpha = _market(1, "ALPHA")
+    fake = FakeClient([alpha],
+                      Snapshot(body=[_limit(alpha, 101, "BUY", 5, 1000)], as_of_seq=4),
+                      Snapshot(body=[], as_of_seq=4))
+    desk = _desk(fake, [alpha])
+    try:
+        recoveries: list[DeskRecovery] = []
+        desk.on_recovery(recoveries.append)
+        fake.active_failure = RuntimeError("503 from the server")
+
+        fake.post(OrdersUpdate(orders=[_limit(alpha, 301, "BUY", 2, 3000)], seq=41))
+        _await("the failure to be told", lambda: len(recoveries) == 1)
+
+        assert recoveries[0].success is False and "503" in (recoveries[0].reason or "")
+        assert desk._dispatcher.is_alive()
+        assert desk.book(alpha.id).best_buy_price() == 1000, "not applied over the frames it missed"
+
+        # The next frame is still a gap, so it asks again, and this read works.
+        fake.active_failure = None
+        fake.next_active_orders(Snapshot(body=[_limit(alpha, 201, "BUY", 9, 1500)], as_of_seq=42))
+        fake.post(OrdersUpdate(orders=[], seq=42))
+
+        _await("the reseeded book", lambda: desk.book(alpha.id).best_buy_price() == 1500)
+        _await("the recovery to be told", lambda: len(recoveries) == 2)
+        assert recoveries[1] == DeskRecovery(marketplace_id=MP, success=True, reason=None)
+    finally:
+        desk.close()
+
+
+def test_a_failed_reseed_is_not_tried_again_on_every_frame(monkeypatch):
+    """A busy market sends many frames a second, and a server that cannot answer
+    the read is the last one to want a snapshot read for each."""
+    monkeypatch.setattr("fm.desk.RESEED_RETRY_SECONDS", 60.0)
+    alpha = _market(1, "ALPHA")
+    fake = FakeClient([alpha], Snapshot(body=[], as_of_seq=4), Snapshot(body=[], as_of_seq=4))
+    desk = _desk(fake, [alpha])
+    try:
+        recoveries: list[DeskRecovery] = []
+        gaps: list[Any] = []
+        desk.on_recovery(recoveries.append)
+        desk.on_gap(gaps.append)
+        fake.active_failure = RuntimeError("503 from the server")
+
+        for seq in (41, 42, 43):
+            fake.post(OrdersUpdate(orders=[], seq=seq))
+        _dispatcher_has_seen_everything_posted(desk, fake)
+
+        assert fake.active_reads == 2, "one seed at open, one for the gap, none for the frames behind it"
+        assert len(gaps) == 1 and len(recoveries) == 1
+    finally:
+        desk.close()
+
+
+def test_a_reconnect_reseeds_a_desk_a_gap_left_stale_at_once(monkeypatch):
+    monkeypatch.setattr("fm.desk.RESEED_RETRY_SECONDS", 60.0)
+    alpha = _market(1, "ALPHA")
+    fake = FakeClient([alpha], Snapshot(body=[], as_of_seq=4), Snapshot(body=[], as_of_seq=4))
+    desk = _desk(fake, [alpha])
+    try:
+        recoveries: list[DeskRecovery] = []
+        desk.on_recovery(recoveries.append)
+        fake.active_failure = RuntimeError("503 from the server")
+        fake.post(OrdersUpdate(orders=[], seq=41))
+        _await("the failure to be told", lambda: len(recoveries) == 1)
+
+        fake.active_failure = None
+        fake.next_active_orders(Snapshot(body=[_limit(alpha, 201, "BUY", 9, 1500)], as_of_seq=50))
+        fake.post(StreamReconnected(marketplace_id=MP))
+        _await("the recovery to be told", lambda: len(recoveries) == 2)
+        assert recoveries[1].success is True
+
+        # And it has forgotten the wait: the next gap reads straight away.
+        fake.next_active_orders(Snapshot(body=[_limit(alpha, 202, "BUY", 9, 1600)], as_of_seq=60))
+        fake.post(OrdersUpdate(orders=[], seq=60))
+        _await("the book the next gap read", lambda: desk.book(alpha.id).best_buy_price() == 1600)
+    finally:
+        desk.close()
+
+
+def test_a_gap_that_heals_what_a_failed_reconnect_left_stale_says_so():
+    """Told the desk is stale, a caller stops trading on it; it has to hear when that ends."""
+    alpha = _market(1, "ALPHA")
+    fake = FakeClient([alpha], Snapshot(body=[], as_of_seq=4), Snapshot(body=[], as_of_seq=4))
+    desk = _desk(fake, [alpha])
+    try:
+        recoveries: list[DeskRecovery] = []
+        desk.on_recovery(recoveries.append)
+        fake.active_failure = RuntimeError("503 from the server")
+        fake.post(StreamReconnected(marketplace_id=MP))
+        _await("the failure to be told", lambda: len(recoveries) == 1)
+
+        fake.active_failure = None
+        fake.next_active_orders(Snapshot(body=[], as_of_seq=41))
+        fake.post(OrdersUpdate(orders=[], seq=41))
+
+        _await("the recovery to be told", lambda: len(recoveries) == 2)
+        assert recoveries[1].success is True
+    finally:
+        desk.close()
+
+
+def test_an_ordinary_gap_says_nothing_of_recovery():
+    alpha = _market(1, "ALPHA")
+    fake = FakeClient([alpha], Snapshot(body=[], as_of_seq=4), Snapshot(body=[], as_of_seq=4))
+    desk = _desk(fake, [alpha])
+    try:
+        recoveries: list[DeskRecovery] = []
+        desk.on_recovery(recoveries.append)
+        fake.next_active_orders(Snapshot(body=[], as_of_seq=41))
+        fake.post(OrdersUpdate(orders=[], seq=41))
+        _dispatcher_has_seen_everything_posted(desk, fake)
+
+        assert fake.active_reads == 2 and recoveries == []
+    finally:
+        desk.close()
+
+
 def test_session_and_holding_updates_reach_the_desk_and_its_handlers():
     alpha = _market(1, "ALPHA")
     fake = FakeClient([alpha], Snapshot(body=[], as_of_seq=1), Snapshot(body=[], as_of_seq=1))

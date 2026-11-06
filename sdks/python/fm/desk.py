@@ -53,10 +53,13 @@ class GapEvent:
 
 @dataclass(frozen=True)
 class DeskRecovery:
-    """Fires when :class:`Desk` reacts to a
-    :class:`~fm.events.StreamDropped` — either after the reconnect
-    + resnapshot completes successfully, or after the attempt has
-    failed and the desk is left stale.
+    """Fires when a :class:`Desk` is left stale, and when it stops being.
+
+    After a :class:`~fm.events.StreamReconnected`, whether its reseed worked
+    or not. After a sequence gap, when its reseed fails and so when a later
+    one ends that; a gap that reseeds first time is only a
+    :class:`GapEvent`. Until one says ``success``, the books are as they
+    stood before whatever was missed.
     """
 
     marketplace_id: int
@@ -66,6 +69,11 @@ class DeskRecovery:
 
 #: Trades each tape keeps; the seed asks each market for two legs a trade.
 TAPE_CAPACITY = 100
+
+#: How long after a reseed fails before a frame may ask for another. Each frame
+#: past the gap reads as one, and a busy market sends many a second, to a server
+#: that has just shown it cannot answer the read. Chosen, not measured.
+RESEED_RETRY_SECONDS = 5.0
 
 
 class Desk:
@@ -109,6 +117,8 @@ class Desk:
         self._trade_handlers: list[tuple[int, Callable[[Trade], None]]] = []
         self._gap_handlers: list[Callable[[GapEvent], None]] = []
         self._reconnect_handlers: list[Callable[[DeskRecovery], None]] = []
+        self._stale = False
+        self._no_reseed_before = 0.0
 
         self._queue: queue.Queue[object] = queue.Queue(maxsize=10_000)
         self._closed = False
@@ -482,12 +492,18 @@ class Desk:
         gap-triggering delta's seq is now ``<=`` the refreshed
         ``_last_applied_seq`` it's silently skipped (snapshot covered
         it), otherwise it applies normally.
+
+        A delta past a gap that has not been reseeded is dropped, not
+        applied: ``_last_applied_seq`` has not moved, so the next one
+        reads as the gap again, and the snapshot that ends it covers both.
         """
         if (
             event.seq != NO_SEQ
             and self._last_applied_seq != NO_SEQ
             and event.seq > self._last_applied_seq + 1
         ):
+            if time.monotonic() < self._no_reseed_before:
+                return
             expected_seq = self._last_applied_seq + 1
             log.warning(
                 "ORDERS-UPDATE seq gap on marketplace %d — expected %d, got %d; "
@@ -506,7 +522,8 @@ class Desk:
                     h(gap)
                 except Exception:
                     pass  # one bad handler can't stop recovery
-            self._seed_from_snapshot()
+            if not self._reseed_after_gap():
+                return
 
         if (
             event.seq != NO_SEQ
@@ -540,6 +557,28 @@ class Desk:
         if event.seq != NO_SEQ:
             self._last_applied_seq = event.seq
 
+    def _reseed_after_gap(self) -> bool:
+        """Whether the desk reseeded. If not it is left stale and the dispatcher
+        continues, and the DeskRecovery says so, as after a reconnect."""
+        try:
+            self._seed_from_snapshot()
+        except Exception as e:
+            log.error(
+                "Reseed after a gap failed on marketplace %d; desk is stale: %s",
+                self.marketplace_id,
+                e,
+            )
+            self._no_reseed_before = time.monotonic() + RESEED_RETRY_SECONDS
+            self._announce_recovery(DeskRecovery(
+                marketplace_id=self.marketplace_id, success=False, reason=str(e)
+            ))
+            return False
+        if self._stale:
+            self._announce_recovery(DeskRecovery(
+                marketplace_id=self.marketplace_id, success=True, reason=None
+            ))
+        return True
+
     def _reseed_after_reconnect(self) -> None:
         """Re-seed once the transport is back.
 
@@ -568,6 +607,12 @@ class Desk:
             outcome = DeskRecovery(
                 marketplace_id=self.marketplace_id, success=False, reason=str(e)
             )
+        self._announce_recovery(outcome)
+
+    def _announce_recovery(self, outcome: DeskRecovery) -> None:
+        self._stale = not outcome.success
+        if outcome.success:
+            self._no_reseed_before = 0.0
         for h in self._reconnect_handlers:
             try:
                 h(outcome)
