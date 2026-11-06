@@ -2,6 +2,7 @@ package fm.internal;
 
 import fm.event.GapEvent;
 import fm.event.DeskRecovery;
+import fm.event.StreamDropped;
 import fm.model.Holding;
 import fm.model.Market;
 import fm.model.Order;
@@ -124,6 +125,13 @@ class DeskHandle implements Desk {
     @Override public Subscription onRecovery(Consumer<DeskRecovery> handler) {
         _check();
         Subscription sub = _shared.onRecovery(handler);
+        _mySubscriptions.add(sub);
+        return sub;
+    }
+
+    @Override public Subscription onStreamDropped(Consumer<StreamDropped> handler) {
+        _check();
+        Subscription sub = _shared.onStreamDropped(handler);
         _mySubscriptions.add(sub);
         return sub;
     }

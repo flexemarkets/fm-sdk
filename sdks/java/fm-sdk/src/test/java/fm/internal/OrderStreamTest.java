@@ -351,7 +351,7 @@ class OrderStreamTest {
         var stream = new OrderStream(queue -> stub, MP, OrderStream.MAX_IN_FLIGHT, 50);
         opened.add(stream::close);
         var sent = stream.submit("s-1", order("s-1"));
-        stream.events().offer(new StreamDropped(new IOException("gone")));
+        stream.events().offer(new StreamDropped(new IOException("gone"), false));
         settle(stream);
         var held = stream.submit("s-2", order("s-2"));
 
@@ -368,7 +368,7 @@ class OrderStreamTest {
     void anOrderHeldLessThanTheHoldGoesWhenTheSocketIsBack() throws Exception {
         var stub = new Stub();
         var stream = stubbed(stub, OrderStream.MAX_IN_FLIGHT);
-        stream.events().offer(new StreamDropped(new IOException("gone")));
+        stream.events().offer(new StreamDropped(new IOException("gone"), false));
         settle(stream);
         var held = stream.submit("s-1", order("s-1"));
         stream.events().offer(new StreamReconnected(MP));
@@ -383,7 +383,7 @@ class OrderStreamTest {
         var stub = new Stub();
         var stream = stubbed(stub, OrderStream.MAX_IN_FLIGHT);
         var sent = stream.submit("s-1", order("s-1"));
-        stream.events().offer(new StreamDropped(new IOException("gone")));
+        stream.events().offer(new StreamDropped(new IOException("gone"), false));
         settle(stream);
         var held = stream.submit("s-2", order("s-2"));
 
@@ -407,8 +407,8 @@ class OrderStreamTest {
         var stream = stubbed(stub, OrderStream.MAX_IN_FLIGHT);
         var pending = stream.submit("s-1", order("s-1"));
         var refusal = new AuthenticationException("WebSocket refused: the token was rejected.", null);
-        stub.closed = true;
-        stream.events().offer(new StreamDropped(refusal));
+        // By what the event says: an order stream closes on nothing else.
+        stream.events().offer(new StreamDropped(refusal, true));
         assertThat(cause(pending)).isInstanceOf(OrderOutcomeUnknownException.class).hasCause(refusal);
         stream.dispatcher().join(5000);
         assertThat(stream.dispatcher().isAlive()).isFalse();
@@ -564,7 +564,7 @@ class OrderStreamTest {
         var fm = stubbedClient(listener, OrderStream.HOLD_MS);
         var pending = fm.sendCancel(MP, 11, 101);
         var stream = fm._orderStream(MP);
-        stream.events().offer(new StreamDropped(new IOException("gone")));
+        stream.events().offer(new StreamDropped(new IOException("gone"), false));
         stream.events().offer(new StreamReconnected(MP));
         settle(stream);
         assertThat(listener.stub.sent).containsExactly(pending.submissionId(), pending.submissionId());
@@ -582,7 +582,7 @@ class OrderStreamTest {
         var listener = new Bodies();
         var fm = stubbedClient(listener, 50);
         var stream = fm._orderStream(MP);
-        stream.events().offer(new StreamDropped(new IOException("gone")));
+        stream.events().offer(new StreamDropped(new IOException("gone"), false));
         settle(stream);
         var pending = fm.sendCancel(MP, 11, 101);
         assertThat(cause(pending)).isInstanceOf(ConnectionFailedException.class)
@@ -604,7 +604,7 @@ class OrderStreamTest {
         assertThat(listener.types()).containsExactly("LIMIT", "CANCEL", "LIMIT");
 
         var stream = fm._orderStream(MP);
-        stream.events().offer(new StreamDropped(new IOException("gone")));
+        stream.events().offer(new StreamDropped(new IOException("gone"), false));
         stream.events().offer(new StreamReconnected(MP));
         settle(stream);
         var twice = new ArrayList<>(order);

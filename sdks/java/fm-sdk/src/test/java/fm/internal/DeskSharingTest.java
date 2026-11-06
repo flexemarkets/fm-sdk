@@ -351,6 +351,7 @@ class DeskSharingTest {
             desk.onTrade(ALPHA.id(), events::add);
             desk.onGap(events::add);
             desk.onRecovery(events::add);
+            desk.onStreamDropped(events::add);
         }
 
         boolean has(Class<?> type) {
@@ -358,13 +359,14 @@ class DeskSharingTest {
         }
     }
 
-    /** Post one of everything a desk announces: a session, a holding, a trade, a gap, a reconnect. */
+    /** Post one of everything a desk announces: a session, a holding, a trade, a gap, a reconnect, a drop. */
     private static void _postOneOfEach(Scripted fm) throws InterruptedException {
         fm.post(MP, OPEN);
         fm.post(MP, HELD);
         fm.post(MP, new OrdersUpdate(_trade(101L, 102L, 500), 5L));
         fm.post(MP, new OrdersUpdate(new Order[0], 41L));
         fm.post(MP, new fm.event.StreamReconnected(MP));
+        fm.post(MP, new fm.event.StreamDropped(new java.io.IOException("gone"), false));
     }
 
     /** What a handle reads and every handler it registers reach the shared desk. */
@@ -376,11 +378,11 @@ class DeskSharingTest {
             heard.on(desk);
 
             _postOneOfEach(fm);
-            _await("the recovery", () -> heard.has(fm.event.DeskRecovery.class));
+            _await("the drop, posted last", () -> heard.has(fm.event.StreamDropped.class));
 
             assertThat(desk.session()).isEqualTo(OPEN);
             assertThat(desk.holding()).isEqualTo(HELD);
-            assertThat(heard.events).hasSize(5).contains(OPEN, HELD,
+            assertThat(heard.events).hasSize(6).contains(OPEN, HELD,
                 new fm.event.GapEvent(MP, 6L, 41L), new fm.event.DeskRecovery(MP, true, null));
             assertThat(heard.events).filteredOn(fm.model.Trade.class::isInstance)
                 .extracting(e -> ((fm.model.Trade) e).price()).containsExactly(500L);
@@ -409,8 +411,8 @@ class DeskSharingTest {
             a.close();
             _postOneOfEach(fm);
 
-            _await("b's recovery", () -> heardByB.has(fm.event.DeskRecovery.class));
-            assertThat(heardByB.events).hasSize(5);
+            _await("b's drop, posted last", () -> heardByB.has(fm.event.StreamDropped.class));
+            assertThat(heardByB.events).hasSize(6);
             assertThat(heardByA.events).isEmpty();
             assertThatIllegalStateException().isThrownBy(a::session);
             assertThatIllegalStateException().isThrownBy(a::holding);

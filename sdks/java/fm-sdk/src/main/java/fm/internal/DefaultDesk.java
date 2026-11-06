@@ -85,7 +85,8 @@ public class DefaultDesk implements Desk {
      * gets these in its own logs, and one with none gets java.util.logging.
      *
      * <p>These lines are the FALLBACK, not the interface. What a caller
-     * should act on is {@link Desk#onGap} and {@link Desk#onRecovery},
+     * should act on is {@link Desk#onGap}, {@link Desk#onRecovery} and
+     * {@link Desk#onStreamDropped},
      * which carry the same events as typed records.
      */
     private static final System.Logger LOG = System.getLogger(DefaultDesk.class.getName());
@@ -115,6 +116,13 @@ public class DefaultDesk implements Desk {
     private final List<TradeHandler>                       _tradeHandlers     = new CopyOnWriteArrayList<>();
     private final List<Consumer<GapEvent>>                 _gapHandlers       = new CopyOnWriteArrayList<>();
     private final List<Consumer<DeskRecovery>>           _reconnectHandlers = new CopyOnWriteArrayList<>();
+    private final List<Consumer<StreamDropped>>          _streamDroppedHandlers = new CopyOnWriteArrayList<>();
+    /**
+     * The drop that ended the stream, once one has; taken with the handlers
+     * under this lock, so a handler registered as it lands hears it once.
+     */
+    private final Object _streamLostLock = new Object();
+    private StreamDropped _streamLost;
 
     private final BlockingQueue<Object> _queue = new ArrayBlockingQueue<>(10_000);
     private final Subscription _events;
@@ -345,6 +353,20 @@ public class DefaultDesk implements Desk {
     }
 
     @Override
+    public Subscription onStreamDropped(Consumer<StreamDropped> handler) {
+        _ensureOpen();
+        StreamDropped lost;
+        synchronized (_streamLostLock) {
+            _streamDroppedHandlers.add(handler);
+            lost = _streamLost;
+        }
+        if (lost != null) {
+            _notify(handler, lost);
+        }
+        return () -> _streamDroppedHandlers.remove(handler);
+    }
+
+    @Override
     public Order submitLimit(long marketId, OrderSide side, long units, long price) {
         return submitLimit(marketId, side, units, price, OrderChecks.LOCAL);
     }
@@ -448,11 +470,8 @@ public class DefaultDesk implements Desk {
                 } else if (event instanceof Holding h) {
                     _holding.set(h);
                     for (var hh : _holdingHandlers) _notify(hh, h);
-                } else if (event instanceof StreamDropped error) {
-                    // The subscription restores itself; nothing to do but say so.
-                    LOG.log(System.Logger.Level.WARNING,
-                            "WS transport error on marketplace {0}: {1}",
-                            _marketplaceId, _describe(error.failure()));
+                } else if (event instanceof StreamDropped dropped) {
+                    _streamDropped(dropped);
                 } else if (event instanceof StreamReconnected) {
                     _reseedAfterReconnect();
                 } else if (event instanceof FrameUnreadable ex) {
@@ -500,6 +519,30 @@ public class DefaultDesk implements Desk {
                     "A desk handler threw on marketplace {0}; the desk carries on: {1}",
                     _marketplaceId, _describe(e));
         }
+    }
+
+    /**
+     * Say so, in the log and to the handlers. The subscription restores itself
+     * unless the drop is permanent, so there is nothing else to do.
+     */
+    private void _streamDropped(StreamDropped dropped) {
+        if (dropped.permanent()) {
+            LOG.log(System.Logger.Level.ERROR,
+                    "The stream on marketplace {0} is lost for good; the books will not update again: {1}",
+                    _marketplaceId, _describe(dropped.failure()));
+        } else {
+            LOG.log(System.Logger.Level.WARNING,
+                    "WS transport error on marketplace {0}: {1}",
+                    _marketplaceId, _describe(dropped.failure()));
+        }
+        List<Consumer<StreamDropped>> handlers;
+        synchronized (_streamLostLock) {
+            if (dropped.permanent()) {
+                _streamLost = dropped;
+            }
+            handlers = List.copyOf(_streamDroppedHandlers);
+        }
+        for (var h : handlers) _notify(h, dropped);
     }
 
     private void _reseedAfterReconnect() {

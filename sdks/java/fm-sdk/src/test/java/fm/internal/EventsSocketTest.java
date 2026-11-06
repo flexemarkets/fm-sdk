@@ -370,9 +370,10 @@ class EventsSocketTest {
 
         server.connection(0).close();
 
-        assertThat(next()).isInstanceOf(StreamDropped.class);
+        assertThat(((StreamDropped) next()).permanent()).isFalse();
         StreamDropped refused = (StreamDropped) next();
         assertThat(refused.failure()).isInstanceOf(AuthenticationException.class);
+        assertThat(refused.permanent()).isTrue();
         assertThat(queue.poll(3, TimeUnit.SECONDS)).as("and nothing after it").isNull();
         assertThat(server.handshakes()).as("one refused attempt, not a retry loop").isEqualTo(2);
     }

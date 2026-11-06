@@ -241,8 +241,7 @@ final class OrderStream {
                 case OrderRejected rejected when rejected.submissionId() != null ->
                         _answer(rejected.submissionId(), null, rejected.error());
                 case StreamDropped dropped -> {
-                    if (_listener.isClosed()) {
-                        // The listener has given up: its token was refused twice.
+                    if (dropped.permanent()) {
                         close(dropped.failure());
                         return;
                     }

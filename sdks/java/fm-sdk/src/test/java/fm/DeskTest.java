@@ -718,9 +718,9 @@ class DeskTest {
         logger.addHandler(capture);
 
         try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
-            fake.post(new fm.event.StreamDropped(null));
-            fake.post(new fm.event.StreamDropped(new java.io.IOException()));
-            fake.post(new fm.event.StreamDropped(new java.io.IOException("connection reset")));
+            fake.post(new fm.event.StreamDropped(null, false));
+            fake.post(new fm.event.StreamDropped(new java.io.IOException(), false));
+            fake.post(new fm.event.StreamDropped(new java.io.IOException("connection reset"), false));
             fake.post(new fm.event.FrameUnreadable("STOMP ERROR: no such marketplace", null));
             fake.post(new OrdersUpdate(new Order[] { _limit(alpha, 102L, OrderSide.BUY, 3, 1100) }, 5L));
 
@@ -786,5 +786,124 @@ class DeskTest {
 
         org.assertj.core.api.Assertions.assertThatExceptionOfType(fm.error.ApiException.class)
             .isThrownBy(() -> new DefaultDesk(fake, MP, List.of(alpha)));
+    }
+
+    private static fm.event.StreamDropped _blip() {
+        return new fm.event.StreamDropped(new java.io.IOException("connection reset"), false);
+    }
+
+    private static fm.event.StreamDropped _lost() {
+        return new fm.event.StreamDropped(new IllegalStateException("the token was rejected"), true);
+    }
+
+    private static FakeFlexemarkets _quiet(Market market) {
+        return new FakeFlexemarkets(
+            List.of(market),
+            new Snapshot<>(List.of(_limit(market, 101L, OrderSide.BUY, 5, 1000)), 4L),
+            new Snapshot<>(List.of(), 4L));
+    }
+
+    /**
+     * Only a log line said so, so a robot went on quoting from a book that had
+     * stopped; and a stream lost for good looked the same as one about to return.
+     */
+    @Test
+    @Timeout(20)
+    void everyDropReachesAHandlerAndSaysWhetherItWillComeBack() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = _quiet(alpha);
+        var blip = _blip();
+        var lost = _lost();
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            var heard = new java.util.concurrent.CopyOnWriteArrayList<fm.event.StreamDropped>();
+            desk.onStreamDropped(heard::add);
+
+            fake.post(blip);
+            fake.post(lost);
+
+            _await("both drops", () -> heard.size() == 2);
+            assertThat(heard).containsExactly(blip, lost);
+            assertThat(desk.book(alpha.id()).bestBuyPrice())
+                .as("the handler decides; what the desk holds can still be read").isEqualTo(1000L);
+        }
+    }
+
+    /** A desk is shared, so a robot can open one whose stream died long ago. */
+    @Test
+    @Timeout(20)
+    void aHandlerRegisteredAfterTheStreamWasLostHearsItOnce() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = _quiet(alpha);
+        var lost = _lost();
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            var early = new java.util.concurrent.CopyOnWriteArrayList<fm.event.StreamDropped>();
+            desk.onStreamDropped(early::add);
+            fake.post(lost);
+            _await("the drop", () -> !early.isEmpty());
+
+            var late = new java.util.concurrent.CopyOnWriteArrayList<fm.event.StreamDropped>();
+            desk.onStreamDropped(late::add);
+
+            assertThat(late).containsExactly(lost);
+            assertThat(early).containsExactly(lost);
+        }
+    }
+
+    @Test
+    @Timeout(20)
+    void aHandlerRegisteredAfterADropItWillRecoverFromHearsNothingOfIt() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = _quiet(alpha);
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            var early = new java.util.concurrent.CopyOnWriteArrayList<fm.event.StreamDropped>();
+            desk.onStreamDropped(early::add);
+            fake.post(_blip());
+            _await("the drop", () -> !early.isEmpty());
+
+            var late = new java.util.concurrent.CopyOnWriteArrayList<fm.event.StreamDropped>();
+            desk.onStreamDropped(late::add);
+
+            assertThat(late).isEmpty();
+        }
+    }
+
+    @Test
+    @Timeout(20)
+    void aStreamDroppedHandlerThatThrowsDoesNotStopTheDeskOrTheNextOne() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = _quiet(alpha);
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            var heard = new java.util.concurrent.CopyOnWriteArrayList<fm.event.StreamDropped>();
+            desk.onStreamDropped(e -> { throw new IllegalStateException("a bug in the caller's handler"); });
+            desk.onStreamDropped(heard::add);
+
+            fake.post(_blip());
+            fake.post(new OrdersUpdate(new Order[] { _limit(alpha, 102L, OrderSide.BUY, 1, 1100) }, 5L));
+
+            _await("a delta after it", () -> desk.book(alpha.id()).bestBuyPrice() == 1100L);
+            assertThat(heard).hasSize(1);
+        }
+    }
+
+    @Test
+    @Timeout(20)
+    void aCancelledStreamDroppedHandlerHearsNothing() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = _quiet(alpha);
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            var heard = new java.util.concurrent.CopyOnWriteArrayList<fm.event.StreamDropped>();
+            desk.onStreamDropped(heard::add).close();
+
+            fake.post(_blip());
+            fake.post(new OrdersUpdate(new Order[] { _limit(alpha, 102L, OrderSide.BUY, 1, 1100) }, 5L));
+
+            _await("a delta after it", () -> desk.book(alpha.id()).bestBuyPrice() == 1100L);
+            assertThat(heard).isEmpty();
+        }
     }
 }

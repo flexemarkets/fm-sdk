@@ -392,7 +392,7 @@ public class Events implements Subscription, OrderStream.Listener {
                     _closed = true;
                     _queue.offer(new StreamDropped(new AuthenticationException(
                         "WebSocket refused: the token was rejected. It has expired or was "
-                        + "signed for another server; reconnecting cannot fix it.", e)));
+                        + "signed for another server; reconnecting cannot fix it.", e), true));
                     return;
                 }
                 _failures++;
@@ -859,7 +859,7 @@ public class Events implements Subscription, OrderStream.Listener {
         public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
             if (!_closed && webSocket == _webSocket) {
                 _queue.offer(new StreamDropped(
-                    new Exception("WebSocket closed: %d %s".formatted(statusCode, reason))));
+                    new Exception("WebSocket closed: %d %s".formatted(statusCode, reason)), false));
                 reconnectInBackground(webSocket);
             }
             return CompletableFuture.completedFuture(null);
@@ -868,7 +868,7 @@ public class Events implements Subscription, OrderStream.Listener {
         @Override
         public void onError(WebSocket webSocket, Throwable error) {
             if (webSocket != _webSocket) return; // one this client closed
-            _queue.offer(new StreamDropped(error));
+            _queue.offer(new StreamDropped(error, false));
             reconnectInBackground(webSocket);
         }
     }

@@ -2,6 +2,7 @@ package fm;
 
 import fm.event.GapEvent;
 import fm.event.DeskRecovery;
+import fm.event.StreamDropped;
 import fm.model.Holding;
 import fm.model.Market;
 import fm.model.Order;
@@ -228,6 +229,23 @@ public interface Desk extends AutoCloseable {
      * @return a handle that unsubscribes the handler
      */
     Subscription onRecovery(Consumer<DeskRecovery> handler);
+
+    /**
+     * Register a handler that fires each time the stream drops, while the books
+     * stop updating.
+     *
+     * <p>{@code permanent} on the event says what happens next. False: the stream
+     * is being restored, and {@link #onRecovery} fires once the desk has
+     * reseeded. True: it has given up, its token refused twice. The books stay as
+     * they are and will not update again; what to do about it is the caller's,
+     * and a new desk is what starts over. A handler registered after that hears
+     * of it at once, on the calling thread: a desk is shared, so a robot can open
+     * one whose stream ended long ago.
+     *
+     * @param handler called with each drop
+     * @return a handle that unsubscribes the handler
+     */
+    Subscription onStreamDropped(Consumer<StreamDropped> handler);
 
     /**
      * Submit a limit order on this marketplace.
