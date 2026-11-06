@@ -202,8 +202,7 @@ class OrderStream:
                 if event.submission_id is not None:
                     self._answer(event.submission_id, event.error)
             elif isinstance(event, StreamDropped):
-                if isinstance(event.exception, PermissionError):
-                    # The listener has given up: its token was refused twice.
+                if event.permanent:
                     self.close(event.exception)
                     return
                 with self._lock:

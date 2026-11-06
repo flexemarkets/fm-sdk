@@ -19,7 +19,7 @@ import pytest
 
 from fm.client import Flexemarkets
 from fm.desk import DeskRecovery, GapEvent
-from fm.events import OrdersUpdate, StreamReconnected
+from fm.events import OrdersUpdate, StreamDropped, StreamReconnected
 from fm.snapshot import Snapshot
 from fm.trades import Trade
 from fm.types import Holding, Market, Order, Session
@@ -189,7 +189,8 @@ def test_a_closed_handle_refuses_use_while_the_others_carry_on(fm: Scripted) -> 
     for use in (a.books, a.tapes, a.session, a.holding, lambda: a.tape(ALPHA),
                 lambda: a.on_session_change(print), lambda: a.on_holding_change(print),
                 lambda: a.on_trade(ALPHA, print), lambda: a.on_gap(print),
-                lambda: a.on_recovery(print), lambda: a.submit_cancel(ALPHA, 101)):
+                lambda: a.on_recovery(print), lambda: a.on_stream_dropped(print),
+                lambda: a.submit_cancel(ALPHA, 101)):
         with pytest.raises(RuntimeError, match="Desk handle for marketplace 1 is closed"):
             use()
     assert [m.id for m in b.markets] == [ALPHA]
@@ -261,10 +262,11 @@ def test_a_handle_reads_the_session_and_holding_the_desk_last_heard(fm: Scripted
     (lambda d, h: d.on_trade(ALPHA, h), Trade),
     (lambda d, h: d.on_gap(h), GapEvent),
     (lambda d, h: d.on_recovery(h), DeskRecovery),
-], ids=["session", "holding", "trade", "gap", "recovery"])
+    (lambda d, h: d.on_stream_dropped(h), StreamDropped),
+], ids=["session", "holding", "trade", "gap", "recovery", "stream-dropped"])
 def test_every_kind_of_handler_fires_through_a_handle_and_stops_when_it_closes(
         fm: Scripted, register: Callable[[Any, Callable[[Any], None]], Any], kind: type) -> None:
-    """The book handler has its own test above; these are the other five."""
+    """The book handler has its own test above; these are the others."""
     keeper = fm.desk(MP)
     a = fm.desk(MP)
     heard: list[Any] = []
@@ -275,6 +277,7 @@ def test_every_kind_of_handler_fires_through_a_handle_and_stops_when_it_closes(
         fm.post(MP, Holding(marketplace_id=MP, session_id=30, cash=1500))
         fm.post(MP, OrdersUpdate(orders=_match(seq, seq + 1), seq=seq))  # a gap every time
         fm.post(MP, StreamReconnected(marketplace_id=MP))
+        fm.post(MP, StreamDropped(exception=OSError("gone"), permanent=False))
 
     provoke(50)
     _await("the handler", lambda: heard)

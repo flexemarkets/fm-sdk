@@ -375,10 +375,12 @@ def test_a_refused_token_on_reconnect_ends_the_stream_and_says_why(server, event
     server.refuse_with = 401
     server.connection(0).close()
 
-    assert isinstance(_next(events), StreamDropped)
+    dropped = _next(events)
+    assert isinstance(dropped, StreamDropped) and dropped.permanent is False
     refused = _next(events)
     assert isinstance(refused, StreamDropped)
     assert isinstance(refused.exception, PermissionError)
+    assert refused.permanent is True
     with pytest.raises(queue.Empty):
         events.get(timeout=3)
     assert server.handshakes == 2, "one refused attempt, not a retry loop"

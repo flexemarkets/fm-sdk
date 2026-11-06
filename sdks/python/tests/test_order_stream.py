@@ -241,7 +241,7 @@ class TestStubbed:
         """Held for a whole outage, a robot's quotes went onto the book long after it sent them."""
         s, listener = stub(hold_seconds=0.1)
         sent = s.submit(_order("s-1"))
-        s._events.put(StreamDropped(exception=OSError("gone")))
+        s._events.put(StreamDropped(exception=OSError("gone"), permanent=False))
         _settle(s)
         held = s.submit(_order("s-2"))
 
@@ -254,7 +254,7 @@ class TestStubbed:
 
     def test_an_order_held_less_than_the_hold_goes_when_the_socket_is_back(self, stub):
         s, listener = stub(hold_seconds=5.0)
-        s._events.put(StreamDropped(exception=OSError("gone")))
+        s._events.put(StreamDropped(exception=OSError("gone"), permanent=False))
         _settle(s)
         held = s.submit(_order("s-1"))
         s._events.put(StreamReconnected(marketplace_id=MP))
@@ -264,7 +264,7 @@ class TestStubbed:
     def test_closing_fails_what_is_unanswered_by_whether_it_was_sent(self, stub):
         s, listener = stub()
         sent = s.submit(_order("s-1"))
-        s._events.put(StreamDropped(exception=OSError("gone")))
+        s._events.put(StreamDropped(exception=OSError("gone"), permanent=False))
         _settle(s)
         held = s.submit(_order("s-2"))
 
@@ -285,8 +285,9 @@ class TestStubbed:
     def test_a_refused_token_closes_the_stream_and_says_why(self, stub):
         s, listener = stub()
         pending = s.submit(_order("s-1"))
-        refusal = PermissionError("WebSocket refused: the token was rejected.")
-        s._events.put(StreamDropped(exception=refusal))
+        # Not by the exception's type: a stream closes on what the event says.
+        refusal = OSError("WebSocket refused: the token was rejected.")
+        s._events.put(StreamDropped(exception=refusal, permanent=True))
         with pytest.raises(OrderOutcomeUnknownError) as unknown:
             pending.result(5)
         assert unknown.value.__cause__ is refusal
@@ -418,7 +419,7 @@ class TestSendCancel:
         fm, listener = client
         pending = fm.send_cancel(MP, 11, 101)
         stream = fm._order_streams[MP]
-        stream._events.put(StreamDropped(exception=OSError("gone")))
+        stream._events.put(StreamDropped(exception=OSError("gone"), permanent=False))
         stream._events.put(StreamReconnected(marketplace_id=MP))
         _settle(stream)
         assert listener.sent == [pending.submission_id, pending.submission_id]
@@ -432,7 +433,7 @@ class TestSendCancel:
         fm, listener = client
         stream = fm._order_stream(MP)
         stream._hold_seconds = 0.1
-        stream._events.put(StreamDropped(exception=OSError("gone")))
+        stream._events.put(StreamDropped(exception=OSError("gone"), permanent=False))
         _settle(stream)
         pending = fm.send_cancel(MP, 11, 101)
         with pytest.raises(ConnectionFailedError, match="was not sent: the order socket was down") as refused:
@@ -450,7 +451,7 @@ class TestSendCancel:
         assert [b["type"] for b in listener.bodies] == ["LIMIT", "CANCEL", "LIMIT"]
 
         stream = fm._order_streams[MP]
-        stream._events.put(StreamDropped(exception=OSError("gone")))
+        stream._events.put(StreamDropped(exception=OSError("gone"), permanent=False))
         stream._events.put(StreamReconnected(marketplace_id=MP))
         _settle(stream)
         assert listener.sent == order + order

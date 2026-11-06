@@ -161,7 +161,15 @@ def _is_auth_refusal(failure: BaseException) -> bool:
 
 @dataclass
 class StreamDropped:
+    """The stream dropped.
+
+    :attr:`permanent` says what happens next. False: the listener is restoring
+    it, and a :class:`StreamReconnected` follows when it has. True: it has given
+    up, its token refused twice, and nothing more will arrive.
+    """
+
     exception: BaseException
+    permanent: bool
 
 
 @dataclass
@@ -531,7 +539,7 @@ class EventListener:
         """
         if self._closed:
             return
-        self._queue.put(StreamDropped(exception=exc))
+        self._queue.put(StreamDropped(exception=exc, permanent=False))
         self._restore_in_background(ws if ws is not None else self._ws)
 
     def _restore_in_background(self, dropped: object | None) -> None:
@@ -626,7 +634,7 @@ class EventListener:
                     self._queue.put(StreamDropped(exception=PermissionError(
                         "WebSocket refused: the token was rejected. It has expired "
                         "or was signed for another server; reconnecting cannot fix it."
-                    )))
+                    ), permanent=True))
                     return
                 self._failures += 1
 

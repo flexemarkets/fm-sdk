@@ -570,7 +570,8 @@ def test_a_handler_for_a_market_the_desk_does_not_keep_never_fires():
     (lambda d, h: d.on_trade(1, h), None),
     (lambda d, h: d.on_gap(h), OrdersUpdate(orders=[], seq=50)),
     (lambda d, h: d.on_recovery(h), StreamReconnected(marketplace_id=MP)),
-], ids=["session", "holding", "book", "trade", "gap", "recovery"])
+    (lambda d, h: d.on_stream_dropped(h), StreamDropped(exception=OSError("gone"), permanent=False)),
+], ids=["session", "holding", "book", "trade", "gap", "recovery", "stream-dropped"])
 def test_a_cancelled_handler_hears_nothing_and_cancelling_twice_is_harmless(register, event):
     alpha = _market(1, "ALPHA")
     fake, desk = _empty_desk(alpha)
@@ -620,7 +621,7 @@ def test_a_dropped_stream_and_an_unreadable_frame_are_logged_and_the_desk_carrie
     fake, desk = _empty_desk(alpha)
     try:
         with caplog.at_level(logging.WARNING, logger="fm.desk"):
-            fake.post(StreamDropped(exception=OSError("connection reset")))
+            fake.post(StreamDropped(exception=OSError("connection reset"), permanent=False))
             fake.post(FrameUnreadable(command="ERROR", headers={}, body="no such marketplace",
                                       exception=RuntimeError("STOMP ERROR")))
             fake.post(OrdersUpdate(orders=[_limit(alpha, 102, "BUY", 1, 950)], seq=2))
@@ -729,3 +730,96 @@ def test_a_snapshot_the_book_cannot_apply_fails_the_open_as_the_sdk_fails():
 
     with pytest.raises(ApiError):
         _desk(fake, [alpha])
+
+
+def test_every_drop_reaches_a_handler_and_says_whether_it_will_come_back():
+    """Only a log line said so, so a robot went on quoting from a book that had
+    stopped; and a stream lost for good looked the same as one about to return."""
+    alpha = _market(1, "ALPHA")
+    fake, desk = _empty_desk(alpha)
+    try:
+        heard: list[StreamDropped] = []
+        desk.on_stream_dropped(heard.append)
+        blip = StreamDropped(exception=OSError("connection reset"), permanent=False)
+        lost = StreamDropped(exception=PermissionError("the token was rejected"), permanent=True)
+
+        fake.post(blip)
+        fake.post(lost)
+
+        _await("both drops", lambda: len(heard) == 2)
+        assert heard == [blip, lost]
+    finally:
+        desk.close()
+
+
+def test_a_desk_whose_stream_is_lost_stays_open_and_logs_it_as_an_error(caplog):
+    alpha = _market(1, "ALPHA")
+    fake, desk = _empty_desk(alpha)
+    try:
+        heard: list[StreamDropped] = []
+        desk.on_stream_dropped(heard.append)
+        with caplog.at_level(logging.ERROR, logger="fm.desk"):
+            fake.post(StreamDropped(exception=PermissionError("the token was rejected"), permanent=True))
+            _await("the drop", lambda: heard)
+
+        assert "lost for good" in caplog.text and "the token was rejected" in caplog.text
+        assert desk.book(alpha.id) is not None, "the handler decides; what the desk holds can still be read"
+        assert fake.stream_closes == 0
+    finally:
+        desk.close()
+
+
+def test_a_handler_registered_after_the_stream_was_lost_hears_it_once():
+    """A desk is shared, so a robot can open one whose stream died long ago."""
+    alpha = _market(1, "ALPHA")
+    fake, desk = _empty_desk(alpha)
+    try:
+        early: list[StreamDropped] = []
+        desk.on_stream_dropped(early.append)
+        lost = StreamDropped(exception=PermissionError("the token was rejected"), permanent=True)
+        fake.post(lost)
+        _await("the drop", lambda: early)
+
+        late: list[StreamDropped] = []
+        desk.on_stream_dropped(late.append)
+
+        assert late == [lost]
+        assert early == [lost]
+    finally:
+        desk.close()
+
+
+def test_a_handler_registered_after_a_drop_it_will_recover_from_hears_nothing_of_it():
+    alpha = _market(1, "ALPHA")
+    fake, desk = _empty_desk(alpha)
+    try:
+        early: list[StreamDropped] = []
+        desk.on_stream_dropped(early.append)
+        fake.post(StreamDropped(exception=OSError("connection reset"), permanent=False))
+        _await("the drop", lambda: early)
+
+        late: list[StreamDropped] = []
+        desk.on_stream_dropped(late.append)
+
+        assert late == []
+    finally:
+        desk.close()
+
+
+def test_a_stream_dropped_handler_that_raises_does_not_stop_the_desk_or_the_next_one():
+    alpha = _market(1, "ALPHA")
+    fake, desk = _empty_desk(alpha)
+    try:
+        def explode(_event: object) -> None:
+            raise ValueError("a bug in the caller's handler")
+
+        heard: list[StreamDropped] = []
+        desk.on_stream_dropped(explode)
+        desk.on_stream_dropped(heard.append)
+        fake.post(StreamDropped(exception=OSError("gone"), permanent=False))
+        fake.post(OrdersUpdate(orders=[_limit(alpha, 102, "BUY", 1, 950)], seq=2))
+
+        _await("a delta after it", lambda: desk.book(alpha.id).best_buy_price() == 950)
+        assert len(heard) == 1
+    finally:
+        desk.close()

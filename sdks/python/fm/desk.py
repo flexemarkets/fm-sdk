@@ -117,6 +117,11 @@ class Desk:
         self._trade_handlers: list[tuple[int, Callable[[Trade], None]]] = []
         self._gap_handlers: list[Callable[[GapEvent], None]] = []
         self._reconnect_handlers: list[Callable[[DeskRecovery], None]] = []
+        self._stream_dropped_handlers: list[Callable[[StreamDropped], None]] = []
+        # The drop that ended the stream, once one has; taken with the handlers
+        # under the lock, so a handler registered as it lands hears it once.
+        self._stream_lost: StreamDropped | None = None
+        self._stream_lost_lock = threading.Lock()
         self._stale = False
         self._no_reseed_before = 0.0
 
@@ -340,6 +345,33 @@ class Desk:
 
         return cancel
 
+    def on_stream_dropped(self, handler: Callable[[StreamDropped], None]) -> Subscription:
+        """Register a handler that fires each time the stream drops, while
+        the books stop updating.
+
+        ``permanent`` on the event says what happens next. False: the stream is
+        being restored, and :meth:`on_recovery` fires once the desk has reseeded.
+        True: it has given up, its token refused twice. The books stay as they
+        are and will not update again; what to do about it is the caller's, and
+        a new desk is what starts over. A handler registered after that hears
+        of it at once, on the calling thread: a desk is shared, so a robot can
+        open one whose stream ended long ago.
+        """
+        self._ensure_open()
+        with self._stream_lost_lock:
+            self._stream_dropped_handlers.append(handler)
+            lost = self._stream_lost
+        if lost is not None:
+            self._notify(handler, lost)
+
+        def cancel() -> None:
+            try:
+                self._stream_dropped_handlers.remove(handler)
+            except ValueError:
+                pass
+
+        return cancel
+
     # -- write-side pass-throughs -----------------------------------------
 
     def submit_limit(
@@ -460,12 +492,7 @@ class Desk:
                 continue
 
             if isinstance(event, StreamDropped):
-                # The subscription restores itself; nothing to do but say so.
-                log.warning(
-                    "WS transport error on marketplace %d: %s",
-                    self.marketplace_id,
-                    event.exception,
-                )
+                self._stream_dropped(event)
                 continue
 
             if isinstance(event, StreamReconnected):
@@ -486,6 +513,28 @@ class Desk:
 
             # VERSION, SESSION-LIST aren't reflected in the public
             # surface yet; ignore.
+
+    def _stream_dropped(self, event: StreamDropped) -> None:
+        """Say so, in the log and to the handlers. The subscription restores
+        itself unless the drop is permanent, so there is nothing else to do."""
+        if event.permanent:
+            log.error(
+                "The stream on marketplace %d is lost for good; the books will not update again: %s",
+                self.marketplace_id,
+                event.exception,
+            )
+        else:
+            log.warning(
+                "WS transport error on marketplace %d: %s",
+                self.marketplace_id,
+                event.exception,
+            )
+        with self._stream_lost_lock:
+            if event.permanent:
+                self._stream_lost = event
+            handlers = list(self._stream_dropped_handlers)
+        for handler in handlers:
+            self._notify(handler, event)
 
     def _process_orders_update(self, event: OrdersUpdate) -> None:
         """Phase 2b gap recovery + Phase 2a filter. When a delta
@@ -752,6 +801,12 @@ class DeskHandle:
     def on_recovery(self, handler: Callable[[DeskRecovery], None]) -> Subscription:
         self._check()
         sub = self._shared.on_recovery(handler)
+        self._my_subscriptions.append(sub)
+        return sub
+
+    def on_stream_dropped(self, handler: Callable[[StreamDropped], None]) -> Subscription:
+        self._check()
+        sub = self._shared.on_stream_dropped(handler)
         self._my_subscriptions.append(sub)
         return sub
 
