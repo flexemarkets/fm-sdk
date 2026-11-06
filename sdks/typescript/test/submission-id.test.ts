@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 
-import { Flexemarkets, InvalidArgumentError } from "../src/client.ts";
+import { ApiError, Flexemarkets, InvalidArgumentError } from "../src/client.ts";
 
 const TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl";
 
@@ -93,7 +93,7 @@ test("a refused order is not sent again", async () => {
 test("an order lost twice is reported, and not sent a third time", async () => {
   const { fm, submitted, done } = await serving(["lose", "lose"]);
   try {
-    await assert.rejects(fm.submitLimit(1, 11, "BUY", 5, 135), TypeError);
+    await assert.rejects(fm.submitLimit(1, 11, "BUY", 5, 135), (e: Error) => e instanceof ApiError && e.cause instanceof TypeError);
   } finally {
     await done();
   }

@@ -836,9 +836,37 @@ async function tokenExpired(resp: Response): Promise<boolean> {
  * says with a TypeError of these two messages and nothing more specific, or
  * no answer within {@link REQUEST_TIMEOUT_MS}.
  */
-function answerLost(e: unknown): boolean {
+function exchangeLost(e: unknown): e is Error {
   return (e instanceof TypeError && (e.message === "fetch failed" || e.message === "terminated"))
     || (e instanceof Error && e.name === "TimeoutError");
+}
+
+/**
+ * What a lost exchange is thrown as: an {@link ApiError} carrying it as its
+ * cause, as in the Java and Python SDKs, rather than a bare TypeError escaping
+ * past a caller who catches FlexemarketsError.
+ */
+function transportFailure(e: unknown): unknown {
+  if (!exchangeLost(e)) return e;
+  const why = e.cause instanceof Error ? `${e.message}: ${e.cause.message}` : e.message;
+  return new ApiError(`HTTP request failed: ${why}`, { cause: e });
+}
+
+/**
+ * Whether it is worth sending again: the answer was lost, as distinct from an
+ * ApiError for an answer that came and could not be read.
+ */
+function answerLost(e: unknown): boolean {
+  return e instanceof ApiError && exchangeLost(e.cause);
+}
+
+/** The body of an answer, which can be lost as well after its headers came. */
+async function bodyOf(resp: Response): Promise<string> {
+  try {
+    return await resp.text();
+  } catch (e) {
+    throw transportFailure(e);
+  }
 }
 
 /** How long a request may take, start to finish, before it is given up. */
@@ -853,8 +881,12 @@ export const requestTimeout = { ms: REQUEST_TIMEOUT_MS };
  * waited for ever, where the Python and Java SDKs give up at 30 s -- and a
  * robot stalled on one order stopped trading without a word.
  */
-function fetchWithin(url: string, init: RequestInit): Promise<Response> {
-  return fetch(url, { ...init, signal: init.signal ?? AbortSignal.timeout(requestTimeout.ms) });
+async function fetchWithin(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, { ...init, signal: init.signal ?? AbortSignal.timeout(requestTimeout.ms) });
+  } catch (e) {
+    throw transportFailure(e);
+  }
 }
 
 export class Flexemarkets {
@@ -1075,7 +1107,7 @@ export class Flexemarkets {
         "User-Agent": FM_NETWORK_CLIENT,
       },
     });
-    const body = await resp.text();
+    const body = await bodyOf(resp);
     checkResponse(resp, body);
     return readBody(body);
   }
@@ -1102,7 +1134,7 @@ export class Flexemarkets {
         "User-Agent": FM_NETWORK_CLIENT,
       },
     });
-    const body = await resp.text();
+    const body = await bodyOf(resp);
     checkResponse(resp, body);
     return { data: readBody(body), headers: resp.headers };
   }
@@ -1141,7 +1173,7 @@ export class Flexemarkets {
       },
       body: JSON.stringify(json),
     });
-    const body = await resp.text();
+    const body = await bodyOf(resp);
     checkResponse(resp, body);
     return readBody(body);
   }
@@ -1159,7 +1191,7 @@ export class Flexemarkets {
         "User-Agent": FM_NETWORK_CLIENT,
       },
     });
-    const body = await resp.text();
+    const body = await bodyOf(resp);
     checkResponse(resp, body);
     return body;
   }
@@ -1176,7 +1208,7 @@ export class Flexemarkets {
       },
       body: JSON.stringify(json),
     });
-    const body = await resp.text();
+    const body = await bodyOf(resp);
     checkResponse(resp, body);
     return readBody(body);
   }
@@ -1427,7 +1459,7 @@ export class Flexemarkets {
       method: "DELETE",
       headers: { ...this._authHeaders(), Accept: "application/json" },
     });
-    const body = await resp.text();
+    const body = await bodyOf(resp);
     checkResponse(resp, body);
   }
 
@@ -1439,7 +1471,7 @@ export class Flexemarkets {
       method: "DELETE",
       headers: { ...this._authHeaders(), Accept: "application/json", "User-Agent": FM_NETWORK_CLIENT },
     });
-    const body = await resp.text();
+    const body = await bodyOf(resp);
     checkResponse(resp, body);
     return readBody(body);
   }
@@ -1488,7 +1520,7 @@ export class Flexemarkets {
       },
       body: content,
     });
-    const body = await resp.text();
+    const body = await bodyOf(resp);
     checkResponse(resp, body);
     return readBody(body);
   }
@@ -2280,7 +2312,7 @@ export class Flexemarkets {
       method: "DELETE",
       headers: { ...this._authHeaders(), Accept: "application/json", "User-Agent": FM_NETWORK_CLIENT },
     });
-    const body = await resp.text();
+    const body = await bodyOf(resp);
     if (resp.status === 404 && body.trim() === "") return false;
     checkResponse(resp, body);
     return true;
@@ -2579,7 +2611,7 @@ async function renewWithRefreshToken(baseUrl: string, config: Record<string, str
     },
     body: JSON.stringify({ refreshToken: config[REFRESH_TOKEN_PROPERTY]!.trim() }),
   });
-  const body = await resp.text();
+  const body = await bodyOf(resp);
   checkResponse(resp, body);
   const data = readBody(body);
   if (typeof data.refreshToken === "string" && data.refreshToken) {
@@ -2617,7 +2649,7 @@ async function signIn(
         "User-Agent": FM_NETWORK_CLIENT,
       },
     });
-    const body = await resp.text();
+    const body = await bodyOf(resp);
     checkResponse(resp, body);
     return parseToken(readBody(body));
   }
@@ -2643,7 +2675,7 @@ async function signIn(
       password,
     }),
   });
-  const body = await resp.text();
+  const body = await bodyOf(resp);
   checkResponse(resp, body);
   return parseToken(readBody(body));
 }

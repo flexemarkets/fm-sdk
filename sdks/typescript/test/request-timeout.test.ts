@@ -11,9 +11,11 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 
-import { Flexemarkets, REQUEST_TIMEOUT_MS, requestTimeout } from "../src/client.ts";
+import { ApiError, Flexemarkets, REQUEST_TIMEOUT_MS, requestTimeout } from "../src/client.ts";
 
 const TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl";
+
+const givenUp = (e: Error) => e instanceof ApiError && (e.cause as Error).name === "TimeoutError";
 
 beforeEach(() => (requestTimeout.ms = 200));
 afterEach(() => (requestTimeout.ms = REQUEST_TIMEOUT_MS));
@@ -60,7 +62,7 @@ test("a read whose answer never comes is given up", async () => {
   const { fm, done } = await serving(1);
   const started = Date.now();
   try {
-    await assert.rejects(fm.markets(1), (e: Error) => e.name === "TimeoutError");
+    await assert.rejects(fm.markets(1), givenUp);
   } finally {
     await done();
   }
@@ -81,7 +83,7 @@ test("an order whose answer never came is sent once more as the same submission"
 test("an order unanswered twice is reported", async () => {
   const { fm, orders, done } = await serving(2);
   try {
-    await assert.rejects(fm.submitLimit(1, 11, "BUY", 5, 135), (e: Error) => e.name === "TimeoutError");
+    await assert.rejects(fm.submitLimit(1, 11, "BUY", 5, 135), givenUp);
   } finally {
     await done();
   }
