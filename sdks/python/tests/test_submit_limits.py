@@ -164,8 +164,10 @@ def test_a_request_whose_answer_was_lost_is_sent_once_more_whole(client):
 def test_a_request_lost_twice_is_raised(client):
     plan.extend(["lose", "lose"])
 
-    with pytest.raises(httpx.TransportError):
+    with pytest.raises(ApiError) as lost:
         client.submit_limits(1, [Limit(11, "BUY", 1, 150)])
+
+    assert isinstance(lost.value.__cause__, httpx.TransportError)
 
 
 def test_a_refusal_of_the_whole_request_is_raised(client):

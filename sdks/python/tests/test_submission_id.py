@@ -18,7 +18,7 @@ import httpx
 import pytest
 
 from fm.client import Flexemarkets
-from fm.exceptions import InvalidArgumentError
+from fm.exceptions import ApiError, InvalidArgumentError
 
 TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl"
 
@@ -100,8 +100,10 @@ def test_a_refused_order_is_not_sent_again(client):
 def test_an_order_lost_twice_is_reported_and_not_sent_a_third_time(client):
     plan.extend(["lose", "lose"])
 
-    with pytest.raises(httpx.TransportError):
+    with pytest.raises(ApiError) as lost:
         client.submit_limit(1, 11, "BUY", 5, 135)
+
+    assert isinstance(lost.value.__cause__, httpx.TransportError)
 
     assert len(submitted) == 2
 

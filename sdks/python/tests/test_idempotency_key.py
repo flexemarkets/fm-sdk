@@ -17,7 +17,7 @@ import httpx
 import pytest
 
 from fm.client import Flexemarkets
-from fm.exceptions import InvalidArgumentError
+from fm.exceptions import ApiError, InvalidArgumentError
 from fm.types import Holding, Security, TickGrid
 
 TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl"
@@ -156,7 +156,9 @@ def test_a_refused_create_is_not_sent_again(client):
 def test_a_create_lost_twice_is_reported_and_not_sent_a_third_time(client):
     plan.extend(["lose", "lose"])
 
-    with pytest.raises(httpx.TransportError):
+    with pytest.raises(ApiError) as lost:
         client.clear_now(1, 12)
+
+    assert isinstance(lost.value.__cause__, httpx.TransportError)
 
     assert len(sent) == 2

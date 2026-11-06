@@ -1002,13 +1002,28 @@ class Flexemarkets:
             self._token_obj = token
             return True
 
+    def _exchange(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+        """One request and its answer, or :class:`ApiError` if the exchange was lost.
+
+        Every request this SDK sends goes through here, so no call can let an
+        ``httpx`` transport error past a caller catching ``FlexemarketsError``,
+        which is what the Java and TypeScript SDKs answer too. The transport error
+        stays the ``__cause__``. The resends of an order or a create rely on this:
+        reading an answer happens after they send, so from the send itself
+        ``ApiError`` can only mean the answer was lost.
+        """
+        try:
+            return self._http.request(method, url, **kwargs)
+        except httpx.TransportError as lost:
+            raise ApiError(f"HTTP request failed: {lost!r}") from lost
+
     def _request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         """Send with this client's token; if it has expired, renew it once and send again."""
         extra = kwargs.pop("headers", {})
         presented = self._bearer_token()
-        resp = self._http.request(method, url, headers={**self._auth_headers(), **extra}, **kwargs)
+        resp = self._exchange(method, url, headers={**self._auth_headers(), **extra}, **kwargs)
         if _token_expired(resp) and self._renew_token(presented):
-            resp = self._http.request(method, url, headers={**self._auth_headers(), **extra}, **kwargs)
+            resp = self._exchange(method, url, headers={**self._auth_headers(), **extra}, **kwargs)
         _check_response(resp)
         return resp
 
@@ -1031,7 +1046,7 @@ class Flexemarkets:
         key = {"Idempotency-Key": str(uuid.uuid4())}
         try:
             return send(key)
-        except httpx.TransportError:
+        except ApiError:
             return send(key)
 
     def _patch(self, url: str, json: Any) -> httpx.Response:
@@ -1059,7 +1074,7 @@ class Flexemarkets:
         self, method: str, url: str, content: bytes, headers: dict[str, str] | None = None,
     ) -> httpx.Response:
         """CSV bytes as the request body, declared text/csv; see :meth:`_send_csv`."""
-        resp = self._http.request(
+        resp = self._exchange(
             method, url, content=content,
             headers={
                 **self._auth_headers(),
@@ -1118,7 +1133,8 @@ class Flexemarkets:
         handed a refresh token of its own, not the participant's access token,
         which stops working after hours while the robot runs on.
         """
-        resp = self._http.post(
+        resp = self._exchange(
+            "POST",
             _v1(self._endpoint, "/tokens/renew"),
             json={"refreshToken": self._refresh_token},
             headers={"Accept": "application/json"},
@@ -1145,7 +1161,8 @@ class Flexemarkets:
             # rewrite dropped it, and the Java SDK restored it with a test. This
             # SDK and the TypeScript one never had it, so token auth returned
             # 400 in both from the day it was written.
-            resp = self._http.post(
+            resp = self._exchange(
+            "POST",
                 _v1(self._endpoint, "/tokens/refresh"),
                 headers={
                     "Authorization": f"Bearer {tok}",
@@ -1167,7 +1184,8 @@ class Flexemarkets:
             raise ConfigurationError("Missing 'password' in configuration.")
 
         auth_url = _v1(self._endpoint, "/tokens")
-        resp = self._http.post(
+        resp = self._exchange(
+            "POST",
             auth_url,
             json={"username": f"{acct}|{email}", "password": password},
             headers={"Accept": "application/json"},
@@ -1211,7 +1229,8 @@ class Flexemarkets:
         if last_name is not None:
             body["lastName"] = last_name
 
-        resp = self._http.post(
+        resp = self._exchange(
+            "POST",
             url,
             json=body,
             headers={
@@ -1296,7 +1315,7 @@ class Flexemarkets:
 
     def delete_user(self, user_id: int) -> None:
         url = _v1(self._endpoint, f"/users/{user_id}")
-        resp = self._http.delete(url, headers=self._auth_headers())
+        resp = self._exchange("DELETE", url, headers=self._auth_headers())
         _check_conflict_user(resp, user_id)
 
     # -- marketplaces ------------------------------------------------------
@@ -1558,7 +1577,7 @@ class Flexemarkets:
         url = _marketplace(self._endpoint, marketplace_id) + "/orders"
         try:
             resp = self._post(url, order)
-        except httpx.TransportError:
+        except ApiError:
             resp = self._post(url, order)
         return _parse_order(_json(resp))
 
@@ -1640,7 +1659,7 @@ class Flexemarkets:
         lost: each order's placed order, or the error its refusal raises."""
         try:
             resp = self._post(url, batch)
-        except httpx.TransportError:
+        except ApiError:
             resp = self._post(url, batch)
         entries = _json(resp)
         if not isinstance(entries, list) or len(entries) != len(batch):
@@ -1881,8 +1900,8 @@ class Flexemarkets:
         ``x-fm-as-of-seq`` response header value. Returns
         :data:`NO_SEQ` when the header is absent.
         """
-        resp = self._http.get(
-            url,
+        resp = self._exchange(
+            "GET", url,
             headers={
                 **self._auth_headers(),
                 "Accept": "application/json",
@@ -1997,8 +2016,8 @@ class Flexemarkets:
         url = _marketplace(self._endpoint, marketplace_id) + "/holdings"
         if session_ids:
             url += f"?sessions={_ids_param(session_ids)}"
-        resp = self._http.get(
-            url, headers={**self._auth_headers(), "Accept": "text/csv, */*"})
+        resp = self._exchange(
+            "GET", url, headers={**self._auth_headers(), "Accept": "text/csv, */*"})
         _check_response(resp)
         return resp.text
 
@@ -2086,7 +2105,7 @@ class Flexemarkets:
             # A participant's widget is theirs, under the participant.
             url += f"/participants/{user_id}"
         url += f"/widgets/{_segment(key)}"
-        resp = self._http.delete(url, headers=self._auth_headers())
+        resp = self._exchange("DELETE", url, headers=self._auth_headers())
         if resp.status_code == 404 and not resp.text.strip():
             return False
         _check_response(resp)
