@@ -146,6 +146,20 @@ export interface Desk {
    */
   onRecovery(handler: (event: DeskRecovery) => void): Subscription;
 
+  /**
+   * Register a handler that fires each time the stream drops, while the books
+   * stop updating.
+   *
+   * `permanent` on the event says what happens next. False: the stream is being
+   * restored, and {@link onRecovery} fires once the desk has reseeded. True: it
+   * has given up, its token refused twice. The books stay as they are and will
+   * not update again; what to do about it is the caller's, and a new desk is
+   * what starts over. A handler registered after that hears of it at once,
+   * before this returns: a desk is shared, so a robot can open one whose stream
+   * ended long ago.
+   */
+  onStreamDropped(handler: (event: StreamDropped) => void): Subscription;
+
   /** Submit a limit order on this marketplace. */
   submitLimit(marketId: number, side: string, units: number, price: number): Promise<Order>;
 
@@ -190,6 +204,9 @@ export class DefaultDesk implements Desk {
   private readonly _tradeHandlers: Array<{ marketId: number; handler: (t: Trade) => void }> = [];
   private readonly _gapHandlers: Array<(e: GapEvent) => void> = [];
   private readonly _reconnectHandlers: Array<(e: DeskRecovery) => void> = [];
+  private readonly _streamDroppedHandlers: Array<(e: StreamDropped) => void> = [];
+  /** The drop that ended the stream, once one has. */
+  private _streamLost: StreamDropped | null = null;
 
   private _closed = false;
 
@@ -377,6 +394,16 @@ export class DefaultDesk implements Desk {
     };
   }
 
+  onStreamDropped(handler: (e: StreamDropped) => void): Subscription {
+    this._ensureOpen();
+    this._streamDroppedHandlers.push(handler);
+    if (this._streamLost !== null) this._notify(handler, this._streamLost);
+    return () => {
+      const i = this._streamDroppedHandlers.indexOf(handler);
+      if (i >= 0) this._streamDroppedHandlers.splice(i, 1);
+    };
+  }
+
   /**
    * Submit a limit order, unless the desk already knows fm-server would refuse
    * it: a session the desk holds that is not OPEN, or a position in the market
@@ -517,10 +544,20 @@ export class DefaultDesk implements Desk {
       return;
     }
     if (_isStreamDropped(event)) {
-      // The subscription restores itself; nothing to do but say so.
-      console.warn(
-        `[Desk] WS transport error on marketplace ${this.marketplaceId}: ${event.exception.message}`,
-      );
+      // The subscription restores itself unless the drop is permanent, so
+      // there is nothing else to do but say so.
+      if (event.permanent) {
+        this._streamLost = event;
+        console.error(
+          `[Desk] The stream on marketplace ${this.marketplaceId} is lost for good; ` +
+            `the books will not update again: ${event.exception.message}`,
+        );
+      } else {
+        console.warn(
+          `[Desk] WS transport error on marketplace ${this.marketplaceId}: ${event.exception.message}`,
+        );
+      }
+      for (const h of [...this._streamDroppedHandlers]) this._notify(h, event);
       return;
     }
     if (_isReconnected(event)) {
@@ -800,6 +837,13 @@ export class DeskHandle implements Desk {
   onRecovery(handler: (e: DeskRecovery) => void): Subscription {
     this._check();
     const sub = this._shared.onRecovery(handler);
+    this._mySubscriptions.push(sub);
+    return sub;
+  }
+
+  onStreamDropped(handler: (e: StreamDropped) => void): Subscription {
+    this._check();
+    const sub = this._shared.onStreamDropped(handler);
     this._mySubscriptions.push(sub);
     return sub;
   }

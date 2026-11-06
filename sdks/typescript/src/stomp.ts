@@ -124,9 +124,17 @@ export function decodeFrame(raw: string): StompFrame {
 // Error / transport event types
 // ---------------------------------------------------------------------------
 
+/**
+ * The stream dropped.
+ *
+ * `permanent` says what happens next. False: the listener is restoring it, and
+ * a `StreamReconnected` follows when it has. True: it has given up, its token
+ * refused twice, and nothing more will arrive.
+ */
 export interface StreamDropped {
   kind: "stream-dropped";
   exception: Error;
+  permanent: boolean;
 }
 
 /**
@@ -606,7 +614,7 @@ export class EventListener {
    */
   _onStreamDropped(exception: Error): void {
     if (this._closed) return;
-    this._callback({ kind: "stream-dropped", exception });
+    this._callback({ kind: "stream-dropped", exception, permanent: false });
     if (this._reconnecting) return;
     this._reconnecting = true;
     const opened = this._connectedAt;
@@ -668,6 +676,7 @@ export class EventListener {
                 "signed for another server; reconnecting cannot fix it.",
               { cause: exception },
             ),
+            permanent: true,
           });
           return;
         }

@@ -256,6 +256,7 @@ test("a server close is a drop that reconnects and says so", async () => {
     s.sockets[0].close();
     await until("dropped and reconnected", () => events.some((e) => kind(e) === "reconnected"));
     assert.equal(kind(events[0]), "stream-dropped");
+    assert.equal((events[0] as StreamDropped).permanent, false);
     await until("the new socket subscribes again", () => s.received[1]?.length >= 4);
   } finally { await done(); }
 });
@@ -429,6 +430,7 @@ for (const status of [401, 403]) {
       assert.equal(events.length, 1);
       const dropped = events[0] as StreamDropped;
       assert.equal(dropped.kind, "stream-dropped");
+      assert.equal(dropped.permanent, true);
       assert.match(dropped.exception.message, /token was rejected/);
       assert.match(String((dropped.exception.cause as Error).message), new RegExp(String(status)));
     } finally {

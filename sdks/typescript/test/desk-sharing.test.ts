@@ -252,6 +252,7 @@ function listenToEverything(desk: Desk): string[] {
   desk.onTrade(ALPHA, () => heard.push("trade"));
   desk.onGap(() => heard.push("gap"));
   desk.onRecovery(() => heard.push("recovery"));
+  desk.onStreamDropped(() => heard.push("stream-dropped"));
   return heard;
 }
 
@@ -268,6 +269,7 @@ async function postEverything(fm: Scripted): Promise<void> {
   await new Promise((r) => setTimeout(r, 50));
   fm.post(MP, { kind: "reconnected", marketplaceId: MP });
   await new Promise((r) => setTimeout(r, 50));
+  fm.post(MP, { kind: "stream-dropped", exception: new Error("gone"), permanent: false });
 }
 
 test("a handle hears every kind of event, and reads what they carried", async () => {
@@ -277,7 +279,7 @@ test("a handle hears every kind of event, and reads what they carried", async ()
 
   await postEverything(fm);
 
-  assert.deepEqual(heard, ["session", "holding", "trade", "book", "gap", "recovery"]);
+  assert.deepEqual(heard, ["session", "holding", "trade", "book", "gap", "recovery", "stream-dropped"]);
   assert.equal(desk.session()?.state, "OPEN");
   assert.equal(desk.holding()?.cash, 2500);
   desk.close();
@@ -295,7 +297,7 @@ test("a closed handle's handlers of every kind stop", async () => {
   await postEverything(fm);
 
   assert.deepEqual(heardByA, []);
-  assert.equal(heardByB.length, 6, heardByB.join(", "));
+  assert.equal(heardByB.length, 7, heardByB.join(", "));
   assert.throws(() => a.session(), /closed/);
   assert.throws(() => a.holding(), /closed/);
   b.close();

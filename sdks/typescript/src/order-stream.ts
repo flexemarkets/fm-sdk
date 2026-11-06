@@ -255,8 +255,7 @@ export class OrderStream {
         if (event.submissionId !== null) this._answerById(event.submissionId, event.error);
         return;
       case "stream-dropped":
-        // The listener has given up: its token was refused twice.
-        if (this._listener.closed) this.close(event.exception);
+        if (event.permanent) this.close(event.exception);
         else this._up = false;
         return;
       case "reconnected":

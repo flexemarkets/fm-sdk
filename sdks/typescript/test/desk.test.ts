@@ -17,7 +17,7 @@ import { DefaultDesk, RESEED_RETRY_MS, reseedRetry, type DeskRecovery } from "..
 import { ApiError, parseHolding, type Flexemarkets } from "../src/client.ts";
 import type { Market, Order } from "../src/types.ts";
 import { parseSession } from "../src/stomp.ts";
-import type { FmEvent, OrdersUpdate } from "../src/stomp.ts";
+import type { FmEvent, OrdersUpdate, StreamDropped } from "../src/stomp.ts";
 import type { Snapshot } from "../src/snapshot.ts";
 
 const MP = 7;
@@ -605,7 +605,7 @@ test("a dropped stream and an unreadable frame leave the desk as it is", async (
   const desk = await DefaultDesk.open(asClient(fake), MP);
   const warn = mock.method(console, "warn", () => {});
   try {
-    fake.post({ kind: "stream-dropped", exception: new Error("connection reset") });
+    fake.post({ kind: "stream-dropped", exception: new Error("connection reset"), permanent: false });
     fake.post({ kind: "frame-unreadable", command: "ERROR", headers: {}, body: "bad frame",
                 exception: new Error("bad frame") });
     await new Promise((r) => setTimeout(r, 50));
@@ -710,4 +710,100 @@ test("a snapshot the book cannot apply fails the open as the SDK fails", async (
   const fake = new FakeClient([alpha], snapshot([{ ...limit(alpha, 101, "BUY", 5, 1000), side: null } as Order], 4),
                               snapshot([], 4));
   await assert.rejects(DefaultDesk.open(asClient(fake), MP), ApiError);
+});
+
+// -- the stream drops ---------------------------------------------------------
+
+const blip = (): StreamDropped => ({ kind: "stream-dropped", exception: new Error("connection reset"), permanent: false });
+const lost = (): StreamDropped => ({ kind: "stream-dropped", exception: new Error("the token was rejected"), permanent: true });
+
+async function quietDesk() {
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([limit(alpha, 101, "BUY", 5, 1000)], 4), snapshot([], 4));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  mock.method(console, "warn", () => {});
+  const errors = mock.method(console, "error", () => {});
+  const done = () => { mock.restoreAll(); desk.close(); };
+  return { alpha, fake, desk, errors, done };
+}
+
+test("every drop reaches a handler and says whether it will come back", async () => {
+  // Only a log line said so, so a robot went on quoting from a book that had
+  // stopped; and a stream lost for good looked the same as one about to return.
+  const { fake, desk, done } = await quietDesk();
+  try {
+    const heard: StreamDropped[] = [];
+    desk.onStreamDropped((e) => heard.push(e));
+    const first = blip();
+    const second = lost();
+
+    fake.post(first);
+    fake.post(second);
+
+    assert.deepEqual(heard, [first, second]);
+  } finally { done(); }
+});
+
+test("a desk whose stream is lost stays open and logs it as an error", async () => {
+  const { alpha, fake, desk, errors, done } = await quietDesk();
+  try {
+    fake.post(lost());
+
+    assert.match(String(errors.mock.calls[0]!.arguments[0]), /lost for good.*the token was rejected/);
+    assert.equal(desk.book(alpha.id)!.bestBuyPrice(), 1000, "the handler decides; what the desk holds can still be read");
+  } finally { done(); }
+});
+
+test("a handler registered after the stream was lost hears it once", async () => {
+  // A desk is shared, so a robot can open one whose stream died long ago.
+  const { fake, desk, done } = await quietDesk();
+  try {
+    const early: StreamDropped[] = [];
+    desk.onStreamDropped((e) => early.push(e));
+    const event = lost();
+    fake.post(event);
+
+    const late: StreamDropped[] = [];
+    desk.onStreamDropped((e) => late.push(e));
+
+    assert.deepEqual(late, [event]);
+    assert.deepEqual(early, [event]);
+  } finally { done(); }
+});
+
+test("a handler registered after a drop it will recover from hears nothing of it", async () => {
+  const { fake, desk, done } = await quietDesk();
+  try {
+    fake.post(blip());
+    const late: StreamDropped[] = [];
+    desk.onStreamDropped((e) => late.push(e));
+    assert.deepEqual(late, []);
+  } finally { done(); }
+});
+
+test("a stream-dropped handler that throws does not stop the desk or the next one", async () => {
+  const { alpha, fake, desk, done } = await quietDesk();
+  try {
+    const heard: StreamDropped[] = [];
+    desk.onStreamDropped(() => { throw new Error("a bug in the caller's handler"); });
+    desk.onStreamDropped((e) => heard.push(e));
+
+    fake.post(blip());
+    fake.post(update([limit(alpha, 102, "BUY", 1, 1100)], 5));
+
+    assert.equal(heard.length, 1);
+    assert.equal(desk.book(alpha.id)!.bestBuyPrice(), 1100);
+  } finally { done(); }
+});
+
+test("a cancelled stream-dropped handler hears nothing and cancelling twice is harmless", async () => {
+  const { fake, desk, done } = await quietDesk();
+  try {
+    const heard: StreamDropped[] = [];
+    const cancel = desk.onStreamDropped((e) => heard.push(e));
+    cancel();
+    cancel();
+    fake.post(blip());
+    assert.deepEqual(heard, []);
+  } finally { done(); }
 });

@@ -299,7 +299,7 @@ test("an order not sent within the hold is refused, and one sent before the drop
     return listener;
   }, MP, ERRORS, undefined, 50);
   const sent = await stream.submit(order("s-1"));
-  listener.callback({ kind: "stream-dropped", exception: new Error("gone") });
+  listener.callback({ kind: "stream-dropped", exception: new Error("gone"), permanent: false });
   const held = await stream.submit(order("s-2"));
 
   await assert.rejects(held.result(), (e: Error) =>
@@ -312,7 +312,7 @@ test("an order not sent within the hold is refused, and one sent before the drop
 
 test("an order held less than the hold goes when the socket is back", async () => {
   const { stream, listener } = await stubbed();
-  listener.callback({ kind: "stream-dropped", exception: new Error("gone") });
+  listener.callback({ kind: "stream-dropped", exception: new Error("gone"), permanent: false });
   const held = await stream.submit(order("s-1"));
   listener.callback({ kind: "reconnected", marketplaceId: MP });
   assert.deepEqual(listener.sent, ["s-1"]);
@@ -323,7 +323,7 @@ test("an order held less than the hold goes when the socket is back", async () =
 test("closing fails what is unanswered by whether it was sent", async () => {
   const { stream, listener } = await stubbed();
   const sent = await stream.submit(order("s-1"));
-  listener.callback({ kind: "stream-dropped", exception: new Error("gone") });
+  listener.callback({ kind: "stream-dropped", exception: new Error("gone"), permanent: false });
   const held = await stream.submit(order("s-2"));
 
   stream.close();
@@ -341,8 +341,8 @@ test("a refused token closes the stream and says why", async () => {
   const { stream, listener } = await stubbed();
   const pending = await stream.submit(order("s-1"));
   const refusal = new Error("WebSocket refused: the token was rejected.");
-  listener.closed = true;
-  listener.callback({ kind: "stream-dropped", exception: refusal });
+  // By what the event says: an order stream closes on nothing else.
+  listener.callback({ kind: "stream-dropped", exception: refusal, permanent: true });
   await assert.rejects(pending.result(), (e: Error) => e instanceof OrderOutcomeUnknownError && e.cause === refusal);
 });
 
@@ -491,7 +491,7 @@ test("a sendCancel is sent again after a reconnect, and its replay answers it", 
   const { fm, listener, bodies, done } = await stubbedClient();
   try {
     const pending = await fm.sendCancel(MP, 11, 101);
-    listener.callback({ kind: "stream-dropped", exception: new Error("gone") });
+    listener.callback({ kind: "stream-dropped", exception: new Error("gone"), permanent: false });
     listener.callback({ kind: "reconnected", marketplaceId: MP });
     assert.deepEqual(listener.sent, [pending.submissionId, pending.submissionId]);
     assert.deepEqual(bodies[0], bodies[1]);
@@ -506,7 +506,7 @@ test("a sendCancel the socket could not send is refused after the hold", async (
   const { fm, listener, bodies, stream, done } = await stubbedClient();
   try {
     (await stream() as unknown as { _holdMs: number })._holdMs = 50;
-    listener.callback({ kind: "stream-dropped", exception: new Error("gone") });
+    listener.callback({ kind: "stream-dropped", exception: new Error("gone"), permanent: false });
     const pending = await fm.sendCancel(MP, 11, 101);
     await assert.rejects(pending.result(), (e: Error) =>
       e instanceof ConnectionFailedError && /was not sent: the order socket was down/.test(e.message)
@@ -525,7 +525,7 @@ test("limits and cancels go in the order sent, and are sent again in it", async 
     assert.deepEqual(listener.sent, sent);
     assert.deepEqual(bodies.map((b) => b.type), ["LIMIT", "CANCEL", "LIMIT"]);
 
-    listener.callback({ kind: "stream-dropped", exception: new Error("gone") });
+    listener.callback({ kind: "stream-dropped", exception: new Error("gone"), permanent: false });
     listener.callback({ kind: "reconnected", marketplaceId: MP });
     assert.deepEqual(listener.sent, [...sent, ...sent]);
   } finally { done(); }
