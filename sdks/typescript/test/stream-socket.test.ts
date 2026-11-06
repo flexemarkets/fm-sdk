@@ -17,7 +17,9 @@ import type { FmEvent, OrdersUpdate } from "../src/stomp.ts";
 import { Flexemarkets, parseHolding, parseOrder } from "../src/client.ts";
 import type { CallIndicative, Holding, MarketCall, Session, Version } from "../src/types.ts";
 import type { FrameUnreadable, StreamDropped } from "../src/stomp.ts";
-import { HEARTBEAT_INTERVAL_MS } from "../src/stomp.ts";
+import { connectWait, HEARTBEAT_INTERVAL_MS } from "../src/stomp.ts";
+import { ConnectionFailedError } from "../src/client.ts";
+import net from "node:net";
 
 const MP = 7;
 
@@ -509,5 +511,159 @@ test("closing a listener while its socket is still connecting does not crash the
     for (const l of runnersOwn) process.on("uncaughtException", l);
     for (const socket of s.sockets) socket.terminate();
     await new Promise<void>((resolve) => s.wss.close(() => resolve()));
+  }
+});
+
+// -- a connect that does not complete ---------------------------------------
+
+/** A server that answers CONNECT with `reply`: what, nothing, or a hang-up. */
+async function answering(reply: string | null | "hang-up") {
+  const wss = new WebSocketServer({ host: "127.0.0.1", port: 0 });
+  await new Promise((resolve) => wss.once("listening", resolve));
+  const received: string[] = [];
+  const sockets: WebSocket[] = [];
+  wss.on("connection", (socket) => {
+    sockets.push(socket);
+    socket.on("message", (raw) => {
+      const text = raw.toString();
+      received.push(text);
+      if (!text.startsWith("CONNECT\n")) return;
+      if (reply === "hang-up") socket.close();
+      else if (reply !== null) socket.send(reply);
+    });
+  });
+  const url = () => `ws://127.0.0.1:${(wss.address() as AddressInfo).port}/api/v1/events`;
+  const done = async () => {
+    for (const socket of sockets) socket.terminate();
+    await new Promise<void>((resolve) => wss.close(() => resolve()));
+  };
+  return { url, received, sockets, done };
+}
+
+function unstarted(url: string, onEvent: (e: FmEvent) => void = () => {}): EventListener {
+  return new EventListener(url, "Bearer the-token", MP, onEvent, "fm-sdk-test", parseHolding, parseOrder);
+}
+
+/** Runs `run` with connects limited to 200 ms: the limit itself is ten seconds. */
+async function withShortConnects(run: () => Promise<void>): Promise<void> {
+  const was = connectWait.ms;
+  connectWait.ms = 200;
+  try { await run(); } finally { connectWait.ms = was; }
+}
+
+/** Rejects if `promise` is still pending after `ms`: one that hangs fails rather than hanging the run. */
+function within<T>(promise: Promise<T>, ms = 3000): Promise<T> {
+  return Promise.race([promise, new Promise<T>((_, reject) => {
+    setTimeout(() => reject(new Error("still pending")), ms).unref();
+  })]);
+}
+
+test("a server that never says CONNECTED fails the connect, and the socket is let go", async () => {
+  const s = await answering(null);
+  await withShortConnects(async () => {
+    const listener = unstarted(s.url());
+    try {
+      await assert.rejects(within(listener.start()), /CONNECTED/);
+      await until("the socket closed", () => s.sockets[0].readyState !== s.sockets[0].OPEN);
+    } finally { listener.close(); await s.done(); }
+  });
+});
+
+test("a heartbeat before CONNECTED is not taken for it", async () => {
+  const s = await answering("\n");
+  await withShortConnects(async () => {
+    const listener = unstarted(s.url());
+    try {
+      await assert.rejects(within(listener.start()), /CONNECTED/);
+      assert.ok(!s.received.some((frame) => frame.startsWith("SUBSCRIBE")));
+    } finally { listener.close(); await s.done(); }
+  });
+});
+
+test("a server that hangs up before CONNECTED fails the connect at once", async () => {
+  const s = await answering("hang-up");
+  const listener = unstarted(s.url());
+  try {
+    await assert.rejects(within(listener.start()), /closed/);
+  } finally { listener.close(); await s.done(); }
+});
+
+test("a connect answered with a STOMP ERROR fails and says why", async () => {
+  // It counted as connected: whatever came first did.
+  const s = await answering("ERROR\nmessage:bad credentials\n\n\0");
+  const listener = unstarted(s.url());
+  try {
+    await assert.rejects(within(listener.start()), /bad credentials/);
+    assert.ok(!s.received.some((frame) => frame.startsWith("SUBSCRIBE")));
+  } finally { listener.close(); await s.done(); }
+});
+
+test("an upgrade that is never answered fails the connect", async () => {
+  const sockets: net.Socket[] = [];
+  const silent = net.createServer((socket) => { sockets.push(socket); socket.on("error", () => {}); });
+  await new Promise<void>((resolve) => silent.listen(0, "127.0.0.1", () => resolve()));
+  await withShortConnects(async () => {
+    const listener = unstarted(`ws://127.0.0.1:${(silent.address() as AddressInfo).port}/api/v1/events`);
+    try {
+      await assert.rejects(within(listener.start()), /CONNECTED/);
+    } finally {
+      listener.close();
+      for (const socket of sockets) socket.destroy();
+      silent.close();
+    }
+  });
+});
+
+test("a reconnect that never hears CONNECTED tries again", async () => {
+  // start() is what reconnect() awaits, so this hung it for good: no retry and no word.
+  let reply: string | null = "CONNECTED\nversion:1.2\nheart-beat:0,0\n\n\0";
+  const wss = new WebSocketServer({ host: "127.0.0.1", port: 0 });
+  await new Promise((resolve) => wss.once("listening", resolve));
+  const sockets: WebSocket[] = [];
+  wss.on("connection", (socket) => {
+    sockets.push(socket);
+    socket.on("message", (raw) => {
+      if (raw.toString().startsWith("CONNECT\n") && reply !== null) socket.send(reply);
+    });
+  });
+  const url = `ws://127.0.0.1:${(wss.address() as AddressInfo).port}/api/v1/events`;
+
+  class Quick extends EventListener {
+    protected override _sleep(): Promise<void> { return new Promise((r) => setTimeout(r, 10)); }
+  }
+  const events: FmEvent[] = [];
+  const listener = new Quick(url, "Bearer the-token", MP, (e) => events.push(e), "fm-sdk-test", parseHolding, parseOrder);
+  await withShortConnects(async () => {
+    try {
+      await listener.start();
+      reply = null;
+      sockets[0].close();
+      await until("a second attempt, past the silent one", () => sockets.length >= 3);
+      reply = "CONNECTED\nversion:1.2\nheart-beat:0,0\n\n\0";
+      await until("the stream back", () => events.some((e) => kind(e) === "reconnected"));
+    } finally {
+      listener.close();
+      for (const socket of sockets) socket.terminate();
+      await new Promise<void>((resolve) => wss.close(() => resolve()));
+    }
+  });
+});
+
+test("a stream that cannot connect fails as the SDK fails", async () => {
+  const api = createServer((req, res) => {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ token: "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl", person: { id: 7 }, account: { id: 1 } }));
+  });
+  api.on("upgrade", (_req, socket) => socket.destroy());
+  await new Promise<void>((resolve) => api.listen(0, "127.0.0.1", () => resolve()));
+  const fm = await Flexemarkets.connect("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl",
+    `http://127.0.0.1:${(api.address() as AddressInfo).port}/api/marketplaces/1`, "stream-socket-test");
+  try {
+    await assert.rejects(within(fm._connectEvents(1, () => {})), (e: Error) =>
+      e instanceof ConnectionFailedError && e.cause instanceof Error);
+  } finally {
+    await fm.close();
+    api.closeAllConnections();
+    api.close();
   }
 });

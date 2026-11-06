@@ -453,6 +453,9 @@ function isAuthRefusal(failure: unknown): boolean {
   return false;
 }
 
+/** How long a connect waits for the server's CONNECTED, as in the Java SDK; a test shortens it. */
+export const connectWait = { ms: 10_000 };
+
 export class EventListener {
   private readonly _wsUrl: string;
   /** Read on every connect, so a reconnect after the client renewed its sign-in presents the new token. */
@@ -529,30 +532,65 @@ export class EventListener {
 
   // -- public API ------------------------------------------------------------
 
+  /**
+   * Connect, and subscribe once the server has said CONNECTED. Rejects, letting
+   * go of the socket, if it refuses, hangs up, or says nothing for
+   * {@link connectWait}: nothing else limited this, so a server that stalled held
+   * the caller for good, and a reconnect too, which then neither retried nor
+   * said anything.
+   */
   start(): Promise<void> {
     return new Promise((resolve, reject) => {
-      this._ws = this._connect();
-      this._ws.on("open", () => {
-        try {
-          this._stompConnect();
-        } catch (err) {
-          reject(err);
-          return;
-        }
-        // Wait for the server's first frame -- CONNECTED -- then subscribe.
-        this._ws!.once("message", () => {
-          this._subscribe();
+      const ws = this._connect();
+      this._ws = ws;
+      let settled = false;
+      const settle = (): boolean => {
+        if (settled) return false;
+        settled = true;
+        clearTimeout(limit);
+        ws.off("message", onMessage);
+        ws.off("close", onClose);
+        return true;
+      };
+      const fail = (err: unknown): void => {
+        if (!settle()) return;
+        if (this._ws === ws) this._disconnect();
+        reject(err);
+      };
+      // What else comes first, a heartbeat, is not CONNECTED. An ERROR is the
+      // server's refusal, and subscribing on anyway read nothing from then on.
+      const onMessage = (raw: WebSocket.RawData): void => {
+        const frame = decodeFrame(raw.toString());
+        if (frame.command === "ERROR") {
+          fail(new Error(`STOMP CONNECT refused: ${frame.headers.message ?? frame.body}`));
+        } else if (frame.command === "CONNECTED") {
+          try {
+            this._subscribe();
+          } catch (err) {
+            fail(err);
+            return;
+          }
+          settle();
           this._startHeartbeats();
           this._connectedAt = Date.now();
           this._receiveLoop();
           resolve();
-        });
-      });
-      this._ws.on("error", (err) => {
-        if (!this._closed) {
-          reject(err);
+        }
+      };
+      const onClose = (): void => fail(new Error("WebSocket closed before STOMP CONNECTED"));
+      const limit = setTimeout(() => fail(new Error("STOMP CONNECTED frame not received within timeout")), connectWait.ms);
+      limit.unref?.();
+
+      ws.on("open", () => {
+        try {
+          this._stompConnect();
+        } catch (err) {
+          fail(err);
         }
       });
+      ws.on("message", onMessage);
+      ws.on("close", onClose);
+      ws.on("error", fail);
     });
   }
 

@@ -2597,7 +2597,11 @@ export class Flexemarkets {
       refused,
     );
     if (reconnectMaxPauseMs !== undefined) events.reconnectMaxPauseMs = reconnectMaxPauseMs;
-    await events.start();
+    try {
+      await events.start();
+    } catch (e) {
+      throw new ConnectionFailedError(`The event stream could not connect: ${String(e)}`, { cause: e });
+    }
     return events;
   }
 
