@@ -53,6 +53,9 @@ def _handler(state: Server):
             if self.path.startswith("/api/v1/marketplaces"):
                 self._answer_call(b"[]")
                 return
+            if self.path == "/api/v1/accounts":
+                self._answer_call(b'{"token": "made"}')
+                return
             if self.path in ("/api/v1/tokens", "/api/v1/tokens/refresh"):
                 state.sign_ins += 1
                 if state.sign_in_fails_after is not None and state.sign_ins > state.sign_in_fails_after:
@@ -131,7 +134,9 @@ def test_an_expired_token_is_renewed_once_and_the_request_repeated(server, tmp_p
     lambda c: c.delete_user(9),
     lambda c: c.remove_widget(1, "layout"),
     lambda c: c.upload_holdings_csv(1, "a,b\n"),
-], ids=["active_orders", "recent_trades", "download_holdings", "delete_user", "remove_widget", "csv_upload"])
+    lambda c: c.signup("acct", "a@b", "pw"),
+], ids=["active_orders", "recent_trades", "download_holdings", "delete_user", "remove_widget", "csv_upload",
+        "signup"])
 def test_every_call_that_does_not_go_through_request_renews_too(server, tmp_path, call):
     """These sent through httpx directly, so an expired token ended them where it
     renewed everything else. A desk's reseed is active_orders and recent_trades:

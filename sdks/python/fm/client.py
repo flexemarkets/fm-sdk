@@ -1292,15 +1292,7 @@ class Flexemarkets:
         if last_name is not None:
             body["lastName"] = last_name
 
-        resp = self._exchange(
-            "POST",
-            url,
-            json=body,
-            headers={
-                **self._auth_headers(),
-                "Accept": "application/json",
-            },
-        )
+        resp = self._send("POST", url, json=body, headers={"Accept": "application/json"})
         _check_conflict_account(resp, account_name)
         return _parse_token(_json(resp))
 
