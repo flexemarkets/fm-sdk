@@ -93,6 +93,11 @@ export class Book {
   }
 
   private _add(side: string, price: number, units: number): void {
+    // Refused here because nothing else would: a level that is not a whole
+    // number goes in quietly, and the book reads wrong from then on.
+    if (!Number.isInteger(price) || !Number.isInteger(units)) {
+      throw new Error(`An order's price and units must be whole numbers; got: ${price}, ${units}`);
+    }
     const levels = this._priceLevels(side);
     levels.set(price, (levels.get(price) ?? 0) + units);
   }

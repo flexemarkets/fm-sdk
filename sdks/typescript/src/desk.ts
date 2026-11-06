@@ -10,7 +10,7 @@
  * snapshot seed, no sharing, no reconnect — those land in Phase 2.
  */
 
-import { OrderRefusedLocallyError, type Flexemarkets } from "./client.js";
+import { ApiError, OrderRefusedLocallyError, type Flexemarkets } from "./client.js";
 import { Book, BookIndex } from "./orderbook.js";
 import { TapeIndex, type Trade, type Tape } from "./trades.js";
 import { NO_SEQ, type EventListener, type FmEvent, type OrdersUpdate, type FrameUnreadable, type StreamReconnected, type StreamDropped } from "./stomp.js";
@@ -267,8 +267,12 @@ export class DefaultDesk implements Desk {
     this._books.clear();
     this._trades.clear();
 
-    if (orders.body.length > 0) this._books.update(orders.body);
-    if (legs.length > 0) this._trades.update(legs);
+    try {
+      if (orders.body.length > 0) this._books.update(orders.body);
+      if (legs.length > 0) this._trades.update(legs);
+    } catch (e) {
+      throw new ApiError(`The snapshot could not be applied: ${String(e)}`, { cause: e });
+    }
 
     // Orders and trades flow through the same delta stream, so they share a
     // single seq: the orders snapshot's is the watermark. The trades
@@ -495,17 +499,8 @@ export class DefaultDesk implements Desk {
         for (const h of this._gapHandlers) {
           try { h(gap); } catch { /* one bad handler can't stop recovery */ }
         }
-        this._resyncInFlight = true;
-        this._seedComplete = false;
         this._seedBuffer.push(event);
-        // _seedFromSnapshot flips both flags back atomically on its
-        // synchronous tail, and _leftStale does if it fails.
-        void this._seedFromSnapshot().then(
-          () => {
-            if (this._stale) this._announceRecovery({ marketplaceId: this.marketplaceId, success: true, reason: null });
-          },
-          (err) => this._leftStale("Reseed after a gap failed", err),
-        );
+        this._resync();
         return;
       }
       this._applyOrdersUpdate(event);
@@ -542,6 +537,20 @@ export class DefaultDesk implements Desk {
       return;
     }
     // VERSION, SESSION-LIST — not reflected in the public surface yet.
+  }
+
+  /** Read the snapshot again, holding frames meanwhile; a gap, or a frame the book could not apply. */
+  private _resync(): void {
+    this._resyncInFlight = true;
+    this._seedComplete = false;
+    // _seedFromSnapshot flips both flags back atomically on its
+    // synchronous tail, and _leftStale does if it fails.
+    void this._seedFromSnapshot().then(
+      () => {
+        if (this._stale) this._announceRecovery({ marketplaceId: this.marketplaceId, success: true, reason: null });
+      },
+      (err) => this._leftStale("Reseed after a gap failed", err),
+    );
   }
 
   /**
@@ -616,8 +625,19 @@ export class DefaultDesk implements Desk {
     }
     const orders = update.orders;
     const touched = _marketIdsTouched(orders);
-    this._books.update(orders);
-    const traded = this._trades.update(orders);
+    let traded: ReturnType<typeof this._trades.update>;
+    try {
+      this._books.update(orders);
+      traded = this._trades.update(orders);
+    } catch (e) {
+      // Thrown from here it leaves the socket's message listener, which ends the
+      // process unless something handles uncaughtException. Some of the frame
+      // may have gone in, so the books are not to be trusted; the snapshot puts
+      // that right, and if it cannot the DeskRecovery says so.
+      console.error(`[Desk] ORDERS-UPDATE could not be applied on marketplace ${this.marketplaceId}; resyncing from snapshot:`, e);
+      this._resync();
+      return;
+    }
 
     // Tape first: the more specific event, and a book handler that then reads
     // the tape sees the same trade the trade handler was just given. Both

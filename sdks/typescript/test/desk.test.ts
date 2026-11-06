@@ -13,8 +13,8 @@
 import { afterEach, test, mock } from "node:test";
 import assert from "node:assert/strict";
 
-import { DefaultDesk, RESEED_RETRY_MS, reseedRetry } from "../src/desk.ts";
-import { parseHolding, type Flexemarkets } from "../src/client.ts";
+import { DefaultDesk, RESEED_RETRY_MS, reseedRetry, type DeskRecovery } from "../src/desk.ts";
+import { ApiError, parseHolding, type Flexemarkets } from "../src/client.ts";
 import type { Market, Order } from "../src/types.ts";
 import { parseSession } from "../src/stomp.ts";
 import type { FmEvent, OrdersUpdate } from "../src/stomp.ts";
@@ -660,4 +660,54 @@ test("orders go through the desk to its own marketplace", async () => {
     assert.equal((await desk.submitCancel(alpha.id, 900)).id, 901);
     assert.deepEqual(fake.submitted, [`${MP}/${alpha.id} BUY 2@950`, `${MP}/${alpha.id} cancel 900`]);
   } finally { desk.close(); }
+});
+
+// -- a frame the book cannot apply ------------------------------------------
+
+for (const [name, bad] of Object.entries({
+  "no side": { side: null }, "unknown side": { side: "SIDEWAYS" }, "no units": { units: null },
+  "text units": { units: "3" }, "no price": { price: null }, "text price": { price: "10" },
+}) as [string, Partial<Order>][]) {
+  test(`a frame the book cannot apply reseeds and the desk carries on: ${name}`, async () => {
+    // It threw out of the socket's message listener, which ends the process
+    // unless something handles uncaughtException; units went in as null quietly.
+    const alpha = market(1, "ALPHA");
+    const fake = new FakeClient([alpha], snapshot([limit(alpha, 101, "BUY", 5, 1000)], 4), snapshot([], 4));
+    const desk = await DefaultDesk.open(asClient(fake), MP);
+    try {
+      fake.nextActiveOrders(snapshot([limit(alpha, 201, "BUY", 9, 1500)], 5));
+
+      fake.post(update([{ ...limit(alpha, 102, "BUY", 1, 1100), ...bad }], 5));
+
+      await settled();
+      assert.equal(desk.book(alpha.id)!.bestBuyPrice(), 1500);
+      fake.post(update([limit(alpha, 103, "BUY", 2, 1600)], 6));
+      assert.equal(desk.book(alpha.id)!.bestBuyPrice(), 1600);
+    } finally { desk.close(); }
+  });
+}
+
+test("a frame the book cannot apply and a reseed that fails says the desk is stale", async () => {
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([], 4), snapshot([], 4));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  const errors = mock.method(console, "error", () => {});
+  try {
+    const recoveries: DeskRecovery[] = [];
+    desk.onRecovery((r) => recoveries.push(r));
+    fake.refuseActive = new Error("the snapshot read failed too");
+
+    fake.post(update([{ ...limit(alpha, 102, "BUY", 1, 1100), side: null } as Order], 5));
+
+    await settled();
+    assert.equal(recoveries.length, 1);
+    assert.equal(recoveries[0].success, false);
+  } finally { errors.mock.restore(); desk.close(); }
+});
+
+test("a snapshot the book cannot apply fails the open as the SDK fails", async () => {
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([{ ...limit(alpha, 101, "BUY", 5, 1000), side: null } as Order], 4),
+                              snapshot([], 4));
+  await assert.rejects(DefaultDesk.open(asClient(fake), MP), ApiError);
 });
