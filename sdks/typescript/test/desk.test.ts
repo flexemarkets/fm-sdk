@@ -10,10 +10,10 @@
  * These assert the book's *contents*, not a log line.
  */
 
-import { test, mock } from "node:test";
+import { afterEach, test, mock } from "node:test";
 import assert from "node:assert/strict";
 
-import { DefaultDesk } from "../src/desk.ts";
+import { DefaultDesk, RESEED_RETRY_MS, reseedRetry } from "../src/desk.ts";
 import { parseHolding, type Flexemarkets } from "../src/client.ts";
 import type { Market, Order } from "../src/types.ts";
 import { parseSession } from "../src/stomp.ts";
@@ -21,6 +21,8 @@ import type { FmEvent, OrdersUpdate } from "../src/stomp.ts";
 import type { Snapshot } from "../src/snapshot.ts";
 
 const MP = 7;
+
+afterEach(() => (reseedRetry.ms = RESEED_RETRY_MS));
 
 function market(id: number, symbol: string): Market {
   return {
@@ -386,12 +388,193 @@ test("a reconnect that cannot reseed leaves the desk stale and says why", async 
     assert.deepEqual(recoveries, [{ marketplaceId: MP, success: false, reason: "server unavailable" }]);
     assert.match(String(error.mock.calls[0]?.arguments[0]), /desk is stale: server unavailable/);
 
-    // Stale, not corrupt: a delta is held back rather than applied to a book
-    // that missed whatever came before it.
+    // The next in sequence means nothing was missed, so it applies, as in the
+    // Python and Java SDKs. One past a gap does not: see below.
+    fake.refuseActive = null;
     fake.post(update([limit(alpha, 102, "BUY", 3, 1100)], 5));
-    assert.equal(desk.book(alpha.id)!.bestBuyPrice(), 1000);
+    assert.equal(desk.book(alpha.id)!.bestBuyPrice(), 1100);
   } finally {
     error.mock.restore();
+    desk.close();
+  }
+});
+
+const settled = () => new Promise((r) => setTimeout(r, 50));
+
+test("a reseed that fails after a gap is told, and a later frame asks again", async () => {
+  // The read was not awaited or caught here: its rejection went unhandled, and
+  // Node's default for that ends the process.
+  reseedRetry.ms = 0;
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([limit(alpha, 101, "BUY", 5, 1000)], 4), snapshot([], 4));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  const error = mock.method(console, "error", () => {});
+  const warn = mock.method(console, "warn", () => {});
+  const unhandled: unknown[] = [];
+  const record = (e: unknown) => void unhandled.push(e);
+  const runnersOwn = process.listeners("unhandledRejection");
+  process.removeAllListeners("unhandledRejection");
+  process.on("unhandledRejection", record);
+  try {
+    const recoveries: unknown[] = [];
+    desk.onRecovery((e) => recoveries.push(e));
+
+    fake.refuseActive = new Error("server unavailable");
+    fake.post(update([limit(alpha, 301, "BUY", 2, 3000)], 41));
+    await settled();
+
+    assert.deepEqual(unhandled, []);
+    assert.deepEqual(recoveries, [{ marketplaceId: MP, success: false, reason: "server unavailable" }]);
+    assert.equal(desk.book(alpha.id)!.bestBuyPrice(), 1000, "not applied over the frames it missed");
+
+    fake.refuseActive = null;
+    fake.nextActiveOrders(snapshot([limit(alpha, 201, "BUY", 9, 1500)], 42));
+    fake.post(update([], 42));
+    await settled();
+
+    assert.equal(desk.book(alpha.id)!.bestBuyPrice(), 1500);
+    assert.deepEqual(recoveries[1], { marketplaceId: MP, success: true, reason: null });
+  } finally {
+    process.off("unhandledRejection", record);
+    for (const l of runnersOwn) process.on("unhandledRejection", l);
+    error.mock.restore();
+    warn.mock.restore();
+    desk.close();
+  }
+});
+
+test("a failed reseed is not tried again on every frame", async () => {
+  reseedRetry.ms = 60_000;
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([], 4), snapshot([], 4));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  const error = mock.method(console, "error", () => {});
+  const warn = mock.method(console, "warn", () => {});
+  try {
+    const recoveries: unknown[] = [];
+    let gaps = 0;
+    desk.onRecovery((e) => recoveries.push(e));
+    desk.onGap(() => gaps++);
+    fake.refuseActive = new Error("server unavailable");
+
+    fake.post(update([], 41));
+    await settled();
+    fake.post(update([], 42));
+    fake.post(update([], 43));
+    await settled();
+
+    assert.equal(fake.activeReads, 2, "one seed at open, one for the gap, none for the frames behind it");
+    assert.equal(gaps, 1);
+    assert.equal(recoveries.length, 1);
+  } finally {
+    error.mock.restore();
+    warn.mock.restore();
+    desk.close();
+  }
+});
+
+test("a reconnect reseeds a desk a gap left stale at once", async () => {
+  // It was taken for one already reseeding and ignored, so a desk once stale
+  // stayed so until the caller closed it.
+  reseedRetry.ms = 60_000;
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([], 4), snapshot([], 4));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  const error = mock.method(console, "error", () => {});
+  const warn = mock.method(console, "warn", () => {});
+  try {
+    const recoveries: Array<{ success: boolean }> = [];
+    desk.onRecovery((e) => recoveries.push(e));
+    fake.refuseActive = new Error("server unavailable");
+    fake.post(update([], 41));
+    await settled();
+
+    fake.refuseActive = null;
+    fake.nextActiveOrders(snapshot([limit(alpha, 201, "BUY", 9, 1500)], 50));
+    fake.post({ kind: "reconnected", marketplaceId: MP });
+    await settled();
+    assert.deepEqual(recoveries.map((e) => e.success), [false, true]);
+
+    // And it has forgotten the wait: the next gap reads straight away.
+    fake.nextActiveOrders(snapshot([limit(alpha, 202, "BUY", 9, 1600)], 60));
+    fake.post(update([], 60));
+    await settled();
+    assert.equal(desk.book(alpha.id)!.bestBuyPrice(), 1600);
+  } finally {
+    error.mock.restore();
+    warn.mock.restore();
+    desk.close();
+  }
+});
+
+test("a reconnect that fails twice is told twice, then a third can still succeed", async () => {
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([], 4), snapshot([], 4));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  const error = mock.method(console, "error", () => {});
+  try {
+    const recoveries: Array<{ success: boolean }> = [];
+    desk.onRecovery((e) => recoveries.push(e));
+    fake.refuseActive = new Error("server unavailable");
+    fake.post({ kind: "reconnected", marketplaceId: MP });
+    await settled();
+    fake.post({ kind: "reconnected", marketplaceId: MP });
+    await settled();
+    fake.refuseActive = null;
+    fake.post({ kind: "reconnected", marketplaceId: MP });
+    await settled();
+
+    assert.deepEqual(recoveries.map((e) => e.success), [false, false, true]);
+  } finally {
+    error.mock.restore();
+    desk.close();
+  }
+});
+
+test("a gap that heals what a failed reconnect left stale says so", async () => {
+  // Told the desk is stale, a caller stops trading on it; it has to hear when that ends.
+  reseedRetry.ms = 0;
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([], 4), snapshot([], 4));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  const error = mock.method(console, "error", () => {});
+  const warn = mock.method(console, "warn", () => {});
+  try {
+    const recoveries: Array<{ success: boolean }> = [];
+    desk.onRecovery((e) => recoveries.push(e));
+    fake.refuseActive = new Error("server unavailable");
+    fake.post({ kind: "reconnected", marketplaceId: MP });
+    await settled();
+
+    fake.refuseActive = null;
+    fake.nextActiveOrders(snapshot([], 41));
+    fake.post(update([], 41));
+    await settled();
+
+    assert.deepEqual(recoveries.map((e) => e.success), [false, true]);
+  } finally {
+    error.mock.restore();
+    warn.mock.restore();
+    desk.close();
+  }
+});
+
+test("an ordinary gap says nothing of recovery", async () => {
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([], 4), snapshot([], 4));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  const warn = mock.method(console, "warn", () => {});
+  try {
+    const recoveries: unknown[] = [];
+    desk.onRecovery((e) => recoveries.push(e));
+    fake.nextActiveOrders(snapshot([], 41));
+    fake.post(update([], 41));
+    await settled();
+
+    assert.equal(fake.activeReads, 2);
+    assert.deepEqual(recoveries, []);
+  } finally {
+    warn.mock.restore();
     desk.close();
   }
 });

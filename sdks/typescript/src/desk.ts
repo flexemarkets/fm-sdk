@@ -37,9 +37,11 @@ export interface GapEvent {
 }
 
 /**
- * Fires when Desk reacts to a StreamDropped — either after
- * the reconnect + resnapshot completes successfully, or after the
- * attempt has failed and the desk is left stale.
+ * Fires when a Desk is left stale, and when it stops being: after a
+ * reconnect, whether its reseed worked or not; after a sequence gap, when its
+ * reseed fails and so when a later one ends that. A gap that reseeds first time
+ * is only a {@link GapEvent}. Until one says `success`, the books are as they
+ * stood before whatever was missed.
  */
 export interface DeskRecovery {
   readonly marketplaceId: number;
@@ -159,6 +161,16 @@ export interface Desk {
 }
 
 /** Trades each tape keeps; the seed asks each market for two legs a trade. */
+/**
+ * How long after a reseed fails before a frame may ask for another. Each frame
+ * past the gap reads as one, and a busy market sends many a second, to a server
+ * that has just shown it cannot answer the read. Chosen, not measured.
+ */
+export const RESEED_RETRY_MS = 5_000;
+
+/** The wait in force: {@link RESEED_RETRY_MS}, unless a test has changed it. */
+export const reseedRetry = { ms: RESEED_RETRY_MS };
+
 const TAPE_CAPACITY = 100;
 
 export class DefaultDesk implements Desk {
@@ -189,6 +201,11 @@ export class DefaultDesk implements Desk {
    * `asOfSeq`; `NO_SEQ` disables filtering (older fm-server).
    */
   private _lastAppliedSeq: number = NO_SEQ;
+
+  /** A reseed failed and none has worked since; a {@link DeskRecovery} said so. */
+  private _stale = false;
+  /** When a frame past a gap may next ask for a reseed. */
+  private _noReseedBefore = 0;
 
   static async open(flexemarkets: Flexemarkets, marketplaceId: number): Promise<DefaultDesk> {
     const markets = await flexemarkets.markets(marketplaceId);
@@ -462,6 +479,9 @@ export class DefaultDesk implements Desk {
         this._lastAppliedSeq !== NO_SEQ &&
         event.seq > this._lastAppliedSeq + 1
       ) {
+        // Dropped, not applied: the seq has not moved, so the next frame reads
+        // as the gap again, and the snapshot that ends it covers both.
+        if (Date.now() < this._noReseedBefore) return;
         const expectedSeq = this._lastAppliedSeq + 1;
         console.warn(
           `[Desk] ORDERS-UPDATE seq gap on marketplace ${this.marketplaceId} ` +
@@ -479,8 +499,13 @@ export class DefaultDesk implements Desk {
         this._seedComplete = false;
         this._seedBuffer.push(event);
         // _seedFromSnapshot flips both flags back atomically on its
-        // synchronous tail; nothing more to do in the .then().
-        void this._seedFromSnapshot();
+        // synchronous tail, and _leftStale does if it fails.
+        void this._seedFromSnapshot().then(
+          () => {
+            if (this._stale) this._announceRecovery({ marketplaceId: this.marketplaceId, success: true, reason: null });
+          },
+          (err) => this._leftStale("Reseed after a gap failed", err),
+        );
         return;
       }
       this._applyOrdersUpdate(event);
@@ -526,32 +551,40 @@ export class DefaultDesk implements Desk {
    * because the listener already restored the subscription. Reseeding is: a
    * reconnect is the largest possible sequence gap, so _seedFromSnapshot()
    * (clear + REST snapshot + reapply + seq watermark) is what converges the
-   * state, exactly as it does for a small one. If it fails the desk is left
-   * stale until the caller close()s and desk()s again.
+   * state, exactly as it does for a small one.
    */
   private _reseedAfterReconnect(): void {
     if (this._resyncInFlight) return; // already handling
     this._resyncInFlight = true;
     this._seedComplete = false;
-    void (async () => {
-      let outcome: DeskRecovery;
-      try {
-        await this._seedFromSnapshot();
-        outcome = { marketplaceId: this.marketplaceId, success: true, reason: null };
-      } catch (err) {
-        const reason = err instanceof Error ? err.message : String(err);
-        console.error(
-          `[Desk] Reconnect failed on marketplace ${this.marketplaceId}; desk is stale: ${reason}`,
-        );
-        outcome = { marketplaceId: this.marketplaceId, success: false, reason };
-        // Leave _resyncInFlight=true so subsequent dispatches keep
-        // buffering rather than corrupting state; caller can close()
-        // and desk() to recover.
-      }
-      for (const h of this._reconnectHandlers) {
-        try { h(outcome); } catch { /* don't let one bad handler stop dispatch */ }
-      }
-    })();
+    void this._seedFromSnapshot().then(
+      () => this._announceRecovery({ marketplaceId: this.marketplaceId, success: true, reason: null }),
+      (err) => this._leftStale("Reconnect failed", err),
+    );
+  }
+
+  /**
+   * A reseed failed. The desk goes on: a frame next in sequence applies, as
+   * nothing was missed, and one past a gap asks again once the wait is over.
+   * What was held for the reseed is let go, as the snapshot that ends this
+   * covers it. The DeskRecovery says the books are stale until told otherwise.
+   */
+  private _leftStale(what: string, err: unknown): void {
+    const reason = err instanceof Error ? err.message : String(err);
+    console.error(`[Desk] ${what} on marketplace ${this.marketplaceId}; desk is stale: ${reason}`);
+    this._seedBuffer = [];
+    this._seedComplete = true;
+    this._resyncInFlight = false;
+    this._noReseedBefore = Date.now() + reseedRetry.ms;
+    this._announceRecovery({ marketplaceId: this.marketplaceId, success: false, reason });
+  }
+
+  private _announceRecovery(outcome: DeskRecovery): void {
+    this._stale = !outcome.success;
+    if (outcome.success) this._noReseedBefore = 0;
+    for (const h of this._reconnectHandlers) {
+      try { h(outcome); } catch { /* don't let one bad handler stop dispatch */ }
+    }
   }
 
   /**
