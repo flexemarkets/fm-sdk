@@ -522,6 +522,42 @@ class EventsSocketTest {
         org.assertj.core.api.Assertions.assertThatExceptionOfType(fm.error.ApiException.class)
             .isThrownBy(events::connect)
             .withMessage("STOMP CONNECTED frame not received within timeout");
+        assertThat(events._webSocket).as("the socket that failed is let go").isNull();
+    }
+
+    /** It waited out the ten seconds with the reason in hand, and did not say what it was. */
+    @Test
+    @Timeout(20)
+    void aConnectAnsweredWithAStompErrorFailsAtOnceAndSaysWhy() throws Exception {
+        server.silent = true;
+        events = new Events(server.url(), "Bearer the-token", MP, "fm-sdk-test", HttpFlexemarkets.MAPPER, queue);
+        var connecting = java.util.concurrent.CompletableFuture.runAsync(events::connect);
+
+        server.connection(0).received(0);
+        server.connection(0).send("ERROR\nmessage:bad credentials\n\n\0");
+
+        org.assertj.core.api.Assertions.assertThat(connecting)
+            .failsWithin(5, TimeUnit.SECONDS)
+            .withThrowableOfType(java.util.concurrent.ExecutionException.class)
+            .withCauseInstanceOf(fm.error.ApiException.class)
+            .withMessageContaining("bad credentials");
+    }
+
+    /** buildAsync(...).join() had no limit: a server that took the connection and said nothing held it for good. */
+    @Test
+    @Timeout(20)
+    void anUpgradeThatIsNeverAnsweredFailsTheConnect() throws Exception {
+        try (var silent = new java.net.ServerSocket(0, 50, java.net.InetAddress.getLoopbackAddress())) {
+            events = new Events("ws://127.0.0.1:" + silent.getLocalPort() + "/api/v1/events",
+                                "Bearer the-token", MP, "fm-sdk-test", HttpFlexemarkets.MAPPER, queue);
+            events.connectedTimeoutMillis = 200;
+            var connecting = java.util.concurrent.CompletableFuture.runAsync(events::connect);
+
+            org.assertj.core.api.Assertions.assertThat(connecting)
+                .failsWithin(5, TimeUnit.SECONDS)
+                .withThrowableOfType(java.util.concurrent.ExecutionException.class)
+                .withCauseInstanceOf(fm.error.ApiException.class);
+        }
     }
 
     /** A connection cut without a close frame is a drop too, recovered and announced. */

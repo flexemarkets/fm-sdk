@@ -24,6 +24,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.net.http.WebSocketHandshakeException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -158,7 +159,7 @@ public class Events implements Subscription, OrderStream.Listener {
      */
     static final long HEROKU_IDLE_TIMEOUT_MS = 55_000;
 
-    /** How long connect() waits for the server's CONNECTED frame. */
+    /** How long connect() waits for the upgrade, and again for the server's CONNECTED frame. */
     static final long CONNECTED_TIMEOUT_MS = 10_000;
 
     /**
@@ -169,6 +170,9 @@ public class Events implements Subscription, OrderStream.Listener {
      */
     long connectedTimeoutMillis = CONNECTED_TIMEOUT_MS;
     long heartbeatIntervalMillis = TimeUnit.SECONDS.toMillis(HEARTBEAT_INTERVAL_SECONDS);
+
+    /** What the server said in refusing a CONNECT, as an ERROR frame; null if it has not. */
+    private volatile String _connectRefusal;
 
     /** The socket in use; package-private so a test can stand one in. */
     volatile WebSocket _webSocket;
@@ -284,6 +288,7 @@ public class Events implements Subscription, OrderStream.Listener {
         try {
             var connectedLatch = new CountDownLatch(1);
             var listener = new StompListener(connectedLatch);
+            _connectRefusal = null;
 
             // NORMAL rather than the JDK's default of NEVER, for the same reason
             // the REST client uses it: an edge that upgrades plain HTTP to HTTPS
@@ -294,6 +299,10 @@ public class Events implements Subscription, OrderStream.Listener {
                 .newWebSocketBuilder()
                 .header("Authorization", _presented = _bearerToken.get())
                 .subprotocols("v12.stomp", "v11.stomp", "v10.stomp")
+                // join() below has no limit of its own: a server that took the
+                // connection and said nothing held the caller for good, and a
+                // reconnect too, which then neither retried nor said anything.
+                .connectTimeout(Duration.ofMillis(connectedTimeoutMillis))
                 .buildAsync(URI.create(_wsUrl), listener)
                 .join();
 
@@ -301,6 +310,9 @@ public class Events implements Subscription, OrderStream.Listener {
 
             if (!connectedLatch.await(connectedTimeoutMillis, TimeUnit.MILLISECONDS)) {
                 throw new ApiException("STOMP CONNECTED frame not received within timeout");
+            }
+            if (_connectRefusal != null) {
+                throw new ApiException("STOMP CONNECT refused: " + _connectRefusal);
             }
 
             // fm-server publishes broadcasts on the V0 destination paths
@@ -318,8 +330,10 @@ public class Events implements Subscription, OrderStream.Listener {
             _startHeartbeats();
             _connectedAt = System.nanoTime();
         } catch (FlexemarketsException e) {
+            _closeWebSocket();
             throw e;
         } catch (Exception e) {
+            _closeWebSocket();
             throw new ApiException("WebSocket connection failed", e);
         }
     }
@@ -819,6 +833,11 @@ public class Events implements Subscription, OrderStream.Listener {
                 _buffer.setLength(0);
 
                 if (frame.startsWith("CONNECTED")) {
+                    _connectedLatch.countDown();
+                } else if (frame.startsWith("ERROR") && _connectedLatch.getCount() > 0) {
+                    // The answer to CONNECT, and not to wait out the limit for.
+                    _connectRefusal = frame.lines().filter(line -> line.startsWith("message:"))
+                        .findFirst().map(line -> line.substring("message:".length())).orElse(frame);
                     _connectedLatch.countDown();
                 }
 
