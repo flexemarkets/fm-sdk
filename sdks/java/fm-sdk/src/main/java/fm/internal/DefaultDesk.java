@@ -1,5 +1,6 @@
 package fm.internal;
 
+import fm.error.ApiException;
 import fm.error.OrderRefusedLocallyException;
 import fm.event.FrameUnreadable;
 import fm.event.GapEvent;
@@ -26,6 +27,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -232,11 +234,15 @@ public class DefaultDesk implements Desk {
         // Book.update treats them as adds — same code path WS
         // deltas use. Tape snapshot feeds the tape via the same
         // update() entrypoint.
-        if (!orders.body().isEmpty()) {
-            this._books.update(orders.body().toArray(new Order[0]));
-        }
-        if (!legs.isEmpty()) {
-            this._trades.update(legs.toArray(new Order[0]));
+        try {
+            if (!orders.body().isEmpty()) {
+                this._books.update(orders.body().toArray(new Order[0]));
+            }
+            if (!legs.isEmpty()) {
+                this._trades.update(legs.toArray(new Order[0]));
+            }
+        } catch (RuntimeException e) {
+            throw new ApiException("The snapshot could not be applied: " + e, e);
         }
 
         // Use the orders snapshot's seq as the watermark — orders and
@@ -581,8 +587,21 @@ public class DefaultDesk implements Desk {
 
         Order[] orders = update.orders();
         var touched = _marketIdsTouched(orders);
-        _books.update(orders);
-        var traded = _trades.update(orders);
+        Map<Long, List<Trade>> traded;
+        try {
+            _books.update(orders);
+            traded = _trades.update(orders);
+        } catch (RuntimeException e) {
+            // Nothing else on this thread would catch it, and it ending is a
+            // desk that stops with nothing to say so. Some of the frame may have
+            // gone in, so the books are not to be trusted; the snapshot puts that
+            // right, and if it cannot the DeskRecovery says so.
+            LOG.log(System.Logger.Level.ERROR,
+                    "ORDERS-UPDATE could not be applied on marketplace {0}; resyncing from snapshot: {1}",
+                    _marketplaceId, _describe(e));
+            _reseedAfterGap();
+            return;
+        }
 
         // Tape first: the more specific event, and a book handler that then
         // reads the tape sees the same trade the trade handler was just given.

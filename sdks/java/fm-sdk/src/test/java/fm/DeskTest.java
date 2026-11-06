@@ -735,4 +735,56 @@ class DeskTest {
         }
     }
 
+
+    /** It ended the dispatcher, which catches only interruption, with nothing to say so. */
+    @Test
+    @Timeout(20)
+    void aFrameTheBookCannotApplyReseedsAndTheDeskCarriesOn() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha),
+            new Snapshot<>(List.of(_limit(alpha, 101L, OrderSide.BUY, 5, 1000)), 4L),
+            new Snapshot<>(List.of(), 4L));
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            fake.nextActiveOrders(new Snapshot<>(List.of(_limit(alpha, 201L, OrderSide.BUY, 9, 1500)), 5L));
+
+            fake.post(new OrdersUpdate(new Order[] { _limit(alpha, 102L, null, 1, 1100) }, 5L));
+            _await("the reseeded book", () -> desk.book(alpha.id()).bestBuyPrice() == 1500L);
+
+            fake.post(new OrdersUpdate(new Order[] { _limit(alpha, 103L, OrderSide.BUY, 2, 1600) }, 6L));
+            _await("the next frame applied", () -> desk.book(alpha.id()).bestBuyPrice() == 1600L);
+        }
+    }
+
+    @Test
+    @Timeout(20)
+    void aFrameTheBookCannotApplyAndAReseedThatFailsSaysTheDeskIsStale() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(List.of(alpha), new Snapshot<>(List.of(), 4L), new Snapshot<>(List.of(), 4L));
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            var recoveries = new java.util.concurrent.CopyOnWriteArrayList<fm.event.DeskRecovery>();
+            desk.onRecovery(recoveries::add);
+            fake.failActiveOrders(new IllegalStateException("503 from the server"));
+
+            fake.post(new OrdersUpdate(new Order[] { _limit(alpha, 102L, null, 1, 1100) }, 5L));
+            _await("the recovery handler", () -> !recoveries.isEmpty());
+
+            assertThat(recoveries.get(0).success()).isFalse();
+        }
+    }
+
+    @Test
+    @Timeout(20)
+    void aSnapshotTheBookCannotApplyFailsTheOpenAsTheSdkFails() {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha),
+            new Snapshot<>(List.of(_limit(alpha, 101L, null, 5, 1000)), 4L),
+            new Snapshot<>(List.of(), 4L));
+
+        org.assertj.core.api.Assertions.assertThatExceptionOfType(fm.error.ApiException.class)
+            .isThrownBy(() -> new DefaultDesk(fake, MP, List.of(alpha)));
+    }
 }
