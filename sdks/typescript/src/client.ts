@@ -358,8 +358,11 @@ export function parseSession(data: JsonObject): Session {
 
 export function parseOrder(data: JsonObject): Order {
   requireObject(data);
+  // Every field below has a default, so an answer naming no order read as
+  // order 0, which a robot then kept as resting or cancelled.
+  if (!Number.isInteger(data.id)) throw new ApiError("Failed to parse the response body: an order with no id");
   return {
-    id: (data.id as number) ?? 0,
+    id: data.id as number,
     original: (data.original as number) ?? 0,
     supplier: (data.supplier as number) ?? 0,
     consumer: (data.consumer as number | null) ?? null,

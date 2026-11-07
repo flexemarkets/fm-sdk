@@ -180,3 +180,42 @@ for (const body of ["[]", "1", '"x"', "null"]) {
     } finally { done(); }
   });
 }
+
+const NO_ORDER_ID = ["{}", '{"side":"BUY","units":1,"price":100}', '{"id":null}', '{"id":"80035520"}', '{"id":1.5}', '{"id":true}'];
+
+for (const name of ["submitLimit", "submitCancel"]) {
+  for (const body of NO_ORDER_ID) {
+    test(`${name} answered with ${body} is an ApiError, not order 0`, async () => {
+      const { base, done } = await answeringWith(body);
+      const fm = await Flexemarkets.connect(TOKEN, `${base}/marketplaces/1`, "transport-failure-test");
+      try {
+        await assert.rejects(ONE_THING[name](fm), (e: Error) => e instanceof ApiError && /order with no id/.test(e.message));
+      } finally { await fm.close(); done(); }
+    });
+  }
+}
+
+test("a row with no order id is an ApiError", async () => {
+  const { base, done } = await answeringWith('[{"id":5},{}]');
+  const fm = await Flexemarkets.connect(TOKEN, `${base}/marketplaces/1`, "transport-failure-test");
+  try {
+    await assert.rejects(fm.activeOrders(1), (e: Error) => e instanceof ApiError && /order with no id/.test(e.message));
+  } finally { await fm.close(); done(); }
+});
+
+test("a batch entry with no order id is an ApiError", async () => {
+  const { base, done } = await answeringWith('[{"status":201,"order":{}}]');
+  const fm = await Flexemarkets.connect(TOKEN, `${base}/marketplaces/1`, "transport-failure-test");
+  try {
+    await assert.rejects(fm.submitLimits(1, [{ marketId: 11, side: "BUY", units: 1, price: 100 }]),
+      (e: Error) => e instanceof ApiError && /order with no id/.test(e.message));
+  } finally { await fm.close(); done(); }
+});
+
+test("an order with an id of zero is still read", async () => {
+  const { base, done } = await answeringWith('{"id":0}');
+  const fm = await Flexemarkets.connect(TOKEN, `${base}/marketplaces/1`, "transport-failure-test");
+  try {
+    assert.equal((await fm.submitLimit(1, 11, "BUY", 1, 100)).id, 0);
+  } finally { await fm.close(); done(); }
+});

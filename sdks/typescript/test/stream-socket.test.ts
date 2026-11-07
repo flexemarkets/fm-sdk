@@ -215,6 +215,22 @@ test("a history chunk out of turn is reported, not delivered as the history", as
   } finally { await done(); }
 });
 
+for (const [type, body] of [["ORDERS-UPDATE", '[{"id":5},{}]'], ["ORDER-ACCEPTED", "{}"]]) {
+  test(`${type} naming an order with no id is reported`, async () => {
+    // It reached the book as order 0, so the desk never reseeded.
+    const { s, events, done } = await listening(true);
+    try {
+      s.sockets[0].send(message(type, body, "seq:8\nsubmission-id:s1"));
+      s.sockets[0].send(chunk([6], 9, "1/1"));
+      await until("two events", () => events.length >= 2);
+      assert.equal(kind(events[0]), "frame-unreadable");
+      assert.match((events[0] as FrameUnreadable).exception.message, /order with no id/);
+      assert.ok(isOrdersUpdate(events[1]));
+      assert.deepEqual(events[1].orders.map((o) => o.id), [6]);
+    } finally { await done(); }
+  });
+}
+
 test("a history mark that is not <i>/<n> is reported", async () => {
   const { s, events, done } = await listening(true);
   try {
