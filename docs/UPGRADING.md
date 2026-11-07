@@ -123,6 +123,25 @@ them one. A socket order whose `ORDER-ACCEPTED` frame is unreadable keeps waitin
 as it does for any unreadable frame, until the `ORDERS-UPDATE` broadcast answers
 it or the stream closes, so give its result a timeout.
 
+### Python ships type information
+
+The package now carries `py.typed`, so mypy and pyright read the SDK's annotations
+in your code, and a checker that passed before may now report real problems.
+`fm.Desk` is now what `fm.desk()` returns, the handle, so `desk: Desk` is correct;
+it was the shared desk behind the handle, which a caller never holds, so code
+calling `fm.Desk(...)` directly must use `fm.desk.Desk`. `contra()` of no side is a
+`ValueError`, where it was an `AttributeError`. A STOMP frame sent as a binary
+message is read, where it dropped the stream.
+
+### A call promising an account or person refuses an answer without one (all three)
+
+An answer of `null`, or an approval with no account in it, returned `None` or
+`null` from a method promising the thing: `account_by_id`, `user_by_id`,
+`create_user` and `approve_account` in Python, their counterparts in TypeScript,
+and `approveAccount` in Java. Each is now an `ApiError` (`ApiException` in Java).
+TypeScript's `accountById` and `approveAccount` no longer say `Account | null`, so
+a null check on their result is now dead code a linter may flag.
+
 ### A frame a desk cannot apply reseeds it (all three)
 
 An `ORDERS-UPDATE` whose orders the book could not apply ended the desk's thread
