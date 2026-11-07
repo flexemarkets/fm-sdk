@@ -301,7 +301,7 @@ def test_a_history_mark_that_is_not_i_of_n_is_reported(server, events, history_l
 def test_a_frame_naming_an_order_with_no_id_is_reported(server, events, history_listener, msg_type, body):
     """It reached the book as order 0, so the desk never reseeded."""
     connection = server.connection(0)
-    connection.send(_message(msg_type, body, "seq:8\nsubmission-id:s1"))
+    connection.send(_message(msg_type, body, "seq:8"))
     connection.send(_chunk([6], 9, "1/1"))
 
     unreadable = _next(events)

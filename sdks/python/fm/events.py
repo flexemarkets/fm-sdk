@@ -20,7 +20,7 @@ from typing import Any, Callable
 import websockets.sync.client as ws_sync
 from websockets.typing import Subprotocol
 
-from .exceptions import ConnectionFailedError, FlexemarketsError
+from .exceptions import ApiError, ConnectionFailedError, FlexemarketsError
 from .types import CallIndicative, Holding, MarketCall, Order, Session, Version
 
 log = logging.getLogger(__name__)
@@ -240,7 +240,9 @@ class OrderAccepted:
 
 @dataclass
 class OrderRejected:
-    """An order sent over the socket was refused.
+    """An order sent over the socket was refused, or its acceptance could not be
+    read, when *error* is the :class:`~fm.exceptions.ApiError` REST raises for an
+    answer it cannot read and the order may have been placed.
 
     *error* is what REST raises for the same refusal, built from the same
     failure body, so a caller handles a refused order one way whichever
@@ -263,6 +265,29 @@ _SUBMISSION_ID_HEADER = "submission-id"
 _HISTORY_HEADER = "history"
 
 
+def _json_or_none(body: str) -> Any:
+    """A refusal's body: one that is not JSON is still a refusal, and its text says what it can."""
+    try:
+        return json.loads(body) if body else None
+    except ValueError:
+        return None
+
+
+def _unreadable_acceptance(frame: StompFrame, cause: Exception) -> "OrderRejected | None":
+    """What answers an order whose acceptance cannot be read; None if this frame is not one.
+
+    Nothing else would. The broadcast may never name it, so it waited for as long
+    as the stream stayed up. The order may well have been placed, which is why
+    the message says so: this is the socket's form of REST's unreadable answer.
+    """
+    submission_id = frame.headers.get(_SUBMISSION_ID_HEADER)
+    if frame.headers.get(_MESSAGE_TYPE) != "ORDER-ACCEPTED" or submission_id is None:
+        return None
+    error = ApiError(f"The answer to order {submission_id} could not be read; it may have been placed")
+    error.__cause__ = cause
+    return OrderRejected(submission_id=submission_id, error=error)
+
+
 def _parse_event(frame: StompFrame) -> object | None:
     msg_type = frame.headers.get(_MESSAGE_TYPE)
     if msg_type is None:
@@ -271,7 +296,8 @@ def _parse_event(frame: StompFrame) -> object | None:
 
     # A body that is not JSON raises, and the receive loop reports the frame
     # as unreadable -- as Java always has -- instead of it vanishing here.
-    data: Any = json.loads(frame.body) if frame.body else None
+    data: Any = _json_or_none(frame.body) if msg_type == "ORDER-REJECTED" else (
+        json.loads(frame.body) if frame.body else None)
 
     match msg_type:
         case "VERSION":
@@ -832,6 +858,9 @@ class EventListener:
                         self._queue.put(FrameUnreadable(
                             command=frame.command, headers=frame.headers,
                             body=frame.body, exception=exc))
+                        answer = _unreadable_acceptance(frame, exc)
+                        if answer is not None:
+                            self._queue.put(answer)
                         continue
                     if event is not None:
                         self._queue.put(event)

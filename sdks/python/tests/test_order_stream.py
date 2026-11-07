@@ -27,7 +27,7 @@ from fm.events import (
     StreamReconnected,
     _decode_frame,
 )
-from fm.exceptions import ConnectionFailedError, InvalidArgumentError, OrderOutcomeUnknownError
+from fm.exceptions import ApiError, ConnectionFailedError, InvalidArgumentError, OrderOutcomeUnknownError
 from fm.order_stream import OrderStream, PendingOrder
 from fm.types import Order
 from test_events_socket import MP, _await, _message, _Server
@@ -115,6 +115,30 @@ class TestOnTheSocket:
         server.connection(1).send(_message("ORDER-ACCEPTED", json.dumps(_row("s-1", 101)), "submission-id:s-1"))
         server.connection(1).send(_message("ORDERS-UPDATE", json.dumps([_row("s-2", 102)])))
         assert (first.result(5).id, held.result(5).id) == (101, 102)
+
+    @pytest.mark.parametrize("body", ["{}", "not json"], ids=["no-id", "not-json"])
+    def test_an_acceptance_that_cannot_be_read_fails_the_order_and_not_the_next(self, server, stream, body):
+        """Nothing answered it, so it waited until a broadcast or the stream closing, however long."""
+        s = stream()
+        pending = s.submit(_order("s-1"))
+        _await("sent", lambda: _sent(server, 0) == ["s-1"])
+        server.connection(0).send(_message("ORDER-ACCEPTED", body, "submission-id:s-1"))
+        with pytest.raises(ApiError, match="could not be read"):
+            pending.result(5)
+
+        following = s.submit(_order("s-2"))
+        _await("the next sent", lambda: _sent(server, 0) == ["s-1", "s-2"])
+        server.connection(0).send(_message("ORDER-ACCEPTED", json.dumps(_row("s-2", 102)), "submission-id:s-2"))
+        assert following.result(5).id == 102
+
+    def test_a_refusal_that_is_not_json_is_still_a_refusal(self, server, stream):
+        """It raised before the refusal was built, so the order waited, where Java refuses it."""
+        s = stream()
+        pending = s.submit(_order("s-1"))
+        _await("sent", lambda: _sent(server, 0) == ["s-1"])
+        server.connection(0).send(_message("ORDER-REJECTED", "not json", "submission-id:s-1"))
+        with pytest.raises(InvalidArgumentError):
+            pending.result(5)
 
     def test_a_refused_order_raises_what_rest_raises(self, server, stream):
         s = stream()
