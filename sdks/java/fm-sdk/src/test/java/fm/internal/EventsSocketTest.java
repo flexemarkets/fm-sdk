@@ -254,7 +254,7 @@ class EventsSocketTest {
         var socket = server.connection(0);
 
         socket.send(message("ORDERS-UPDATE", "seq:8", "[{\"id\":5},{}]"));
-        socket.send(message("ORDER-ACCEPTED", "seq:8\nsubmission-id:s1", "{}"));
+        socket.send(message("ORDER-ACCEPTED", "seq:8", "{}"));
         socket.send(chunk(9, "1/1", 6));
 
         assertThat(((FrameUnreadable) next()).failure()).hasRootCauseMessage("an order with no id");

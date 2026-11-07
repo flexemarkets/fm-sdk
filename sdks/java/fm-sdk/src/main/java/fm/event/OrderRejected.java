@@ -4,7 +4,9 @@ import fm.error.FlexemarketsException;
 
 
 /**
- * An order sent over the socket was refused.
+ * An order sent over the socket was refused, or its acceptance could not be
+ * read, when {@code error} is the {@link fm.error.ApiException} REST throws for an
+ * answer it cannot read and the order may have been placed.
  *
  * <p>{@code error} is what REST throws for the same refusal, built from the
  * same failure body, so a caller handles a refused order one way whichever

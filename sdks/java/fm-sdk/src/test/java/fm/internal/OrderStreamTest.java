@@ -169,6 +169,30 @@ class OrderStreamTest {
         assertThat(held.get(5, TimeUnit.SECONDS).id()).isEqualTo(102);
     }
 
+    /** Nothing answered it, so it waited until a broadcast or the stream closing, however long. */
+    @Test
+    @Timeout(30)
+    void anAcceptanceThatCannotBeReadFailsTheOrderAndNotTheNext() throws Exception {
+        var stream = onSocket();
+        var noId = stream.submit("s-1", order("s-1"));
+        var notJson = stream.submit("s-2", order("s-2"));
+        until("sent", () -> sentCount(this, 0, 2));
+        var socket = server.connection(0);
+        socket.send(message("ORDER-ACCEPTED", "submission-id:s-1", "{}"));
+        socket.send(message("ORDER-ACCEPTED", "submission-id:s-2", "not json"));
+
+        for (var pending : java.util.List.of(noId, notJson)) {
+            assertThatThrownBy(() -> pending.get(5, TimeUnit.SECONDS))
+                    .hasCauseInstanceOf(fm.error.ApiException.class)
+                    .hasMessageContaining("could not be read");
+        }
+
+        var following = stream.submit("s-3", order("s-3"));
+        until("the next sent", () -> sentCount(this, 0, 3));
+        socket.send(message("ORDER-ACCEPTED", "submission-id:s-3", row("s-3", 103)));
+        assertThat(following.get(5, TimeUnit.SECONDS).id()).isEqualTo(103);
+    }
+
     @Test
     @Timeout(20)
     void aRefusedOrderFailsWithWhatRestThrowsForItsStatus() throws Exception {

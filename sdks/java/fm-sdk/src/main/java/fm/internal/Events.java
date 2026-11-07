@@ -718,6 +718,13 @@ public class Events implements Subscription, OrderStream.Listener {
             }
         } catch (Exception e) {
             _queue.offer(new FrameUnreadable("Failed to parse STOMP message: " + messageType, e));
+            // Nothing else answers an order whose acceptance cannot be read: the
+            // broadcast may never name it, so it waited as long as the stream
+            // stayed up. It may well have been placed, and the message says so.
+            if (MESSAGE_TYPE_ORDER_ACCEPTED.equals(messageType) && submissionId != null) {
+                _queue.offer(new OrderRejected(submissionId, new ApiException(
+                        "The answer to order " + submissionId + " could not be read; it may have been placed", e)));
+            }
         }
     }
 
