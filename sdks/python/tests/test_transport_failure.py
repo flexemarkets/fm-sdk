@@ -18,6 +18,7 @@ import pytest
 import fm.client as client_module
 from fm.client import Flexemarkets
 from fm.exceptions import ApiError, ConnectionFailedError, FlexemarketsError
+from fm.types import Limit
 
 TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl"
 SIGNED_IN = {"token": TOKEN, "person": {"id": 7, "accountId": 1, "email": "dev@dev"},
@@ -203,3 +204,35 @@ def test_every_parser_answers_a_wrong_shape_with_an_api_error(name):
 def test_every_list_answer_is_checked_for_being_one():
     source = Path(client_module.__file__).read_text()
     assert not re.findall(r"for \w+ in (?:_json\(|data\])", source)
+
+
+NO_ORDER_ID = [{}, {"side": "BUY", "units": 1, "price": 100}, {"id": None}, {"id": "80035520"}, {"id": 1.5}, {"id": True}]
+NO_ORDER_ID_NAMES = ["empty", "no-id", "null-id", "text-id", "fraction-id", "boolean-id"]
+
+
+@pytest.mark.parametrize("order", NO_ORDER_ID, ids=NO_ORDER_ID_NAMES)
+@pytest.mark.parametrize("call", ["submit_limit", "submit_cancel"])
+def test_an_order_answered_with_no_id_is_an_api_error(monkeypatch, tmp_path, call, order):
+    """It came back as order 0, and a robot cancelled order 0 or kept it as resting."""
+    with _client(monkeypatch, tmp_path, lambda request: httpx.Response(200, json=order)) as client:
+        with pytest.raises(ApiError, match="order with no id"):
+            ONE_THING[call](client)
+
+
+def test_a_row_with_no_order_id_is_an_api_error(monkeypatch, tmp_path):
+    with _client(monkeypatch, tmp_path, lambda request: httpx.Response(200, json=[{"id": 5}, {}])) as client:
+        with pytest.raises(ApiError, match="order with no id"):
+            client.active_orders(1)
+
+
+def test_a_batch_entry_with_no_order_id_is_an_api_error(monkeypatch, tmp_path):
+    answer = [{"status": 201, "order": {}}]
+    with _client(monkeypatch, tmp_path, lambda request: httpx.Response(200, json=answer)) as client:
+        with pytest.raises(ApiError, match="order with no id"):
+            client.submit_limits(1, [Limit(11, "BUY", 1, 100)])
+
+
+def test_an_order_with_an_id_of_zero_is_still_read(monkeypatch, tmp_path):
+    """The check is that the server named one, not which; a test double may use 0."""
+    with _client(monkeypatch, tmp_path, lambda request: httpx.Response(200, json={"id": 0})) as client:
+        assert client.submit_limit(1, 11, "BUY", 1, 100).id == 0

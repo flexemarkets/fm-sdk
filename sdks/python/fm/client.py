@@ -313,8 +313,13 @@ def _parse_session(data: dict[str, Any]) -> Session:
 
 @_reads_an_answer
 def _parse_order(data: dict[str, Any]) -> Order:
+    # Every field below has a default, so an answer naming no order read as
+    # order 0, which a robot then kept as resting or cancelled.
+    order_id = data.get("id")
+    if type(order_id) is not int:
+        raise ApiError(f"Failed to parse the response body: an order with no id: {data!r}")
     return Order(
-        id=data.get("id", 0),
+        id=order_id,
         original=data.get("original", 0),
         supplier=data.get("supplier", 0),
         consumer=data.get("consumer"),

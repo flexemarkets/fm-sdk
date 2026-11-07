@@ -297,6 +297,20 @@ def test_a_history_mark_that_is_not_i_of_n_is_reported(server, events, history_l
     assert "is not <i>/<n>" in str(unreadable.exception)
 
 
+@pytest.mark.parametrize("msg_type, body", [("ORDERS-UPDATE", '[{"id":5},{}]'), ("ORDER-ACCEPTED", "{}")])
+def test_a_frame_naming_an_order_with_no_id_is_reported(server, events, history_listener, msg_type, body):
+    """It reached the book as order 0, so the desk never reseeded."""
+    connection = server.connection(0)
+    connection.send(_message(msg_type, body, "seq:8\nsubmission-id:s1"))
+    connection.send(_chunk([6], 9, "1/1"))
+
+    unreadable = _next(events)
+    assert isinstance(unreadable, FrameUnreadable)
+    assert "order with no id" in str(unreadable.exception)
+    update = _next(events)
+    assert isinstance(update, OrdersUpdate) and [o.id for o in update.orders] == [6]
+
+
 def test_an_orders_update_arrives_with_its_sequence_number(server, events, listener):
     listener()
     server.connection(0).send(_message(
