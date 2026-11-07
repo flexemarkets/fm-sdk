@@ -6,6 +6,7 @@ moving to, oldest first: from the bottom up.
 
 | Version | Covers |
 |---------|--------|
+| [0.20](#020-from-019x) | no change for a robot or a client; for a study, fm-spi 0.0.19 (contract 0.5) adds `StudyProvider.marketplaces`, with a default, so a host can create a run's marketplaces before its people |
 | [0.19](#019-from-018x) | a lost connection is an `ApiError` in Python and TypeScript; a desk that cannot reseed or apply a frame goes on and says so; a stream connect fails after 10 s; a `PendingOrder` cannot be cancelled; a desk says when its stream drops, and `StreamDropped` gains `permanent`, which Java callers that build or destructure it must handle |
 | [0.18](#018-from-017x) | additive: `sendLimit` and `sendCancel` can go over REST, in batches, with one request in flight (fm-server 4.19) |
 | [0.17](#017-from-016x) | additive for callers: `sendCancel` over the socket, in order with `sendLimit`; Java implementers have a method to add; a credential passed replaces `~/.fm/credential`'s whole |
@@ -25,6 +26,33 @@ moving to, oldest first: from the bottom up.
 | [0.3](#03-from-02x) | which is additive, and says so |
 | [0.2](#02-from-01x) | the package moves, the renames, and the five changes that are not renames |
 | [0.1](#01-from-00x) | Migrating a codebase from 0.0.x to 0.1.x, in all three languages |
+
+---
+
+## 0.20: from 0.19.x
+
+Nothing changes for a robot or a client: the Python, TypeScript and Java SDKs
+are as they were in 0.19.
+
+A study changes only if it wants to. fm-spi 0.0.19 is study contract 0.5, which
+adds `StudyProvider.marketplaces(parameters)`: the marketplaces a run needs
+before anyone takes part. A host creates them at setup and plans the people
+later, once the manager has added them in Participants, as for any
+marketplace. The answer must be the marketplaces `setup` returns, by key,
+whoever takes part.
+
+- **A study whose marketplaces come from its parameters alone** -- every study
+  so far -- can override it with the builder its plan already uses. Without
+  the override it still works: the default plans for stand-in people (one
+  participant, a manager, a person for each of the study's own robots, all
+  with negative ids and `.invalid` emails) and keeps the marketplaces.
+- **A study whose marketplaces depend on who takes part** must override it,
+  because the stand-ins would give the wrong answer.
+- **Hosts:** a host refuses a provider whose contract minor is newer than its
+  own, so fm-server speaking 0.5 must be deployed before a study built on
+  fm-spi 0.0.19.
+
+See `docs/STUDY-SPI-0.5.md` for the design.
 
 ---
 
