@@ -33,7 +33,8 @@ moving to, oldest first: from the bottom up.
 No signatures change, and it needs the same server as 0.18.0. What changes for a
 robot: what a lost connection or an unreadable answer raises, what a desk does
 when it cannot reseed or apply a frame, how long a stream connect may take, what
-`cancel()` on a `PendingOrder` answers, and how a desk reports a dropped stream.
+`cancel()` on a `PendingOrder` answers, how a desk reports a dropped stream, and
+that an order answered with no id is refused.
 Java has one signature change: see `StreamDropped` below.
 
 ### A lost connection is an `ApiError` (Python, TypeScript)
@@ -107,6 +108,20 @@ original as its cause. Code catching those types no longer catches this.
 A request on a closed Python client is a `ConnectionFailedError`, where it was a
 `RuntimeError`. Python's `signup` now renews an expired token, as every other call
 does.
+
+### An order with no id is unreadable (all three)
+
+Every field of an order has a default, so an answer of `{}` read as a successful
+order 0, which a robot kept as resting or cancelled. An order must now name its
+`id`. An answer, a list row or a batch entry without one is an `ApiError`
+(`ApiException` in Java), and a stream frame without one is `FrameUnreadable`, so
+a desk reseeds. An `id` of 0 is still read. Python and TypeScript also refuse an
+`id` that is not a whole number; Java's Jackson settings still read `"5"` as 5.
+
+A fake server or test fixture whose orders have no `id` now fails this way: give
+them one. A socket order whose `ORDER-ACCEPTED` frame is unreadable keeps waiting,
+as it does for any unreadable frame, until the `ORDERS-UPDATE` broadcast answers
+it or the stream closes, so give its result a timeout.
 
 ### A frame a desk cannot apply reseeds it (all three)
 
