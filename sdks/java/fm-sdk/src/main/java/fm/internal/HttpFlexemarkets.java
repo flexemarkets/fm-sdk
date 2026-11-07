@@ -737,7 +737,11 @@ public class HttpFlexemarkets implements Flexemarkets {
                 .orElseThrow(() -> new InvalidArgumentException("No account named '" + accountName + "'"));
         var approval = _post(_v1("/accounts/" + account.id() + "/approvals"),
                             new ApproveAccount(true), APPROVAL_TYPE);
-        return approval == null ? null : approval.account();
+        var approved = approval == null ? null : approval.account();
+        if (approved == null) {
+            throw new ApiException("Failed to parse the response body: expected an account, got nothing");
+        }
+        return approved;
     }
 
     @Override

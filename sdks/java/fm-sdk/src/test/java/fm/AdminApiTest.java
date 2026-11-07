@@ -11,6 +11,7 @@ import fm.model.Person;
 import fm.model.TickGrid;
 import fm.model.Token;
 import fm.error.AccountNameConflictException;
+import fm.error.ApiException;
 import fm.error.ConflictException;
 import fm.error.FlexemarketsException;
 import fm.error.PersonHasMarketplaceDataException;
@@ -61,6 +62,9 @@ class AdminApiTest {
     /** When set, POST /api/v1/accounts and DELETE /api/v1/users/* answer 409. */
     private boolean _conflict = false;
 
+    /** When set, an approval answers without the account it approved. */
+    private boolean _approvalWithNoAccount = false;
+
     @BeforeEach
     void startServer() throws IOException {
         _server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -88,8 +92,8 @@ class AdminApiTest {
                      "account":{"id":2,"name":"acme"}}
                     """.formatted(TOKEN));
             } else if ("POST".equals(method) && path.matches("/api/v1/accounts/\\d+/approvals")) {
-                _respond(exchange, 201,
-                        "{\"approve\":true,\"account\":{\"id\":2,\"name\":\"acme\",\"approval\":true}}");
+                _respond(exchange, 201, _approvalWithNoAccount ? "{\"approve\":true}"
+                        : "{\"approve\":true,\"account\":{\"id\":2,\"name\":\"acme\",\"approval\":true}}");
             } else if ("DELETE".equals(method)) {
                 _respond(exchange, 204, "");
             } else if ("GET".equals(method) && path.matches("/api/v1/accounts/\\d+")) {
@@ -244,6 +248,17 @@ class AdminApiTest {
         var body = _bodyOf("POST /api/v1/accounts");
         assertThat(body).contains("\"accountName\":\"acme\"");
         assertThat(body).contains("\"firstName\":null");
+    }
+
+    /** It returned null from a method promising the account, for the caller to trip over later. */
+    @Test
+    void anApprovalAnsweredWithNoAccountIsAnApiException() throws Exception {
+        _approvalWithNoAccount = true;
+        try (Flexemarkets fm = _connect()) {
+            assertThatThrownBy(() -> fm.approveAccount("acme"))
+                    .isInstanceOf(ApiException.class)
+                    .hasMessageContaining("got nothing");
+        }
     }
 
     /**
