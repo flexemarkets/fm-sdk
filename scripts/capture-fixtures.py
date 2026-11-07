@@ -94,8 +94,15 @@ class Server:
     def fetch(self, captured: dict[str, Any]) -> Any:
         if "path" not in captured:
             raise LookupError(f"a captured fixture names its route by path: {captured}")
-        url = self.api + captured["path"].replace(
-            "{marketplaceId}", str(self.marketplace_id))
+        # A fixture captured from a write names its verb. It is compared by hand:
+        # a check that replayed it would place an order.
+        verb, _, route = captured["path"].rpartition(" ")
+        if verb not in ("", "GET"):
+            raise LookupError(f"{verb} is not a read, so it is not sent")
+
+        url = self.api + route.replace("{marketplaceId}", str(self.marketplace_id))
+        if "{sessionId}" in url:
+            url = url.replace("{sessionId}", str(self._current_session()))
 
         query = captured.get("query", "")
         if query:
@@ -103,6 +110,13 @@ class Server:
             url += ("&" if "?" in url else "?") + query
 
         return _get(url, self.token)
+
+    def _current_session(self) -> Any:
+        url = f"{self.api}/v1/marketplaces/{self.marketplace_id}/sessions/current"
+        try:
+            return _get(url, self.token)["id"]
+        except urllib.error.HTTPError as failure:
+            raise LookupError(f"this marketplace has no current session ({failure.code})") from failure
 
 
 # --- shapes -----------------------------------------------------------------
@@ -142,6 +156,8 @@ def _select(body: Any, selector: dict[str, Any] | None, whole: bool = False) -> 
     fixture is about the envelope itself, otherwise the first row matching the
     selector."""
     if whole:
+        if body == []:
+            raise LookupError("this server has no rows here, so no shape to compare")
         return body
 
     rows = body
@@ -219,6 +235,13 @@ def audit() -> int:
             continue
         if "constructed" in source and not str(source["constructed"]).strip():
             problems.append(f"  {path.name} is constructed with no reason given.")
+        # A filter its own row would not pass can match nothing on any server, so
+        # the fixture is never compared and nothing says so.
+        select = source.get("captured", {}).get("select") or {}
+        for field in sorted(select):
+            if doc["payload"].get(field) != select[field]:
+                problems.append(f"  {path.name} selects on {field!r}={select[field]!r}, "
+                                f"which its own payload does not have.")
 
     if problems:
         print("fixture provenance:\n" + "\n".join(problems), file=sys.stderr)
@@ -238,6 +261,10 @@ def audit() -> int:
 def check(server: Server, write: bool, verbose: bool = False) -> int:
     drifted = 0
     checked = 0
+    # Named and not failed: this server having no such row, or a route a check
+    # must not send, says nothing about the fixture. A route answering an error
+    # does, and a run that compared nothing has shown nothing.
+    not_compared = 0
 
     for path, doc in _fixtures():
         captured = doc.get("source", {}).get("captured")
@@ -247,7 +274,11 @@ def check(server: Server, write: bool, verbose: bool = False) -> int:
         try:
             live = _select(server.fetch(captured), captured.get("select"),
                            captured.get("body", False))
-        except (LookupError, urllib.error.HTTPError) as failure:
+        except LookupError as failure:
+            print(f"  {path.name}: not compared -- {failure}", file=sys.stderr)
+            not_compared += 1
+            continue
+        except urllib.error.HTTPError as failure:
             print(f"  {path.name}: cannot reach its route -- {failure}", file=sys.stderr)
             drifted += 1
             continue
@@ -280,7 +311,13 @@ def check(server: Server, write: bool, verbose: bool = False) -> int:
               file=sys.stderr)
         return 1
 
-    print(f"shapes ok: {checked} captured fixtures still match this server")
+    if not checked:
+        print(f"\nnothing compared: {not_compared} fixtures had no row on this server. "
+              f"Name a marketplace with orders in it.", file=sys.stderr)
+        return 1
+
+    print(f"shapes ok: {checked} captured fixtures still match this server, "
+          f"{not_compared} not compared")
     return 0
 
 
