@@ -246,6 +246,22 @@ class EventsSocketTest {
         assertThat(ids(next())).containsExactly(5);
     }
 
+    /** It reached the book as order 0, so the desk never reseeded. */
+    @Test
+    @Timeout(20)
+    void aFrameNamingAnOrderWithNoIdIsReported() throws Exception {
+        historyConnected();
+        var socket = server.connection(0);
+
+        socket.send(message("ORDERS-UPDATE", "seq:8", "[{\"id\":5},{}]"));
+        socket.send(message("ORDER-ACCEPTED", "seq:8\nsubmission-id:s1", "{}"));
+        socket.send(chunk(9, "1/1", 6));
+
+        assertThat(((FrameUnreadable) next()).failure()).hasRootCauseMessage("an order with no id");
+        assertThat(((FrameUnreadable) next()).failure()).hasRootCauseMessage("an order with no id");
+        assertThat(ids(next())).containsExactly(6);
+    }
+
     @Test
     @Timeout(20)
     void aHistoryChunkOutOfTurnIsReportedNotDeliveredAsTheHistory() throws Exception {

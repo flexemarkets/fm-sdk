@@ -116,6 +116,28 @@ class SnapshotShapeTest {
         }
     }
 
+    /** It came back as order 0, and a robot cancelled order 0 or kept it as resting. */
+    @Test
+    void aRowWithNoOrderIdIsAnApiException() throws Exception {
+        try (Flexemarkets fm = _connect()) {
+            for (var row : new String[] {"{}", "{\"side\":\"BUY\",\"units\":1}", "{\"id\":null}"}) {
+                _snapshot = "[" + ORDER + "," + row + "]";
+                assertThatThrownBy(() -> fm.activeOrders(1))
+                        .as(row)
+                        .isInstanceOf(ApiException.class)
+                        .hasRootCauseMessage("an order with no id");
+            }
+        }
+    }
+
+    @Test
+    void anOrderWithAnIdOfZeroIsStillRead() throws Exception {
+        try (Flexemarkets fm = _connect()) {
+            _snapshot = "[{\"id\":0}]";
+            assertThat(fm.activeOrders(1).body()).singleElement().matches(order -> order.id() == 0);
+        }
+    }
+
     @Test
     void aBodyThatIsNotAListIsAnApiException() throws Exception {
         try (Flexemarkets fm = _connect()) {

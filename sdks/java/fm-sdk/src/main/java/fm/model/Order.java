@@ -89,7 +89,7 @@ public record Order(
     static Order fromWire(
             @JsonProperty("createdDate") String createdDate,
             @JsonProperty("lastModifiedDate") String lastModifiedDate,
-            @JsonProperty("id") long id,
+            @JsonProperty("id") Long id,
             @JsonProperty("original") long original,
             @JsonProperty("supplier") long supplier,
             @JsonProperty("consumer") Long consumer,
@@ -108,6 +108,11 @@ public record Order(
             @JsonProperty("ownerTargetId") Long ownerTargetId,
             @JsonProperty("originalSessionId") Long originalSessionId,
             @JsonProperty("submissionId") String submissionId) {
+        // Every other field has a default, so an answer naming no order read as
+        // order 0, which a robot then kept as resting or cancelled.
+        if (id == null) {
+            throw new IllegalArgumentException("an order with no id");
+        }
         return new Order(Timestamps.parse(createdDate), Timestamps.parse(lastModifiedDate), id, original, supplier, consumer, type, side, units, price, mine, ownerId, marketplaceId, sessionId, symbol, marketId, ownerTarget, clientDescription, ownerTargetId, originalSessionId, submissionId);
     }
 
