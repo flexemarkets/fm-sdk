@@ -2612,6 +2612,7 @@ export class Flexemarkets {
       (presented) => this._renewToken(presented),
       history,
       refused,
+      (message) => new ApiError(message),
     );
     if (reconnectMaxPauseMs !== undefined) events.reconnectMaxPauseMs = reconnectMaxPauseMs;
     try {

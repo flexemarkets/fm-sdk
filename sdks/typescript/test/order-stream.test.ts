@@ -27,7 +27,7 @@ import { EventListener, decodeFrame, parseEvent } from "../src/stomp.ts";
 import type { EventCallback, FmEvent } from "../src/stomp.ts";
 import { OrderStream, PendingOrder, type OrderListener } from "../src/order-stream.ts";
 import type { Order } from "../src/types.ts";
-import { AuthorizationError } from "../src/client.ts";
+import { ApiError, AuthorizationError } from "../src/client.ts";
 
 const MP = 7;
 const DESTINATION = `/app/marketplaces/${MP}/orders`;
@@ -105,7 +105,8 @@ async function onSocket() {
   const s = await server();
   const stream = await OrderStream.open(async (callback: EventCallback) => {
     const listener = new Listener(s.url, "Bearer the-token", MP, callback, "fm-sdk-test",
-                                  parseHolding as never, parseOrder as never, async () => false, false, refused);
+                                  parseHolding as never, parseOrder as never, async () => false, false, refused,
+                                  (message) => new ApiError(message));
     await listener.start();
     return listener;
   }, MP, ERRORS);
@@ -149,6 +150,35 @@ test("unanswered orders are sent again in order once the socket is back", async 
     s.sockets[1].send(message("ORDER-ACCEPTED", JSON.stringify(row("s-1", 101)), "submission-id:s-1"));
     s.sockets[1].send(message("ORDERS-UPDATE", JSON.stringify([row("s-2", 102)])));
     assert.deepEqual([(await first.result()).id, (await held.result()).id], [101, 102]);
+  } finally { await done(); }
+});
+
+for (const [name, body] of [["no id", "{}"], ["not JSON", "not json"]]) {
+  test(`an acceptance with ${name} fails the order and not the next`, { timeout: 15000 }, async () => {
+    // Nothing answered it, so it waited until a broadcast or the stream closing, however long.
+    const { s, stream, done } = await onSocket();
+    try {
+      const pending = await stream.submit(order("s-1"));
+      await until("sent", () => s.sent(0).length === 1);
+      s.sockets[0].send(message("ORDER-ACCEPTED", body, "submission-id:s-1"));
+      await assert.rejects(pending.result(), (e: Error) => e instanceof ApiError && /could not be read/.test(e.message));
+
+      const following = await stream.submit(order("s-2"));
+      await until("the next sent", () => s.sent(0).length === 2);
+      s.sockets[0].send(message("ORDER-ACCEPTED", JSON.stringify(row("s-2", 102)), "submission-id:s-2"));
+      assert.equal((await following.result()).id, 102);
+    } finally { await done(); }
+  });
+}
+
+test("a refusal that is not JSON is still a refusal", { timeout: 15000 }, async () => {
+  // It threw before the refusal was built, so the order waited, where Java refuses it.
+  const { s, stream, done } = await onSocket();
+  try {
+    const pending = await stream.submit(order("s-1"));
+    await until("sent", () => s.sent(0).length === 1);
+    s.sockets[0].send(message("ORDER-REJECTED", "not json", "submission-id:s-1"));
+    await assert.rejects(pending.result(), InvalidArgumentError);
   } finally { await done(); }
 });
 

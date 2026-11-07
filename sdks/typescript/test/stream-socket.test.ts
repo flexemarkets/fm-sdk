@@ -18,7 +18,7 @@ import { Flexemarkets, parseHolding, parseOrder } from "../src/client.ts";
 import type { CallIndicative, Holding, MarketCall, Session, Version } from "../src/types.ts";
 import type { FrameUnreadable, StreamDropped } from "../src/stomp.ts";
 import { connectWait, HEARTBEAT_INTERVAL_MS } from "../src/stomp.ts";
-import { ConnectionFailedError } from "../src/client.ts";
+import { ApiError, ConnectionFailedError } from "../src/client.ts";
 import net from "node:net";
 
 const MP = 7;
@@ -220,7 +220,7 @@ for (const [type, body] of [["ORDERS-UPDATE", '[{"id":5},{}]'], ["ORDER-ACCEPTED
     // It reached the book as order 0, so the desk never reseeded.
     const { s, events, done } = await listening(true);
     try {
-      s.sockets[0].send(message(type, body, "seq:8\nsubmission-id:s1"));
+      s.sockets[0].send(message(type, body, "seq:8"));
       s.sockets[0].send(chunk([6], 9, "1/1"));
       await until("two events", () => events.length >= 2);
       assert.equal(kind(events[0]), "frame-unreadable");
@@ -314,6 +314,14 @@ test("a connection dials its endpoint's events socket with its own token", async
     await until("the holding", () => events.length >= 1);
     assert.equal((events[0] as Holding).cash, 2500);
     assert.equal((events[0] as Holding).securities[0]?.units, 4);
+
+    // The client's own wiring: a listener built without it answers a plain Error.
+    sockets[0]!.send(message("ORDER-ACCEPTED", "{}", "submission-id:s-1"));
+    await until("the answer", () => events.length >= 3);
+    assert.equal(kind(events[1]), "frame-unreadable");
+    const answer = events[2] as { kind: string; submissionId: string; error: Error };
+    assert.deepEqual([answer.kind, answer.submissionId], ["order-rejected", "s-1"]);
+    assert.ok(answer.error instanceof ApiError, String(answer.error));
 
     await fm.reconnect();
     assert.equal(upgrades.length, 2, "reconnect dials again");

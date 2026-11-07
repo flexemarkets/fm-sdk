@@ -195,9 +195,11 @@ export interface OrderAccepted {
 }
 
 /**
- * An order sent over the socket was refused. `error` is what REST throws for
- * the same refusal, built from the same failure body, so a caller handles a
- * refused order one way whichever route it took.
+ * An order sent over the socket was refused, or its acceptance could not be
+ * read, when `error` is the ApiError REST throws for an answer it cannot read
+ * and the order may have been placed. `error` is what REST throws for the same
+ * refusal, built from the same failure body, so a caller handles a refused order
+ * one way whichever route it took.
  */
 export interface OrderRejected {
   readonly kind: "order-rejected";
@@ -244,6 +246,15 @@ const STATUS_BY_NAME = new Map(
 /** Sentinel for "no seq header" — see OrdersUpdate.seq docstring. */
 export const NO_SEQ = -1;
 
+/** A refusal's body: one that is not JSON is still a refusal, and its text says what it can. */
+function jsonOrNull(body: string): unknown {
+  try {
+    return body ? JSON.parse(body) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function parseEvent(
   frame: StompFrame,
   parseHolding: (data: Record<string, unknown>) => Holding,
@@ -255,7 +266,7 @@ export function parseEvent(
 
   // A body that is not JSON throws, and the receive loop reports the frame as
   // unreadable -- as Java always has -- instead of it vanishing here.
-  const data: unknown = frame.body ? JSON.parse(frame.body) : null;
+  const data: unknown = msgType === "ORDER-REJECTED" ? jsonOrNull(frame.body) : (frame.body ? JSON.parse(frame.body) : null);
 
   switch (msgType) {
     case "VERSION":
@@ -483,6 +494,7 @@ export class EventListener {
   private readonly _parseHolding: (data: Record<string, unknown>) => Holding;
   private readonly _parseOrder: (data: Record<string, unknown>) => Order;
   private readonly _refusal: Refusal;
+  private readonly _unreadableAnswer: (message: string) => Error;
 
   private _ws: WebSocket | null = null;
   private _closed = false;
@@ -523,6 +535,7 @@ export class EventListener {
     renew: (presented: string) => Promise<boolean> = async () => false,
     history = false,
     refusal: Refusal = (_, body) => new Error(body),
+    unreadableAnswer: (message: string) => Error = (message) => new Error(message),
   ) {
     this._wsUrl = wsUrl;
     // The V0 subscribe, whose first ORDERS-UPDATE is the session's whole
@@ -536,6 +549,7 @@ export class EventListener {
     this._parseHolding = parseHolding;
     this._parseOrder = parseOrder;
     this._refusal = refusal;
+    this._unreadableAnswer = unreadableAnswer;
   }
 
   // -- public API ------------------------------------------------------------
@@ -858,6 +872,17 @@ export class EventListener {
             body: frame.body,
             exception: e instanceof Error ? e : new Error(String(e)),
           });
+          // Nothing else answers an order whose acceptance cannot be read: the
+          // broadcast may never name it, so it waited as long as the stream
+          // stayed up. It may well have been placed, and the message says so.
+          const submissionId = frame.headers[SUBMISSION_ID_HEADER];
+          if (frame.headers[MESSAGE_TYPE] === "ORDER-ACCEPTED" && submissionId !== undefined) {
+            this._callback({
+              kind: "order-rejected",
+              submissionId,
+              error: this._unreadableAnswer(`The answer to order ${submissionId} could not be read; it may have been placed`),
+            });
+          }
           return;
         }
         if (event !== null) {
