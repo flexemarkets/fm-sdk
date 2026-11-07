@@ -5,12 +5,11 @@
     "captured": {
       "path": "/v1/marketplaces/{marketplaceId}/orders?sessions={sessionId}",
       "select": {
-        "type": "LIMIT",
-        "privateMarket": true
+        "type": "LIMIT"
       },
       "server": "4.10.3",
       "on": "2026-10-20",
-      "note": "Ids replaced; the shape, the nested market and the nulls are as sent."
+      "note": "Ids replaced; the shape and the nulls are as sent."
     }
   },
   "payload": {
@@ -20,22 +19,6 @@
     "createdDate": "2025-02-20T03:09:10.731685",
     "id": 8997,
     "lastModifiedDate": "2025-02-20T03:11:50.818395",
-    "market": {
-      "createdDate": "2025-01-15T18:10:18.402033",
-      "description": "private",
-      "id": 12,
-      "lastModifiedDate": "2026-06-07T09:52:49.10114",
-      "marketplaceId": 3050,
-      "name": "private",
-      "priceMaximum": 1000,
-      "priceMinimum": 1,
-      "priceTick": 1,
-      "privateMarket": true,
-      "symbol": "private",
-      "unitMaximum": 10,
-      "unitMinimum": 1,
-      "unitTick": 1
-    },
     "marketId": 12,
     "marketplaceId": 3050,
     "original": 8997,

@@ -9,9 +9,6 @@
     }
   },
   "payload": {
-    "CLOSED": false,
-    "OPEN": true,
-    "PAUSED": false,
     "allocationId": 78689,
     "closeDate": null,
     "createdDate": "2026-10-26T15:55:24.629019918",
