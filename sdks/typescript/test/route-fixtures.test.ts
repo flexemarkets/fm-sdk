@@ -78,10 +78,12 @@ function holding(marketplaceId: number, h: Args): Holding {
     name: h.name,
     cash: h.cash,
     availableCash: h.cash,
+    initialCash: h.cash,
     securities: (h.securities ?? []).map((s: Args) => ({
       marketId: s.marketId,
       units: s.units,
       availableUnits: s.units,
+      initialUnits: s.units,
       shortUnits: 0,
       canBuy: true,
       canSell: true,

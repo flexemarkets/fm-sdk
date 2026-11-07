@@ -36,6 +36,8 @@ function market(minimum: number, maximum: number, tick: number): Market {
     id: 11, marketplaceId: 1, name: "Stock", description: null, symbol: "STK",
     privateMarket: false, priceMinimum: minimum, priceMaximum: maximum,
     priceTick: tick, unitMinimum: 1, unitMaximum: 100, unitTick: 1,
+    mechanism: "CONTINUOUS", callIntervalSeconds: null, callCarry: true, priceDecimals: 0, unitDecimals: 0,
+    callBook: "SEALED",
   };
 }
 

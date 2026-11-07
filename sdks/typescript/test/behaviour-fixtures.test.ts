@@ -28,7 +28,7 @@ import type { Market, Order } from "../src/types.js";
 const DIR = fileURLToPath(new URL("../../fixtures/behaviour/", import.meta.url));
 const FILES = readdirSync(DIR).filter((f) => f.endsWith(".json")).sort();
 
-interface Step { orders: Record<string, unknown>[]; clear?: boolean; adds?: number; note?: string }
+interface Step { orders: Record<string, unknown>[]; clear?: boolean; adds?: number; note?: string; refused?: string }
 interface Fixture {
   type: string;
   market: { id: number; symbol: string };

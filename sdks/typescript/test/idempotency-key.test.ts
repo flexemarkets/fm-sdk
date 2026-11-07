@@ -81,7 +81,7 @@ test("every create names its own key", async () => {
   const grid = { minimum: 1, maximum: 100, tick: 1 };
   const holding: Holding = {
     marketplaceId: 1, sessionId: 0, allocationId: 0, ownerId: 8, name: "alice",
-    cash: 10000, availableCash: 10000,
+    cash: 10000, availableCash: 10000, initialCash: 10000,
     securities: [{ marketId: 10, units: 50, availableUnits: 50, initialUnits: 50, shortUnits: 0, canBuy: true, canSell: true }],
   };
   try {

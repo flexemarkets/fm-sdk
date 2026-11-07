@@ -19,7 +19,7 @@ import type { Holding, Security } from "../src/types.ts";
 
 function security(marketId: number, units = 1): Security {
   return {
-    marketId, units, availableUnits: units, shortUnits: 0,
+    marketId, units, availableUnits: units, initialUnits: units, shortUnits: 0,
     canBuy: true, canSell: true,
   };
 }
@@ -27,7 +27,7 @@ function security(marketId: number, units = 1): Security {
 function holding(securities: Security[]): Holding {
   return {
     marketplaceId: 1, sessionId: 300, allocationId: 42, ownerId: 8,
-    name: "alice", cash: 10_000, availableCash: 10_000,
+    name: "alice", cash: 10_000, availableCash: 10_000, initialCash: 10_000,
     securities: orderedSecurities(securities),
   };
 }

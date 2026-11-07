@@ -132,12 +132,12 @@ install-typescript:
 build-typescript:
 	cd sdks/typescript && npx tsc
 
+# Twice, because they are different programs. tsconfig.json is what is built and
+# published, so `include` is ["src"]; tsconfig.test.json adds test/, which tsx
+# runs with its types stripped and so never checks.
 check-typescript:
-	cd sdks/typescript && npx tsc --noEmit
+	cd sdks/typescript && npm run check
 
-# tsc --noEmit is not this. tsconfig's `include` is ["src"], so the typecheck
-# above never looks at test/, and tsx strips types without checking them --
-# a test can assert something the source contradicts and still pass.
 test-typescript:
 	cd sdks/typescript && npm test
 

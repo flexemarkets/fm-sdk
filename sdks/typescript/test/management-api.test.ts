@@ -239,8 +239,8 @@ test("allotments are read from the V1 route for one allocation", async () => {
 test("allocate sends positions as grants", async () => {
   const holding: Holding = {
     marketplaceId: 1, sessionId: 0, allocationId: 0, ownerId: 8, name: "alice",
-    cash: 10000, availableCash: 10000,
-    securities: [{ marketId: 10, units: 50, availableUnits: 50, shortUnits: 0, canBuy: true, canSell: true }],
+    cash: 10000, availableCash: 10000, initialCash: 10000,
+    securities: [{ marketId: 10, units: 50, availableUnits: 50, initialUnits: 50, shortUnits: 0, canBuy: true, canSell: true }],
   };
 
   const fm = await connect();
@@ -259,7 +259,7 @@ test("allocate sends positions as grants", async () => {
 test("allocate returns what the server created", async () => {
   const holding: Holding = {
     marketplaceId: 1, sessionId: 0, allocationId: 0, ownerId: 8, name: "alice",
-    cash: 10000, availableCash: 10000, securities: [],
+    cash: 10000, availableCash: 10000, initialCash: 10000, securities: [],
   };
 
   const fm = await connect();
@@ -353,8 +353,8 @@ test("malformed marketplace JSON fails before any request", async () => {
 test("a short allowance is read under either name and sent as shortUnits", async () => {
   const holding: Holding = {
     marketplaceId: 1, sessionId: 0, allocationId: 0, ownerId: 8, name: "alice",
-    cash: 10000, availableCash: 10000,
-    securities: [{ marketId: 10, units: 5, availableUnits: 55, shortUnits: 50, canBuy: true, canSell: true }],
+    cash: 10000, availableCash: 10000, initialCash: 10000,
+    securities: [{ marketId: 10, units: 5, availableUnits: 55, initialUnits: 5, shortUnits: 50, canBuy: true, canSell: true }],
   };
 
   const fm = await connect();
