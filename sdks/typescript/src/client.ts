@@ -224,6 +224,20 @@ export function parsePerson(data: JsonObject | null | undefined): Person | null 
   };
 }
 
+/** An answer that must be an account: parseAccount reads no account as null, as a signed-in person may have none. */
+function anAccount(data: JsonObject | null | undefined): Account {
+  const account = parseAccount(data);
+  if (account === null) throw new ApiError("Failed to parse the response body: expected an account, got nothing");
+  return account;
+}
+
+/** An answer that must be a person; see {@link anAccount}. */
+function aPerson(data: JsonObject | null | undefined): Person {
+  const person = parsePerson(data);
+  if (person === null) throw new ApiError("Failed to parse the response body: expected a person, got nothing");
+  return person;
+}
+
 export function parseAccount(data: JsonObject | null | undefined): Account | null {
   if (!data) return null;
   requireObject(data);
@@ -1319,23 +1333,23 @@ export class Flexemarkets {
    * V1 approves an account by id; the name is looked up in the account list
    * first, so callers keep naming the account they signed up.
    */
-  async approveAccount(accountName: string): Promise<Account | null> {
+  async approveAccount(accountName: string): Promise<Account> {
     const account = (await this.accounts()).find((a) => a.name === accountName);
     if (account === undefined) {
       throw new InvalidArgumentError(`No account named '${accountName}'`);
     }
     const data = await this._post(this._v1(`/accounts/${account.id}/approvals`), { approve: true });
-    return parseAccount(data.account as JsonObject);
+    return anAccount(data.account as JsonObject);
   }
 
   /** One account by id. */
-  async accountById(accountId: number): Promise<Account | null> {
-    return parseAccount(await this._get(this._v1(`/accounts/${accountId}`)));
+  async accountById(accountId: number): Promise<Account> {
+    return anAccount(await this._get(this._v1(`/accounts/${accountId}`)));
   }
 
   /** One user by id. */
   async userById(userId: number): Promise<Person> {
-    return parsePerson(await this._get(this._v1(`/users/${userId}`))) as Person;
+    return aPerson(await this._get(this._v1(`/users/${userId}`)));
   }
 
   /**
@@ -1354,7 +1368,7 @@ export class Flexemarkets {
   /** Every account on the server. Admin-only. */
   async accounts(): Promise<Account[]> {
     const data = await this._get(this._v1("/accounts"));
-    return rows(data).map(parseAccount) as Account[];
+    return rows(data).map(anAccount);
   }
 
   /**
@@ -1362,7 +1376,7 @@ export class Flexemarkets {
    * `before` -- a page's `next`. The server answers at most 5,000.
    */
   async accountsPage(limit: number, before?: number): Promise<Page<Account>> {
-    return this._page(this._v1("/accounts"), limit, before, (a) => parseAccount(a) as Account);
+    return this._page(this._v1("/accounts"), limit, before, anAccount);
   }
 
   /** Delete an account. Destructive, and takes its users with it. */
@@ -1380,7 +1394,7 @@ export class Flexemarkets {
   ): Promise<Person> {
     const user = { email, password, firstName, lastName, roles };
     const data = await this._create((key) => this._post(this._v1("/users"), user, key));
-    return parsePerson(data) as Person;
+    return aPerson(data);
   }
 
   /** Delete a user. Destructive. */
@@ -2223,7 +2237,7 @@ export class Flexemarkets {
   /** Everyone in the caller's account. */
   async users(): Promise<Person[]> {
     const data = await this._get(this._v1("/users"));
-    return rows(data).map((u) => parsePerson(u) as Person);
+    return rows(data).map(aPerson);
   }
 
   /**
@@ -2231,7 +2245,7 @@ export class Flexemarkets {
    * `before` -- a page's `next`. The server answers at most 5,000.
    */
   async usersPage(limit: number, before?: number): Promise<Page<Person>> {
-    return this._page(this._v1("/users"), limit, before, (u) => parsePerson(u) as Person);
+    return this._page(this._v1("/users"), limit, before, aPerson);
   }
 
   /** The opening positions of one allocation. */

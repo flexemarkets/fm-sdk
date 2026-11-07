@@ -219,3 +219,38 @@ test("an order with an id of zero is still read", async () => {
     assert.equal((await fm.submitLimit(1, 11, "BUY", 1, 100)).id, 0);
   } finally { await fm.close(); done(); }
 });
+
+const NOTHING_ANSWERED: Record<string, (fm: Flexemarkets) => Promise<unknown>> = {
+  accountById: (fm) => fm.accountById(5),
+  userById: (fm) => fm.userById(5),
+  createUser: (fm) => fm.createUser("u@x", "pw", "U", "X", ["USER"]),
+};
+
+for (const [name, call] of Object.entries(NOTHING_ANSWERED)) {
+  test(`${name} answered with null is an ApiError`, async () => {
+    // It resolved to null from a method promising the thing, for the caller to trip over later.
+    const { base, done } = await answeringWith("null");
+    const fm = await Flexemarkets.connect(TOKEN, `${base}/marketplaces/1`, "transport-failure-test");
+    try {
+      await assert.rejects(call(fm), (e: Error) => e instanceof ApiError && /got nothing/.test(e.message));
+    } finally { await fm.close(); done(); }
+  });
+}
+
+test("an approval answered with no account is an ApiError", async () => {
+  const server = http.createServer((req, res) => {
+    req.resume();
+    res.writeHead(200, { "Content-Type": "application/json" });
+    if ((req.url ?? "").startsWith("/api/v1/tokens")) {
+      res.end(JSON.stringify({ token: TOKEN, person: { id: 7, accountId: 1 }, account: { id: 1, name: "dev" } }));
+    } else {
+      res.end(req.method === "POST" ? "{}" : '[{"id":5,"name":"acme"}]');
+    }
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`;
+  const fm = await Flexemarkets.connect(TOKEN, `${base}/marketplaces/1`, "transport-failure-test");
+  try {
+    await assert.rejects(fm.approveAccount("acme"), (e: Error) => e instanceof ApiError && /got nothing/.test(e.message));
+  } finally { await fm.close(); server.closeAllConnections(); server.close(); }
+});
