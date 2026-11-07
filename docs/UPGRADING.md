@@ -30,12 +30,12 @@ moving to, oldest first: from the bottom up.
 
 ## 0.19: from 0.18.x
 
-No signatures change, and it needs the same server as 0.18.0. What changes for a
-robot: what a lost connection or an unreadable answer raises, what a desk does
-when it cannot reseed or apply a frame, how long a stream connect may take, what
-`cancel()` on a `PendingOrder` answers, how a desk reports a dropped stream, and
-that an order answered with no id is refused.
-Java has one signature change: see `StreamDropped` below.
+One signature changes, in Java: see `StreamDropped` below. It needs the same
+server as 0.18.0. What changes for a robot: what a lost connection or an
+unreadable answer raises, what a desk does when it cannot reseed or apply a
+frame, how long a stream connect may take, what `cancel()` on a `PendingOrder`
+answers, how a desk reports a dropped stream, and that an order answered with no
+id is refused.
 
 ### A lost connection is an `ApiError` (Python, TypeScript)
 
