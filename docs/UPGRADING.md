@@ -119,9 +119,15 @@ a desk reseeds. An `id` of 0 is still read. Python and TypeScript also refuse an
 `id` that is not a whole number; Java's Jackson settings still read `"5"` as 5.
 
 A fake server or test fixture whose orders have no `id` now fails this way: give
-them one. A socket order whose `ORDER-ACCEPTED` frame is unreadable keeps waiting,
-as it does for any unreadable frame, until the `ORDERS-UPDATE` broadcast answers
-it or the stream closes, so give its result a timeout.
+them one.
+
+A socket order whose `ORDER-ACCEPTED` frame cannot be read now fails with that same
+`ApiError`, where it waited until a broadcast named it or the stream closed. It
+may have been placed, as with REST's unreadable answer, so check before sending it
+again. It arrives as an `OrderRejected` after the `FrameUnreadable`, so code reading
+the events itself should not take every `OrderRejected` as proof the order was not
+placed. In Python and TypeScript, an `ORDER-REJECTED` frame that is not JSON is a
+refusal, as it is in Java, where it hung.
 
 ### Python ships type information
 
