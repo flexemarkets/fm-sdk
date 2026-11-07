@@ -49,7 +49,8 @@ def display(desk: Desk, session: Session | None, endpoint_url: str = "") -> None
         bid = book.best_buy_price()
         ask = book.best_sell_price()
         symbol = book.symbol or "?"
-        recent = desk.tape(book.market_id).most_recent_prices()
+        tape = desk.tape(book.market_id)
+        recent = tape.most_recent_prices() if tape is not None else []
         decimals = book.market.price_decimals
         lines.append(
             f"  {symbol:>6}  {_price(bid, decimals)}  {_price(ask, decimals)}"

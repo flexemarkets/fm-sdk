@@ -18,6 +18,7 @@ dist/
 build/
 .eggs/
 .venv
+.mypy_cache/
 .env
 .env.*
 

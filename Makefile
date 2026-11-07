@@ -105,6 +105,7 @@ build-python:
 
 check-python:
 	$(VENV_PY) -c "import fm; print('python sdk ok')"
+	cd sdks/python && ../../$(VENV_PY) -m mypy
 
 test-python:
 	cd sdks/python && ../../$(VENV_PY) -m coverage run -m pytest -q && ../../$(VENV_PY) -m coverage report; s=$$?; rm -f .coverage; exit $$s

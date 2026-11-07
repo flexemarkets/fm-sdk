@@ -24,9 +24,10 @@ from __future__ import annotations
 
 import argparse
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from fm import Flexemarkets, InvalidArgumentError, Market, Session
+from fm import Desk, Flexemarkets, InvalidArgumentError, Market, Order, Session
 
 #: How often the robot looks at the book, in seconds. Not faster: a robot
 #: that acts every 0.2 s is most of a class's order traffic on its own.
@@ -59,7 +60,7 @@ def quotes(market: Market, best_buy: int, best_sell: int,
 class FirstRobot:
     """One robot on one desk. :meth:`tick` is one look at the book."""
 
-    desk: object
+    desk: Desk
     resting: dict[tuple[int, str], tuple[int, int]] = field(default_factory=dict)
     refusals: list[str] = field(default_factory=list)
 
@@ -92,7 +93,7 @@ class FirstRobot:
             if order is not None:
                 self.resting[(market_id, side)] = (order.original or order.id, price)
 
-    def _send(self, call):
+    def _send(self, call: Callable[[], Order]) -> Order | None:
         """One order, reported rather than raised when it is refused."""
         try:
             return call()
