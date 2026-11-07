@@ -56,7 +56,7 @@
         Set with `make set-spi-version V=x.y.z`. `make set-version` moves the
         parent reference below but leaves this alone.
     -->
-    <version>0.0.18</version><!-- spi-version -->
+    <version>0.0.19</version><!-- spi-version -->
 
     <packaging>jar</packaging>
 

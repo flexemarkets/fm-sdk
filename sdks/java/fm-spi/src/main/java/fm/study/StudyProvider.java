@@ -1,5 +1,6 @@
 package fm.study;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -44,10 +45,14 @@ import fm.manifest.ParameterSpec;
  * orders collect, and a call clears them all at one price, on a schedule or
  * when a manager clears -- a frequent batch auction beside, or instead of, a
  * continuous one. Contract 0.4.
+ *
+ * <p>A host may create a run's marketplaces before anyone takes part
+ * ({@link #marketplaces}), and plan its people once the manager has added
+ * them, as they add anyone to a marketplace. Contract 0.5.
  */
 public interface StudyProvider {
     /** The contract's major.minor; a host rejects a provider whose major differs from its own. */
-    String STUDY_SPI_VERSION = "0.4";
+    String STUDY_SPI_VERSION = "0.5";
 
     /**
      * The study's id, as its page and its command line name it.
@@ -156,6 +161,42 @@ public interface StudyProvider {
     default StudyPlan setup(Map<String, String> parameters, List<Participant> participants, Participant manager,
             Map<String, Participant> robots) {
         return setup(parameters, participants, manager);
+    }
+
+    /**
+     * The marketplaces a run needs, before anyone takes part.
+     *
+     * <p>What a host calls from contract 0.5 to create a run's marketplaces
+     * at setup, and plan its people later with
+     * {@link #setup(Map, List, Participant, Map)}, once the manager has added
+     * them the way they add anyone to a marketplace. The answer must be the
+     * marketplaces that call returns, by key, whoever takes part: the host
+     * creates these and stages that plan's rotations into them.
+     *
+     * <p>A study whose marketplaces come from its parameters alone -- every
+     * study so far -- overrides this with the builder its plan uses. The
+     * default plans for stand-ins, one participant and a manager and a person
+     * for each of its own robots, and keeps the marketplaces; that is right
+     * only for a study whose marketplaces do not depend on who takes part.
+     *
+     * @param parameters the manager's answers by parameter name, as text;
+     *                   a missing name means the default
+     * @return the marketplaces to create, each with the key the plan's
+     *         rotations name
+     * @throws IllegalArgumentException for a parameter the study refuses,
+     *                                  with the reason in the message
+     */
+    default List<MarketplaceSpec> marketplaces(Map<String, String> parameters) {
+        Map<String, Participant> robots = new LinkedHashMap<>();
+        long id = -3;
+        for (RobotSpec robot : robots(parameters)) {
+            if (robot.mode() == RobotSpec.Mode.OWN) {
+                robots.put(robot.key(), new Participant(id--, robot.key() + "@stand-in.invalid", robot.key(), ""));
+            }
+        }
+        Participant participant = new Participant(-1, "participant@stand-in.invalid", "Stand-in", "");
+        Participant manager = new Participant(-2, "manager@stand-in.invalid", "Stand-in", "");
+        return setup(parameters, List.of(participant), manager, robots).marketplaces();
     }
 
     /**

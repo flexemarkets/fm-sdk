@@ -52,8 +52,8 @@ class StudyProviderRobotsTest {
     }
 
     @Test
-    void theContractIsFour() {
-        assertThat(new Planned().studySpiVersion()).isEqualTo("0.4");
+    void theContractIsFive() {
+        assertThat(new Planned().studySpiVersion()).isEqualTo("0.5");
     }
 
     @Test
