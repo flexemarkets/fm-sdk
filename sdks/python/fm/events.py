@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 import websockets.sync.client as ws_sync
+from websockets.typing import Subprotocol
 
 from .exceptions import ConnectionFailedError, FlexemarketsError
 from .types import CallIndicative, Holding, MarketCall, Order, Session, Version
@@ -99,6 +100,12 @@ def _encode_frame(frame: StompFrame) -> str:
     lines.append("")
     lines.append(frame.body)
     return "\n".join(lines) + _NULL
+
+
+def _text(raw: str | bytes) -> str:
+    """What the socket read, as text: STOMP may arrive in a binary message, and
+    one that is not UTF-8 is left for the frame reader to find unreadable."""
+    return raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else raw
 
 
 def _decode_frame(raw: str) -> StompFrame:
@@ -264,7 +271,7 @@ def _parse_event(frame: StompFrame) -> object | None:
 
     # A body that is not JSON raises, and the receive loop reports the frame
     # as unreadable -- as Java always has -- instead of it vanishing here.
-    data = json.loads(frame.body) if frame.body else None
+    data: Any = json.loads(frame.body) if frame.body else None
 
     match msg_type:
         case "VERSION":
@@ -716,7 +723,7 @@ class EventListener:
             additional_headers={
                 "Authorization": self._present(),
             },
-            subprotocols=["v12.stomp", "v11.stomp", "v10.stomp"],
+            subprotocols=[Subprotocol("v12.stomp"), Subprotocol("v11.stomp"), Subprotocol("v10.stomp")],
             max_size=_INBOUND_MESSAGE_SIZE,
         ).__enter__()
 
@@ -754,7 +761,7 @@ class EventListener:
         deadline = time.monotonic() + _CONNECTED_TIMEOUT_SECONDS
         while True:
             try:
-                raw = self._ws.recv(timeout=max(0.0, deadline - time.monotonic()))  # type: ignore[union-attr]
+                raw = _text(self._ws.recv(timeout=max(0.0, deadline - time.monotonic())))  # type: ignore[union-attr]
             except TimeoutError:
                 raise ConnectionFailedError("STOMP CONNECTED frame not received within timeout") from None
             reply = _decode_frame(raw)
@@ -801,7 +808,7 @@ class EventListener:
         try:
             while not self._closed:
                 try:
-                    raw = ws.recv(timeout=_HEARTBEAT_MS / 1000 * 2)  # type: ignore[union-attr]
+                    raw = _text(ws.recv(timeout=_HEARTBEAT_MS / 1000 * 2))  # type: ignore[union-attr]
                 except TimeoutError:
                     continue
 

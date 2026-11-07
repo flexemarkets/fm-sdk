@@ -8,6 +8,7 @@ from .decimals import Decimals
 from .enums import OrderType, OrderSide
 
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass

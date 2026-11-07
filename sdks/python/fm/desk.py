@@ -487,8 +487,8 @@ class Desk:
 
             if isinstance(event, Holding):
                 self._holding = event
-                for h in self._holding_handlers:
-                    self._notify(h, event)
+                for holding_handler in self._holding_handlers:
+                    self._notify(holding_handler, event)
                 continue
 
             if isinstance(event, StreamDropped):
@@ -613,9 +613,9 @@ class Desk:
             book = self._books.get(market_id)
             if book is None:
                 continue
-            for entry_id, handler in self._book_handlers:
+            for entry_id, book_handler in self._book_handlers:
                 if entry_id == market_id:
-                    self._notify(handler, book)
+                    self._notify(book_handler, book)
         if event.seq != NO_SEQ:
             self._last_applied_seq = event.seq
 

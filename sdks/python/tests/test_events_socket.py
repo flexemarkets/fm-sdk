@@ -311,6 +311,23 @@ def test_a_frame_naming_an_order_with_no_id_is_reported(server, events, history_
     assert isinstance(update, OrdersUpdate) and [o.id for o in update.orders] == [6]
 
 
+def test_a_frame_sent_as_binary_is_read(server, events, history_listener):
+    """recv() answers bytes for one, and it reached a decoder for text: a TypeError, and a dropped stream."""
+    server.connection(0).send(_chunk([5], 8, "1/1").encode())
+
+    update = _next(events)
+    assert isinstance(update, OrdersUpdate) and [o.id for o in update.orders] == [5]
+
+
+def test_a_heartbeat_sent_as_binary_is_a_heartbeat(server, events, history_listener):
+    connection = server.connection(0)
+    connection.send(b"\n")
+    connection.send(_chunk([5], 8, "1/1"))
+
+    update = _next(events)
+    assert isinstance(update, OrdersUpdate) and [o.id for o in update.orders] == [5]
+
+
 def test_an_orders_update_arrives_with_its_sequence_number(server, events, listener):
     listener()
     server.connection(0).send(_message(

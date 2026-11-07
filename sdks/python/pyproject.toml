@@ -47,19 +47,15 @@ pattern = "(?P<version>.+)"
 [tool.hatch.build.targets.wheel]
 packages = ["fm"]
 
-# The two examples a reader runs first, against the SDK's annotations. first_robot
-# called desk.markets(), a property, and every test passed because the fake desk
-# had a method of that name while desk was declared `object`, which nothing can
-# check. check_untyped_defs because an unannotated helper is where such a call
-# hides. fm itself is read but not reported: it does not pass yet.
+# The SDK, which ships py.typed so a caller's checker reads these annotations, and
+# the two examples a reader runs first. first_robot called desk.markets(), a
+# property, and every test passed because the fake desk had a method of that name
+# while desk was declared `object`, which nothing can check. check_untyped_defs
+# because an unannotated helper is where such a call hides.
 [tool.mypy]
 python_version = "3.11"
-files = ["first_robot.py", "ticker.py"]
+files = ["fm", "first_robot.py", "ticker.py"]
 check_untyped_defs = true
-
-[[tool.mypy.overrides]]
-module = "fm.*"
-follow_imports = "silent"
 
 [tool.coverage.run]
 source = ["fm"]

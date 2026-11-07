@@ -236,3 +236,27 @@ def test_an_order_with_an_id_of_zero_is_still_read(monkeypatch, tmp_path):
     """The check is that the server named one, not which; a test double may use 0."""
     with _client(monkeypatch, tmp_path, lambda request: httpx.Response(200, json={"id": 0})) as client:
         assert client.submit_limit(1, 11, "BUY", 1, 100).id == 0
+
+
+NOTHING_ANSWERED = {
+    "account_by_id": lambda c: c.account_by_id(5),
+    "user_by_id": lambda c: c.user_by_id(5),
+    "create_user": lambda c: c.create_user("u@x", "pw", "U", "X", "USER"),
+}
+
+
+@pytest.mark.parametrize("call", NOTHING_ANSWERED.values(), ids=NOTHING_ANSWERED.keys())
+def test_a_call_promising_one_thing_answered_with_null_is_an_api_error(monkeypatch, tmp_path, call):
+    """It returned None from a method annotated to return the thing, for the caller to trip over later."""
+    with _client(monkeypatch, tmp_path, lambda request: httpx.Response(200, content="null")) as client:
+        with pytest.raises(ApiError, match="got nothing"):
+            call(client)
+
+
+def test_an_approval_answered_with_no_account_is_an_api_error(monkeypatch, tmp_path):
+    def route(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={} if request.method == "POST" else [{"id": 5, "name": "acme"}])
+
+    with _client(monkeypatch, tmp_path, route) as client:
+        with pytest.raises(ApiError, match="got nothing"):
+            client.approve_account("acme")

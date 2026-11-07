@@ -25,7 +25,8 @@ from .timestamps import parse as _timestamp
 
 if TYPE_CHECKING:
     from .events import EventListener
-    from .desk import Desk
+    from .desk import Desk, DeskHandle
+    from .events import EventListener
     from .order_stream import OrderStream, PendingOrder
     from .rest_orders import RestOrderWindow
 
@@ -731,6 +732,22 @@ def _json(response: httpx.Response) -> Any:
         raise ApiError("Failed to parse the response body") from e
 
 
+def _an_account(data: Any) -> Account:
+    """An answer that must be an account: :func:`_parse_account` reads no account as None, as a signed-in person may have none."""
+    account = _parse_account(data)
+    if account is None:
+        raise ApiError("Failed to parse the response body: expected an account, got nothing")
+    return account
+
+
+def _a_person(data: Any) -> Person:
+    """An answer that must be a person; see :func:`_an_account`."""
+    person = _parse_person(data)
+    if person is None:
+        raise ApiError("Failed to parse the response body: expected a person, got nothing")
+    return person
+
+
 def _rows(data: Any) -> list[dict[str, Any]]:
     """A list answer, or :class:`ApiError` if this one is not a list of objects.
 
@@ -949,7 +966,7 @@ class Flexemarkets:
         self._account = self._token_obj.account
         self._user = self._token_obj.person
 
-        self._event_listener = None
+        self._event_listener: "EventListener | None" = None
 
         # Phase 2d shared-desk registry, keyed by marketplace_id.
         self._shared_views: dict[int, _SharedView] = {}
@@ -986,7 +1003,7 @@ class Flexemarkets:
 
     @property
     def account_id(self) -> int:
-        return self._account.id  # type: ignore[union-attr]
+        return self._account.id  # type: ignore[union-attr,return-value]
 
     @property
     def account_name(self) -> str:
@@ -1270,13 +1287,13 @@ class Flexemarkets:
     def accounts(self) -> list[Account]:
         url = _v1(self._endpoint, "/accounts")
         data = _json(self._get(url))
-        return [_parse_account(a) for a in _rows(data)]
+        return [_an_account(a) for a in _rows(data)]
 
     def accounts_page(self, limit: int, before: int | None = None) -> Page[Account]:
         """A page of :meth:`accounts`: the newest *limit*, or of those whose id is
         below *before* -- a page's ``next``. The server answers at most 5,000.
         """
-        return self._page(_v1(self._endpoint, "/accounts"), limit, before, _parse_account)
+        return self._page(_v1(self._endpoint, "/accounts"), limit, before, _an_account)
 
     def signup(
         self,
@@ -1313,7 +1330,7 @@ class Flexemarkets:
             raise InvalidArgumentError(f"No account named '{account_name}'")
         url = _v1(self._endpoint, f"/accounts/{account.id}/approvals")
         approval_data = _object(_json(self._post(url, {"approve": True})))
-        return _parse_account(approval_data.get("account"))  # type: ignore[return-value]
+        return _an_account(approval_data.get("account"))
 
     def delete_account(self, account_id: int) -> None:
         self._delete(_v1(self._endpoint, f"/accounts/{account_id}"))
@@ -1346,13 +1363,13 @@ class Flexemarkets:
     def users(self) -> list[Person]:
         url = _v1(self._endpoint, "/users")
         data = _json(self._get(url))
-        return [_parse_person(u) for u in _rows(data)]  # type: ignore[misc]
+        return [_a_person(u) for u in _rows(data)]
 
     def users_page(self, limit: int, before: int | None = None) -> Page[Person]:
         """A page of :meth:`users`: the newest *limit*, or of those whose id is
         below *before* -- a page's ``next``. The server answers at most 5,000.
         """
-        return self._page(_v1(self._endpoint, "/users"), limit, before, _parse_person)  # type: ignore[arg-type]
+        return self._page(_v1(self._endpoint, "/users"), limit, before, _a_person)
 
     def create_user(
         self,
@@ -1371,7 +1388,7 @@ class Flexemarkets:
             "roles": list(roles),
         }
         resp = self._create(lambda key: self._post(url, user, key))
-        return _parse_person(_json(resp))  # type: ignore[return-value]
+        return _a_person(_json(resp))
 
     def delete_user(self, user_id: int) -> None:
         url = _v1(self._endpoint, f"/users/{user_id}")
@@ -1577,19 +1594,19 @@ class Flexemarkets:
         connection signed in to. Java overloads the two; a property cannot
         take an argument, so here they are separate names.
         """
-        return _parse_account(_json(self._get(_v1(self._endpoint, f"/accounts/{account_id}"))))
+        return _an_account(_json(self._get(_v1(self._endpoint, f"/accounts/{account_id}"))))
 
     def user_by_id(self, user_id: int) -> Person:
         """One user by id; see :meth:`account_by_id` for the name."""
         url = _v1(self._endpoint, f"/users/{user_id}")
-        return _parse_person(_json(self._get(url)))
+        return _a_person(_json(self._get(url)))
 
     def identifiers(self, marketplace_id: int) -> list[str]:
         """The names of the participants a caller may target: ``GET
         participants``, names only. A row is an object -- a name, and for a
         manager the user id, not needed here."""
         url = _marketplace(self._endpoint, marketplace_id) + "/participants"
-        return [p.get("name") for p in _rows(_json(self._get(url)))]
+        return [p.get("name") for p in _rows(_json(self._get(url)))]  # type: ignore[misc]
 
     def open_session(self, marketplace_id: int) -> Session:
         return self._session_state(marketplace_id, "OPEN")
@@ -2368,7 +2385,7 @@ class Flexemarkets:
         if self._event_listener is not None:
             self._event_listener.reconnect()
 
-    def desk(self, marketplace_id: int, *, refuse_locally: bool = True) -> "Desk":
+    def desk(self, marketplace_id: int, *, refuse_locally: bool = True) -> "DeskHandle":
         """Open a stateful :class:`~fm.desk.Desk` on this
         marketplace.
 

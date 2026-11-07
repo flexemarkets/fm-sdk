@@ -23,7 +23,11 @@ from .exceptions import (
     OrderRefusedLocallyError,
     PersonHasMarketplaceDataError,
 )
-from .desk import GapEvent, Desk, DeskRecovery, Subscription
+# fm.Desk is what Flexemarkets.desk() returns, as it is in Java and TypeScript:
+# the handle on a shared desk. fm.desk.Desk is that shared desk, which a caller
+# never holds, so annotating a robot's `desk: Desk` with it was a type error.
+from .desk import DeskHandle as Desk
+from .desk import GapEvent, DeskRecovery, Subscription
 from .orderbook import Book
 from .trades import Trade, Tape
 from .types import (

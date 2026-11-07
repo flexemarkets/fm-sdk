@@ -17,18 +17,21 @@ def is_limit(order: Order) -> bool:
     return OrderType.of(order.type) is OrderType.LIMIT
 
 
-def is_buy(side: "OrderSide | None") -> bool:
+def is_buy(side: str | None) -> bool:
     return OrderSide.of(side) is OrderSide.BUY
 
 
-def is_sell(side: str) -> bool:
+def is_sell(side: str | None) -> bool:
     return OrderSide.of(side) is OrderSide.SELL
 
 
-def contra(side: "OrderSide") -> "OrderSide":
+def contra(side: str | None) -> OrderSide:
     """Kept as a function as well as :meth:`OrderSide.contra`, because callers hold
     a side and read left-to-right: ``contra(quote_side)``."""
-    return OrderSide.of(side).contra()
+    known = OrderSide.of(side)
+    if known is None:
+        raise ValueError(f"A side that is neither BUY nor SELL has no contra; got: {side!r}")
+    return known.contra()
 
 
 def is_available(order: Order) -> bool:

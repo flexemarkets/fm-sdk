@@ -98,7 +98,7 @@ class Book:
         if not self._initialized:
             self._initialized = True
 
-    def _add(self, side: str, price: int, units: int) -> None:
+    def _add(self, side: str | None, price: int, units: int) -> None:
         # Refused here because nothing else would: a level that is not a whole
         # number goes in quietly and every later read of the book raises.
         if not isinstance(price, int) or not isinstance(units, int):
@@ -106,7 +106,7 @@ class Book:
         levels = self._price_levels(side)
         levels[price] += units
 
-    def _remove(self, side: str, price: int, units: int) -> None:
+    def _remove(self, side: str | None, price: int, units: int) -> None:
         levels = self._price_levels(side)
         updated = levels.get(price, 0) - units
         if updated < 1:
@@ -114,7 +114,7 @@ class Book:
         else:
             levels[price] = updated
 
-    def _price_levels(self, side: str) -> dict[int, int]:
+    def _price_levels(self, side: str | None) -> dict[int, int]:
         """The book a side belongs to, refusing anything that does not name one.
 
         This used to be ``self._buys if is_buy(side) else self._sells``, which
