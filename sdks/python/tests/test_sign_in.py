@@ -64,7 +64,7 @@ def base() -> str:
     bodies.clear()
     answers.clear()
     httpd = HTTPServer(("127.0.0.1", 0), Handler)
-    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    threading.Thread(target=httpd.serve_forever, args=(0.01,), daemon=True).start()
     yield f"http://127.0.0.1:{httpd.server_address[1]}/api"
     httpd.shutdown()
 

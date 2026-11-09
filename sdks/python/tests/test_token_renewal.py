@@ -102,7 +102,7 @@ def _handler(state: Server):
 def server():
     state = Server()
     httpd = HTTPServer(("127.0.0.1", 0), _handler(state))
-    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    threading.Thread(target=httpd.serve_forever, args=(0.01,), daemon=True).start()
     state.base = f"http://127.0.0.1:{httpd.server_address[1]}/api"
     yield state
     httpd.shutdown()

@@ -75,7 +75,7 @@ def connect():
 
     def _connect(snapshot=BARE_ARRAY):
         httpd = HTTPServer(("127.0.0.1", 0), _serving(snapshot))
-        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        threading.Thread(target=httpd.serve_forever, args=(0.01,), daemon=True).start()
         servers.append(httpd)
         base = f"http://127.0.0.1:{httpd.server_address[1]}/api"
         fm = Flexemarkets.connect(TOKEN, f"{base}/marketplaces/1", "snapshot-shape-test")

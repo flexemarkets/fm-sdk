@@ -175,12 +175,12 @@ test("a reconnect that fails for any reason but the token waits, then tries agai
   await listener.start();
   listener.failConnects = listener.connects + 1;
   const before = listener.connects;
-  const started = Date.now();
+  listener.pauses = [];
 
   await listener.reconnect();
 
   assert.equal(listener.connects - before, 2, "one refused, one that succeeded");
-  assert.ok(Date.now() - started >= 900, "retried without waiting");
+  assertPaced(listener.pauses, [2000]);
   listener.close();
 });
 

@@ -26,3 +26,15 @@ def _isolated_home(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPat
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.delenv("FM_API_URL", raising=False)
     monkeypatch.delenv("FM_URL", raising=False)
+
+
+@pytest.fixture
+def quick_reconnects(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Reconnect pauses of milliseconds rather than seconds.
+
+    A drop right after a connect counts as a failed attempt, so a test that
+    drops its fresh stream otherwise sits out a real 1-2 s back-off before the
+    reconnect it is about. The tests of the pacing itself do not use this.
+    """
+    from fm import events
+    monkeypatch.setattr(events, "_RECONNECT_FIRST_PAUSE_SECONDS", 0.01)

@@ -251,7 +251,7 @@ def test_history_chunks_reach_the_caller_with_no_repeated_sequence_number(server
     assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
 
 
-def test_a_drop_mid_history_discards_the_part_received(server, events, history_listener):
+def test_a_drop_mid_history_discards_the_part_received(server, events, history_listener, quick_reconnects):
     """The reconnect sends the whole history again. Kept, the first socket's
     chunks would be prepended to it -- or, with a chunk short, delivered as a
     history that is not one."""
@@ -392,7 +392,7 @@ def test_frames_reach_the_queue_in_the_order_they_were_sent(server, events, list
     assert received == sorted(received)
 
 
-def test_a_server_close_is_a_drop_that_reconnects_and_says_so(server, events, listener):
+def test_a_server_close_is_a_drop_that_reconnects_and_says_so(server, events, listener, quick_reconnects):
     listener()
     server.connection(0).close()
 
@@ -401,7 +401,7 @@ def test_a_server_close_is_a_drop_that_reconnects_and_says_so(server, events, li
     _await("the new socket subscribes again", lambda: len(server.received) > 1 and len(server.received[1]) >= 4)
 
 
-def test_a_refused_token_on_reconnect_ends_the_stream_and_says_why(server, events, listener):
+def test_a_refused_token_on_reconnect_ends_the_stream_and_says_why(server, events, listener, quick_reconnects):
     listener()
     server.refuse_with = 401
     server.connection(0).close()
@@ -413,7 +413,7 @@ def test_a_refused_token_on_reconnect_ends_the_stream_and_says_why(server, event
     assert isinstance(refused.exception, PermissionError)
     assert refused.permanent is True
     with pytest.raises(queue.Empty):
-        events.get(timeout=3)
+        events.get(timeout=0.5)
     assert server.handshakes == 2, "one refused attempt, not a retry loop"
 
 
@@ -538,7 +538,7 @@ def test_a_reconnect_that_never_hears_connected_tries_again(server, events, list
     raise AssertionError("the stream never came back")
 
 
-def test_a_reconnect_the_caller_asks_for_replaces_the_socket_once(server, events, listener):
+def test_a_reconnect_the_caller_asks_for_replaces_the_socket_once(server, events, listener, quick_reconnects):
     """Ported from Java's EventsSocketTest (c981b65). The old socket's close is
     the client's own doing, not a drop: reported as one, it queued a
     StreamDropped and set off a second reconnect that tore down the socket
@@ -550,8 +550,7 @@ def test_a_reconnect_the_caller_asks_for_replaces_the_socket_once(server, events
 
     _await("the new socket subscribes", lambda: len(server.received) > 1 and len(server.received[1]) >= 4)
     with pytest.raises(queue.Empty):
-        events.get(timeout=1.5)
-    time.sleep(0.5)
+        events.get(timeout=0.5)
     assert len(server.connections) == 2, "one replacement"
 
 

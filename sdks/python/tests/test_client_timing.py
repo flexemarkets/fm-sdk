@@ -55,7 +55,7 @@ def client(tmp_path):
     timings.clear()
     server_timing["value"] = "st=1000"
     httpd = HTTPServer(("127.0.0.1", 0), Handler)
-    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    threading.Thread(target=httpd.serve_forever, args=(0.01,), daemon=True).start()
     base = f"http://127.0.0.1:{httpd.server_address[1]}/api"
     credential = tmp_path / "credential"
     credential.write_text("account=dev\nemail=dev@dev\npassword=pw\n")
