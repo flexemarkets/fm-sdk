@@ -85,7 +85,7 @@ def _drain(q: "queue.Queue[object]", timeout: float = 5.0) -> list[object]:
     return events
 
 
-def test_a_dropped_stream_restores_itself_and_says_so() -> None:
+def test_a_dropped_stream_restores_itself_and_says_so(quick_reconnects) -> None:
     q: queue.Queue[object] = queue.Queue()
     listener = _Listener(q)
     listener.start()
@@ -101,7 +101,7 @@ def test_a_dropped_stream_restores_itself_and_says_so() -> None:
     listener.close()
 
 
-def test_reconnected_carries_the_marketplace_it_belongs_to() -> None:
+def test_reconnected_carries_the_marketplace_it_belongs_to(quick_reconnects) -> None:
     """Matching Java's ``StreamReconnected(long marketplaceId)``.
 
     One Flexemarkets can hold several subscriptions, so a bare "we are back"
@@ -133,7 +133,7 @@ def test_a_closed_listener_does_not_reconnect() -> None:
         q.get(timeout=0.5)
 
 
-def test_one_drop_starts_one_reconnect() -> None:
+def test_one_drop_starts_one_reconnect(quick_reconnects) -> None:
     """A burst of errors from a dying socket is one outage, not five.
 
     Java guards with compareAndSet on a `reconnecting` flag; without it a
@@ -183,7 +183,7 @@ def test_one_drop_starts_one_reconnect() -> None:
     reconnected = []
     while True:
         try:
-            event = q.get(timeout=3.0)
+            event = q.get(timeout=0.5)
         except queue.Empty:
             break
         if isinstance(event, StreamReconnected):

@@ -10,7 +10,12 @@ from __future__ import annotations
 
 import queue
 
+import pytest
+
 from fm.events import EventListener, StreamDropped, StreamReconnected
+
+
+pytestmark = pytest.mark.usefixtures("quick_reconnects")
 
 
 class _Refused(Exception):
