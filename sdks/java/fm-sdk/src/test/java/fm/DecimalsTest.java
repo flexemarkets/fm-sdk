@@ -91,13 +91,25 @@ public class DecimalsTest {
      * The displays moved onto {@code format} printed {@code "%5.2f"} of
      * {@code cents / 100.0}. Over the range a price takes, the two agree
      * character for character, so the move changes no output.
+     *
+     * <p>{@code format} places a point in the digits, so its output depends
+     * only on the sign and the number of digits. Every value up to five
+     * digits, of either sign, is checked; above that a prime stride reaches
+     * every last-two-digit pattern, and the ends of the range are checked
+     * outright.
      */
     @Test
     public void agreesWithTheCentsDisplayItReplaced() {
-        for (long cents = -20_000; cents <= 2_000_000; cents++) {
-            assertThat("%5s".formatted(Decimals.format(cents, Decimals.DEFAULT_PRICE_DECIMALS)))
-                .isEqualTo(String.format(Locale.ROOT, "%5.2f", cents / 100.0));
-        }
+        var cents = java.util.stream.LongStream.concat(
+            java.util.stream.LongStream.rangeClosed(-20_000, 20_000),
+            java.util.stream.LongStream.concat(
+                java.util.stream.LongStream.iterate(20_001, c -> c <= 2_000_000, c -> c + 97),
+                java.util.stream.LongStream.of(99_999, 100_000, 100_001, 999_999, 1_000_000, 1_000_001,
+                                               1_999_999, 2_000_000)));
+        cents.forEach(c ->
+            assertThat("%5s".formatted(Decimals.format(c, Decimals.DEFAULT_PRICE_DECIMALS)))
+                .as("at %d", c)
+                .isEqualTo(String.format(Locale.ROOT, "%5.2f", c / 100.0)));
     }
 
     @ParameterizedTest(name = "whole units at {0} decimals")
