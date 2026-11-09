@@ -327,7 +327,7 @@ class TestFromTheClient:
         from http.server import HTTPServer
 
         http = HTTPServer(("127.0.0.1", 0), Handler)
-        threading.Thread(target=http.serve_forever, daemon=True).start()
+        threading.Thread(target=http.serve_forever, args=(0.01,), daemon=True).start()
         fm = Flexemarkets.connect(TOKEN, f"http://127.0.0.1:{http.server_address[1]}/api/marketplaces/1",
                                   "order-stream-test")
         opened: list[EventListener] = []
@@ -377,7 +377,7 @@ def client(monkeypatch):
     from http.server import HTTPServer
 
     http = HTTPServer(("127.0.0.1", 0), Handler)
-    threading.Thread(target=http.serve_forever, daemon=True).start()
+    threading.Thread(target=http.serve_forever, args=(0.01,), daemon=True).start()
     fm = Flexemarkets.connect(TOKEN, f"http://127.0.0.1:{http.server_address[1]}/api/marketplaces/1",
                               "order-stream-test")
     listener = _Bodies()

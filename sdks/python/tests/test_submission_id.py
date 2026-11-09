@@ -62,7 +62,7 @@ def client():
     submitted.clear()
     plan.clear()
     server = HTTPServer(("127.0.0.1", 0), Handler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    threading.Thread(target=server.serve_forever, args=(0.01,), daemon=True).start()
     fm = Flexemarkets.connect(TOKEN, f"http://127.0.0.1:{server.server_address[1]}/api/marketplaces/1",
                               "submission-id-test")
     yield fm

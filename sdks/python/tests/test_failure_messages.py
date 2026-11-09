@@ -76,7 +76,7 @@ def base() -> str:
     answers["/api/v1/tokens/refresh"] = (200, SIGNED_IN, None)
     ANSWER[0] = UNANSWERED
     httpd = HTTPServer(("127.0.0.1", 0), Handler)
-    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    threading.Thread(target=httpd.serve_forever, args=(0.01,), daemon=True).start()
     yield f"http://127.0.0.1:{httpd.server_address[1]}/api"
     httpd.shutdown()
 
