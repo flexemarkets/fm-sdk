@@ -69,6 +69,16 @@ class EventsSocketTest {
         return events;
     }
 
+    /**
+     * Reconnect pauses of tens of milliseconds. A drop straight after a
+     * connect counts as a failed attempt, so a test about what a reconnect
+     * delivers otherwise sits out a real 1-2 s back-off first. The tests of
+     * the waiting itself do not use this.
+     */
+    private void quickReconnects() {
+        events.reconnectMaxPauseMillis = 50;
+    }
+
     private Object next() throws InterruptedException {
         Object event = queue.poll(5, TimeUnit.SECONDS);
         assertThat(event).as("an event within 5 s").isNotNull();
@@ -226,6 +236,7 @@ class EventsSocketTest {
     @Timeout(30)
     void aDropMidHistoryDiscardsThePartReceived() throws Exception {
         historyConnected();
+        quickReconnects();
         var first = server.connection(0);
         first.send(chunk(8, "1/3", 1, 2));
         first.send(chunk(8, "2/3", 3));
@@ -365,6 +376,7 @@ class EventsSocketTest {
     @Timeout(30)
     void aServerCloseIsADropThatReconnectsAndSaysSo() throws Exception {
         connected();
+        quickReconnects();
 
         server.connection(0).close();
 
@@ -382,6 +394,7 @@ class EventsSocketTest {
     @Timeout(30)
     void aRefusedTokenOnReconnectEndsTheStreamAndSaysWhy() throws Exception {
         connected();
+        quickReconnects();
         server.refuseWith(401);
 
         server.connection(0).close();
@@ -390,7 +403,7 @@ class EventsSocketTest {
         StreamDropped refused = (StreamDropped) next();
         assertThat(refused.failure()).isInstanceOf(AuthenticationException.class);
         assertThat(refused.permanent()).isTrue();
-        assertThat(queue.poll(3, TimeUnit.SECONDS)).as("and nothing after it").isNull();
+        assertThat(queue.poll(500, TimeUnit.MILLISECONDS)).as("and nothing after it").isNull();
         assertThat(server.handshakes()).as("one refused attempt, not a retry loop").isEqualTo(2);
     }
 
@@ -411,6 +424,7 @@ class EventsSocketTest {
             return true;
         });
         events.connect();
+        quickReconnects();
         server.refuseWith(401);
 
         server.connection(0).close();
@@ -582,6 +596,7 @@ class EventsSocketTest {
     @Timeout(30)
     void aConnectionCutWithoutACloseIsADropThatReconnects() throws Exception {
         connected();
+        quickReconnects();
 
         server.connection(0).abort();
 
@@ -625,18 +640,21 @@ class EventsSocketTest {
     @Timeout(30)
     void closingWhileReconnectingStopsTheRetries() throws Exception {
         connected();
+        // Waits of 0.5-1 s rather than 1-4 s: the close still lands in one,
+        // and a retry after it would come inside the 1.5 s below.
+        events.reconnectMaxPauseMillis = 1_000;
         server.dropHandshakes(Integer.MAX_VALUE);
 
         server.connection(0).close();
         assertThat(next()).isInstanceOf(StreamDropped.class);
         // The first, then one failed attempt (two handshakes: the JDK retries
-        // a dropped GET once). Events is now in its two-second wait.
+        // a dropped GET once). Events is now in its wait.
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
         while (server.handshakes() < 3 && System.nanoTime() < deadline) Thread.sleep(5);
         events.close();
         int attempts = server.handshakes();
 
-        assertThat(queue.poll(4, TimeUnit.SECONDS)).as("nothing after the close").isNull();
+        assertThat(queue.poll(1_500, TimeUnit.MILLISECONDS)).as("nothing after the close").isNull();
         assertThat(server.handshakes()).as("no retry after the close").isEqualTo(attempts);
     }
 
