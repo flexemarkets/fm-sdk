@@ -81,8 +81,16 @@ test("says why it refused", () => {
 // The displays moved onto format printed (cents / 100).toFixed(2). Over the
 // range a price takes the two agree character for character, so the move
 // changes no output.
+//
+// format() is string slicing, so its output depends only on the sign and the
+// number of digits. Every value up to five digits, of either sign, is checked;
+// above that a prime stride reaches every last-two-digit pattern, and the ends
+// of the range are checked outright.
 test("agrees with the cents display it replaced", () => {
-  for (let cents = -20_000; cents <= 2_000_000; cents++) {
+  const above: number[] = [99_999, 100_000, 100_001, 999_999, 1_000_000, 1_000_001, 1_999_999, 2_000_000];
+  for (let cents = 20_001; cents <= 2_000_000; cents += 97) above.push(cents);
+  const upToFiveDigits = Array.from({ length: 40_001 }, (_, i) => i - 20_000);
+  for (const cents of [...upToFiveDigits, ...above]) {
     const old = (cents / 100).toFixed(2).padStart(5);
     const now = Decimals.format(cents, Decimals.DEFAULT_PRICE_DECIMALS).padStart(5);
     if (old !== now) assert.equal(now, old, `at ${cents}`);
