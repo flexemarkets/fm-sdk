@@ -62,13 +62,20 @@ async function until(what: string, condition: () => boolean): Promise<void> {
   throw new Error(`timed out waiting for: ${what}`);
 }
 
-async function listening(history = false) {
+/**
+ * A listener on a fresh server. `quickReconnects` makes its reconnect pauses
+ * 10 ms: a drop straight after the connect counts as a failed attempt, so
+ * otherwise a test about what a reconnect delivers sits out a real 1-2 s
+ * back-off first. Tests about whether it waits leave it off.
+ */
+async function listening(history = false, quickReconnects = false) {
   const s = server();
   await new Promise<void>((resolve) => s.wss.on("listening", () => resolve()));
   const events: FmEvent[] = [];
   const listener = new EventListener(s.url(), "Bearer the-token", MP, (e) => void events.push(e),
                                      "fm-sdk-test", parseHolding as never, parseOrder as never,
                                      async () => false, history);
+  if (quickReconnects) listener["_sleep"] = () => new Promise<void>((r) => setTimeout(r, 10));
   await listener.start();
   const done = async () => {
     listener.close();
@@ -181,7 +188,7 @@ test("a drop mid-history discards the part received", async () => {
   // The reconnect sends the whole history again. Kept, the first socket's
   // chunks would be prepended to it -- or, with a chunk short, delivered as a
   // history that is not one.
-  const { s, events, done } = await listening(true);
+  const { s, events, done } = await listening(true, true);
   try {
     s.sockets[0].send(chunk([1, 2], 8, "1/3"));
     s.sockets[0].send(chunk([3], 8, "2/3"));
@@ -267,7 +274,7 @@ test("frames arrive in the order they were sent", async () => {
 });
 
 test("a server close is a drop that reconnects and says so", async () => {
-  const { s, events, done } = await listening();
+  const { s, events, done } = await listening(false, true);
   try {
     s.sockets[0].close();
     await until("dropped and reconnected", () => events.some((e) => kind(e) === "reconnected"));
