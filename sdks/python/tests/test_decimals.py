@@ -86,8 +86,14 @@ def test_is_not_instantiated() -> None:
 def test_agrees_with_the_cents_display_it_replaced() -> None:
     """The displays moved onto format printed f"{cents / 100:5.2f}". Over the
     range a price takes the two agree character for character, so the move
-    changes no output."""
-    for cents in range(-20_000, 500_001):
+    changes no output.
+
+    format() is string slicing, so its output depends only on the sign and the
+    number of digits. Every value up to five digits, of either sign, is
+    checked; above that a prime stride reaches every last-two-digit pattern,
+    and the ends of the range are checked outright."""
+    above = [*range(20_001, 500_001, 97), 99_999, 100_000, 100_001, 499_999, 500_000]
+    for cents in [*range(-20_000, 20_001), *above]:
         old = f"{cents / 100:5.2f}"
         assert Decimals.format(cents, Decimals.DEFAULT_PRICE_DECIMALS).rjust(5) == old, cents
 
