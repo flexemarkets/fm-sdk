@@ -6,6 +6,7 @@ moving to, oldest first: from the bottom up.
 
 | Version | Covers |
 |---------|--------|
+| [0.21](#021-from-020x) | no signature changes; an endpoint that names no marketplace is a configuration error when its marketplace is asked for, not a number-parsing failure (or `NaN` in TypeScript) |
 | [0.20](#020-from-019x) | no change for a robot or a client; for a study, fm-spi 0.0.19 (contract 0.5) adds `StudyProvider.marketplaces`, with a default, so a host can create a run's marketplaces before its people |
 | [0.19](#019-from-018x) | a lost connection is an `ApiError` in Python and TypeScript; a desk that cannot reseed or apply a frame goes on and says so; a stream connect fails after 10 s; a `PendingOrder` cannot be cancelled; a desk says when its stream drops, and `StreamDropped` gains `permanent`, which Java callers that build or destructure it must handle |
 | [0.18](#018-from-017x) | additive: `sendLimit` and `sendCancel` can go over REST, in batches, with one request in flight (fm-server 4.19) |
@@ -26,6 +27,30 @@ moving to, oldest first: from the bottom up.
 | [0.3](#03-from-02x) | which is additive, and says so |
 | [0.2](#02-from-01x) | the package moves, the renames, and the five changes that are not renames |
 | [0.1](#01-from-00x) | Migrating a codebase from 0.0.x to 0.1.x, in all three languages |
+
+---
+
+## 0.21: from 0.20.x
+
+No signature changes. One failure changes type, in all three languages.
+
+Asking for the marketplace an endpoint names -- `endpointMarketplaceId()` in
+Java, `endpoint_marketplace_id` in Python, `endpointMarketplaceId` in
+TypeScript -- when the endpoint names none (most often the bare default host,
+because nothing configured a marketplace) used to fail on the parse:
+
+- **Java** threw `NumberFormatException: For input string: "api.flexemarkets.com"`;
+- **Python** raised `ValueError: invalid literal for int() with base 10: ...`;
+- **TypeScript** returned `NaN` without complaint, and the robot failed later,
+  asking for marketplace `NaN`.
+
+Each now fails at once with the SDK's configuration error
+(`ConfigurationException`, `ConfigurationError`, `ConfigurationError`), whose
+message names the endpoint and how to point it at a marketplace; Java's also
+says where the endpoint came from. Code that caught `NumberFormatException` or
+`ValueError` there, or tested for `NaN`, should catch the configuration error
+instead. An endpoint with a trailing slash after the id (`.../marketplaces/1/`)
+is now accepted in Java, as it already was in Python and TypeScript.
 
 ---
 
