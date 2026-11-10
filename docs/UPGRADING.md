@@ -49,8 +49,7 @@ Each now fails at once with the SDK's configuration error
 message names the endpoint and how to point it at a marketplace; Java's also
 says where the endpoint came from. Code that caught `NumberFormatException` or
 `ValueError` there, or tested for `NaN`, should catch the configuration error
-instead. An endpoint with a trailing slash after the id (`.../marketplaces/1/`)
-is now accepted in Java, as it already was in Python and TypeScript.
+instead.
 
 ---
 
