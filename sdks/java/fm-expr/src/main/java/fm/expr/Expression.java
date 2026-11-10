@@ -55,8 +55,8 @@ import java.util.function.Consumer;
  *
  * <p>Deliberately absent: loops, user functions, assignment, text
  * concatenation, randomness, a clock, and any reach into another
- * participant's state. Each is recorded, with why, in the Panel Expressions
- * specification.
+ * participant's state. Each is recorded, with why, in fm-sdk's
+ * {@code docs/PANEL-EXPRESSIONS.md}.
  *
  * <h2>Numbers</h2>
  *
