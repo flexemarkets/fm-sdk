@@ -461,7 +461,7 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     public long endpointMarketplaceId() {
-        return resourceId(endpointUrl());
+        return marketplaceId(endpointUrl(), _properties.getProperty("endpoint-source"));
     }
 
     // --- REST APIs ---
@@ -2268,9 +2268,24 @@ public class HttpFlexemarkets implements Flexemarkets {
         return endpoint.endsWith("/") ? endpoint + "api" : endpoint + "/api";
     }
 
-    static long resourceId(String endpoint) {
-        var segments = endpoint.split("/");
-        return Long.parseLong(segments[segments.length - 1]);
+    /**
+     * The marketplace an endpoint names, from its last path segment.
+     *
+     * <p>A robot run with no marketplace configured -- no -E, ~/.fm/endpoint
+     * commented out -- has the default host as its endpoint, and this used to
+     * fail as {@code NumberFormatException: For input string:
+     * "api.flexemarkets.com"}, naming neither the problem nor the fix
+     * (fm-venture-capital, 2026-11-10).
+     */
+    static long marketplaceId(String endpoint, String source) {
+        var path = endpoint.replaceAll("/+$", "");
+        var last = path.substring(path.lastIndexOf('/') + 1);
+        if (last.matches("\\d+")) {
+            return Long.parseLong(last);
+        }
+        throw new ConfigurationException(
+            "No marketplace to run in: the endpoint %s names none.%s Pass -E <marketplace id>, or -E <server>/api/marketplaces/<id>, or set endpoint= to either in ~/.fm/endpoint."
+                .formatted(endpoint, null == source ? "" : " That address came from " + source + "."));
     }
 
 

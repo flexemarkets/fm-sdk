@@ -1,6 +1,7 @@
 package fm.internal;
 
 import fm.Flexemarkets;
+import fm.error.ConfigurationException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -27,6 +28,27 @@ import org.junit.jupiter.api.io.TempDir;
  * extracted.
  */
 public class FlexemarketsEndpointTest {
+
+    @Test
+    public void anEndpointNamesItsMarketplace() {
+        assertThat(HttpFlexemarkets.marketplaceId("https://api.flexemarkets.com/api/marketplaces/3494", null)).isEqualTo(3494L);
+        assertThat(HttpFlexemarkets.marketplaceId("http://localhost:8080/api/marketplaces/1/", null)).isEqualTo(1L);
+    }
+
+    /**
+     * No marketplace configured leaves the default host as the endpoint. That
+     * failed as a bare NumberFormatException on "api.flexemarkets.com"; it now
+     * says what is missing, where the address came from, and how to fix it.
+     */
+    @Test
+    public void anEndpointWithoutAMarketplaceSaysSo() {
+        assertThatThrownBy(() -> HttpFlexemarkets.marketplaceId("https://api.flexemarkets.com", "the default host"))
+            .isInstanceOf(ConfigurationException.class)
+            .hasMessageContaining("No marketplace to run in")
+            .hasMessageContaining("https://api.flexemarkets.com")
+            .hasMessageContaining("came from the default host")
+            .hasMessageContaining("-E <marketplace id>");
+    }
 
     @Test
     public void bareIdResolvesToDefaultProductionHost() throws Exception {
