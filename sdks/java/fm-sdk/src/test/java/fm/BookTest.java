@@ -194,7 +194,7 @@ class BookTest {
      * <p>The assertion records the damage rather than a fix — after the final
      * cancel the book still shows a bid that the server does not have, and goes
      * on showing it. That is why a consumer must detect the gap and re-seed
-     * from REST rather than trust the book: venture-credit's resync exists for
+     * from REST rather than trust the book: venture-capital's resync exists for
      * exactly this, and this test is the reason it cannot be dropped.
      */
     @Test

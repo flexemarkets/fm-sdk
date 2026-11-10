@@ -325,7 +325,7 @@ Three changes from the proposal, each smaller than what it replaces.
   two-argument one, so a study is told both the manager and its robots.
 - **The entrepreneur robot lives in the Venture module**, not one of its
   own. `fm-venture-entrepreneur` is a `ServiceProvider` and a manifest in
-  `applications/studies/venture-credit`, beside the CLI and the study. One
+  `applications/studies/venture-capital`, beside the CLI and the study. One
   jar carries all three; a separate module would have been shaded into the
   study's jar as well, registering the robot twice with any host that
   loads both. The take rule is one class, `Entrepreneur`, that the CLI's
