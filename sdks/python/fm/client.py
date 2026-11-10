@@ -606,7 +606,20 @@ def _server(endpoint: str) -> str:
 
 
 def _resource_id(endpoint: str) -> int:
-    return int(endpoint.rstrip("/").rsplit("/", 1)[-1])
+    """The marketplace an endpoint names, from its last path segment.
+
+    With no marketplace configured the endpoint is the bare default host, and
+    this used to fail as ``ValueError: invalid literal for int() with base 10:
+    'api.flexemarkets.com'``, naming neither the problem nor the fix.
+    """
+    last = endpoint.rstrip("/").rsplit("/", 1)[-1]
+    if last.isascii() and last.isdigit():
+        return int(last)
+    raise ConfigurationError(
+        f"No marketplace to run in: the endpoint {endpoint} names none. "
+        "Use a marketplace id or <server>/api/marketplaces/<id> as the endpoint: "
+        "pass it in, or set FM_API_URL or endpoint= in ~/.fm/endpoint to either."
+    )
 
 
 def _marketplace_endpoint(marketplace_id: str) -> str:
