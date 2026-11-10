@@ -687,10 +687,24 @@ export function server(endpoint: string): string {
   return endpoint.endsWith("/") ? `${endpoint}api` : `${endpoint}/api`;
 }
 
-function resourceId(endpoint: string): number {
+/**
+ * The marketplace an endpoint names, from its last path segment.
+ *
+ * With no marketplace configured the endpoint is the bare default host, and
+ * this used to answer NaN without complaint: the robot went on to ask for
+ * marketplace NaN and failed far from the cause.
+ */
+export function resourceId(endpoint: string): number {
   const trimmed = endpoint.replace(/\/+$/, "");
-  const last = trimmed.lastIndexOf("/");
-  return parseInt(trimmed.substring(last + 1), 10);
+  const last = trimmed.substring(trimmed.lastIndexOf("/") + 1);
+  if (/^\d+$/.test(last)) {
+    return parseInt(last, 10);
+  }
+  throw new ConfigurationError(
+    `No marketplace to run in: the endpoint ${endpoint} names none. ` +
+      "Use a marketplace id or <server>/api/marketplaces/<id> as the endpoint: " +
+      "pass it in, or set FM_API_URL or endpoint= in ~/.fm/endpoint to either.",
+  );
 }
 
 /**

@@ -9,7 +9,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { resolveEndpoint, server } from "../src/client.ts";
+import { ConfigurationError, resolveEndpoint, resourceId, server } from "../src/client.ts";
 
 // The API root is derived by hand in Java, Python and TypeScript, and nothing
 // else holds the three together: check-parity.py compares wire fields and
@@ -64,4 +64,16 @@ test("FM_URL overrides the host for a bare id", () => {
     if (previous === undefined) delete process.env.FM_URL;
     else process.env.FM_URL = previous;
   }
+});
+
+test("an endpoint names its marketplace", () => {
+  assert.equal(resourceId("https://api.flexemarkets.com/api/marketplaces/3494"), 3494);
+  assert.equal(resourceId("http://localhost:8080/api/marketplaces/1/"), 1);
+});
+
+test("an endpoint without a marketplace says so", () => {
+  assert.throws(
+    () => resourceId("https://api.flexemarkets.com"),
+    (e: unknown) => e instanceof ConfigurationError && /No marketplace to run in.*https:\/\/api\.flexemarkets\.com/.test(e.message),
+  );
 });
