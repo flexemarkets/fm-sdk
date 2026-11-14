@@ -97,6 +97,28 @@ class AssetsWireFormatTest {
         assertThat(viaInitial.shortUnits()).isEqualTo(50L);
     }
 
+    /**
+     * A manager's RIGHTS adjustment moves the allowance; fm-server sends the
+     * grant's and the move apart, and the floor is their sum. Reading the
+     * grant's alone left a robot on the old floor. A position that already
+     * says shortUnits -- the allotments path, or one written back -- holds
+     * the floor as it stands, so writing a live position out and reading it
+     * back does not add the move twice.
+     */
+    @Test
+    void aLiveFloorIncludesWhatAdjustmentsMoved() {
+        var live = _mapper.readValue(
+                "{\"marketId\":10,\"units\":5,\"initialShortUnits\":50,\"adjustedShortUnits\":-20}",
+                Security.class);
+        var readBack = _mapper.readValue(_mapper.writeValueAsString(live), Security.class);
+        var notSaid = _mapper.readValue("{\"marketId\":10,\"initialShortUnits\":50}", Security.class);
+
+        assertThat(live.shortUnits()).isEqualTo(30L);
+        assertThat(live.adjustedShortUnits()).isEqualTo(-20L);
+        assertThat(readBack).isEqualTo(live);
+        assertThat(notSaid.adjustedShortUnits()).isNull();
+    }
+
     /** Absent means none, not null -- callers do arithmetic on this. */
     @Test
     void anAbsentShortAllowanceIsZero() {

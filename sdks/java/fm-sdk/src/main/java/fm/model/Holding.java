@@ -40,6 +40,12 @@ import com.fasterxml.jackson.annotation.JsonInclude;
  *                      market order
  * @param initialCash   the cash the participant started the session with, or
  *                      null when the response did not say; see below
+ * @param adjustedCash  cash a manager's adjustments gave (+) or took (-), net,
+ *                      since the open: in {@code cash}, but not made by
+ *                      trading, so the cash trading made is
+ *                      {@code cash - initialCash - adjustedCash}. Null when
+ *                      the response did not say; see
+ *                      {@link Security#adjustedUnits()}
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record Holding(
@@ -51,7 +57,8 @@ public record Holding(
     long cash,
     long availableCash,
     @JsonAlias("assets") List<Security> securities,
-    @JsonInclude(JsonInclude.Include.NON_NULL) Long initialCash) {
+    @JsonInclude(JsonInclude.Include.NON_NULL) Long initialCash,
+    @JsonInclude(JsonInclude.Include.NON_NULL) Long adjustedCash) {
 
     /**
      * Never null, and always in market order.
@@ -96,7 +103,28 @@ public record Holding(
      */
     public Holding(long marketplaceId, long sessionId, long allocationId, long ownerId,
                    String name, long cash, long availableCash, List<Security> securities) {
-        this(marketplaceId, sessionId, allocationId, ownerId, name, cash, availableCash, securities, null);
+        this(marketplaceId, sessionId, allocationId, ownerId, name, cash, availableCash, securities, null, null);
+    }
+
+    /**
+     * A holding with its starting cash, and nothing said about adjustments.
+     *
+     * <p>The canonical constructor until 0.22, kept so callers that name
+     * {@code initialCash} still compile.
+     *
+     * @param marketplaceId the marketplace this holding is in
+     * @param sessionId     the session it belongs to
+     * @param allocationId  the allocation it started from
+     * @param ownerId       the participant it belongs to
+     * @param name          the participant's display name
+     * @param cash          settled cash
+     * @param availableCash cash free to spend
+     * @param securities    the position in each market
+     * @param initialCash   the cash the session opened with, or null
+     */
+    public Holding(long marketplaceId, long sessionId, long allocationId, long ownerId,
+                   String name, long cash, long availableCash, List<Security> securities, Long initialCash) {
+        this(marketplaceId, sessionId, allocationId, ownerId, name, cash, availableCash, securities, initialCash, null);
     }
 
     /**
