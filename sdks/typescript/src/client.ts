@@ -269,12 +269,26 @@ export function parseSecurity(data: JsonObject): Security {
     marketId: (data.marketId as number) ?? 0,
     units: (data.units as number) ?? 0,
     availableUnits: (data.availableUnits as number) ?? 0,
-    // Either spelling, depending on which response produced the holding.
-    shortUnits: (data.shortUnits as number) ?? (data.initialShortUnits as number) ?? 0,
+    shortUnits: shortUnitsOf(data),
     canBuy: (data.canBuy as boolean) ?? false,
     canSell: (data.canSell as boolean) ?? false,
     initialUnits: (data.initialUnits as number | null) ?? null,
+    adjustedUnits: (data.adjustedUnits as number | null) ?? null,
+    adjustedShortUnits: (data.adjustedShortUnits as number | null) ?? null,
   };
+}
+
+/**
+ * The floor, from whichever response produced the position. `shortUnits`
+ * (the allotments path, or a position written back) is the floor as it
+ * stands; fm-server's Asset sends the grant's allowance and what
+ * adjustments moved it by, separately, and the floor is their sum.
+ */
+function shortUnitsOf(data: JsonObject): number {
+  if (data.shortUnits != null) {
+    return data.shortUnits as number;
+  }
+  return ((data.initialShortUnits as number) ?? 0) + ((data.adjustedShortUnits as number) ?? 0);
 }
 
 export function parseMarket(data: JsonObject): Market {
@@ -595,6 +609,7 @@ export function parseHolding(data: JsonObject): Holding {
     availableCash: (data.availableCash as number) ?? 0,
     securities: orderedSecurities(rows(securitiesRaw).map(parseSecurity)),
     initialCash: (data.initialCash as number | null) ?? null,
+    adjustedCash: (data.adjustedCash as number | null) ?? null,
   };
 }
 

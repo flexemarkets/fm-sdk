@@ -42,6 +42,11 @@ export interface Token {
  * two names — fm-server's Asset emits `initialShortUnits` for a live session,
  * the allotments path emits `shortUnits` — and both are accepted. Requests
  * carry `shortUnits`.
+ *
+ * A live session's floor is the grant's allowance plus what a manager's
+ * RIGHTS adjustments have moved it by, so `shortUnits` from an Asset is
+ * `initialShortUnits + adjustedShortUnits`. Reading the grant's alone left a
+ * robot on the old floor after a manager raised or lowered it.
  */
 export interface Security {
   marketId: number;
@@ -52,6 +57,16 @@ export interface Security {
   canSell: boolean;
   /** The units the session opened with; null when the response did not say. Never sent. */
   initialUnits: number | null;
+  /**
+   * Units a manager's adjustments gave (+) or took (-), net, since the open:
+   * in `units`, but not put there by trading, so the units trading made are
+   * `units - initialUnits - adjustedUnits`. Null or absent when the response
+   * did not say (an allotment, or a server before 4.30, which had no
+   * adjustments). Optional so positions built by hand need not name it. Never sent.
+   */
+  adjustedUnits?: number | null;
+  /** The change adjustments made to the short allowance, already in `shortUnits`; as `adjustedUnits`. Never sent. */
+  adjustedShortUnits?: number | null;
 }
 
 /** The capital half of an allotment: opening cash and opening positions. */
@@ -162,6 +177,12 @@ export interface Holding {
   securities: Security[];
   /** The cash the session opened with; null when the response did not say (fm-robots#472). */
   initialCash: number | null;
+  /**
+   * Cash a manager's adjustments gave (+) or took (-), net, since the open:
+   * in `cash`, but not made by trading, so the cash trading made is
+   * `cash - initialCash - adjustedCash`. As `Security.adjustedUnits`.
+   */
+  adjustedCash?: number | null;
 }
 
 /**

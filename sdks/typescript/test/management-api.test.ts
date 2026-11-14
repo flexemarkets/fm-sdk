@@ -16,7 +16,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { Flexemarkets, HttpError, InvalidArgumentError } from "../src/client.ts";
+import { Flexemarkets, HttpError, InvalidArgumentError, parseSecurity } from "../src/client.ts";
 import type { Holding } from "../src/types.ts";
 
 const TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl";
@@ -342,6 +342,21 @@ test("malformed marketplace JSON fails before any request", async () => {
   }
 
   assert.ok(!requests.includes("POST /api/v1/marketplaces"));
+});
+
+/**
+ * A manager's RIGHTS adjustment moves the allowance; fm-server sends the
+ * grant's and the move apart, and the floor is their sum. Reading the grant's
+ * alone left a robot on the old floor. A position that already says
+ * shortUnits -- the allotments path, or one written back -- holds the floor as
+ * it stands, so the move is not added twice.
+ */
+test("a live floor includes what adjustments moved", () => {
+  const live = parseSecurity({ marketId: 10, initialShortUnits: 50, adjustedShortUnits: -20 });
+  assert.equal(live.shortUnits, 30);
+  assert.equal(live.adjustedShortUnits, -20);
+  assert.equal(parseSecurity({ marketId: 10, shortUnits: 30, adjustedShortUnits: -20 }).shortUnits, 30);
+  assert.equal(parseSecurity({ marketId: 10, initialShortUnits: 50 }).adjustedShortUnits, null);
 });
 
 /**
