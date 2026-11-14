@@ -357,7 +357,7 @@ def java_methods(directory: Path) -> dict[str, int]:
             # downloadHoldings -- the check reporting the SDKs wrong when it was
             # the one that was.
             match = re.match(
-                r"^    (?:default\s+|static\s+)?[\w<>,\[\]\.\s]+?\s+(\w+)\s*\(", line)
+                r"^    (?=\S)(?:default\s+|static\s+)?[\w<>,\[\]\.\s]+?\s+(\w+)\s*\(", line)
             # `for (` and `if (` at member indentation are statements in a
             # single-expression body; `new HttpFlexemarkets(` is a constructor
             # call. None of them is a declaration.
@@ -907,6 +907,7 @@ EXPORT_EXEMPTIONS: dict[str, str] = {
     "gridRound":         "TickGrid arithmetic, package-private in Java",
     "toSide":            "OrderSide.of() in Java",
     "toOrderType":       "OrderType.of() in Java",
+    "toTimeInForce":     "TimeInForce.of() in Java and Python",
     "tradeOf":           "Trade construction, a static in Java",
     "toInstant":         "fm.internal.Timestamps in Java; TypeScript has no Instant type to hide it behind",
 
