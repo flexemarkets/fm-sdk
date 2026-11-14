@@ -52,6 +52,18 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
  *                          fm-server keeps it: what ties an order arriving on the
  *                          stream to the one a client sent over the socket; null
  *                          for an order sent without one
+ * @param timeInForce       how long what did not trade at once may rest: null for
+ *                          good till cancelled, else IOC or FOK (fm-server 4.30);
+ *                          IOC on a CANCEL marks the one the exchange wrote for an
+ *                          IOC order's rest
+ * @param filledUnits       the units a limit order traded on arrival, on the
+ *                          answer to its sender only; null wherever the server
+ *                          did not say -- every other order, a resend's answer,
+ *                          and any server before 4.30
+ * @param averagePrice      their average price, in the market's price units; null
+ *                          when none traded and wherever the server did not say
+ * @param cancelledUnits    for an IOC order, the units the exchange cancelled; null
+ *                          otherwise
  */
 
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -77,7 +89,11 @@ public record Order(
     String clientDescription,
     Long ownerTargetId,
     Long originalSessionId,
-    String submissionId) {
+    String submissionId,
+    TimeInForce timeInForce,
+    Long filledUnits,
+    Double averagePrice,
+    Long cancelledUnits) {
 
 
     /**
@@ -107,13 +123,53 @@ public record Order(
             @JsonProperty("clientDescription") String clientDescription,
             @JsonProperty("ownerTargetId") Long ownerTargetId,
             @JsonProperty("originalSessionId") Long originalSessionId,
-            @JsonProperty("submissionId") String submissionId) {
+            @JsonProperty("submissionId") String submissionId,
+            @JsonProperty("timeInForce") String timeInForce,
+            @JsonProperty("filledUnits") Long filledUnits,
+            @JsonProperty("averagePrice") Double averagePrice,
+            @JsonProperty("cancelledUnits") Long cancelledUnits) {
         // Every other field has a default, so an answer naming no order read as
         // order 0, which a robot then kept as resting or cancelled.
         if (id == null) {
             throw new IllegalArgumentException("an order with no id");
         }
-        return new Order(Timestamps.parse(createdDate), Timestamps.parse(lastModifiedDate), id, original, supplier, consumer, type, side, units, price, mine, ownerId, marketplaceId, sessionId, symbol, marketId, ownerTarget, clientDescription, ownerTargetId, originalSessionId, submissionId);
+        return new Order(Timestamps.parse(createdDate), Timestamps.parse(lastModifiedDate), id, original, supplier, consumer, type, side, units, price, mine, ownerId, marketplaceId, sessionId, symbol, marketId, ownerTarget, clientDescription, ownerTargetId, originalSessionId, submissionId,
+                         TimeInForce.of(timeInForce), filledUnits, averagePrice, cancelledUnits);
+    }
+
+    /**
+     * An order with no time-in-force and nothing said of what it filled, as
+     * every caller that builds one by hand did before fm-server 4.30.
+     *
+     * @param createdDate       when it was submitted
+     * @param lastModifiedDate  when it last changed
+     * @param id                the order's id
+     * @param original          the order it was split from, or its own id
+     * @param supplier          the order whose units it took
+     * @param consumer          the order that consumed it, 0 for a split, null while it stands
+     * @param type              LIMIT or CANCEL
+     * @param side              BUY or SELL
+     * @param units             how many units
+     * @param price             the price
+     * @param mine              whether it is the caller's own
+     * @param ownerId           who submitted it
+     * @param marketplaceId     the marketplace it was submitted to
+     * @param sessionId         the session it belongs to
+     * @param symbol            the market's symbol
+     * @param marketId          the market's id
+     * @param ownerTarget       the named counterparty
+     * @param clientDescription how the submitting client identified itself
+     * @param ownerTargetId     the counterparty of a private order, by owner id
+     * @param originalSessionId the session it was first placed in, or null
+     * @param submissionId      the id the submitting client named it with, or null
+     */
+    public Order(Instant createdDate, Instant lastModifiedDate, long id, long original, long supplier, Long consumer,
+                 OrderType type, OrderSide side, long units, long price, Boolean mine, Long ownerId,
+                 long marketplaceId, long sessionId, String symbol, long marketId, String ownerTarget,
+                 String clientDescription, Long ownerTargetId, Long originalSessionId, String submissionId) {
+        this(createdDate, lastModifiedDate, id, original, supplier, consumer, type, side, units, price, mine, ownerId,
+             marketplaceId, sessionId, symbol, marketId, ownerTarget, clientDescription, ownerTargetId,
+             originalSessionId, submissionId, null, null, null, null);
     }
 
     /**

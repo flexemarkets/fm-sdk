@@ -23,6 +23,7 @@ import fm.model.Widget;
 import fm.model.WidgetPush;
 import fm.model.OrderSide;
 import fm.model.OrderType;
+import fm.model.TimeInForce;
 import fm.model.Person;
 import fm.model.Session;
 import fm.model.TickGrid;
@@ -66,6 +67,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.Function;
@@ -887,8 +889,21 @@ public class HttpFlexemarkets implements Flexemarkets {
 
     public Order submitLimit(long marketplaceId, long marketId, OrderSide side, long units, long price,
                              String ownerTarget, Long ownerTargetId, String clientDescription) {
+        return submitLimit(marketplaceId, marketId, side, units, price, ownerTarget, ownerTargetId, clientDescription,
+                           null);
+    }
+
+    @Override
+    public Order submitLimit(long marketplaceId, long marketId, OrderSide side, long units, long price,
+                             String ownerTarget, Long ownerTargetId, String clientDescription,
+                             TimeInForce timeInForce) {
         var order = _limitOrder(marketplaceId, marketId, side, units, price, ownerTarget, ownerTargetId,
                                 clientDescription);
+        // Left out when not given, so a server before time-in-force reads the
+        // order it always did.
+        if (null != timeInForce) {
+            order.put("timeInForce", timeInForce);
+        }
         var url = _marketplace(marketplaceId) + "/orders";
         try {
             return _post(url, order, ORDER_TYPE);
@@ -1092,15 +1107,35 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     public Order submitMarket(long marketplaceId, long marketId, OrderSide side, long units) {
-        var limit = submitLimit(marketplaceId, marketId, side, units,
-                                marketableLimit(_market(marketplaceId, marketId), side));
+        var market = _market(marketplaceId, marketId);
+        var cap = marketCap(activeOrders(marketplaceId).body(), market.id(), side, units);
+        if (null == cap) {
+            var buy = OrderSide.BUY == side;
+            throw new InvalidArgumentException("Nothing to " + (buy ? "buy" : "sell") + " against: market "
+                    + marketId + " has no " + (buy ? "sells" : "buys"));
+        }
+        Order order;
+        try {
+            order = submitLimit(marketplaceId, marketId, side, units, cap, null, null, null, TimeInForce.IOC);
+        } catch (InvalidArgumentException refused) {
+            if (null == refused.getMessage() || !refused.getMessage().contains("not IOC")) {
+                throw refused;
+            }
+            // The marketplace takes no IOC: as before, a limit and a cancel.
+            return _cancelRest(marketplaceId, marketId, submitLimit(marketplaceId, marketId, side, units, cap));
+        }
+        // A server before time-in-force placed it good till cancelled.
+        return null == order.filledUnits() ? _cancelRest(marketplaceId, marketId, order) : order;
+    }
 
-        // Unconditional, and safe when the order filled completely: the exchange
-        // consumes a CANCEL by itself when no units remain (Exchange's javadoc
-        // says so). Asking first would cost a round trip to learn something the
-        // cancel handles anyway, and would race the book between the two calls.
-        // It targets the submitted id because CANCEL identifies its target by
-        // original id, which is what survives a split.
+    /**
+     * Cancel what {@code limit} left resting, unconditionally: the exchange
+     * consumes a CANCEL by itself when no units remain, so a complete fill
+     * costs a harmless round trip rather than an inspection that would race the
+     * book. It targets the submitted id because CANCEL identifies its target by
+     * original id, which is what survives a split.
+     */
+    private Order _cancelRest(long marketplaceId, long marketId, Order limit) {
         try {
             submitCancel(marketplaceId, marketId, limit.id());
         } catch (FlexemarketsException e) {
@@ -1110,7 +1145,6 @@ public class HttpFlexemarkets implements Flexemarkets {
                     "Order " + limit.id() + " was placed but its remainder could not be"
                     + " cancelled; it may still be resting. Do not resubmit -- cancel it.", e);
         }
-
         return limit;
     }
 
@@ -1126,39 +1160,44 @@ public class HttpFlexemarkets implements Flexemarkets {
     }
 
     /**
-     * The most aggressive price this market will accept on {@code side}.
+     * The price a market order caps at: the worst price in the visible book it
+     * needs to fill {@code units} -- others' orders on the opposite side of this
+     * market, best first -- or every one of them when there are fewer. Null when
+     * that side is empty. The caller's own orders are left out: a match with
+     * oneself is a cancel, not a trade.
      *
-     * <p>The server has no market order: {@code OrderDtoConverter}'s type switch
-     * falls through to {@code LIMIT}, so every submission is bounds-checked
-     * against the market and must sit on a tick. A buy therefore crosses the
-     * book by bidding the highest legal price, and a sell by offering the
-     * lowest.
+     * <p>Not the market's extreme, which a buy used to bid: the cash check then
+     * priced every unit at the most the market allows, and refused buys the
+     * trader could afford.
      *
-     * <p>Ticks are anchored at {@code priceMinimum}, not at zero -- the server
-     * tests {@code (price - priceMinimum) % priceTick} -- so the top of the
-     * range is only legal when the range is a whole number of ticks. The
-     * highest legal price is the last tick at or below {@code priceMaximum}.
-     * A tick of zero marks a fixed dimension, where the two bounds are equal
-     * and there is one legal price.
-     *
-     * <p>The side must be named. This was {@code BUY == side ? ... : priceMinimum},
-     * the complement of buy rather than a test for sell, so a null side priced
-     * the order at the bottom of the range -- the most aggressive *sell* this
-     * market accepts. {@code submitMarket} is public API and takes the side
-     * straight from its caller, so that turned a missing argument into a real
-     * order crossing the wrong side of the book.
+     * <p>The side must be named. A null side was once priced as the most
+     * aggressive sell the market accepts; {@code submitMarket} is public API and
+     * takes the side straight from its caller, so that turned a missing argument
+     * into a real order crossing the wrong side of the book.
      *
      * @throws IllegalArgumentException if the side is null
      */
-    static long marketableLimit(Market market, OrderSide side) {
-        // The highest legal price is what priceRound gives for the ceiling, so
-        // this is the grid rule rather than a fourth copy of it.
-        return switch (side) {
-            case BUY  -> market.priceRound(market.priceMaximum());
-            case SELL -> market.priceMinimum();
-            case null -> throw new IllegalArgumentException(
-                "A market order must name its side; got: null");
-        };
+    static Long marketCap(List<Order> book, long marketId, OrderSide side, long units) {
+        if (null == side) {
+            throw new IllegalArgumentException("A market order must name its side; got: null");
+        }
+        var opposite = OrderSide.BUY == side ? OrderSide.SELL : OrderSide.BUY;
+        var others = book.stream()
+                .filter(o -> o.marketId() == marketId && o.side() == opposite && o.type() == OrderType.LIMIT
+                        && !Boolean.TRUE.equals(o.mine()))
+                .sorted(OrderSide.BUY == side ? Comparator.comparingLong(Order::price)
+                                              : Comparator.comparingLong(Order::price).reversed())
+                .toList();
+        Long cap = null;
+        var left = units;
+        for (var order : others) {
+            cap = order.price();
+            left -= order.units();
+            if (left <= 0) {
+                break;
+            }
+        }
+        return cap;
     }
 
     // --- management ---------------------------------------------------------

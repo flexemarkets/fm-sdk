@@ -7,6 +7,7 @@ import fm.model.Limit;
 import fm.model.Market;
 import fm.model.Order;
 import fm.model.OrderSide;
+import fm.model.TimeInForce;
 
 
 /**
@@ -98,6 +99,40 @@ public interface Writing {
      */
     Order submitLimit(long marketplaceId, long marketId, OrderSide side, long units, long price,
                       String ownerTarget, Long ownerTargetId, String clientDescription);
+
+    /**
+     * Place a limit order with a time-in-force (fm-server 4.30): {@code GTC},
+     * {@code IOC} or {@code FOK}, as the marketplace takes them. The answer says
+     * what the order did on arrival: {@link Order#filledUnits},
+     * {@link Order#averagePrice} and, for IOC, {@link Order#cancelledUnits}.
+     *
+     * <p>A default for implementations that predate it: good till cancelled, or
+     * none, is {@link #submitLimit(long, long, OrderSide, long, long, String, Long, String)};
+     * anything else they refuse.
+     *
+     * @param marketplaceId     the marketplace to trade in
+     * @param marketId          the market within it
+     * @param side              which way round the order goes
+     * @param units             how many units to trade
+     * @param price             the limit price, an integer at the market's
+     *                          {@link fm.model.Market#priceDecimals}
+     * @param ownerTarget       the counterparty this order is for, by allotment name; or null
+     * @param ownerTargetId     the counterparty this order is for, by owner id; or null
+     * @param clientDescription this order's reference; null for the client's own
+     * @param timeInForce       how long what does not trade at once may rest; null
+     *                          is good till cancelled, and nothing is sent
+     * @return the order as the server recorded it, carrying the id it assigned
+     * @throws UnsupportedOperationException from an implementation that takes no time-in-force
+     */
+    default Order submitLimit(long marketplaceId, long marketId, OrderSide side, long units, long price,
+                              String ownerTarget, Long ownerTargetId, String clientDescription,
+                              TimeInForce timeInForce) {
+        if (null == timeInForce || TimeInForce.GTC == timeInForce) {
+            return submitLimit(marketplaceId, marketId, side, units, price, ownerTarget, ownerTargetId,
+                               clientDescription);
+        }
+        throw new UnsupportedOperationException(getClass().getSimpleName() + " takes no time-in-force");
+    }
 
     /**
      * Place a limit order without waiting for the answer.
@@ -247,34 +282,31 @@ public interface Writing {
     PendingOrder sendCancel(long marketplaceId, long marketId, String originalSubmissionId);
 
     /**
-     * Cross the book: buy at the highest price this market allows, sell at the
-     * lowest.
+     * Trade {@code units} now at whatever the book offers, and leave nothing
+     * resting: one {@code LIMIT} with time-in-force {@link TimeInForce#IOC}
+     * (fm-server 4.30), priced at a cap from the book -- the worst price among
+     * others' orders it needs to fill the units, or all of them when there are
+     * fewer. If the book moves first, fewer units trade rather than at a worse
+     * price.
      *
-     * <p>There is no market order on the server. Its type switch falls through
-     * to {@code LIMIT}, so every submission is bounds-checked against the
-     * market and must sit on a tick — which is why this asks the marketplace
-     * for the market first, and costs a round trip that {@link #submitLimit}
-     * does not.
+     * <p>Reads the market and the active orders first, two round trips that
+     * {@link #submitLimit} does not make. Refused here, sending nothing, when
+     * the opposite side of the market is empty.
      *
-     * <p><b>Immediate or cancel.</b> Whatever does not fill at once is
-     * cancelled. Without that a market order leaves a bid at the market's
-     * maximum, or an offer at its minimum, resting where anyone may take it —
-     * which is not what "market order" means to the person who sent it.
-     *
-     * <p>So this is two calls, and the second is unconditional: the exchange
-     * consumes a cancel by itself when no units remain, so a complete fill
-     * costs a harmless round trip rather than an inspection that would race the
-     * book. If the cancel fails the order is still placed, and this throws
-     * saying so — do not resubmit, or you will trade twice.
-     *
-     * <p>Returns the limit order as submitted. What it filled is a property of
-     * the book afterwards, not of this value.
+     * <p>The answer says what traded: {@link Order#filledUnits},
+     * {@link Order#averagePrice} and {@link Order#cancelledUnits}. A server
+     * before 4.30, or a marketplace that does not take IOC, rests what does not
+     * fill; then the remainder is cancelled at once, as every version before
+     * this one did, and the answer is the order as placed. If that cancel fails
+     * the order is still placed, and this throws saying so -- do not resubmit,
+     * or you will trade twice.
      *
      * @param marketplaceId the marketplace to trade in
      * @param marketId      the market within it
      * @param side          which way round the order goes
      * @param units         how many units to trade
-     * @return the limit order as submitted, not as filled
+     * @return the order as the server answered it
+     * @throws fm.error.InvalidArgumentException when the opposite side is empty
      */
     Order submitMarket(long marketplaceId, long marketId, OrderSide side, long units);
 }

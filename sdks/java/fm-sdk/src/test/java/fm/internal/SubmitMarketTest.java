@@ -1,9 +1,12 @@
 package fm.internal;
 
-import fm.model.Market;
+import fm.model.Order;
 import fm.model.OrderSide;
+import fm.model.OrderType;
+import fm.model.TimeInForce;
 import fm.Flexemarkets;
 import fm.error.ApiException;
+import fm.error.InvalidArgumentException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
@@ -13,49 +16,63 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
-
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * A market order, on an exchange that has none.
+ * A market order: one limit order, immediate or cancel, capped at the book.
  *
- * <p>{@code OrderDtoConverter}'s type switch falls through to {@code LIMIT}, so
- * every submission is bounds-checked against the market and must sit on a tick.
- * This sent {@code Long.MAX_VALUE} for a buy and {@code 0} for a sell: prices no
- * real market accepts. Every buy came back "price above market maximum", and a
- * sell survived only where {@code priceMinimum} happened to be zero.
+ * <p>fm-server 4.30 takes a time-in-force on a limit order (fm-server#1035), so a
+ * market order is a LIMIT marked IOC at a cap from the book: the worst price
+ * among others' orders it needs to fill the units. Nothing of it rests, and the
+ * answer says what traded.
  *
- * <p>It stayed broken because nothing exercised it. The only implementations in
- * the tree were fakes returning null, so the price never reached a server that
- * would have refused it.
+ * <p>Before, it was a limit at the market's extreme and then a cancel: the
+ * remainder rested between the two, and a buy was cash-checked at the extreme,
+ * refusing buys the trader could afford. That is still what it does against a
+ * server or marketplace without IOC -- placed, then cancelled at once. (Earlier
+ * still it sent {@code Long.MAX_VALUE} for a buy, a price no market accepts.)
  */
 class SubmitMarketTest {
 
     private static final String TOKEN =
             "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl";
 
-    private HttpServer _server;
-    /** Each order request as {@code METHOD uri body}. */
-    private final List<String> _submitted = new ArrayList<>();
-    private final List<String> _stray = new ArrayList<>();
-    /** What the cancel's DELETE answers with. */
-    private volatile int _cancelStatus = 200;
-
-    /** priceMinimum 110, tick 25 — so the legal prices are 110, 135, 160, 185. */
-    private String _marketsJson = """
+    private static final String MARKETS = """
         [{"id":11,"marketplaceId":1,"symbol":"STK","name":"Stock",
           "priceMinimum":110,"priceMaximum":199,"priceTick":25,
           "unitMinimum":1,"unitMaximum":100,"unitTick":1}]
         """;
+
+    /**
+     * Sells at 1.35 (2), 1.60 (2) and 1.85 (5); the reader's own sell at 1.10; a
+     * buy at 1.10; and a sell in another market.
+     */
+    private static final String BOOK = """
+        [{"id":1,"type":"LIMIT","side":"SELL","units":2,"price":135,"marketId":11,"mine":false},
+         {"id":2,"type":"LIMIT","side":"SELL","units":2,"price":160,"marketId":11,"mine":false},
+         {"id":3,"type":"LIMIT","side":"SELL","units":5,"price":185,"marketId":11,"mine":false},
+         {"id":4,"type":"LIMIT","side":"SELL","units":9,"price":110,"marketId":11,"mine":true},
+         {"id":5,"type":"LIMIT","side":"BUY","units":3,"price":110,"marketId":11,"mine":false},
+         {"id":6,"type":"LIMIT","side":"SELL","units":9,"price":110,"marketId":12,"mine":false}]
+        """;
+
+    /** How the fake answers a limit: as 4.30, as a server before it, for a marketplace without IOC, or a closed session. */
+    private enum Mode { V430, OLD, NO_IOC, CLOSED }
+
+    private HttpServer _server;
+    /** Each order request as {@code METHOD uri body}. */
+    private final List<String> _submitted = new ArrayList<>();
+    private final List<String> _stray = new ArrayList<>();
+    private volatile int _cancelStatus = 200;
+    private volatile Mode _mode = Mode.V430;
+    private volatile String _book = BOOK;
 
     @BeforeEach
     void startServer() throws IOException {
@@ -67,16 +84,18 @@ class SubmitMarketTest {
              "account":{"id":1,"name":"dev"}}
             """.formatted(TOKEN)));
 
-        // The V1 routes only. No API root, and no V0 /api/orders: a request
-        // to either is recorded as stray and refused.
+        // The V1 routes only: a request to any other is recorded as stray and refused.
         _server.createContext("/", exchange -> {
             String method = exchange.getRequestMethod();
             String uri = exchange.getRequestURI().toString();
             if ("GET".equals(method) && "/api/v1/marketplaces/1/markets".equals(uri)) {
-                _respond(exchange, 200, _marketsJson);
+                _respond(exchange, 200, MARKETS);
+            } else if ("GET".equals(method) && "/api/v1/marketplaces/1/orders?state=ACTIVE".equals(uri)) {
+                _respond(exchange, 200, _book);
             } else if ("POST".equals(method) && "/api/v1/marketplaces/1/orders".equals(uri)) {
-                _submitted.add(method + " " + uri + " " + _body(exchange));
-                _respond(exchange, 200, "{\"id\":42,\"marketplaceId\":1,\"marketId\":11}");
+                String body = _body(exchange);
+                _submitted.add(method + " " + uri + " " + body);
+                _answerLimit(exchange, body);
             } else if ("DELETE".equals(method) && uri.startsWith("/api/v1/marketplaces/1/orders/")) {
                 _submitted.add(method + " " + uri + " " + _body(exchange));
                 _respond(exchange, _cancelStatus, _cancelStatus != 200 ? "{\"message\":\"exchange closed\"}" : """
@@ -88,6 +107,29 @@ class SubmitMarketTest {
         });
 
         _server.start();
+    }
+
+    private void _answerLimit(HttpExchange exchange, String body) throws IOException {
+        boolean ioc = body.contains("\"timeInForce\":\"IOC\"");
+        switch (_mode) {
+            case CLOSED -> _respond(exchange, 400, "{\"error\":\"SESSION_CLOSED\",\"message\":\"The session is closed.\"}");
+            case NO_IOC -> {
+                if (ioc) {
+                    _respond(exchange, 400,
+                            "{\"error\":\"ORDER_INVALID\",\"message\":\"This marketplace takes GTC orders, not IOC.\"}");
+                } else {
+                    _respond(exchange, 200, "{\"id\":42,\"marketplaceId\":1,\"marketId\":11}");
+                }
+            }
+            case OLD -> _respond(exchange, 200, "{\"id\":42,\"marketplaceId\":1,\"marketId\":11}");
+            case V430 -> {
+                long units = Long.parseLong(body.replaceAll(".*\"units\":(\\d+).*", "$1"));
+                long filled = Math.min(units, 4);
+                _respond(exchange, 200, """
+                    {"id":42,"marketplaceId":1,"marketId":11,"timeInForce":"IOC",
+                     "filledUnits":%d,"averagePrice":147.5,"cancelledUnits":%d}""".formatted(filled, units - filled));
+            }
+        }
     }
 
     @AfterEach
@@ -119,78 +161,99 @@ class SubmitMarketTest {
                 "submit-market-test");
     }
 
-    /**
-     * The defect. A buy has to be inside the market, and on a tick: 185, not
-     * Long.MAX_VALUE and not 199, which is within the bounds but off-tick.
-     */
+    private List<String> _posts() {
+        return _submitted.stream().filter(s -> s.startsWith("POST")).toList();
+    }
+
+    private List<String> _deletes() {
+        return _submitted.stream().filter(s -> s.startsWith("DELETE")).toList();
+    }
+
     @Test
-    void aBuyBidsTheHighestLegalPrice() throws Exception {
+    void aBuyIsOneIocLimitCappedAtTheBook_andNothingIsCancelled() throws Exception {
+        Order order;
+        try (Flexemarkets fm = _connect()) {
+            order = fm.submitMarket(1L, 11L, OrderSide.BUY, 3L);
+        }
+
+        assertThat(_posts()).singleElement().asString()
+                .contains("\"type\":\"LIMIT\"", "\"price\":160", "\"timeInForce\":\"IOC\"", "\"units\":3");
+        assertThat(_deletes()).isEmpty();
+        assertThat(order.filledUnits()).isEqualTo(3L);
+        assertThat(order.averagePrice()).isEqualTo(147.5);
+        assertThat(order.cancelledUnits()).isZero();
+        assertThat(order.timeInForce()).isEqualTo(TimeInForce.IOC);
+    }
+
+    @Test
+    void theCapIsTheWorstPriceNeeded_andAllOfTheSideWhenShort() throws Exception {
+        try (Flexemarkets fm = _connect()) {
+            fm.submitMarket(1L, 11L, OrderSide.BUY, 2L);
+            fm.submitMarket(1L, 11L, OrderSide.BUY, 50L);
+        }
+
+        assertThat(_posts().get(0)).contains("\"price\":135");
+        assertThat(_posts().get(1)).contains("\"price\":185");
+    }
+
+    @Test
+    void aSellCapsAtTheBuys() throws Exception {
+        try (Flexemarkets fm = _connect()) {
+            fm.submitMarket(1L, 11L, OrderSide.SELL, 1L);
+        }
+
+        assertThat(_posts().get(0)).contains("\"price\":110", "\"side\":\"SELL\"");
+    }
+
+    @Test
+    void anEmptySideIsRefusedWithoutSending() throws Exception {
+        _book = "[{\"id\":5,\"type\":\"LIMIT\",\"side\":\"BUY\",\"units\":3,\"price\":110,\"marketId\":11}]";
+
+        try (Flexemarkets fm = _connect()) {
+            assertThatExceptionOfType(InvalidArgumentException.class)
+                    .isThrownBy(() -> fm.submitMarket(1L, 11L, OrderSide.BUY, 1L))
+                    .withMessageContaining("market 11 has no sells");
+        }
+        assertThat(_submitted).isEmpty();
+    }
+
+    /** It ignores timeInForce and rests what did not fill; its answer says nothing of what traded, which is how this tells. */
+    @Test
+    void aServerBeforeTimeInForceIsCancelledAsBefore() throws Exception {
+        _mode = Mode.OLD;
+        Order order;
+        try (Flexemarkets fm = _connect()) {
+            order = fm.submitMarket(1L, 11L, OrderSide.BUY, 5L);
+        }
+
+        assertThat(_posts()).hasSize(1);
+        assertThat(_deletes()).containsExactly("DELETE /api/v1/marketplaces/1/orders/42 ");
+        assertThat(order.filledUnits()).isNull();
+    }
+
+    @Test
+    void aMarketplaceWithoutIocIsSentALimitAndACancel() throws Exception {
+        _mode = Mode.NO_IOC;
         try (Flexemarkets fm = _connect()) {
             fm.submitMarket(1L, 11L, OrderSide.BUY, 5L);
         }
 
-        assertThat(_submitted.get(0))
-                .contains("\"price\":185")
-                .doesNotContain(String.valueOf(Long.MAX_VALUE));
+        assertThat(_posts()).hasSize(2);
+        assertThat(_posts().get(0)).contains("\"timeInForce\":\"IOC\"");
+        assertThat(_posts().get(1)).doesNotContain("timeInForce");
+        assertThat(_deletes()).containsExactly("DELETE /api/v1/marketplaces/1/orders/42 ");
     }
 
-    /** A sell offers the floor, which is always on a tick. */
     @Test
-    void aSellOffersTheLowestLegalPrice() throws Exception {
+    void anyOtherRefusalIsThrown_andNotRetriedAsAPlainLimit() throws Exception {
+        _mode = Mode.CLOSED;
         try (Flexemarkets fm = _connect()) {
-            fm.submitMarket(1L, 11L, OrderSide.SELL, 5L);
+            assertThatExceptionOfType(InvalidArgumentException.class)
+                    .isThrownBy(() -> fm.submitMarket(1L, 11L, OrderSide.BUY, 5L))
+                    .withMessageContaining("session is closed");
         }
-
-        assertThat(_submitted.get(0)).contains("\"price\":110");
-    }
-
-    /** It is a LIMIT on the wire, because that is the only type the server has. */
-    @Test
-    void itIsSubmittedAsALimit() throws Exception {
-        try (Flexemarkets fm = _connect()) {
-            fm.submitMarket(1L, 11L, OrderSide.BUY, 5L);
-        }
-
-        assertThat(_submitted.get(0))
-                .startsWith("POST /api/v1/marketplaces/1/orders ")
-                .contains("\"type\":\"LIMIT\"");
-    }
-
-    /**
-     * Immediate or cancel: the remainder does not rest.
-     *
-     * <p>Without the cancel, a market order that did not fill leaves a bid at
-     * the market's maximum — the best price in the book, standing, for anyone
-     * to take. That is the opposite of what the caller asked for.
-     *
-     * <p>The cancel is a DELETE of the order by the id the submit answered;
-     * the server builds the CANCEL row itself.
-     */
-    @Test
-    void whateverDoesNotFillIsCancelled() throws Exception {
-        try (Flexemarkets fm = _connect()) {
-            fm.submitMarket(1L, 11L, OrderSide.BUY, 5L);
-        }
-
-        assertThat(_submitted).hasSize(2);
-        assertThat(_submitted.get(1)).isEqualTo("DELETE /api/v1/marketplaces/1/orders/42 ");
-    }
-
-    /**
-     * The cancel is sent even when nothing can be resting.
-     *
-     * <p>The exchange consumes a cancel by itself when no units remain, so this
-     * is harmless — and cheaper than a round trip to ask, which would race the
-     * book between the answer and the cancel.
-     */
-    @Test
-    void theCancelIsUnconditional() throws Exception {
-        try (Flexemarkets fm = _connect()) {
-            fm.submitMarket(1L, 11L, OrderSide.SELL, 5L);
-        }
-
-        assertThat(_submitted).as("submit then cancel, always").hasSize(2);
-        assertThat(_submitted.get(1)).startsWith("DELETE /api/v1/marketplaces/1/orders/42");
+        assertThat(_posts()).hasSize(1);
+        assertThat(_deletes()).isEmpty();
     }
 
     /**
@@ -200,6 +263,7 @@ class SubmitMarketTest {
      */
     @Test
     void aCancelThatFailsSaysTheOrderWasPlacedAndNotToResubmit() throws Exception {
+        _mode = Mode.OLD;
         _cancelStatus = 503;
 
         try (Flexemarkets fm = _connect()) {
@@ -224,46 +288,44 @@ class SubmitMarketTest {
         assertThat(_submitted).as("nothing was sent").isEmpty();
     }
 
-    // --- the price rule itself, without a server ----------------------------
+    @Test
+    void aLimitSendsItsTimeInForceOnlyWhenGiven() throws Exception {
+        try (Flexemarkets fm = _connect()) {
+            fm.submitLimit(1L, 11L, OrderSide.BUY, 5L, 135L);
+            fm.submitLimit(1L, 11L, OrderSide.BUY, 5L, 135L, null, null, null, TimeInForce.FOK);
+        }
 
-    private static Market _market(long min, long max, long tick) {
-        return new Market(11L, 1L, "Stock", null, "STK", false, min, max, tick, 1L, 100L, 1L);
+        assertThat(_posts().get(0)).doesNotContain("timeInForce");
+        assertThat(_posts().get(1)).contains("\"timeInForce\":\"FOK\"");
+    }
+
+    // --- the cap itself, without a server -----------------------------------
+
+    private static Order _order(OrderSide side, long units, long price, long marketId, Boolean mine) {
+        return new Order(null, null, 1L, 1L, 1L, null, OrderType.LIMIT, side, units, price, mine, null,
+                         1L, 0L, "STK", marketId, null, null, null);
     }
 
     @Test
-    void theTopOfTheRangeIsUsedWhenItIsOnATick() {
-        assertThat(HttpFlexemarkets.marketableLimit(_market(100, 200, 25), OrderSide.BUY))
-                .isEqualTo(200L);
+    void ownOrdersAndOtherMarketsAreLeftOut() {
+        var book = List.of(_order(OrderSide.SELL, 5, 100, 11, true), _order(OrderSide.SELL, 5, 100, 12, false),
+                           _order(OrderSide.SELL, 1, 150, 11, false));
+        assertThat(HttpFlexemarkets.marketCap(book, 11, OrderSide.BUY, 1)).isEqualTo(150L);
     }
 
-    /**
-     * Ticks are anchored at priceMinimum, not at zero -- the server tests
-     * {@code (price - priceMinimum) % priceTick}. With a floor of 110 and a tick
-     * of 25 the legal prices are 110/135/160/185, so a ceiling of 199 rounds
-     * down to 185. Anchoring at zero would give 175, which this market refuses.
-     */
     @Test
-    void aRangeThatIsNotAWholeNumberOfTicksRoundsDownToOne() {
-        assertThat(HttpFlexemarkets.marketableLimit(_market(110, 199, 25), OrderSide.BUY))
-                .isEqualTo(185L);
-    }
-
-    /** A tick of zero marks a fixed dimension: one legal price, both bounds equal. */
-    @Test
-    void aFixedPriceMarketHasOnlyItsFloor() {
-        assertThat(HttpFlexemarkets.marketableLimit(_market(150, 150, 0), OrderSide.BUY))
-                .isEqualTo(150L);
-        assertThat(HttpFlexemarkets.marketableLimit(_market(150, 150, 0), OrderSide.SELL))
+    void anOrderWhoseOwnerTheServerDidNotSayCounts() {
+        assertThat(HttpFlexemarkets.marketCap(List.of(_order(OrderSide.SELL, 1, 150, 11, null)), 11, OrderSide.BUY, 1))
                 .isEqualTo(150L);
     }
 
     /**
-     * A market order that names no side used to price at the bottom of the range -- the most aggressive sell the market accepts -- because the branch was the complement of buy rather than a test for sell. submitMarket takes the side straight from its caller, so a missing argument crossed the wrong side of the book at the worst price rather than failing.
+     * A market order that names no side used to price as the most aggressive sell the market accepts -- because the branch was the complement of buy rather than a test for sell. submitMarket takes the side straight from its caller, so a missing argument crossed the wrong side of the book rather than failing.
      */
     @Test
     void aSidelessMarketOrderIsRefusedRatherThanPricedAsASell() {
         assertThatExceptionOfType(IllegalArgumentException.class).isThrownBy(
-            () -> HttpFlexemarkets.marketableLimit(_market(100, 200, 25), null));
+            () -> HttpFlexemarkets.marketCap(List.of(_order(OrderSide.SELL, 1, 150, 11, false)), 11, null, 1));
     }
 
 }
