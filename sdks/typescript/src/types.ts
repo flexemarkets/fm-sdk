@@ -475,12 +475,33 @@ export const OrderSide = {
 /**
  * What an order is: a bid or offer, or the withdrawal of one.
  *
- * There is no `MARKET`. The server's type switch shares its default with
- * `LIMIT`, so a market order is a limit at the extreme legal price and
- * `submitMarket` sends `LIMIT`; naming a member the exchange does not have
- * would suggest otherwise.
+ * There is no `MARKET`. A market order is a `LIMIT` whose time-in-force is
+ * `IOC` and whose price is a cap from the book, which is what `submitMarket`
+ * sends; naming a member the exchange does not have would suggest otherwise.
  */
 export type OrderType = "LIMIT" | "CANCEL";
+
+/**
+ * How long what a limit order does not trade at once may rest (fm-server 4.30,
+ * fm-server#1035). `GTC`, good till cancelled: the rest rests, as every order
+ * did before. `IOC`, immediate or cancel: whatever crosses trades and the
+ * exchange cancels the rest. `FOK`, fill or kill: every unit trades at once, or
+ * the order is refused and nothing is written. A marketplace takes only the
+ * values its manager lists; without a list, `GTC` alone.
+ */
+export type TimeInForce = "GTC" | "IOC" | "FOK";
+
+export const TimeInForce = {
+  GTC: "GTC",
+  IOC: "IOC",
+  FOK: "FOK",
+} as const satisfies Record<string, TimeInForce>;
+
+/** The time-in-force a response names, or null for none -- good till cancelled -- or one this version does not know. */
+export function toTimeInForce(value: string | null | undefined): TimeInForce | null {
+  const upper = value?.trim().toUpperCase();
+  return upper === "GTC" || upper === "IOC" || upper === "FOK" ? upper : null;
+}
 
 /**
  * How `sendLimit` and `sendCancel` send a client's orders, chosen once, when it
@@ -555,6 +576,22 @@ export interface Order {
    * client sent over the socket. Null for an order sent without one.
    */
   submissionId: string | null;
+  /**
+   * How long what did not trade at once may rest: null for good till
+   * cancelled, else IOC or FOK (fm-server 4.30). IOC on a CANCEL marks the one
+   * the exchange wrote for an IOC order's rest.
+   */
+  timeInForce: TimeInForce | null;
+  /**
+   * What a limit order did on arrival, on the answer to its sender only: the
+   * units it traded, their average price in the market's price units (null when
+   * none traded), and for IOC the units the exchange cancelled. Null wherever
+   * the server did not say -- every other order, a resend's answer, and any
+   * server before 4.30.
+   */
+  filledUnits: number | null;
+  averagePrice: number | null;
+  cancelledUnits: number | null;
 }
 
 /**

@@ -38,8 +38,10 @@ export type {
 export {
   OrderSide,
   OrderType,
+  TimeInForce,
   toSide,
   toOrderType,
+  toTimeInForce,
   SESSION_STATE_INIT,
   SESSION_STATE_OPEN,
   SESSION_STATE_PAUSED,

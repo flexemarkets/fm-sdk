@@ -1,14 +1,15 @@
 /**
- * A market order, on an exchange that has none.
+ * A market order: one limit order, immediate or cancel, capped at the book.
  *
- * The server's type switch falls through to `LIMIT`, so every submission is
- * bounds-checked against the market and must sit on a tick. Java's version sent
- * `Long.MAX_VALUE` to buy and `0` to sell — prices no real market accepts — and
- * Python and TypeScript had no version at all.
+ * fm-server 4.30 takes a time-in-force on a limit order (fm-server#1035), so a
+ * market order is a LIMIT marked IOC at a cap from the book: the worst price
+ * among others' orders it needs to fill the units. Nothing of it rests, and the
+ * answer says what traded.
  *
- * Ported once the semantics were settled: cross the book at the extreme legal
- * price, then cancel the remainder, so a market order that does not fill cannot
- * be left resting at the best price in the book.
+ * Before, it was a limit at the market's extreme and then a cancel: the
+ * remainder rested between the two, and a buy was cash-checked at the extreme,
+ * refusing buys the trader could afford. That is still what it does against a
+ * server or marketplace without IOC -- placed, then cancelled at once.
  */
 
 import { test } from "node:test";
@@ -16,17 +17,28 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 
-import { Flexemarkets, FlexemarketsError, InvalidArgumentError, marketableLimit } from "../src/client.ts";
-import type { Market } from "../src/types.ts";
+import { Flexemarkets, FlexemarketsError, InvalidArgumentError, marketCap } from "../src/client.ts";
+import type { Market, Order, OrderSide } from "../src/types.ts";
+import { limit } from "../src/order-utils.ts";
 
 const TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZXZAZGV2In0.c2lnbmF0dXJl";
 
-// priceMinimum 110, tick 25 — so the legal prices are 110, 135, 160, 185.
 const MARKETS = [{
   id: 11, marketplaceId: 1, symbol: "STK", name: "Stock",
   priceMinimum: 110, priceMaximum: 199, priceTick: 25,
   unitMinimum: 1, unitMaximum: 100, unitTick: 1,
 }];
+
+// Sells at 1.35 (2), 1.60 (2) and 1.85 (5); the reader's own sell at 1.10; a buy
+// at 1.10; and a sell in another market.
+const BOOK = [
+  { id: 1, type: "LIMIT", side: "SELL", units: 2, price: 135, marketId: 11, mine: false },
+  { id: 2, type: "LIMIT", side: "SELL", units: 2, price: 160, marketId: 11, mine: false },
+  { id: 3, type: "LIMIT", side: "SELL", units: 5, price: 185, marketId: 11, mine: false },
+  { id: 4, type: "LIMIT", side: "SELL", units: 9, price: 110, marketId: 11, mine: true },
+  { id: 5, type: "LIMIT", side: "BUY", units: 3, price: 110, marketId: 11, mine: false },
+  { id: 6, type: "LIMIT", side: "SELL", units: 9, price: 110, marketId: 12, mine: false },
+];
 
 /** What the client sent after signing in: the verb and path, and any JSON body. */
 interface Sent {
@@ -34,9 +46,12 @@ interface Sent {
   body: Record<string, unknown> | null;
 }
 
+/** How the fake answers a limit: as 4.30, as a server before it, for a marketplace without IOC, or a closed session. */
+type Mode = "4.30" | "old" | "no-ioc" | "closed";
+
 async function withClient(
   run: (fm: Flexemarkets, sent: Sent[]) => Promise<void>,
-  cancelStatus = 200,
+  { cancelStatus = 200, mode = "4.30" as Mode, book = BOOK as unknown[] } = {},
 ): Promise<void> {
   const sent: Sent[] = [];
 
@@ -44,8 +59,8 @@ async function withClient(
     let raw = "";
     req.on("data", (c) => (raw += c));
     req.on("end", () => {
-      const send = (payload: unknown) => {
-        res.writeHead(200, { "Content-Type": "application/json" });
+      const send = (payload: unknown, status = 200) => {
+        res.writeHead(status, { "Content-Type": "application/json" });
         res.end(JSON.stringify(payload));
       };
       const url = req.url ?? "";
@@ -57,11 +72,24 @@ async function withClient(
         });
         return;
       }
-      sent.push({ request: `${req.method} ${url}`, body: raw ? JSON.parse(raw) : null });
+      const body = raw ? JSON.parse(raw) : null;
+      sent.push({ request: `${req.method} ${url}`, body });
       if (req.method === "GET" && url === "/api/v1/marketplaces/1/markets") {
         send(MARKETS);
+      } else if (req.method === "GET" && url === "/api/v1/marketplaces/1/orders?state=ACTIVE") {
+        send(book);
       } else if (req.method === "POST" && url === "/api/v1/marketplaces/1/orders") {
-        send({ id: 42, original: 42, type: "LIMIT", marketplaceId: 1, marketId: 11 });
+        if (mode === "closed") {
+          send({ error: "SESSION_CLOSED", message: "The session is closed." }, 400);
+        } else if (mode === "no-ioc" && body.timeInForce === "IOC") {
+          send({ error: "ORDER_INVALID", message: "This marketplace takes GTC orders, not IOC." }, 400);
+        } else if (mode === "4.30") {
+          const filled = Math.min(body.units, 4);
+          send({ id: 42, original: 42, type: "LIMIT", marketplaceId: 1, marketId: 11, timeInForce: body.timeInForce,
+                 filledUnits: filled, averagePrice: 147.5, cancelledUnits: body.units - filled });
+        } else {
+          send({ id: 42, original: 42, type: "LIMIT", marketplaceId: 1, marketId: 11 });
+        }
       } else if (req.method === "DELETE" && url === "/api/v1/marketplaces/1/orders/42" && cancelStatus !== 200) {
         res.writeHead(cancelStatus);
         res.end();
@@ -91,32 +119,65 @@ async function withClient(
 
 /** The orders submitted: the POSTs' bodies. */
 const posted = (sent: Sent[]) => sent.filter((s) => s.request.startsWith("POST")).map((s) => s.body!);
+const deleted = (sent: Sent[]) => sent.filter((s) => s.request.startsWith("DELETE")).map((s) => s.request);
 
-test("a buy bids the highest legal price", async () => {
+test("a buy is one IOC limit capped at the book, and nothing is cancelled", async () => {
   await withClient(async (fm, sent) => {
-    await fm.submitMarket(1, 11, "BUY", 5);
-    assert.equal(posted(sent)[0].price, 185);
-    assert.equal(posted(sent)[0].type, "LIMIT");
+    const order = await fm.submitMarket(1, 11, "BUY", 3);
+    assert.deepEqual(posted(sent).map((b) => [b.type, b.price, b.timeInForce, b.units]), [["LIMIT", 160, "IOC", 3]]);
+    assert.deepEqual(deleted(sent), []);
+    assert.deepEqual([order.filledUnits, order.averagePrice, order.cancelledUnits], [3, 147.5, 0]);
   });
 });
 
-test("a sell offers the lowest legal price", async () => {
+test("the cap is the worst price needed, and all of the side when short", async () => {
   await withClient(async (fm, sent) => {
-    await fm.submitMarket(1, 11, "SELL", 5);
+    await fm.submitMarket(1, 11, "BUY", 2);
+    await fm.submitMarket(1, 11, "BUY", 50);
+    assert.deepEqual(posted(sent).map((b) => b.price), [135, 185]);
+  });
+});
+
+test("a sell caps at the buys", async () => {
+  await withClient(async (fm, sent) => {
+    await fm.submitMarket(1, 11, "SELL", 1);
     assert.equal(posted(sent)[0].price, 110);
+    assert.equal(posted(sent)[0].side, "SELL");
   });
 });
 
-test("whatever does not fill is cancelled", async () => {
+test("an empty side is refused without sending", async () => {
+  await withClient(async (fm, sent) => {
+    await assert.rejects(() => fm.submitMarket(1, 11, "BUY", 1), /market 11 has no sells/);
+    assert.equal(posted(sent).length, 0);
+  }, { book: BOOK.filter((o) => o.side === "BUY") });
+});
+
+test("a server before time-in-force is cancelled as before", async () => {
+  // It ignores timeInForce and rests what did not fill; its answer says nothing
+  // of what traded, which is how this tells.
+  await withClient(async (fm, sent) => {
+    const order = await fm.submitMarket(1, 11, "BUY", 5);
+    assert.equal(posted(sent).length, 1);
+    assert.deepEqual(deleted(sent), ["DELETE /api/v1/marketplaces/1/orders/42"]);
+    assert.equal(order.filledUnits, null);
+  }, { mode: "old" });
+});
+
+test("a marketplace without IOC is sent a limit and a cancel", async () => {
   await withClient(async (fm, sent) => {
     await fm.submitMarket(1, 11, "BUY", 5);
-    // A cancel is a DELETE of the order just placed, after it was placed.
-    assert.deepEqual(sent.map((s) => s.request), [
-      "GET /api/v1/marketplaces/1/markets",
-      "POST /api/v1/marketplaces/1/orders",
-      "DELETE /api/v1/marketplaces/1/orders/42",
-    ]);
-  });
+    assert.deepEqual(posted(sent).map((b) => b.timeInForce), ["IOC", undefined]);
+    assert.deepEqual(deleted(sent), ["DELETE /api/v1/marketplaces/1/orders/42"]);
+  }, { mode: "no-ioc" });
+});
+
+test("any other refusal is thrown and not retried as a plain limit", async () => {
+  await withClient(async (fm, sent) => {
+    await assert.rejects(() => fm.submitMarket(1, 11, "BUY", 5), /session is closed/);
+    assert.equal(posted(sent).length, 1);
+    assert.deepEqual(deleted(sent), []);
+  }, { mode: "closed" });
 });
 
 test("an unknown market says so rather than guessing a price", async () => {
@@ -141,43 +202,42 @@ test("a cancel that fails says the order was placed", async () => {
         && /Do not resubmit/.test((e as Error).message),
     );
     assert.equal(posted(sent).length, 1, "submitted once");
-  }, 503);
+  }, { cancelStatus: 503, mode: "old" });
 });
 
-// --- the price rule itself, without a server --------------------------------
+test("a limit sends its time-in-force only when given", async () => {
+  await withClient(async (fm, sent) => {
+    await fm.submitLimit(1, 11, "BUY", 5, 135);
+    await fm.submitLimit(1, 11, "BUY", 5, 135, { timeInForce: "fok" });
+    const [plain, fok] = posted(sent);
+    assert.ok(!("timeInForce" in plain));
+    assert.equal(fok.timeInForce, "FOK");
+  });
+});
 
-function market(minimum: number, maximum: number, tick: number): Market {
-  return {
-    id: 11, marketplaceId: 1, name: "Stock", description: null, symbol: "STK",
-    privateMarket: false, priceMinimum: minimum, priceMaximum: maximum,
-    priceTick: tick, unitMinimum: 1, unitMaximum: 100, unitTick: 1,
-    mechanism: "CONTINUOUS", callIntervalSeconds: null, callCarry: true, priceDecimals: 0, unitDecimals: 0,
-    callBook: "SEALED",
-  };
+// --- the cap itself, without a server ---------------------------------------
+
+function order(side: string, units: number, price: number, marketId = 11, mine: boolean | null = false): Order {
+  const market = { id: marketId, marketplaceId: 1, symbol: "STK" } as Market;
+  return { ...limit(market, side as OrderSide, units, price), id: 1, mine };
 }
 
-test("the top of the range is used when it is on a tick", () => {
-  assert.equal(marketableLimit(market(100, 200, 25), "BUY"), 200);
+test("own orders and other markets are left out", () => {
+  const book = [order("SELL", 5, 100, 11, true), order("SELL", 5, 100, 12), order("SELL", 1, 150)];
+  assert.equal(marketCap(book, 11, "BUY", 1), 150);
 });
 
-test("a range that is not a whole number of ticks rounds down to one", () => {
-  // Anchored at priceMinimum, not zero: 110/135/160/185, so 199 -> 185.
-  // Anchoring at zero would give 175, which this market refuses.
-  assert.equal(marketableLimit(market(110, 199, 25), "BUY"), 185);
-});
-
-test("a fixed price market has only its floor", () => {
-  assert.equal(marketableLimit(market(150, 150, 0), "BUY"), 150);
-  assert.equal(marketableLimit(market(150, 150, 0), "SELL"), 150);
+test("an order whose owner the server did not say counts", () => {
+  assert.equal(marketCap([order("SELL", 1, 150, 11, null)], 11, "BUY", 1), 150);
 });
 
 test("side is read without regard to case", () => {
-  assert.equal(marketableLimit(market(100, 200, 25), "buy"), 200);
+  assert.equal(marketCap([order("SELL", 1, 150)], 11, "buy", 1), 150);
 });
 
-// A market order that names no side used to price at the bottom of the range -- the most aggressive sell the market accepts -- because the branch was the complement of buy rather than a test for sell. submitMarket takes the side straight from its caller, so a missing argument crossed the wrong side of the book at the worst price rather than failing.
+// A market order that names no side used to price as the most aggressive sell the market accepts -- because the branch was the complement of buy rather than a test for sell. submitMarket takes the side straight from its caller, so a missing argument crossed the wrong side of the book rather than failing.
 test("a sideless market order is refused rather than priced as a sell", () => {
-  assert.throws(() => marketableLimit(market(100, 200, 25), null as unknown as string),
+  assert.throws(() => marketCap([order("SELL", 1, 150)], 11, null as unknown as string, 1),
                 /must name its side/);
 });
 

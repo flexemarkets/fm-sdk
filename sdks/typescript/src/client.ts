@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { MARKET_CALL_BOOK_SEALED, MARKET_MECHANISM_CALL, MARKET_MECHANISM_CONTINUOUS, orderedSecurities, toOrderType, toSide, unitGrid } from "./types.js";
+import { MARKET_CALL_BOOK_SEALED, MARKET_MECHANISM_CALL, MARKET_MECHANISM_CONTINUOUS, orderedSecurities, toOrderType, toSide, toTimeInForce, unitGrid } from "./types.js";
 import { toInstant } from "./timestamps.js";
 import { Decimals } from "./decimals.js";
 import type {
@@ -397,6 +397,10 @@ export function parseOrder(data: JsonObject): Order {
     mine: (data.mine as boolean | null) ?? null,
     originalSessionId: (data.originalSessionId as number | null) ?? null,
     submissionId: (data.submissionId as string | null) ?? null,
+    timeInForce: toTimeInForce(data.timeInForce as string),
+    filledUnits: (data.filledUnits as number | null) ?? null,
+    averagePrice: (data.averagePrice as number | null) ?? null,
+    cancelledUnits: (data.cancelledUnits as number | null) ?? null,
   };
 }
 
@@ -630,32 +634,38 @@ export function ordersOf(data: unknown): JsonObject[] {
 }
 
 /**
- * The most aggressive price this market will accept on `side`.
+ * The price a market order caps at: the worst price in the visible book it
+ * needs to fill `units` -- others' orders on the opposite side of this market,
+ * best first -- or every one of them when there are fewer. Null when that side
+ * is empty. The caller's own orders are left out: a match with oneself is a
+ * cancel, not a trade.
  *
- * Ticks are anchored at `priceMinimum`, not at zero — the server tests
- * `(price - priceMinimum) % priceTick` — so the top of the range is only legal
- * when the range is a whole number of ticks. The highest legal price is the
- * last tick at or below `priceMaximum`. A tick of zero marks a fixed dimension,
- * where the two bounds are equal and there is one legal price.
+ * Not the market's extreme, which a buy used to bid: the cash check then priced
+ * every unit at the most the market allows, and refused buys the trader could
+ * afford.
  */
-export function marketableLimit(market: Market, side: string): number {
-  // The side must be named. This was `side?.toUpperCase() !== "BUY"`, the
-  // complement of buy rather than a test for sell, so a null side priced the
-  // order at the bottom of the range -- the most aggressive *sell* this market
-  // accepts. submitMarket is public API and takes the side straight from its
-  // caller, so that turned a missing argument into a real order crossing the
-  // wrong side of the book.
-  const resolved = side?.toUpperCase();
-  if (resolved !== "BUY" && resolved !== "SELL") {
+export function marketCap(book: readonly Order[], marketId: number, side: string, units: number): number | null {
+  // The side must be named. This was the complement of buy rather than a test
+  // for sell, so a null side priced the order as the most aggressive *sell*
+  // the market accepts. submitMarket is public API and takes the side straight
+  // from its caller, so that turned a missing argument into a real order
+  // crossing the wrong side of the book.
+  const resolved = toSide(side);
+  if (resolved === null) {
     throw new Error(`A market order must name its side; got: ${side}`);
   }
-
-  if (resolved !== "BUY" || market.priceTick <= 0) {
-    return market.priceMinimum;
+  const opposite = resolved === "BUY" ? "SELL" : "BUY";
+  const others = book
+    .filter((o) => o.marketId === marketId && o.side === opposite && o.type === "LIMIT" && o.mine !== true)
+    .sort((a, b) => (resolved === "BUY" ? a.price - b.price : b.price - a.price));
+  let cap: number | null = null;
+  let left = units;
+  for (const order of others) {
+    cap = order.price;
+    left -= order.units;
+    if (left <= 0) break;
   }
-
-  const span = market.priceMaximum - market.priceMinimum;
-  return market.priceMinimum + Math.floor(span / market.priceTick) * market.priceTick;
+  return cap;
 }
 
 // ---------------------------------------------------------------------------
@@ -1757,7 +1767,7 @@ export class Flexemarkets {
     side: string,
     units: number,
     price: number,
-    options: { ownerTarget?: string; ownerTargetId?: number; clientDescription?: string } = {},
+    options: { ownerTarget?: string; ownerTargetId?: number; clientDescription?: string; timeInForce?: string } = {},
   ): Promise<Order> {
     const order = this._limitOrder(marketplaceId, marketId, side, units, price, options);
     const url = `${this._marketplace(marketplaceId)}/orders`;
@@ -1867,9 +1877,9 @@ export class Flexemarkets {
     side: string,
     units: number,
     price: number,
-    options: { ownerTarget?: string; ownerTargetId?: number; clientDescription?: string },
+    options: { ownerTarget?: string; ownerTargetId?: number; clientDescription?: string; timeInForce?: string },
   ): JsonObject {
-    const { ownerTarget, ownerTargetId, clientDescription } = options;
+    const { ownerTarget, ownerTargetId, clientDescription, timeInForce } = options;
     if (ownerTarget !== undefined && ownerTargetId !== undefined) {
       throw new InvalidArgumentError("Name the counterparty by ownerTarget or ownerTargetId, not both");
     }
@@ -1886,6 +1896,9 @@ export class Flexemarkets {
     // aimed at nobody, which the server refuses.
     if (ownerTarget !== undefined) order.ownerTarget = ownerTarget;
     if (ownerTargetId !== undefined) order.ownerTargetId = ownerTargetId;
+    // Left out when not given, so a server before time-in-force reads the order
+    // it always did.
+    if (timeInForce !== undefined) order.timeInForce = timeInForce.trim().toUpperCase();
     // Named, so an order whose answer was lost can be sent again without
     // trading twice: fm-server answers a submission it already holds with the
     // order it made, not a second one. A send that lost its connection may or
@@ -1926,22 +1939,20 @@ export class Flexemarkets {
   }
 
   /**
-   * Cross the book: buy at the highest price this market allows, sell at the
-   * lowest. Immediate or cancel — whatever does not fill is cancelled.
+   * Trade `units` now at whatever the book offers, and leave nothing resting:
+   * one `LIMIT` with time-in-force `IOC` (fm-server 4.30), priced at a cap from
+   * the book -- the worst price among others' orders it needs to fill the
+   * units, or all of them when there are fewer. If the book moves first, fewer
+   * units trade rather than at a worse price.
    *
-   * There is no market order on the server. Its type switch falls through to
-   * `LIMIT`, so every submission is bounds-checked against the market and must
-   * sit on a tick — which is why this asks the marketplace for the market
-   * first, and costs a round trip {@link submitLimit} does not.
+   * Reads the market and the active orders first, two round trips
+   * {@link submitLimit} does not make. Refused here, sending nothing, when the
+   * opposite side of the market is empty.
    *
-   * The cancel is unconditional: the exchange consumes a cancel by itself when
-   * no units remain, so a complete fill costs a harmless round trip rather than
-   * an inspection that would race the book. Without it, a market order that did
-   * not fill would rest at the market's extreme — the best price in the book,
-   * standing, for anyone to take.
-   *
-   * Returns the limit order as submitted. What it filled is a property of the
-   * book afterwards, not of this value.
+   * The answer says what traded: `filledUnits`, `averagePrice` and
+   * `cancelledUnits`. A server before 4.30, or a marketplace that does not take
+   * IOC, rests what does not fill; then the remainder is cancelled at once, as
+   * every version before this one did, and the answer is the order as placed.
    */
   async submitMarket(
     marketplaceId: number,
@@ -1950,10 +1961,32 @@ export class Flexemarkets {
     units: number,
   ): Promise<Order> {
     const market = await this._market(marketplaceId, marketId);
-    const limit = await this.submitLimit(
-      marketplaceId, marketId, side, units, marketableLimit(market, side),
-    );
+    const cap = marketCap((await this.activeOrders(marketplaceId)).body, market.id, side, units);
+    if (cap === null) {
+      const buy = toSide(side) === "BUY";
+      throw new InvalidArgumentError(
+        `Nothing to ${buy ? "buy" : "sell"} against: market ${marketId} has no ${buy ? "sells" : "buys"}`,
+      );
+    }
+    let order: Order;
+    try {
+      order = await this.submitLimit(marketplaceId, marketId, side, units, cap, { timeInForce: "IOC" });
+    } catch (e) {
+      if (!(e instanceof InvalidArgumentError) || !String(e.message).includes("not IOC")) throw e;
+      // The marketplace takes no IOC: as before, a limit and a cancel.
+      return this._cancelRest(marketplaceId, marketId,
+                              await this.submitLimit(marketplaceId, marketId, side, units, cap));
+    }
+    // A server before time-in-force placed it good till cancelled.
+    return order.filledUnits === null ? this._cancelRest(marketplaceId, marketId, order) : order;
+  }
 
+  /**
+   * Cancel what `limit` left resting, unconditionally: the exchange consumes a
+   * cancel by itself when nothing remains, so a complete fill costs a harmless
+   * round trip rather than an inspection that would race the book.
+   */
+  private async _cancelRest(marketplaceId: number, marketId: number, limit: Order): Promise<Order> {
     try {
       await this.submitCancel(marketplaceId, marketId, limit.id);
     } catch (e) {
@@ -1964,7 +1997,6 @@ export class Flexemarkets {
           `it may still be resting. Do not resubmit — cancel it. (${String(e)})`,
       );
     }
-
     return limit;
   }
 

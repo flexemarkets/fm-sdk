@@ -200,5 +200,9 @@ export function limit(
     mine: null,
     originalSessionId: null,
     submissionId: null,
+    timeInForce: null,
+    filledUnits: null,
+    averagePrice: null,
+    cancelledUnits: null,
   };
 }
