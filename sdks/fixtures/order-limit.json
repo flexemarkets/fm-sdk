@@ -51,6 +51,10 @@
     },
     "lastModifiedDate": {
       "epochMilli": 1787303730000
-    }
+    },
+    "timeInForce": null,
+    "filledUnits": null,
+    "averagePrice": null,
+    "cancelledUnits": null
   }
 }

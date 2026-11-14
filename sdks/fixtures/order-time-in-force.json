@@ -1,0 +1,40 @@
+{
+  "type": "Order",
+  "why": "fm-server 4.30 answers a LIMIT's sender with what it did on arrival -- filledUnits, averagePrice, and for IOC cancelledUnits -- and names a time-in-force other than GTC. submitMarket tells a server that ignored timeInForce, and so left the remainder resting, by filledUnits being absent; an SDK that drops the field cancels an order that never rested, and a caller reading the fill reads nothing.",
+  "source": {
+    "constructed": "fm-server 4.30 is unreleased (fm-server c27f89a60, fm-server#1035); the shape is its OrderDto as WireManifestTest holds it. Recapture from POST /v1/marketplaces/{marketplaceId}/orders once it is deployed."
+  },
+  "payload": {
+    "createdDate": "2026-11-14T20:15:02.118344Z",
+    "lastModifiedDate": "2026-11-14T20:15:02.118802Z",
+    "id": 90012345,
+    "original": 90012345,
+    "supplier": 90012345,
+    "consumer": 0,
+    "type": "LIMIT",
+    "side": "BUY",
+    "symbol": "A",
+    "units": 5,
+    "price": 520,
+    "mine": true,
+    "ownerTarget": null,
+    "ownerId": 151527,
+    "accountId": 51,
+    "marketplaceId": 7314,
+    "marketId": 12758,
+    "sessionId": 186929,
+    "clientDescription": "fixture",
+    "submissionId": "3f1c9a2e-77b0-4c1e-9d3a-0b6e5f4a2c18",
+    "timeInForce": "IOC",
+    "filledUnits": 3,
+    "averagePrice": 503.3333333333333,
+    "cancelledUnits": 2
+  },
+  "expect": {
+    "id": 90012345,
+    "timeInForce": "IOC",
+    "filledUnits": 3,
+    "averagePrice": 503.3333333333333,
+    "cancelledUnits": 2
+  }
+}
