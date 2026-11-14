@@ -6,6 +6,7 @@ moving to, oldest first: from the bottom up.
 
 | Version | Covers |
 |---------|--------|
+| [0.22](#022-from-021x) | time-in-force on limit orders (fm-server 4.30); `submitMarket` is one IOC order capped at the book and refuses an empty side; `Order` gains four fields, required in TypeScript; Java record patterns over `Order` break |
 | [0.21](#021-from-020x) | no signature changes; an endpoint that names no marketplace is a configuration error when its marketplace is asked for, not a number-parsing failure (or `NaN` in TypeScript) |
 | [0.20](#020-from-019x) | no change for a robot or a client; for a study, fm-spi 0.0.19 (contract 0.5) adds `StudyProvider.marketplaces`, with a default, so a host can create a run's marketplaces before its people |
 | [0.19](#019-from-018x) | a lost connection is an `ApiError` in Python and TypeScript; a desk that cannot reseed or apply a frame goes on and says so; a stream connect fails after 10 s; a `PendingOrder` cannot be cancelled; a desk says when its stream drops, and `StreamDropped` gains `permanent`, which Java callers that build or destructure it must handle |
@@ -27,6 +28,84 @@ moving to, oldest first: from the bottom up.
 | [0.3](#03-from-02x) | which is additive, and says so |
 | [0.2](#02-from-01x) | the package moves, the renames, and the five changes that are not renames |
 | [0.1](#01-from-00x) | Migrating a codebase from 0.0.x to 0.1.x, in all three languages |
+
+---
+
+## 0.22: from 0.21.x
+
+fm-server 4.30 takes a **time-in-force** on a limit order (fm-server#1035):
+`GTC`, good till cancelled, as every order was; `IOC`, immediate or cancel,
+whose rest the exchange cancels at once; `FOK`, fill or kill, every unit now or
+the order is refused and nothing is written. A marketplace takes only what its
+manager lists in `fm.order.time-in-force`; without it, `GTC` alone.
+
+### Additive
+
+- **Placing one.** `submitLimit` takes a time-in-force, sent only when given:
+  - Java: a ninth argument, `submitLimit(marketplaceId, marketId, side, units,
+    price, ownerTarget, ownerTargetId, clientDescription, TimeInForce.IOC)`.
+    Not a sixth: `submitLimit(..., price, null)` would no longer compile.
+  - Python: `submit_limit(..., time_in_force="IOC")`.
+  - TypeScript: `submitLimit(..., { timeInForce: "IOC" })`.
+
+  A marketplace that does not take the value refuses it as `ORDER_INVALID`,
+  before it is queued; so does a call market, for `IOC` and `FOK`.
+- **What it did.** The answer to a limit order's sender says what it did on
+  arrival: `filledUnits`, the units it traded; `averagePrice`, their average
+  price in the market's price units (null when none traded); and, for `IOC`,
+  `cancelledUnits`. `timeInForce` is on any order that is not `GTC`. All four
+  are null on every other order, on the answer to a resend, and from any server
+  before 4.30.
+- **`TimeInForce`** names the three values: an enum in Java and Python, a type
+  and constant in TypeScript with `toTimeInForce` to read one leniently.
+
+### `submitMarket` behaves differently
+
+It was a limit at the market's extreme price and then a cancel. The remainder
+rested in between, and a buy was cash-checked at the extreme, so buys the
+trader could afford were refused. Now:
+
+1. It reads the market and the active orders, and caps the price at the worst
+   level it needs to fill the units among others' orders on the opposite side
+   -- your own are left out, as a match with yourself trades nothing -- or the
+   whole side when there are fewer.
+2. It sends one limit order at that cap, marked `IOC`. Nothing rests. If the
+   book moves first, fewer units trade rather than at a worse price.
+3. It returns the order as answered, with `filledUnits`, `averagePrice` and
+   `cancelledUnits`. Before, it returned the order as submitted, and what
+   filled had to be read from the book.
+
+What a caller has to handle:
+
+- **An empty opposite side is refused before anything is sent**:
+  `InvalidArgumentException` / `InvalidArgumentError`, saying the market has no
+  sells (or buys). Before, the order was placed and cancelled, and nothing
+  traded.
+- **The price sent is the book's, not the market's extreme.** Code that
+  checked `price` on the returned order, or a test that expected the extreme,
+  sees the cap.
+- **Against a server before 4.30, or a marketplace that does not take `IOC`,**
+  it falls back to what it did before: the remainder is cancelled at once,
+  and the answer has no fill. A server that ignores `timeInForce` is told by
+  the missing `filledUnits`.
+- Any other refusal -- a closed session, the cash check -- is raised as
+  before, and not retried as a plain limit.
+
+### What breaks
+
+- **TypeScript:** `Order` has four more required fields, `timeInForce`,
+  `filledUnits`, `averagePrice` and `cancelledUnits`. Code that builds an
+  `Order` as an object literal must add them, as `null`; `limit()` already
+  does. `marketableLimit`, exported from `client.ts` but never from the
+  package, is gone; `marketCap` takes the book instead of the market.
+- **Java:** `Order` is a record with four more components, at the end. The
+  constructors of 19, 20 and 21 arguments remain, so code that builds one
+  compiles as before; a record pattern over `Order` (`case Order(var a, ...)`)
+  does not, and must name the four. `Writing.submitLimit`'s new overload is a
+  default method: an implementation that predates it compiles, sends `GTC`
+  on, and throws `UnsupportedOperationException` for anything else until it
+  overrides it.
+- **Python:** nothing. The four `Order` fields have defaults.
 
 ---
 
