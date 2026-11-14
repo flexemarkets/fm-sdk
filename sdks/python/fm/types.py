@@ -92,6 +92,11 @@ class Security:
     the client under two names -- fm-server's Asset emits
     ``initialShortUnits`` for a live session, the allotments path emits
     ``shortUnits`` -- and both are accepted. Requests carry ``shortUnits``.
+
+    A live session's floor is the grant's allowance plus what a manager's
+    RIGHTS adjustments have moved it by, so ``short_units`` from an Asset is
+    ``initialShortUnits + adjustedShortUnits``. Reading the grant's alone left
+    a robot on the old floor after a manager raised or lowered it.
     """
 
     market_id: int = 0
@@ -104,6 +109,14 @@ class Security:
     # "opened with none" and "nobody said" are different answers, and a
     # holdings export has to tell them apart (fm-robots#472). Never sent.
     initial_units: int | None = None
+    # What a manager's adjustments have moved, net, since the open: units
+    # given (+) or taken (-), and the change to the short allowance (already
+    # in short_units). In ``units``, but not put there by trading, so the
+    # units trading made are ``units - initial_units - adjusted_units``. None
+    # when the response did not say (an allotment, or a server before 4.30,
+    # which had no adjustments). Never sent.
+    adjusted_units: int | None = None
+    adjusted_short_units: int | None = None
 
 
 @dataclass
@@ -119,6 +132,11 @@ class Holding:
     # The cash the session opened with, or None when the response did not say;
     # see Security.initial_units.
     initial_cash: int | None = None
+    # Cash a manager's adjustments gave (+) or took (-), net, since the open:
+    # in ``cash``, but not made by trading, so the cash trading made is
+    # ``cash - initial_cash - adjusted_cash``. None when the response did not
+    # say; see Security.adjusted_units.
+    adjusted_cash: int | None = None
 
     def __post_init__(self) -> None:
         """Positions are never None and always in market order.

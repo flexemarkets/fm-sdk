@@ -260,6 +260,21 @@ def test_a_short_allowance_is_read_under_either_name():
     assert _parse_security({"marketId": 10}).short_units == 0, "absent means none, not None"
 
 
+def test_a_live_floor_includes_what_adjustments_moved():
+    """A manager's RIGHTS adjustment moves the allowance; fm-server sends the
+    grant's and the move apart, and the floor is their sum. Reading the
+    grant's alone left a robot on the old floor. A position that already
+    says shortUnits -- the allotments path, or one written back -- holds the
+    floor as it stands, so the move is not added twice."""
+    from fm.client import _parse_security
+
+    live = _parse_security({"marketId": 10, "initialShortUnits": 50, "adjustedShortUnits": -20})
+    assert live.short_units == 30
+    assert live.adjusted_short_units == -20
+    assert _parse_security({"marketId": 10, "shortUnits": 30, "adjustedShortUnits": -20}).short_units == 30
+    assert _parse_security({"marketId": 10, "initialShortUnits": 50}).adjusted_short_units is None
+
+
 def test_allocate_sends_the_short_allowance(fm):
     holding = Holding(
         marketplace_id=1, owner_id=8, name="alice", cash=10000, available_cash=10000,

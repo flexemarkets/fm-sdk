@@ -202,12 +202,25 @@ def _parse_security(data: dict[str, Any]) -> Security:
         market_id=data.get("marketId", 0),
         units=data.get("units", 0),
         available_units=data.get("availableUnits", 0),
-        # Either spelling, depending on which response produced the holding.
-        short_units=data.get("shortUnits", data.get("initialShortUnits", 0)) or 0,
+        short_units=_short_units(data),
         can_buy=data.get("canBuy", False),
         can_sell=data.get("canSell", False),
         initial_units=data.get("initialUnits"),
+        adjusted_units=data.get("adjustedUnits"),
+        adjusted_short_units=data.get("adjustedShortUnits"),
     )
+
+
+def _short_units(data: dict[str, Any]) -> int:
+    """The floor, from whichever response produced the position.
+
+    ``shortUnits`` (the allotments path, or a position written back) is the
+    floor as it stands. fm-server's Asset sends the grant's allowance and
+    what adjustments moved it by, separately; the floor is their sum.
+    """
+    if data.get("shortUnits") is not None:
+        return data["shortUnits"]
+    return (data.get("initialShortUnits") or 0) + (data.get("adjustedShortUnits") or 0)
 
 
 @_reads_an_answer
@@ -361,6 +374,7 @@ def _parse_holding(data: dict[str, Any]) -> Holding:
         available_cash=data.get("availableCash", 0),
         securities=[_parse_security(s) for s in securities_raw],
         initial_cash=data.get("initialCash"),
+        adjusted_cash=data.get("adjustedCash"),
     )
 
 
