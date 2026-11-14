@@ -54,7 +54,7 @@ from .exceptions import (
     InvalidArgumentError,
     PersonHasMarketplaceDataError,
 )
-from .enums import OrderRoute, OrderType, OrderSide
+from .enums import OrderRoute, OrderType, OrderSide, TimeInForce
 from .types import (
     Account,
     Allotment,
@@ -341,6 +341,10 @@ def _parse_order(data: dict[str, Any]) -> Order:
         mine=data.get("mine"),
         original_session_id=data.get("originalSessionId"),
         submission_id=data.get("submissionId"),
+        time_in_force=TimeInForce.of(data.get("timeInForce")),
+        filled_units=data.get("filledUnits"),
+        average_price=data.get("averagePrice"),
+        cancelled_units=data.get("cancelledUnits"),
     )
 
 
@@ -518,31 +522,38 @@ def _orders_of(body: Any) -> list[dict[str, Any]]:
     return body
 
 
-def _marketable_limit(market: Market, side: str) -> int:
-    """The most aggressive price this market will accept on *side*.
+def _market_cap(book: "Sequence[Order]", market_id: int, side: str, units: int) -> int | None:
+    """The price a market order caps at: the worst price in the visible book
+    it needs to fill *units* -- others' orders on the opposite side of this
+    market, best first -- or every one of them when there are fewer. ``None``
+    when that side is empty. The caller's own orders are left out: a match
+    with oneself is a cancel, not a trade.
 
-    Ticks are anchored at ``price_minimum``, not at zero -- the server tests
-    ``(price - price_minimum) % price_tick`` -- so the top of the range is only
-    legal when the range is a whole number of ticks. The highest legal price is
-    the last tick at or below ``price_maximum``. A tick of zero marks a fixed
-    dimension, where the two bounds are equal and there is one legal price.
+    Not the market's extreme, which a buy used to bid: the cash check then
+    priced every unit at the most the market allows, and refused buys the
+    trader could afford.
 
-    The side must be named. This was ``is not OrderSide.BUY``, the complement
-    of buy rather than a test for sell, so a ``None`` side priced the order at
-    the bottom of the range -- the most aggressive *sell* this market accepts.
-    ``submit_market`` is public API and takes the side straight from its
-    caller, so that turned a missing argument into a real order crossing the
-    wrong side of the book.
+    The side must be named. This was the complement of buy rather than a
+    test for sell, so a ``None`` side priced the order as the most aggressive
+    *sell* the market accepts; ``submit_market`` takes the side straight from
+    its caller, so that turned a missing argument into a real order crossing
+    the wrong side of the book.
     """
     resolved = OrderSide.of(side)
     if resolved is None:
         raise ValueError(f"A market order must name its side; got: {side!r}")
-
-    if resolved is not OrderSide.BUY or market.price_tick <= 0:
-        return market.price_minimum
-
-    span = market.price_maximum - market.price_minimum
-    return market.price_minimum + (span // market.price_tick) * market.price_tick
+    opposite = sorted(
+        (o for o in book
+         if o.market_id == market_id and o.side is resolved.contra() and o.type is OrderType.LIMIT
+         and not o.mine),
+        key=lambda o: o.price, reverse=resolved is OrderSide.SELL)
+    cap = None
+    for order in opposite:
+        cap = order.price
+        units -= order.units
+        if units <= 0:
+            break
+    return cap
 
 
 # ---------------------------------------------------------------------------
@@ -1648,6 +1659,7 @@ class Flexemarkets:
         owner_target: str | None = None,
         owner_target_id: int | None = None,
         client_description: str | None = None,
+        time_in_force: str | None = None,
     ) -> Order:
         """Place a limit order.
 
@@ -1661,9 +1673,15 @@ class Flexemarkets:
         *client_description* is this order's own reference, as the server keeps
         it on the order; it defaults to the description this client connected
         with.
+
+        *time_in_force* is :class:`~fm.enums.TimeInForce`'s ``GTC``, ``IOC`` or
+        ``FOK``, as the marketplace takes them (fm-server 4.30); left out, the
+        order is good till cancelled. The answer says what the order did on
+        arrival: ``filled_units``, ``average_price`` and, for IOC,
+        ``cancelled_units``.
         """
         order = self._limit_order(marketplace_id, market_id, side, units, price, owner_target,
-                                  owner_target_id, client_description)
+                                  owner_target_id, client_description, time_in_force)
         url = _marketplace(self._endpoint, marketplace_id) + "/orders"
         try:
             resp = self._post(url, order)
@@ -1764,6 +1782,7 @@ class Flexemarkets:
     def _limit_order(
         self, marketplace_id: int, market_id: int, side: str, units: int, price: int,
         owner_target: str | None, owner_target_id: int | None, client_description: str | None,
+        time_in_force: str | None = None,
     ) -> dict[str, Any]:
         """The body of a limit order, named with a fresh submission id."""
         if owner_target is not None and owner_target_id is not None:
@@ -1784,6 +1803,10 @@ class Flexemarkets:
             order["ownerTarget"] = owner_target
         if owner_target_id is not None:
             order["ownerTargetId"] = owner_target_id
+        # Left out when not given, so a server before time-in-force reads the
+        # order it always did.
+        if time_in_force is not None:
+            order["timeInForce"] = str(time_in_force).strip().upper()
         # Named, so an order whose answer was lost can be sent again without
         # trading twice: fm-server answers a submission it already holds with
         # the order it made, not a second one. A send that timed out or lost
@@ -1814,26 +1837,47 @@ class Flexemarkets:
     def submit_market(
         self, marketplace_id: int, market_id: int, side: str, units: int,
     ) -> Order:
-        """Cross the book: buy at the highest price this market allows, sell at
-        the lowest. Immediate or cancel -- whatever does not fill is cancelled.
+        """Trade *units* now at whatever the book offers, and leave nothing
+        resting: one ``LIMIT`` with time-in-force ``IOC`` (fm-server 4.30),
+        priced at a cap from the book -- the worst price among others' orders
+        it needs to fill the units, or all of them when there are fewer. If the
+        book moves first, fewer units trade rather than at a worse price.
 
-        There is no market order on the server. Its type switch falls through to
-        ``LIMIT``, so every submission is bounds-checked against the market and
-        must sit on a tick -- which is why this asks the marketplace for the
-        market first, and costs a round trip :meth:`submit_limit` does not.
+        Reads the market and the active orders first, two round trips
+        :meth:`submit_limit` does not make. Refused here, sending nothing, when
+        the opposite side of the market is empty.
 
-        The cancel is unconditional: the exchange consumes a cancel by itself
-        when no units remain, so a complete fill costs a harmless round trip
-        rather than an inspection that would race the book. Without it, a market
-        order that did not fill would rest at the market's extreme -- the best
-        price in the book, standing, for anyone to take.
-
-        Returns the limit order as submitted. What it filled is a property of
-        the book afterwards, not of this value.
+        The answer says what traded: ``filled_units``, ``average_price`` and
+        ``cancelled_units``. A server before 4.30, or a marketplace that does
+        not take IOC, rests what does not fill; then the remainder is
+        cancelled at once, as every version before this one did, and the
+        answer is the order as placed.
         """
-        price = _marketable_limit(self._market(marketplace_id, market_id), side)
-        limit = self.submit_limit(marketplace_id, market_id, side, units, price)
+        market = self._market(marketplace_id, market_id)
+        cap = _market_cap(self.active_orders(marketplace_id).body, market.id, side, units)
+        if cap is None:
+            raise InvalidArgumentError(
+                f"Nothing to {'buy' if OrderSide.of(side) is OrderSide.BUY else 'sell'} against: "
+                f"market {market_id} has no {'sells' if OrderSide.of(side) is OrderSide.BUY else 'buys'}")
+        try:
+            order = self.submit_limit(marketplace_id, market_id, side, units, cap,
+                                      time_in_force=TimeInForce.IOC)
+        except InvalidArgumentError as e:
+            if "not IOC" not in str(e):
+                raise
+            # The marketplace takes no IOC: as before, a limit and a cancel.
+            return self._cancel_rest(marketplace_id, market_id,
+                                     self.submit_limit(marketplace_id, market_id, side, units, cap))
+        if order.filled_units is None:
+            # A server before time-in-force placed it good till cancelled.
+            return self._cancel_rest(marketplace_id, market_id, order)
+        return order
 
+    def _cancel_rest(self, marketplace_id: int, market_id: int, limit: Order) -> Order:
+        """Cancel what *limit* left resting, unconditionally: the exchange
+        consumes a cancel by itself when nothing remains, so a complete fill
+        costs a harmless round trip rather than an inspection that would race
+        the book."""
         try:
             self.submit_cancel(marketplace_id, market_id, limit.id)
         except FlexemarketsError as e:
@@ -1843,7 +1887,6 @@ class Flexemarkets:
                 f"Order {limit.id} was placed but its remainder could not be "
                 f"cancelled; it may still be resting. Do not resubmit -- cancel it."
             ) from e
-
         return limit
 
     def _market(self, marketplace_id: int, market_id: int) -> Market:

@@ -1,7 +1,7 @@
 """Flexemarkets Python SDK."""
 
 from .client import Flexemarkets
-from .enums import OrderRoute, OrderType, OrderSide
+from .enums import OrderRoute, OrderType, OrderSide, TimeInForce
 from .events import (NO_SEQ, OrdersUpdate, FrameUnreadable, StreamReconnected, StreamDropped,
                      OrderAccepted, OrderRejected)
 from .order_stream import PendingOrder
@@ -71,6 +71,7 @@ __all__ = [
     "OrderSide",
     "OrderRoute",
     "OrderType",
+    "TimeInForce",
     # types
     "Account",
     "Allotment",

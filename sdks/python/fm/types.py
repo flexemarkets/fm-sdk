@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from .decimals import Decimals
-from .enums import OrderType, OrderSide
+from .enums import OrderType, OrderSide, TimeInForce
 
 from dataclasses import dataclass, field
 from typing import Any
@@ -420,6 +420,18 @@ class Order:
     # on the order. What ties an order arriving on the stream to the one a
     # client sent over the socket; None for an order sent without one.
     submission_id: str | None = None
+    # How long what did not trade at once may rest: None for good till
+    # cancelled, else IOC or FOK (fm-server 4.30). IOC on a CANCEL marks the
+    # one the exchange wrote for an IOC order's rest.
+    time_in_force: "TimeInForce | None" = None
+    # What a limit order did on arrival, on the answer to its sender only:
+    # the units it traded, their average price in the market's price units
+    # (None when none traded), and for IOC the units the exchange cancelled.
+    # None wherever the server did not say -- every other order, a resend's
+    # answer, and any server before 4.30.
+    filled_units: int | None = None
+    average_price: float | None = None
+    cancelled_units: int | None = None
 
 
 @dataclass

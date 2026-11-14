@@ -47,9 +47,9 @@ class OrderSide(StrEnum):
 class OrderType(StrEnum):
     """What an order is: a bid or offer, or the withdrawal of one.
 
-    There is no ``MARKET``. The server's type switch shares its default with
-    ``LIMIT``, so a market order is a limit at the extreme legal price and
-    ``submit_market`` sends ``LIMIT``; naming a constant the exchange does not
+    There is no ``MARKET``. A market order is a ``LIMIT`` whose time-in-force
+    is :attr:`TimeInForce.IOC` and whose price is a cap from the book, which
+    is what ``submit_market`` sends; naming a constant the exchange does not
     have would suggest otherwise.
     """
 
@@ -66,6 +66,33 @@ class OrderType(StrEnum):
         for order_type in cls:
             if order_type.value == value.strip().upper():
                 return order_type
+        return None
+
+
+class TimeInForce(StrEnum):
+    """How long what a limit order does not trade at once may rest
+    (fm-server 4.30, fm-server#1035).
+
+    ``GTC``, good till cancelled: the rest rests, as every order did before.
+    ``IOC``, immediate or cancel: whatever crosses trades and the exchange
+    cancels the rest. ``FOK``, fill or kill: every unit trades at once, or the
+    order is refused and nothing is written. A marketplace takes only the
+    values its manager lists; without a list, ``GTC`` alone.
+    """
+
+    GTC = "GTC"
+    IOC = "IOC"
+    FOK = "FOK"
+
+    @classmethod
+    def of(cls, value: str | None) -> "TimeInForce | None":
+        """The time-in-force a response names, or ``None`` for none -- which
+        is good till cancelled -- or one this version does not know."""
+        if value is None:
+            return None
+        for time_in_force in cls:
+            if time_in_force.value == value.strip().upper():
+                return time_in_force
         return None
 
 
