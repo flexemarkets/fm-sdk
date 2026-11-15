@@ -132,7 +132,7 @@ const RUNNERS: Record<string, (fm: Flexemarkets, a: Args) => Promise<unknown>> =
   removeWidget: (fm, a) => fm.removeWidget(a.marketplaceId, a.key, a.userId),
   allWidgets: (fm, a) => fm.allWidgets(a.marketplaceId),
   createCallMarket: (fm, a) =>
-    fm.createCallMarket(a.marketplaceId, a.symbol, a.name, a.price, a.units, a.intervalSeconds, a.carry, a.callBook),
+    fm.createCallMarket(a.marketplaceId, a.symbol, a.name, a.price, a.units, a.intervalSeconds, a.carry, a.callBook, a.callRationing),
   clearNow: (fm, a) => fm.clearNow(a.marketplaceId, a.marketId),
   indicative: (fm, a) => fm.indicative(a.marketplaceId, a.marketId),
   calls: (fm, a) => fm.calls(a.marketplaceId, a.sessionId),

@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { MARKET_CALL_BOOK_SEALED, MARKET_MECHANISM_CALL, MARKET_MECHANISM_CONTINUOUS, orderedSecurities, toOrderType, toSide, toTimeInForce, unitGrid } from "./types.js";
+import { MARKET_CALL_BOOK_SEALED, MARKET_RATIONING_TIME, MARKET_MECHANISM_CALL, MARKET_MECHANISM_CONTINUOUS, orderedSecurities, toOrderType, toSide, toTimeInForce, unitGrid } from "./types.js";
 import { toInstant } from "./timestamps.js";
 import { Decimals } from "./decimals.js";
 import type {
@@ -312,6 +312,7 @@ export function parseMarket(data: JsonObject): Market {
     priceDecimals: (data.priceDecimals as number) ?? Decimals.DEFAULT_PRICE_DECIMALS,
     unitDecimals: (data.unitDecimals as number) ?? Decimals.DEFAULT_UNIT_DECIMALS,
     callBook: (data.callBook as string) || MARKET_CALL_BOOK_SEALED,
+    callRationing: (data.callRationing as string) || MARKET_RATIONING_TIME,
   };
 }
 
@@ -353,6 +354,8 @@ export function parseMarketCall(data: JsonObject): MarketCall {
     buyOrders: (data.buyOrders as number) ?? 0,
     sellOrders: (data.sellOrders as number) ?? 0,
     carry: (data.carry as boolean) ?? true,
+    rationing: (data.rationing as string) || MARKET_RATIONING_TIME,
+    seed: (data.seed as number) ?? null,
   };
 }
 
@@ -1505,6 +1508,13 @@ export class Flexemarkets {
    * {@link MARKET_CALL_BOOK_INDICATIVE}, also the price it would clear at now
    * and the volume. Left out, the server makes it sealed. Needs fm-server
    * 4.17; an older one ignores it.
+   *
+   * `callRationing` is who trades when the long side's last price level
+   * cannot all trade: {@link MARKET_RATIONING_TIME}, the earlier order first;
+   * {@link MARKET_RATIONING_PRO_RATA}, each order there by its units; or
+   * {@link MARKET_RATIONING_RANDOM}, in an order drawn from a seed each call
+   * records. Left out, the server rations by time. Needs fm-server 4.31; an
+   * older one ignores it.
    */
   async createCallMarket(
     marketplaceId: number,
@@ -1515,6 +1525,7 @@ export class Flexemarkets {
     intervalSeconds: number | null = null,
     carry = true,
     callBook?: string,
+    callRationing?: string,
   ): Promise<Market> {
     return parseMarket(await this._create((key) => this._post(`${this._marketplace(marketplaceId)}/markets`, {
       symbol,
@@ -1530,6 +1541,7 @@ export class Flexemarkets {
       callIntervalSeconds: intervalSeconds,
       callCarry: carry,
       ...(callBook === undefined ? {} : { callBook }),
+      ...(callRationing === undefined ? {} : { callRationing }),
     }, key)));
   }
 

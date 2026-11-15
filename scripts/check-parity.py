@@ -887,6 +887,9 @@ EXPORT_EXEMPTIONS: dict[str, str] = {
     "MARKET_MECHANISM_CALL":        "same",
     "MARKET_CALL_BOOK_SEALED":      "Market.CALL_BOOK_SEALED in Java and Python, string constants in TypeScript",
     "MARKET_CALL_BOOK_INDICATIVE":  "same",
+    "MARKET_RATIONING_TIME":        "Market.RATIONING_TIME in Java and Python, string constants in TypeScript",
+    "MARKET_RATIONING_PRO_RATA":    "same",
+    "MARKET_RATIONING_RANDOM":      "same",
     "MARKET_CALL_TRIGGER_MANUAL":   "MarketCall.TRIGGER_MANUAL in Java and Python, string constants in TypeScript",
     "MARKET_CALL_TRIGGER_INTERVAL": "same",
 

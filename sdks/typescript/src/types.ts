@@ -265,12 +265,35 @@ export interface Market {
    * and the volume ({@link CallIndicative}). Sealed when the server does not say.
    */
   callBook: string;
+  /**
+   * For a call market, who trades at the margin -- the one price level of the
+   * long side a call cannot fill whole: {@link MARKET_RATIONING_TIME}, the
+   * earlier order first; {@link MARKET_RATIONING_PRO_RATA}, each in proportion
+   * to its units; or {@link MARKET_RATIONING_RANDOM}, in an order drawn from a
+   * seed the call records. Better prices always trade whole. Time when the
+   * server does not say, as every call cleared before fm-server 4.31.
+   */
+  callRationing: string;
 }
 
 export const MARKET_MECHANISM_CONTINUOUS = "CONTINUOUS";
 export const MARKET_MECHANISM_CALL = "CALL";
 export const MARKET_CALL_BOOK_SEALED = "SEALED";
 export const MARKET_CALL_BOOK_INDICATIVE = "INDICATIVE";
+/** A call's margin goes by time: the earlier order first, the last in part. */
+export const MARKET_RATIONING_TIME = "TIME";
+/**
+ * A call's margin goes to each order there by its units, in whole steps of
+ * the unit tick; what whole steps leave goes a step at a time to the largest
+ * remainder, then the earlier order.
+ */
+export const MARKET_RATIONING_PRO_RATA = "PRO_RATA";
+/**
+ * A call's margin goes in an order drawn from a seed the call records
+ * ({@link MarketCall.seed}), then as by time: the same book and seed clear to
+ * the same trades.
+ */
+export const MARKET_RATIONING_RANDOM = "RANDOM";
 
 /**
  * Whether `market` is a call auction, where a crossing order rests until a
@@ -318,6 +341,18 @@ export interface MarketCall {
   sellOrders: number;
   /** Whether what it left unfilled waits for the next call. */
   carry: boolean;
+  /**
+   * Who traded at the margin: one of the `MARKET_RATIONING_*` rules, the
+   * market's when the call was made. Time from a server older than rationing
+   * (fm-server 4.31).
+   */
+  rationing: string;
+  /**
+   * For a {@link MARKET_RATIONING_RANDOM} call, the seed its margin was drawn
+   * with; null for any other. Below 2^53, so a JavaScript number holds it
+   * exactly: the same book and seed clear to the same trades.
+   */
+  seed: number | null;
 }
 
 export const MARKET_CALL_TRIGGER_MANUAL = "MANUAL";

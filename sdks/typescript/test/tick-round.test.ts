@@ -38,6 +38,7 @@ function market(minimum: number, maximum: number, tick: number): Market {
     priceTick: tick, unitMinimum: 1, unitMaximum: 100, unitTick: 1,
     mechanism: "CONTINUOUS", callIntervalSeconds: null, callCarry: true, priceDecimals: 0, unitDecimals: 0,
     callBook: "SEALED",
+    callRationing: "TIME",
   };
 }
 

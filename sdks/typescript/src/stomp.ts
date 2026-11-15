@@ -8,6 +8,7 @@
 import { STATUS_CODES } from "node:http";
 import WebSocket from "ws";
 import { toInstant } from "./timestamps.js";
+import { MARKET_RATIONING_TIME } from "./types.js";
 import type { CallIndicative, Holding, MarketCall, Order, Session, Version } from "./types.js";
 
 const HEARTBEAT_MS = 30_000;
@@ -374,6 +375,8 @@ export function parseMarketCall(data: Record<string, unknown>): MarketCall {
     buyOrders: (data.buyOrders as number) ?? 0,
     sellOrders: (data.sellOrders as number) ?? 0,
     carry: (data.carry as boolean) ?? true,
+    rationing: (data.rationing as string) || MARKET_RATIONING_TIME,
+    seed: (data.seed as number) ?? null,
   };
 }
 
