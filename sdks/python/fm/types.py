@@ -268,11 +268,27 @@ class Market:
     # CALL_BOOK_INDICATIVE, also the price it would clear at now and the
     # volume (CallIndicative). Sealed when the server does not say.
     call_book: str = "SEALED"
+    # For a call market, who trades at the margin -- the one price level of the
+    # long side a call cannot fill whole: RATIONING_TIME, the earlier order
+    # first; RATIONING_PRO_RATA, each in proportion to its units; or
+    # RATIONING_RANDOM, in an order drawn from a seed the call records. Better
+    # prices always trade whole. Time when the server does not say, as every
+    # call cleared before fm-server 4.31.
+    call_rationing: str = "TIME"
 
     MECHANISM_CONTINUOUS = "CONTINUOUS"
     MECHANISM_CALL = "CALL"
     CALL_BOOK_SEALED = "SEALED"
     CALL_BOOK_INDICATIVE = "INDICATIVE"
+    # The earlier order first, the last in part.
+    RATIONING_TIME = "TIME"
+    # Each order at the margin by its units, in whole steps of the unit tick;
+    # what whole steps leave goes a step at a time to the largest remainder,
+    # then the earlier order.
+    RATIONING_PRO_RATA = "PRO_RATA"
+    # In an order drawn from a seed the call records (MarketCall.seed), then as
+    # by time: the same book and seed clear to the same trades.
+    RATIONING_RANDOM = "RANDOM"
 
     def is_call(self) -> bool:
         """Whether this is a call auction, where a crossing order rests until a
@@ -328,6 +344,13 @@ class MarketCall:
     sell_orders: int = 0
     # Whether what it left unfilled waits for the next call.
     carry: bool = True
+    # Who traded at the margin: one of the Market.RATIONING_* rules, the
+    # market's when the call was made. Time from a server older than
+    # rationing (fm-server 4.31).
+    rationing: str = "TIME"
+    # For a RATIONING_RANDOM call, the seed its margin was drawn with, below
+    # 2^53; None for any other. The same book and seed clear to the same trades.
+    seed: int | None = None
 
     TRIGGER_MANUAL = "MANUAL"
     TRIGGER_INTERVAL = "INTERVAL"

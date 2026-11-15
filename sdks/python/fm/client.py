@@ -244,6 +244,7 @@ def _parse_market(data: dict[str, Any]) -> Market:
         price_decimals=_or_default(data.get("priceDecimals"), Decimals.DEFAULT_PRICE_DECIMALS),
         unit_decimals=_or_default(data.get("unitDecimals"), Decimals.DEFAULT_UNIT_DECIMALS),
         call_book=data.get("callBook") or Market.CALL_BOOK_SEALED,
+        call_rationing=data.get("callRationing") or Market.RATIONING_TIME,
     )
 
 
@@ -294,6 +295,8 @@ def _parse_market_call(data: dict[str, Any]) -> MarketCall:
         buy_orders=data.get("buyOrders", 0),
         sell_orders=data.get("sellOrders", 0),
         carry=data.get("carry", True),
+        rationing=data.get("rationing") or Market.RATIONING_TIME,
+        seed=data.get("seed"),
     )
 
 
@@ -1559,6 +1562,7 @@ class Flexemarkets:
         interval_seconds: int | None = None,
         carry: bool = True,
         call_book: str | None = None,
+        call_rationing: str | None = None,
     ) -> Market:
         """Add a call-auction market to a marketplace: orders collect, crossed
         or not, and a call clears them all at one price.
@@ -1575,6 +1579,13 @@ class Flexemarkets:
         :attr:`Market.CALL_BOOK_INDICATIVE`, also the price it would clear at
         now and the volume. None leaves it to the server, which makes it
         sealed. Needs fm-server 4.17; an older one ignores it.
+
+        *call_rationing* is who trades when the long side's last price level
+        cannot all trade: :attr:`Market.RATIONING_TIME`, the earlier order
+        first; :attr:`Market.RATIONING_PRO_RATA`, each order there by its
+        units; or :attr:`Market.RATIONING_RANDOM`, in an order drawn from a
+        seed each call records. None leaves it to the server, which rations by
+        time. Needs fm-server 4.31; an older one ignores it.
         """
         units = units if units is not None else TickGrid.units()
         url = _marketplace(self._endpoint, marketplace_id) + "/markets"
@@ -1594,6 +1605,8 @@ class Flexemarkets:
         }
         if call_book is not None:
             market["callBook"] = call_book
+        if call_rationing is not None:
+            market["callRationing"] = call_rationing
         resp = self._create(lambda key: self._post(url, market, key))
         return _parse_market(_json(resp))
 
