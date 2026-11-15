@@ -1,0 +1,65 @@
+{
+  "type": "Holding",
+  "why": "fm-server 4.30 lets a manager adjust a participant mid-session, and a holding says what adjustments moved apart from what the session opened with: adjustedCash, and adjustedUnits and adjustedShortUnits per position. The short floor is initialShortUnits plus adjustedShortUnits; an SDK that reads the grant's alone keeps a robot on the old floor after a RIGHTS adjustment, and one that drops adjustedCash or adjustedUnits counts a manager's gift as trading.",
+  "source": {
+    "constructed": "No production marketplace has an adjustment yet (fm-server 4.30.0, deployed 2026-11-14); the shape is its Holding and Asset as WireManifestTest holds them. Recapture from GET /v1/marketplaces/{marketplaceId}/participants/me/holding after a session with a cash, units and RIGHTS adjustment."
+  },
+  "payload": {
+    "adjustedCash": 2500,
+    "allocationId": 78690,
+    "assets": [
+      {
+        "adjustedShortUnits": 0,
+        "adjustedUnits": 0,
+        "availableUnits": 50,
+        "canBuy": true,
+        "canSell": true,
+        "initialShortUnits": 0,
+        "initialUnits": 50,
+        "marketId": 11008,
+        "units": 50
+      },
+      {
+        "adjustedShortUnits": 20,
+        "adjustedUnits": -10,
+        "availableUnits": 60,
+        "canBuy": true,
+        "canSell": false,
+        "initialShortUnits": 10,
+        "initialUnits": 50,
+        "marketId": 11009,
+        "units": 40
+      }
+    ],
+    "availableCash": 102500,
+    "cash": 102500,
+    "cashDecimals": 2,
+    "initialCash": 100000,
+    "marketplaceId": 6421,
+    "name": "T1",
+    "ownerId": 151527,
+    "sessionId": 185766
+  },
+  "expect": {
+    "cash": 102500,
+    "initialCash": 100000,
+    "adjustedCash": 2500,
+    "securities": [
+      {
+        "marketId": 11008,
+        "shortUnits": 0,
+        "adjustedUnits": 0,
+        "adjustedShortUnits": 0
+      },
+      {
+        "marketId": 11009,
+        "units": 40,
+        "initialUnits": 50,
+        "shortUnits": 30,
+        "adjustedUnits": -10,
+        "adjustedShortUnits": 20,
+        "canSell": false
+      }
+    ]
+  }
+}
