@@ -6,7 +6,7 @@ moving to, oldest first: from the bottom up.
 
 | Version | Covers |
 |---------|--------|
-| [0.22](#022-from-021x) | time-in-force on limit orders (fm-server 4.30); `submitMarket` is one IOC order capped at the book and refuses an empty side; `Order` gains four fields, required in TypeScript; Java record patterns over `Order` break |
+| [0.22](#022-from-021x) | time-in-force on limit orders (fm-server 4.30); `submitMarket` is one IOC order capped at the book and refuses an empty side; `Order` gains four fields, required in TypeScript; a live short floor counts manager adjustments, and holdings say what adjustments moved; Java record patterns over `Order`, `Security` and `Holding` break |
 | [0.21](#021-from-020x) | no signature changes; an endpoint that names no marketplace is a configuration error when its marketplace is asked for, not a number-parsing failure (or `NaN` in TypeScript) |
 | [0.20](#020-from-019x) | no change for a robot or a client; for a study, fm-spi 0.0.19 (contract 0.5) adds `StudyProvider.marketplaces`, with a default, so a host can create a run's marketplaces before its people |
 | [0.19](#019-from-018x) | a lost connection is an `ApiError` in Python and TypeScript; a desk that cannot reseed or apply a frame goes on and says so; a stream connect fails after 10 s; a `PendingOrder` cannot be cancelled; a desk says when its stream drops, and `StreamDropped` gains `permanent`, which Java callers that build or destructure it must handle |
@@ -58,6 +58,24 @@ manager lists in `fm.order.time-in-force`; without it, `GTC` alone.
   before 4.30.
 - **`TimeInForce`** names the three values: an enum in Java and Python, a type
   and constant in TypeScript with `toTimeInForce` to read one leniently.
+- **What a manager's adjustments moved.** fm-server 4.30 also lets a manager
+  give or take cash or units mid-session, and change a participant's rights
+  in a market. A holding now says what adjustments moved, net, since the
+  open: `adjustedCash` on the holding, `adjustedUnits` and
+  `adjustedShortUnits` on each position. They are in `cash` and `units` but
+  were not put there by trading, so what trading made is
+  `cash - initialCash - adjustedCash` and `units - initialUnits -
+  adjustedUnits`. Null from an allotment and from any server before 4.30,
+  which had no adjustments; never sent.
+
+### The short floor counts adjustments
+
+`shortUnits` on a live position was the grant's allowance alone
+(`initialShortUnits`), so after a manager raised or lowered it a robot kept
+the old floor. It is now `initialShortUnits + adjustedShortUnits`, which is
+the floor the server enforces. A position that says `shortUnits` -- an
+allotment, or one written back -- is read as it stands. Nothing changes until
+a manager adjusts someone's rights.
 
 ### `submitMarket` behaves differently
 
@@ -105,7 +123,15 @@ What a caller has to handle:
   default method: an implementation that predates it compiles, sends `GTC`
   on, and throws `UnsupportedOperationException` for anything else until it
   overrides it.
-- **Python:** nothing. The four `Order` fields have defaults.
+
+  `Security` gains two components (`adjustedUnits`, `adjustedShortUnits`) and
+  `Holding` one (`adjustedCash`), at the end, as `Order` does: the previous
+  canonical constructors remain, record patterns over either type must name
+  the new ones.
+- **TypeScript**, for holdings: nothing. The three adjustment fields are
+  optional, so positions and holdings built by hand still compile.
+- **Python:** nothing. The four `Order` fields and the three adjustment
+  fields have defaults.
 
 ---
 
