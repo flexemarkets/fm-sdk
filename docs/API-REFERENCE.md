@@ -271,6 +271,18 @@ nothing crosses), but no orders. A client reads it on subscribe with
 with a higher `seq` for the same session; two frames can arrive out of order.
 A market from a server without it reads as sealed.
 
+A call market's `callRationing` says who trades at the margin, the one price
+level of the long side a call cannot fill whole; better prices always trade
+whole, and every trade is at the call's price (fm-server 4.31, #1073):
+`TIME`, the default, the earlier order first and the last in part;
+`PRO_RATA`, each order there by its units, in whole steps of the unit tick,
+what whole steps leave going a step at a time to the largest remainder and
+then the earlier order; `RANDOM`, in an order drawn from a seed, then as by
+time. Each call records the rule it used as `rationing`, and a `RANDOM` call
+its `seed`, below 2^53 so every SDK holds it exactly: the same book and seed
+clear to the same trades. A market or call from a server without it reads as
+`TIME`, with no seed.
+
 Every price, unit and cash amount is an integer counting the smallest step of
 its scale, and the scale is on the wire: a market's `priceDecimals` (prices,
 the price tick and bounds) and `unitDecimals` (units, the unit tick and
@@ -283,9 +295,9 @@ refuses text with more decimal places than the scale rather than rounding it.
 
 | | add a call market | Clear now | the calls |
 |---|---|---|---|
-| Java | `createCallMarket(marketplaceId, symbol, name, price, units, Integer intervalSeconds, boolean carry[, String callBook])` | `MarketCall clearNow(marketplaceId, marketId)` | `List<MarketCall> calls(marketplaceId)`, and `(…, long sessionId)` |
-| Python | `create_call_market(marketplace_id, symbol, name, price, units=None, interval_seconds=None, carry=True, call_book=None)` | `clear_now(marketplace_id, market_id)` | `calls(marketplace_id, session_id=None)` |
-| TypeScript | `createCallMarket(marketplaceId, symbol, name, price, units?, intervalSeconds?, carry?, callBook?)` | `clearNow(marketplaceId, marketId)` | `calls(marketplaceId, sessionId?)` |
+| Java | `createCallMarket(marketplaceId, symbol, name, price, units, Integer intervalSeconds, boolean carry[, String callBook[, String callRationing]])` | `MarketCall clearNow(marketplaceId, marketId)` | `List<MarketCall> calls(marketplaceId)`, and `(…, long sessionId)` |
+| Python | `create_call_market(marketplace_id, symbol, name, price, units=None, interval_seconds=None, carry=True, call_book=None, call_rationing=None)` | `clear_now(marketplace_id, market_id)` | `calls(marketplace_id, session_id=None)` |
+| TypeScript | `createCallMarket(marketplaceId, symbol, name, price, units?, intervalSeconds?, carry?, callBook?, callRationing?)` | `clearNow(marketplaceId, marketId)` | `calls(marketplaceId, sessionId?)` |
 
 `Market.isCall()` (Java), `Market.is_call()` (Python) and `isCall(market)`
 (TypeScript) say whether a market is a call auction;

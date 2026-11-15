@@ -2,7 +2,7 @@
   "type": "MarketCall",
   "why": "A call that cleared nothing has no price. Read as zero, a call that found no cross looks like one that traded at 0.00, and an analysis of clearing prices is dragged to the floor by every quiet call.",
   "source": {
-    "constructed": "fm-server's MarketCall record as GET /marketplaces/{id}/calls answers each call: a manual call that found no cross, calledDate zone-less in UTC with milliseconds, as the server writes it."
+    "constructed": "fm-server's MarketCall record as GET /marketplaces/{id}/calls answers each call: a manual call that found no cross, calledDate zone-less in UTC with milliseconds, as the server writes it. Written before rationing (fm-server 4.31), so it carries neither rationing nor seed: such a call cleared by time, and has no seed."
   },
   "payload": {
     "id": 92,
@@ -34,6 +34,8 @@
     "supply": 4,
     "buyOrders": 1,
     "sellOrders": 2,
-    "carry": true
+    "carry": true,
+    "rationing": "TIME",
+    "seed": null
   }
 }

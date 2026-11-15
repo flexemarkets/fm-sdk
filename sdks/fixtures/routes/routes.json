@@ -1812,6 +1812,67 @@
       ]
     },
     {
+      "call": "createCallMarket",
+      "args": {
+        "marketplaceId": 1,
+        "symbol": "RND",
+        "name": "Random",
+        "price": {
+          "minimum": 0,
+          "maximum": 10000,
+          "tick": 1
+        },
+        "units": {
+          "minimum": 1,
+          "maximum": 100,
+          "tick": 1
+        },
+        "intervalSeconds": 5,
+        "carry": true,
+        "callBook": "INDICATIVE",
+        "callRationing": "RANDOM"
+      },
+      "why": "A call market that shares its margin pro rata or at random says so in the create (fm-server 4.31, #1073); left out, the server rations by time and nothing says so, and an experiment run on that market tests a different mechanism than the one it describes.",
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/api/v1/marketplaces/1/markets",
+          "body": {
+            "symbol": "RND",
+            "name": "Random",
+            "privateMarket": false,
+            "mechanism": "CALL",
+            "callIntervalSeconds": 5,
+            "callCarry": true,
+            "callBook": "INDICATIVE",
+            "callRationing": "RANDOM"
+          },
+          "contentType": "application/json",
+          "response": {
+            "status": 200,
+            "body": {
+              "id": 12,
+              "marketplaceId": 1,
+              "symbol": "RND",
+              "name": "Random",
+              "priceMinimum": 0,
+              "priceMaximum": 10000,
+              "priceTick": 1,
+              "unitMinimum": 1,
+              "unitMaximum": 100,
+              "unitTick": 1,
+              "privateMarket": false,
+              "mechanism": "CALL",
+              "callIntervalSeconds": 5,
+              "callCarry": true,
+              "callBook": "INDICATIVE",
+              "callRationing": "RANDOM"
+            }
+          }
+        }
+      ]
+    },
+    {
       "call": "clearNow",
       "args": {
         "marketplaceId": 1,

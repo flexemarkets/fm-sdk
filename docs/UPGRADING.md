@@ -6,6 +6,7 @@ moving to, oldest first: from the bottom up.
 
 | Version | Covers |
 |---------|--------|
+| [0.23](#023-from-022x) | additive: a call market's rationing (fm-server 4.31), and each call's rule and seed; required fields on TypeScript's `Market` and `MarketCall`; Java record patterns over `Market` and `MarketCall` break |
 | [0.22](#022-from-021x) | time-in-force on limit orders (fm-server 4.30); `submitMarket` is one IOC order capped at the book and refuses an empty side; `Order` gains four fields, required in TypeScript; a live short floor counts manager adjustments, and holdings say what adjustments moved; Java record patterns over `Order`, `Security` and `Holding` break |
 | [0.21](#021-from-020x) | no signature changes; an endpoint that names no marketplace is a configuration error when its marketplace is asked for, not a number-parsing failure (or `NaN` in TypeScript) |
 | [0.20](#020-from-019x) | no change for a robot or a client; for a study, fm-spi 0.0.19 (contract 0.5) adds `StudyProvider.marketplaces`, with a default, so a host can create a run's marketplaces before its people |
@@ -28,6 +29,51 @@ moving to, oldest first: from the bottom up.
 | [0.3](#03-from-02x) | which is additive, and says so |
 | [0.2](#02-from-01x) | the package moves, the renames, and the five changes that are not renames |
 | [0.1](#01-from-00x) | Migrating a codebase from 0.0.x to 0.1.x, in all three languages |
+
+---
+
+## 0.23: from 0.22.x
+
+fm-server 4.31 lets a call market choose who trades at its margin, the one
+price level of the long side a call cannot fill whole (fm-server#1073). Better
+prices still trade whole, and everyone trades at the call's price: the rule
+decides only who at that level gets the units left. `TIME` is how every call
+cleared before; `PRO_RATA` shares them by units, in whole steps of the unit
+tick; `RANDOM` shuffles the level's orders with a seed the call records, so the
+same book and seed clear to the same trades.
+
+### Additive
+
+- **Reading it.** `Market.callRationing` (`call_rationing` in Python) is the
+  market's rule, `MarketCall.rationing` the rule a call used, and
+  `MarketCall.seed` a `RANDOM` call's seed, null for any other. From a server
+  before 4.31 the rules read as `TIME` and the seed as null. The seed is below
+  2^53, so a TypeScript `number` holds it exactly.
+- **Naming it.** `Market.RATIONING_TIME`, `RATIONING_PRO_RATA` and
+  `RATIONING_RANDOM` in Java and Python; `MARKET_RATIONING_TIME`,
+  `MARKET_RATIONING_PRO_RATA` and `MARKET_RATIONING_RANDOM` in TypeScript.
+- **Making one.** `createCallMarket` takes the rule after `callBook`, sent only
+  when given; left out, the server rations by time. A server before 4.31
+  ignores it.
+  - Java: a ninth argument, `createCallMarket(..., carry, callBook,
+    Market.RATIONING_PRO_RATA)`.
+  - Python: `create_call_market(..., call_rationing="PRO_RATA")`.
+  - TypeScript: `createCallMarket(..., carry, callBook, "PRO_RATA")`, with
+    `undefined` for a `callBook` left to the server.
+
+### What breaks
+
+- **TypeScript:** `Market` has one more required field, `callRationing`, and
+  `MarketCall` two, `rationing` and `seed`. Code that builds either as an
+  object literal must add them: `"TIME"`, and `null` for the seed.
+- **Java:** `Market` and `MarketCall` are records with more components at the
+  end, one and two. Their previous canonical constructors remain, so code
+  that builds them compiles as before; a record pattern over either must name
+  the new ones. `Administration.createCallMarket`'s nine-argument form is a
+  default method: an implementation that predates it compiles, makes a market
+  by time through the eight-argument form, and throws
+  `UnsupportedOperationException` for any other rule until it overrides it.
+- **Python:** nothing. The three fields have defaults.
 
 ---
 
