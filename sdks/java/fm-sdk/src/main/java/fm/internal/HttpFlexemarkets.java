@@ -815,17 +815,25 @@ public class HttpFlexemarkets implements Flexemarkets {
         return _createMarket(marketplaceId, new CreateMarket(symbol, name,
                                      price.minimum(), price.maximum(), price.tick(),
                                      units.minimum(), units.maximum(), units.tick(),
-                                     privateMarket, null, null, null, null));
+                                     privateMarket, null, null, null, null, null));
     }
 
     @Override
     public Market createCallMarket(long marketplaceId, String symbol, String name,
                                    TickGrid price, TickGrid units, Integer intervalSeconds, boolean carry,
                                    String callBook) {
+        return createCallMarket(marketplaceId, symbol, name, price, units, intervalSeconds, carry, callBook, null);
+    }
+
+    @Override
+    public Market createCallMarket(long marketplaceId, String symbol, String name,
+                                   TickGrid price, TickGrid units, Integer intervalSeconds, boolean carry,
+                                   String callBook, String callRationing) {
         return _createMarket(marketplaceId, new CreateMarket(symbol, name,
                                      price.minimum(), price.maximum(), price.tick(),
                                      units.minimum(), units.maximum(), units.tick(),
-                                     false, Market.MECHANISM_CALL, intervalSeconds, carry, callBook));
+                                     false, Market.MECHANISM_CALL, intervalSeconds, carry, callBook,
+                                     callRationing));
     }
 
     private Market _createMarket(long marketplaceId, CreateMarket market) {
@@ -864,7 +872,7 @@ public class HttpFlexemarkets implements Flexemarkets {
                                 long unitMinimum, long unitMaximum, long unitTick,
                                 boolean privateMarket,
                                 String mechanism, Integer callIntervalSeconds, Boolean callCarry,
-                                String callBook) {}
+                                String callBook, String callRationing) {}
 
     private record ManagerOtpRequest(List<Long> userIds) {}
 

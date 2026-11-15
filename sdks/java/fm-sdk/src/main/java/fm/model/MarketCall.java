@@ -29,6 +29,14 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * @param buyOrders     bids in the book the call cleared
  * @param sellOrders    asks in it
  * @param carry         whether what it left unfilled waits for the next call
+ * @param rationing     who traded at the margin, the long side's one price
+ *                      level the call could not fill whole: one of the
+ *                      {@code Market.RATIONING_*} rules, the market's when the
+ *                      call was made; {@link Market#RATIONING_TIME} from a
+ *                      server older than rationing (fm-server 4.31)
+ * @param seed          for a {@link Market#RATIONING_RANDOM} call, the seed its
+ *                      margin was drawn with, below 2^53; null for any other.
+ *                      The same book and seed clear to the same trades
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record MarketCall(
@@ -44,13 +52,45 @@ public record MarketCall(
     long supply,
     int buyOrders,
     int sellOrders,
-    boolean carry) {
+    boolean carry,
+    String rationing,
+    Long seed) {
 
     /** A manager's call: Clear now. */
     public static final String TRIGGER_MANUAL = "MANUAL";
 
     /** The market's interval came round. */
     public static final String TRIGGER_INTERVAL = "INTERVAL";
+
+    /** A call from a server older than rationing cleared by time. */
+    public MarketCall {
+        rationing = null == rationing ? Market.RATIONING_TIME : rationing;
+    }
+
+    /**
+     * A call rationed by time, with no seed: the shape before rationing, kept
+     * so code built against it still compiles.
+     *
+     * @param id            the call's id
+     * @param marketplaceId the marketplace
+     * @param marketId      the market called
+     * @param sessionId     the session it was made in
+     * @param calledDate    when it was made
+     * @param trigger       what made it
+     * @param price         the clearing price, or null
+     * @param volume        units traded
+     * @param demand        units bid at or above the price
+     * @param supply        units offered at or below it
+     * @param buyOrders     bids in the book
+     * @param sellOrders    asks in it
+     * @param carry         whether what it left unfilled waits for the next call
+     */
+    public MarketCall(long id, long marketplaceId, long marketId, long sessionId, Instant calledDate,
+            String trigger, Long price, long volume, long demand, long supply, int buyOrders, int sellOrders,
+            boolean carry) {
+        this(id, marketplaceId, marketId, sessionId, calledDate, trigger, price, volume, demand, supply,
+                buyOrders, sellOrders, carry, null, null);
+    }
 
     /**
      * Built from the wire, where {@code calledDate} is a string in one of two
@@ -71,8 +111,10 @@ public record MarketCall(
             @JsonProperty("supply") long supply,
             @JsonProperty("buyOrders") int buyOrders,
             @JsonProperty("sellOrders") int sellOrders,
-            @JsonProperty("carry") boolean carry) {
+            @JsonProperty("carry") boolean carry,
+            @JsonProperty("rationing") String rationing,
+            @JsonProperty("seed") Long seed) {
         return new MarketCall(id, marketplaceId, marketId, sessionId, Timestamps.parse(calledDate), trigger, price,
-                volume, demand, supply, buyOrders, sellOrders, carry);
+                volume, demand, supply, buyOrders, sellOrders, carry, rationing, seed);
     }
 }

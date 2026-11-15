@@ -254,6 +254,50 @@ public interface Administration {
                             String callBook);
 
     /**
+     * Add a call-auction market that shares its margin by {@code callRationing}:
+     * who trades when the long side's last price level cannot all trade.
+     * {@link Market#RATIONING_TIME}, the earlier order first, is what every
+     * other form makes; {@link Market#RATIONING_PRO_RATA} gives each order there
+     * its share by units; {@link Market#RATIONING_RANDOM} draws their order from
+     * a seed each call records. Needs fm-server 4.31; an older one ignores it
+     * and rations by time.
+     *
+     * <p>A default so that an implementation written against 0.22 still
+     * compiles: it makes the market by time through the eight-argument form,
+     * and refuses any other rule rather than make a market that clears
+     * differently from the one asked for. The SDK's own client overrides it.
+     *
+     * @param marketplaceId   the marketplace to add the market to
+     * @param symbol          the market's ticker symbol, unique within the marketplace
+     * @param name            the market's display name
+     * @param price           the legal prices: bounds and tick
+     * @param units           the legal order sizes; {@link TickGrid#units()} for the usual 1/100/1
+     * @param intervalSeconds the seconds between calls while a session is open,
+     *                        or null for calls only when a manager clears
+     * @param carry           whether what a call leaves unfilled waits for the
+     *                        next one, rather than being cancelled
+     * @param callBook        {@link Market#CALL_BOOK_SEALED} or
+     *                        {@link Market#CALL_BOOK_INDICATIVE}; the server's
+     *                        default, sealed, when null
+     * @param callRationing   {@link Market#RATIONING_TIME},
+     *                        {@link Market#RATIONING_PRO_RATA} or
+     *                        {@link Market#RATIONING_RANDOM}; the server's
+     *                        default, time, when null
+     * @return the market as created, with its server-assigned id
+     * @throws UnsupportedOperationException when an implementation that does
+     *         not override this is asked for a rule other than time
+     */
+    default Market createCallMarket(long marketplaceId, String symbol, String name,
+                                    TickGrid price, TickGrid units, Integer intervalSeconds, boolean carry,
+                                    String callBook, String callRationing) {
+        if (null != callRationing && !Market.RATIONING_TIME.equals(callRationing)) {
+            throw new UnsupportedOperationException(getClass().getName()
+                    + " makes call markets rationed by time only, not " + callRationing);
+        }
+        return createCallMarket(marketplaceId, symbol, name, price, units, intervalSeconds, carry, callBook);
+    }
+
+    /**
      * Mint one-time passcodes for the given users.
      *
      * <p>These are credentials. They are how a classroom signs in without
