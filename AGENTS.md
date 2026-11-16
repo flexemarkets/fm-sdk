@@ -90,6 +90,11 @@ no undo. Do not create or push a tag as part of ordinary work.
 Each minor release adds a section at the top of `docs/UPGRADING.md`, headed
 `## x.y: from x.(y-1).x`. `fm-release --sdk publish` refuses a minor without one.
 
+`make check-vulnerabilities` asks OSV about every package the three SDKs ship
+with, at the versions built and tested here, and `fm-release --sdk publish`
+refuses a release tree it fails for. 0.22.0 shipped Jackson 3.1.5 six weeks
+after seven CVEs against it were published: nothing here was looking.
+
 ## Two habits this codebase expects
 
 - **No compatibility shims.** 0.1.0 removed accreted API on purpose;

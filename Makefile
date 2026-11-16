@@ -9,7 +9,7 @@ VERSION := $(shell cat VERSION)
        check-fixtures check-fixtures-live \
        install-python install-typescript install-java install-mcp \
        build-python build-typescript build-java \
-       check-release-workflow check-parity check-sdks check-python check-typescript check-java check-mcp \
+       check-release-workflow check-parity check-vulnerabilities check-sdks check-python check-typescript check-java check-mcp \
        build-release build-release-java build-release-python build-release-typescript \
        test-python test-typescript test-java \
        ticker-python ticker-typescript ticker-java first-robot-python first-robot-typescript \
@@ -30,6 +30,12 @@ install: install-python install-typescript install-java install-mcp
 build: build-python build-typescript build-java
 
 check: check-sdks check-mcp
+
+# Known vulnerabilities, from OSV, in what each SDK ships with at the versions
+# built and tested here. Needs the network, so it is not in check-sdks (and CI):
+# fm-release --sdk publish runs it against the release tree.
+check-vulnerabilities:
+	$(PYTHON) scripts/check-vulnerabilities.py
 
 # Everything that gates a publish, which is everything but the MCP server --
 # that is a local tool, in no publish target, and a missing venv for it must
