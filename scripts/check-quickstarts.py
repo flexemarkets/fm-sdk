@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import ast
 import inspect
+import json
 import re
 import subprocess
 import sys
@@ -107,16 +108,23 @@ def check_typescript(verbose: bool) -> list[str]:
                   unit, count=1)
     unit += "}\nvoid quickstart;\n"
 
+    # Its own throwaway tsconfig, naming the one file. TypeScript 7 refuses a
+    # file on the command line beside a tsconfig.json it would not load
+    # (TS5112), where 5.x quietly ignored the config; -p works in both.
     path = TYPESCRIPT / "_quickstart_check.ts"
+    config = TYPESCRIPT / "_quickstart_check.tsconfig.json"
     path.write_text(unit)
+    config.write_text(json.dumps({
+        "compilerOptions": {"noEmit": True, "strict": True, "module": "nodenext",
+                            "moduleResolution": "nodenext", "target": "es2022",
+                            "skipLibCheck": True},
+        "files": [path.name]}))
     try:
-        result = subprocess.run(
-            ["npx", "tsc", "--noEmit", "--strict", "--module", "nodenext",
-             "--moduleResolution", "nodenext", "--target", "es2022",
-             "--skipLibCheck", path.name],
-            cwd=TYPESCRIPT, capture_output=True, text=True)
+        result = subprocess.run(["npx", "tsc", "-p", config.name],
+                                cwd=TYPESCRIPT, capture_output=True, text=True)
     finally:
         path.unlink(missing_ok=True)
+        config.unlink(missing_ok=True)
 
     if result.returncode != 0:
         lines = [l for l in result.stdout.splitlines() if "error" in l]
