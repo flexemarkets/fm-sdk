@@ -1,0 +1,67 @@
+# Dependabot version updates for fm-sdk.
+#
+# fm-sdk had none until 2026-11-16: 0.22.0 went to Maven Central with Jackson
+# 3.1.5, six weeks after seven advisories against it, and nothing here was
+# looking. fm-server, fm-ui, fm-robots and fm-robots-server all had a config;
+# this repo was split out without one.
+#
+# Minor and patch bumps are grouped into one weekly PR per ecosystem, and majors
+# come separately, because every PR runs CI on the org's Actions allowance.
+#
+# Jackson is ignored on purpose. Its version is Spring Boot's, not ours (see
+# the jackson-bom comment in sdks/java/pom.xml): fm-server runs whatever Boot
+# manages, and an SDK built against a newer Jackson is tested against one its
+# largest consumer never runs. It moves when fm-server's Boot does. What keeps
+# it from sitting on a vulnerable version is `make check-vulnerabilities`,
+# which fm-release --sdk publish runs, not this file.
+version: 2
+updates:
+  - package-ecosystem: maven
+    directory: /sdks/java
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      maven-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+    ignore:
+      - dependency-name: "tools.jackson*:*"
+      - dependency-name: "com.fasterxml.jackson*:*"
+
+  - package-ecosystem: npm
+    directory: /sdks/typescript
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: pip
+    directory: /sdks/python
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      pip-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      actions:
+        patterns:
+          - "*"
