@@ -6,7 +6,7 @@ moving to, oldest first: from the bottom up.
 
 | Version | Covers |
 |---------|--------|
-| [0.23](#023-from-022x) | additive: a call market's rationing (fm-server 4.31), and each call's rule and seed; required fields on TypeScript's `Market` and `MarketCall`; Java record patterns over `Market` and `MarketCall` break |
+| [0.23](#023-from-022x) | Java: Jackson 3.1.7 closes seven CVEs in 0.22's 3.1.5; additive: a call market's rationing (fm-server 4.31), and each call's rule and seed; required fields on TypeScript's `Market` and `MarketCall`; Java record patterns over `Market` and `MarketCall` break |
 | [0.22](#022-from-021x) | time-in-force on limit orders (fm-server 4.30); `submitMarket` is one IOC order capped at the book and refuses an empty side; `Order` gains four fields, required in TypeScript; a live short floor counts manager adjustments, and holdings say what adjustments moved; Java record patterns over `Order`, `Security` and `Holding` break |
 | [0.21](#021-from-020x) | no signature changes; an endpoint that names no marketplace is a configuration error when its marketplace is asked for, not a number-parsing failure (or `NaN` in TypeScript) |
 | [0.20](#020-from-019x) | no change for a robot or a client; for a study, fm-spi 0.0.19 (contract 0.5) adds `StudyProvider.marketplaces`, with a default, so a host can create a run's marketplaces before its people |
@@ -41,6 +41,15 @@ decides only who at that level gets the units left. `TIME` is how every call
 cleared before; `PRO_RATA` shares them by units, in whole steps of the unit
 tick; `RANDOM` shuffles the level's orders with a seed the call records, so the
 same book and seed clear to the same trades.
+
+### Security
+
+The Java SDK depends on Jackson 3.1.7, up from 3.1.5, which fixes seven
+advisories: in jackson-core, CVE-2026-89425 and CVE-2026-89407; in
+jackson-databind, CVE-2026-91777, CVE-2026-83557, CVE-2026-68497,
+CVE-2026-19032 and CVE-2026-91776. 3.1.7 is what Spring Boot 4.1.2 manages. A
+consumer that manages Jackson itself should be on 3.1.7 or later; 0.22.0 stays
+flagged on Maven Central, so move off it.
 
 ### Additive
 
