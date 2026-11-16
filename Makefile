@@ -96,7 +96,7 @@ clean:
 install-python:
 	$(PYTHON) -m venv $(PY_VENV)
 	$(VENV_PY) -m pip install --upgrade pip
-	$(VENV_PY) -m pip install -e "sdks/python[test]"
+	$(VENV_PY) -m pip install --upgrade --upgrade-strategy eager -e "sdks/python[test]"
 
 build-python:
 	$(VENV_PY) -m py_compile sdks/python/fm/client.py
