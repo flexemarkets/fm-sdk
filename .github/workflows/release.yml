@@ -12,7 +12,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Extract version from tag
         id: version
@@ -44,7 +44,7 @@ jobs:
     needs: validate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # The release-record checks read the tag and compare it to HEAD, so
           # the tag and its history both have to be here.
@@ -63,7 +63,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # The publish check below reads the release record -- v<version>,
           # and fm-spi-v<n> / fm-expr-v<n> when they ship -- as the gate does.
@@ -71,7 +71,7 @@ jobs:
           fetch-tags: true
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
@@ -103,7 +103,7 @@ jobs:
       contents: read
       id-token: write # OIDC for npm Trusted Publishing — no token needed
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # The publish check below reads the release record -- v<version>,
           # and fm-spi-v<n> / fm-expr-v<n> when they ship -- as the gate does.
@@ -111,7 +111,7 @@ jobs:
           fetch-tags: true
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
@@ -151,7 +151,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: maven
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # The publish check below reads the release record -- v<version>,
           # and fm-spi-v<n> / fm-expr-v<n> when they ship -- as the gate does.
@@ -285,7 +285,7 @@ jobs:
 
       - name: Keep the bundle uploaded to Central
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: central-bundle
           path: sdks/java/target/central-publishing/central-bundle.zip
@@ -299,7 +299,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
