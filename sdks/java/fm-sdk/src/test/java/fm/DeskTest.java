@@ -566,10 +566,10 @@ class DeskTest {
         Market alpha = _market(1L, "ALPHA");
         var fake = new FakeFlexemarkets(
             List.of(alpha), new Snapshot<>(List.of(), 1L), new Snapshot<>(List.of(), 1L));
-        var open = new fm.model.Session(MP, 3L, 30L, 30L, fm.model.Session.STATE_OPEN, "s", null, null, null);
-        var paused = new fm.model.Session(MP, 3L, 30L, 30L, fm.model.Session.STATE_PAUSED, "s", null, null, null);
-        var rich = new fm.model.Holding(MP, 30L, 3L, 1L, "h", 5_000, 4_000, List.of());
-        var poor = new fm.model.Holding(MP, 30L, 3L, 1L, "h", 10, 10, List.of());
+        var open = new fm.model.Session(MP, 3L, 1L, 1L, fm.model.Session.STATE_OPEN, "s", null, null, null);
+        var paused = new fm.model.Session(MP, 3L, 1L, 1L, fm.model.Session.STATE_PAUSED, "s", null, null, null);
+        var rich = new fm.model.Holding(MP, 1L, 3L, 1L, "h", 5_000, 4_000, List.of());
+        var poor = new fm.model.Holding(MP, 1L, 3L, 1L, "h", 10, 10, List.of());
 
         try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
             assertThat(desk.session()).as("nothing streamed yet").isNull();

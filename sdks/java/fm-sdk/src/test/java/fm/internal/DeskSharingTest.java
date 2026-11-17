@@ -326,9 +326,9 @@ class DeskSharingTest {
     }
 
     private static final fm.model.Session OPEN =
-            new fm.model.Session(MP, 3L, 30L, 30L, fm.model.Session.STATE_OPEN, "s", null, null, null);
+            new fm.model.Session(MP, 3L, 1L, 1L, fm.model.Session.STATE_OPEN, "s", null, null, null);
     private static final fm.model.Holding HELD =
-            new fm.model.Holding(MP, 30L, 3L, 7L, "h", 5_000, 4_000, List.of());
+            new fm.model.Holding(MP, 1L, 3L, 7L, "h", 5_000, 4_000, List.of());
 
     /** Both legs of one trade on ALPHA: {@code restingId} rested, {@code aggressorId} took it. */
     private static Order[] _trade(long restingId, long aggressorId, long price) {
@@ -424,11 +424,11 @@ class DeskSharingTest {
     // ---- refusing locally what the server would refuse ------------------
 
     private static Session _session(String state) {
-        return new Session(MP, 3L, 30L, 30L, state, "s", null, null, null);
+        return new Session(MP, 3L, 1L, 1L, state, "s", null, null, null);
     }
 
     private static Holding _granting(boolean canBuy, boolean canSell) {
-        return new Holding(MP, 30L, 3L, 7L, "h", 10_000, 10_000,
+        return new Holding(MP, 1L, 3L, 7L, "h", 10_000, 10_000,
             List.of(new Security(ALPHA.id(), 5L, 5L, 0L, canBuy, canSell)));
     }
 
@@ -443,7 +443,7 @@ class DeskSharingTest {
                 .isInstanceOf(InvalidArgumentException.class)
                 .isInstanceOfSatisfying(OrderRefusedLocallyException.class,
                     refused -> assertThat(refused.reason()).isEqualTo("SESSION_CLOSED"))
-                .hasMessageContaining("session 30 is CLOSED");
+                .hasMessageContaining("session 1 is CLOSED");
             assertThat(fm.submitted).isEmpty();
         }
     }
@@ -490,7 +490,7 @@ class DeskSharingTest {
 
             assertThatThrownBy(() -> desk.submitLimit(ALPHA.id(), OrderSide.BUY, 1, 1000))
                 .isInstanceOf(OrderRefusedLocallyException.class)
-                .hasMessageContaining("session 30 is CLOSED");
+                .hasMessageContaining("session 1 is CLOSED");
             assertThat(fm.submitted).isEmpty();
         }
     }
