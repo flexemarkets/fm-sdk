@@ -906,4 +906,309 @@ class DeskTest {
             assertThat(heard).isEmpty();
         }
     }
+
+
+    // ---- a session's close and the next session's open ------------------
+    //
+    // A close leaves the closed session's resting orders where they are: they
+    // are its final record, and the server still lists them. Nothing on the
+    // stream removes them. A desk that kept them quoted against orders nobody
+    // could take, into the next session (Tyler-Morton/student-bots,
+    // 2026-11-16). A book holds the held session's orders, and only while that
+    // session is OPEN or PAUSED.
+
+    private static Order _resting(Market market, long id, OrderSide side, long units, long price, long session) {
+        return new Order(null, null, id, id, id, null,
+                         OrderType.LIMIT, side, units, price, null, null,
+                         MP, session, market.symbol(), market.id(), null, null, null);
+    }
+
+    /** Session {@code original}, at version {@code id}: a run's later updates carry new ids. */
+    private static fm.model.Session _session(long original, String state, long id) {
+        return new fm.model.Session(MP, 3L, id, original, state, "s", null, null, null);
+    }
+
+    private static fm.model.Session _session(long original, String state) {
+        return _session(original, state, original);
+    }
+
+    private static boolean _empty(Book book) {
+        return book.buyLevels().isEmpty() && book.sellLevels().isEmpty();
+    }
+
+    @Test
+    @Timeout(20)
+    void aCloseEmptiesTheBooksAndTellsTheirHandlers() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha),
+            new Snapshot<>(List.of(_resting(alpha, 101L, OrderSide.BUY, 5, 577, 1L)), 4L),
+            new Snapshot<>(List.of(), 4L));
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            var heardEmpty = new java.util.concurrent.CopyOnWriteArrayList<Boolean>();
+            desk.onBookChange(alpha.id(), book -> heardEmpty.add(_empty(book)));
+            fake.post(_session(1L, fm.model.Session.STATE_OPEN));
+            fake.post(_session(1L, fm.model.Session.STATE_CLOSED, 2L));
+
+            _await("the book handler to hear the close", () -> heardEmpty.contains(true));
+            assertThat(_empty(desk.book(alpha.id()))).as("the closed session's bid is still in the book").isTrue();
+        }
+    }
+
+    /**
+     * Subscribing to a closed session sends its SESSION-UPDATE and then its
+     * history; clearing once at the close leaves the history to put it all back.
+     */
+    @Test
+    @Timeout(20)
+    void theClosedSessionsOrdersDoNotRefillTheBooks() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha), new Snapshot<>(List.of(), 4L), new Snapshot<>(List.of(), 4L));
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            fake.post(_session(1L, fm.model.Session.STATE_CLOSED));
+            fake.post(new OrdersUpdate(new Order[] { _resting(alpha, 101L, OrderSide.BUY, 5, 577, 1L) }, 5L));
+            var marker = _session(1L, fm.model.Session.STATE_CLOSED, 3L);
+            fake.post(marker);
+            _await("the marker", () -> marker.equals(desk.session()));
+
+            assertThat(_empty(desk.book(alpha.id()))).as("the closed session's history went into the book").isTrue();
+        }
+    }
+
+    /** The snapshot of a closed session still lists its resting orders as active. */
+    @Test
+    @Timeout(20)
+    void aDeskOpenedOnAClosedSessionHasEmptyBooks() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha),
+            new Snapshot<>(List.of(_resting(alpha, 101L, OrderSide.SELL, 2, 577, 1L)), 4L),
+            new Snapshot<>(List.of(), 4L));
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            fake.post(_session(1L, fm.model.Session.STATE_CLOSED));
+            _await("the session", () -> desk.session() != null);
+            _await("the book to empty", () -> _empty(desk.book(alpha.id())));
+        }
+    }
+
+    /**
+     * A reconnect while the session is closed reads the closed session's
+     * resting orders back from the snapshot.
+     */
+    @Test
+    @Timeout(20)
+    void aReseedWhileClosedLeavesTheBooksEmpty() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha), new Snapshot<>(List.of(), 4L), new Snapshot<>(List.of(), 4L));
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            var recoveries = new java.util.concurrent.CopyOnWriteArrayList<fm.event.DeskRecovery>();
+            desk.onRecovery(recoveries::add);
+            fake.post(_session(1L, fm.model.Session.STATE_CLOSED));
+            _await("the session", () -> desk.session() != null);
+            fake.nextActiveOrders(new Snapshot<>(List.of(_resting(alpha, 101L, OrderSide.BUY, 5, 577, 1L)), 6L));
+            fake.post(new fm.event.StreamReconnected(MP));
+            _await("the reseed", () -> !recoveries.isEmpty());
+
+            assertThat(fake.activeReads()).isEqualTo(2);
+            assertThat(_empty(desk.book(alpha.id()))).as("the reseed put the closed session's bid back").isTrue();
+        }
+    }
+
+    @Test
+    @Timeout(20)
+    void aNewSessionStartsWithAnEmptyBookAndTakesItsOwnOrders() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha),
+            new Snapshot<>(List.of(_resting(alpha, 101L, OrderSide.BUY, 5, 577, 1L)), 4L),
+            new Snapshot<>(List.of(), 4L));
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            fake.post(_session(1L, fm.model.Session.STATE_OPEN));
+            fake.post(_session(1L, fm.model.Session.STATE_CLOSED, 2L));
+            fake.post(_session(7L, fm.model.Session.STATE_OPEN));
+            fake.post(new OrdersUpdate(new Order[] { _resting(alpha, 201L, OrderSide.SELL, 3, 600, 7L) }, 5L));
+            _await("the new session's ask", () -> desk.book(alpha.id()).hasValue(OrderSide.SELL));
+
+            assertThat(desk.book(alpha.id()).hasValue(OrderSide.BUY))
+                .as("the last session's bid came into the new one").isFalse();
+            assertThat(desk.book(alpha.id()).bestSellPrice()).isEqualTo(600L);
+        }
+    }
+
+    /**
+     * A close can go unheard -- in a drop, or between two updates of a busy
+     * stream -- and the next session's open is then the first the desk sees of it.
+     */
+    @Test
+    @Timeout(20)
+    void aNewSessionEmptiesTheBookThoughTheCloseWasMissed() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha),
+            new Snapshot<>(List.of(_resting(alpha, 101L, OrderSide.BUY, 5, 577, 1L)), 4L),
+            new Snapshot<>(List.of(), 4L));
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            fake.post(_session(1L, fm.model.Session.STATE_OPEN));
+            fake.post(_session(7L, fm.model.Session.STATE_OPEN));
+            _await("the new session", () -> desk.session() != null && desk.session().original() == 7L);
+            _await("the book to empty", () -> _empty(desk.book(alpha.id())));
+        }
+    }
+
+    @Test
+    @Timeout(20)
+    void anOrderOfAnotherSessionIsLeftOutOfTheBook() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha), new Snapshot<>(List.of(), 4L), new Snapshot<>(List.of(), 4L));
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            fake.post(_session(7L, fm.model.Session.STATE_OPEN));
+            fake.post(new OrdersUpdate(new Order[] {
+                _resting(alpha, 101L, OrderSide.BUY, 5, 577, 1L),
+                _resting(alpha, 201L, OrderSide.SELL, 3, 600, 7L) }, 5L));
+            _await("the new session's ask", () -> desk.book(alpha.id()).hasValue(OrderSide.SELL));
+
+            assertThat(desk.book(alpha.id()).hasValue(OrderSide.BUY))
+                .as("an order of session 1 is in session 7's book").isFalse();
+        }
+    }
+
+    /** A paused session resumes with its book: its orders are still in play. */
+    @Test
+    @Timeout(20)
+    void aPauseKeepsTheBook() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha),
+            new Snapshot<>(List.of(_resting(alpha, 101L, OrderSide.BUY, 5, 577, 1L)), 4L),
+            new Snapshot<>(List.of(), 4L));
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            fake.post(_session(1L, fm.model.Session.STATE_OPEN));
+            var marker = _session(1L, fm.model.Session.STATE_PAUSED, 2L);
+            fake.post(marker);
+            _await("the pause", () -> marker.equals(desk.session()));
+
+            assertThat(desk.book(alpha.id()).bestBuyPrice()).isEqualTo(577L);
+        }
+    }
+
+    /** A closed session's trades happened; what a close empties is the book (as fm-ui#858). */
+    @Test
+    @Timeout(20)
+    void aCloseKeepsTheTape() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha), new Snapshot<>(List.of(), 4L),
+            new Snapshot<>(List.of(_trade(alpha, 101L, 102L, 577)), 4L));
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            fake.post(_session(1L, fm.model.Session.STATE_OPEN));
+            var marker = _session(1L, fm.model.Session.STATE_CLOSED, 2L);
+            fake.post(marker);
+            _await("the close", () -> marker.equals(desk.session()));
+
+            assertThat(desk.tape(alpha.id()).mostRecentPrices()).containsExactly(577L);
+        }
+    }
+
+    /** The last session's trades are not this one's (as fm-ui#762). */
+    @Test
+    @Timeout(20)
+    void aNewSessionStartsWithAnEmptyTape() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha), new Snapshot<>(List.of(), 4L),
+            new Snapshot<>(List.of(_trade(alpha, 101L, 102L, 577)), 4L));
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            fake.post(_session(1L, fm.model.Session.STATE_OPEN));
+            fake.post(_session(1L, fm.model.Session.STATE_CLOSED, 2L));
+            fake.post(_session(7L, fm.model.Session.STATE_OPEN));
+            _await("the new session", () -> desk.session() != null && desk.session().original() == 7L);
+            _await("the tape to empty", () -> desk.tape(alpha.id()).size() == 0);
+        }
+    }
+
+    /**
+     * At a reopen the new session's first orders can arrive before its
+     * SESSION-UPDATE; dropping them as another session's loses them for good.
+     */
+    @Test
+    @Timeout(20)
+    void aLaterSessionsOrderStartsItThoughItsUpdateHasNotCome() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha),
+            new Snapshot<>(List.of(_resting(alpha, 101L, OrderSide.BUY, 5, 577, 1L)), 4L),
+            new Snapshot<>(List.of(), 4L));
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            fake.post(_session(1L, fm.model.Session.STATE_CLOSED));
+            fake.post(new OrdersUpdate(new Order[] { _resting(alpha, 201L, OrderSide.SELL, 3, 600, 7L) }, 5L));
+            _await("the new session's ask", () -> desk.book(alpha.id()).hasValue(OrderSide.SELL));
+
+            assertThat(desk.book(alpha.id()).hasValue(OrderSide.BUY)).isFalse();
+            assertThat(desk.book(alpha.id()).bestSellPrice()).isEqualTo(600L);
+        }
+    }
+
+    /** Nor is it the session the desk holds: it would refuse orders into the open one. */
+    @Test
+    @Timeout(20)
+    void aLateUpdateOfAnEarlierSessionLeavesTheBookAlone() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha), new Snapshot<>(List.of(), 4L), new Snapshot<>(List.of(), 4L));
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            var heard = new java.util.concurrent.CopyOnWriteArrayList<fm.model.Session>();
+            desk.onSessionChange(heard::add);
+            fake.post(_session(7L, fm.model.Session.STATE_OPEN));
+            fake.post(new OrdersUpdate(new Order[] { _resting(alpha, 201L, OrderSide.SELL, 3, 600, 7L) }, 5L));
+            fake.post(_session(1L, fm.model.Session.STATE_CLOSED, 2L));
+            var marker = _session(7L, fm.model.Session.STATE_OPEN, 8L);
+            fake.post(marker);
+            _await("the marker", () -> marker.equals(desk.session()));
+            assertThat(heard).extracting(fm.model.Session::original)
+                .as("the earlier session's update was passed on").containsExactly(7L, 7L);
+
+            assertThat(desk.book(alpha.id()).bestSellPrice())
+                .as("an old session's close emptied this one's book").isEqualTo(600L);
+        }
+    }
+
+    /** An update that doesn't say which session it is neither starts one nor is dropped as an earlier one. */
+    @Test
+    @Timeout(20)
+    void aSessionUpdateWithNoOriginalIsTheSessionTheDeskHolds() throws Exception {
+        Market alpha = _market(1L, "ALPHA");
+        var fake = new FakeFlexemarkets(
+            List.of(alpha),
+            new Snapshot<>(List.of(_resting(alpha, 101L, OrderSide.BUY, 5, 577, 1L)), 4L),
+            new Snapshot<>(List.of(_trade(alpha, 201L, 202L, 570)), 4L));
+
+        try (var desk = new DefaultDesk(fake, MP, List.of(alpha))) {
+            fake.post(_session(1L, fm.model.Session.STATE_OPEN));
+            var unnamed = _session(0L, fm.model.Session.STATE_PAUSED, 2L);
+            fake.post(unnamed);
+            _await("the unnamed update", () -> unnamed.equals(desk.session()));
+            assertThat(desk.book(alpha.id()).bestBuyPrice())
+                .as("an update with no original started a new session").isEqualTo(577L);
+
+            fake.post(_session(0L, fm.model.Session.STATE_CLOSED, 3L));
+            _await("the close", () -> fm.model.Session.STATE_CLOSED.equals(desk.session().state()));
+            _await("the book to empty", () -> _empty(desk.book(alpha.id())));
+            assertThat(desk.tape(alpha.id()).mostRecentPrices()).as("a close emptied the tape").containsExactly(570L);
+        }
+    }
 }
