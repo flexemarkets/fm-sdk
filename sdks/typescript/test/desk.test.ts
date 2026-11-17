@@ -16,6 +16,7 @@ import assert from "node:assert/strict";
 import { DefaultDesk, RESEED_RETRY_MS, reseedRetry, type DeskRecovery } from "../src/desk.ts";
 import { ApiError, parseHolding, type Flexemarkets } from "../src/client.ts";
 import type { Market, Order } from "../src/types.ts";
+import type { Book } from "../src/orderbook.ts";
 import { parseSession } from "../src/stomp.ts";
 import type { FmEvent, OrdersUpdate, StreamDropped } from "../src/stomp.ts";
 import type { Snapshot } from "../src/snapshot.ts";
@@ -806,4 +807,225 @@ test("a cancelled stream-dropped handler hears nothing and cancelling twice is h
     fake.post(blip());
     assert.deepEqual(heard, []);
   } finally { done(); }
+});
+
+// -- a session's close and the next session's open ---------------------------
+//
+// A close leaves the closed session's resting orders where they are: they are
+// its final record, and the server still lists them. Nothing on the stream
+// removes them. A desk that kept them quoted against orders nobody could take,
+// into the next session (Tyler-Morton/student-bots, 2026-11-16). A book holds
+// the held session's orders, and only while that session is OPEN or PAUSED.
+
+function resting(m: Market, id: number, side: string, units: number, price: number, session: number): Order {
+  return { ...limit(m, id, side, units, price), sessionId: session };
+}
+
+const session = (original: number, state: string, version?: number) =>
+  parseSession({ id: version ?? original, original, marketplaceId: MP, state });
+
+const empty = (book: Book) => book.buyLevels().length === 0 && book.sellLevels().length === 0;
+
+test("a close empties the books and tells their handlers", async () => {
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([resting(alpha, 101, "BUY", 5, 577, 1)], 4), snapshot([], 4));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  try {
+    const heard: Book[] = [];
+    desk.onBookChange(alpha.id, (b) => heard.push(b));
+    fake.post(session(1, "OPEN"));
+    fake.post(session(1, "CLOSED", 2));
+
+    assert.ok(heard.length > 0 && empty(heard[heard.length - 1]!), "the book handler did not hear the close");
+    assert.ok(empty(desk.book(alpha.id)!), "the closed session's bid is still in the book");
+  } finally { desk.close(); }
+});
+
+test("the closed session's orders do not refill the books", async () => {
+  // Subscribing to a closed session sends its SESSION-UPDATE and then its
+  // history; clearing once at the close leaves the history to put it all back.
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([], 4), snapshot([], 4));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  try {
+    fake.post(session(1, "CLOSED"));
+    fake.post(update([resting(alpha, 101, "BUY", 5, 577, 1)], 5));
+
+    assert.ok(empty(desk.book(alpha.id)!), "the closed session's history went into the book");
+  } finally { desk.close(); }
+});
+
+test("a desk opened on a closed session has empty books", async () => {
+  // The snapshot of a closed session still lists its resting orders as active.
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([resting(alpha, 101, "SELL", 2, 577, 1)], 4), snapshot([], 4));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  try {
+    fake.post(session(1, "CLOSED"));
+
+    assert.ok(empty(desk.book(alpha.id)!));
+  } finally { desk.close(); }
+});
+
+test("a reseed while closed leaves the books empty", async () => {
+  // A reconnect while the session is closed reads the closed session's
+  // resting orders back from the snapshot.
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([], 4), snapshot([], 4));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  try {
+    const recoveries: DeskRecovery[] = [];
+    desk.onRecovery((r) => recoveries.push(r));
+    fake.post(session(1, "CLOSED"));
+    fake.nextActiveOrders(snapshot([resting(alpha, 101, "BUY", 5, 577, 1)], 6));
+    fake.post({ kind: "reconnected", marketplaceId: MP });
+    await settled();
+
+    assert.equal(recoveries.length, 1);
+    assert.equal(fake.activeReads, 2);
+    assert.ok(empty(desk.book(alpha.id)!), "the reseed put the closed session's bid back");
+  } finally { desk.close(); }
+});
+
+test("a new session starts with an empty book and takes its own orders", async () => {
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([resting(alpha, 101, "BUY", 5, 577, 1)], 4), snapshot([], 4));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  try {
+    fake.post(session(1, "OPEN"));
+    fake.post(session(1, "CLOSED", 2));
+    fake.post(session(7, "OPEN"));
+    fake.post(update([resting(alpha, 201, "SELL", 3, 600, 7)], 5));
+
+    assert.ok(!desk.book(alpha.id)!.hasValue("BUY"), "the last session's bid came into the new one");
+    assert.equal(desk.book(alpha.id)!.bestSellPrice(), 600);
+  } finally { desk.close(); }
+});
+
+test("a new session empties the book though the close was missed", async () => {
+  // A close can go unheard -- in a drop, or between two updates of a busy
+  // stream -- and the next session's open is then the first the desk sees of it.
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([resting(alpha, 101, "BUY", 5, 577, 1)], 4), snapshot([], 4));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  try {
+    fake.post(session(1, "OPEN"));
+    fake.post(session(7, "OPEN"));
+
+    assert.equal(desk.session()?.original, 7);
+    assert.ok(empty(desk.book(alpha.id)!));
+  } finally { desk.close(); }
+});
+
+test("an order of another session is left out of the book", async () => {
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([], 4), snapshot([], 4));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  try {
+    fake.post(session(7, "OPEN"));
+    fake.post(update([resting(alpha, 101, "BUY", 5, 577, 1), resting(alpha, 201, "SELL", 3, 600, 7)], 5));
+
+    assert.equal(desk.book(alpha.id)!.bestSellPrice(), 600);
+    assert.ok(!desk.book(alpha.id)!.hasValue("BUY"), "an order of session 1 is in session 7's book");
+  } finally { desk.close(); }
+});
+
+test("a pause keeps the book", async () => {
+  // A paused session resumes with its book: its orders are still in play.
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([resting(alpha, 101, "BUY", 5, 577, 1)], 4), snapshot([], 4));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  try {
+    fake.post(session(1, "OPEN"));
+    fake.post(session(1, "PAUSED", 2));
+
+    assert.equal(desk.session()?.state, "PAUSED");
+    assert.equal(desk.book(alpha.id)!.bestBuyPrice(), 577);
+  } finally { desk.close(); }
+});
+
+test("a close keeps the tape", async () => {
+  // A closed session's trades happened; what a close empties is the book (as fm-ui#858).
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([], 4), snapshot(trade(alpha, 101, 102, 577), 4));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  try {
+    fake.post(session(1, "OPEN"));
+    fake.post(session(1, "CLOSED", 2));
+
+    assert.equal(desk.session()?.state, "CLOSED");
+    assert.deepEqual(desk.tape(alpha.id)!.mostRecentPrices(), [577]);
+  } finally { desk.close(); }
+});
+
+test("a new session starts with an empty tape", async () => {
+  // The last session's trades are not this one's (as fm-ui#762).
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([], 4), snapshot(trade(alpha, 101, 102, 577), 4));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  try {
+    assert.equal(desk.tape(alpha.id)!.size(), 1, "the seed did put the trade on the tape");
+    fake.post(session(1, "OPEN"));
+    fake.post(session(1, "CLOSED", 2));
+    fake.post(session(7, "OPEN"));
+
+    assert.equal(desk.session()?.original, 7);
+    assert.equal(desk.tape(alpha.id)!.size(), 0);
+  } finally { desk.close(); }
+});
+
+test("a later session's order starts it though its update has not come", async () => {
+  // At a reopen the new session's first orders can arrive before its
+  // SESSION-UPDATE; dropping them as another session's loses them for good.
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([resting(alpha, 101, "BUY", 5, 577, 1)], 4), snapshot([], 4));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  try {
+    const heard: Book[] = [];
+    desk.onBookChange(alpha.id, (b) => heard.push(b));
+    fake.post(session(1, "CLOSED"));
+    fake.post(update([resting(alpha, 201, "SELL", 3, 600, 7)], 5));
+
+    assert.ok(!desk.book(alpha.id)!.hasValue("BUY"));
+    assert.equal(desk.book(alpha.id)!.bestSellPrice(), 600);
+  } finally { desk.close(); }
+});
+
+test("a late update of an earlier session leaves the book alone", async () => {
+  // Nor is it the session the desk holds: it would refuse orders into the open one.
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([], 4), snapshot([], 4));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  try {
+    const heard: number[] = [];
+    desk.onSessionChange((s) => heard.push(s.original));
+    fake.post(session(7, "OPEN"));
+    fake.post(update([resting(alpha, 201, "SELL", 3, 600, 7)], 5));
+    fake.post(session(1, "CLOSED", 2));
+    fake.post(session(7, "OPEN", 8));
+
+    assert.deepEqual(heard, [7, 7], "the earlier session's update was passed on");
+    assert.equal(desk.session()?.id, 8);
+    assert.equal(desk.book(alpha.id)!.bestSellPrice(), 600, "an old session's close emptied this one's book");
+  } finally { desk.close(); }
+});
+
+test("a session update with no original is the session the desk holds", async () => {
+  // An update that doesn't say which session it is neither starts one nor is dropped as an earlier one.
+  const alpha = market(1, "ALPHA");
+  const fake = new FakeClient([alpha], snapshot([resting(alpha, 101, "BUY", 5, 577, 1)], 4),
+    snapshot(trade(alpha, 201, 202, 570), 4));
+  const desk = await DefaultDesk.open(asClient(fake), MP);
+  try {
+    fake.post(session(1, "OPEN"));
+    const unnamed = parseSession({ id: 2, original: 0, marketplaceId: MP, state: "PAUSED" });
+    fake.post(unnamed);
+    assert.equal(desk.session(), unnamed, "the unnamed update was dropped");
+    assert.equal(desk.book(alpha.id)!.bestBuyPrice(), 577, "an update with no original started a new session");
+
+    fake.post(parseSession({ id: 3, original: 0, marketplaceId: MP, state: "CLOSED" }));
+    assert.equal(desk.session()?.state, "CLOSED");
+    assert.ok(empty(desk.book(alpha.id)!), "the close left the book");
+    assert.deepEqual(desk.tape(alpha.id)!.mostRecentPrices(), [570], "a close emptied the tape");
+  } finally { desk.close(); }
 });
