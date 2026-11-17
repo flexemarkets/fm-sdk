@@ -248,8 +248,8 @@ def test_a_handle_reads_the_session_and_holding_the_desk_last_heard(fm: Scripted
         assert desk.session() is None
         assert desk.holding() is None
 
-        fm.post(MP, Session(marketplace_id=MP, id=30, original=30, state="PAUSED"))
-        fm.post(MP, Holding(marketplace_id=MP, session_id=30, cash=1500))
+        fm.post(MP, Session(marketplace_id=MP, id=1, original=1, state="PAUSED"))
+        fm.post(MP, Holding(marketplace_id=MP, session_id=1, cash=1500))
         _await("both updates", lambda: desk.session() is not None and desk.holding() is not None)
 
         assert desk.session().state == "PAUSED"
@@ -273,8 +273,8 @@ def test_every_kind_of_handler_fires_through_a_handle_and_stops_when_it_closes(
     register(a, heard.append)
 
     def provoke(seq: int) -> None:
-        fm.post(MP, Session(marketplace_id=MP, id=30, original=30, state="OPEN"))
-        fm.post(MP, Holding(marketplace_id=MP, session_id=30, cash=1500))
+        fm.post(MP, Session(marketplace_id=MP, id=1, original=1, state="OPEN"))
+        fm.post(MP, Holding(marketplace_id=MP, session_id=1, cash=1500))
         fm.post(MP, OrdersUpdate(orders=_match(seq, seq + 1), seq=seq))  # a gap every time
         fm.post(MP, StreamReconnected(marketplace_id=MP))
         fm.post(MP, StreamDropped(exception=OSError("gone"), permanent=False))
@@ -308,12 +308,12 @@ def test_a_handle_closed_after_its_client_releases_nothing_twice() -> None:
 # -- refusing locally what the server would refuse ---------------------------
 
 def _session(state: str) -> Session:
-    return Session(marketplace_id=MP, id=30, original=30, state=state)
+    return Session(marketplace_id=MP, id=1, original=1, state=state)
 
 
 def _holding(can_buy: bool, can_sell: bool) -> Holding:
     from fm.types import Security
-    return Holding(marketplace_id=MP, session_id=30, owner_id=7, cash=10_000, available_cash=10_000,
+    return Holding(marketplace_id=MP, session_id=1, owner_id=7, cash=10_000, available_cash=10_000,
                    securities=[Security(market_id=ALPHA, units=5, available_units=5,
                                         can_buy=can_buy, can_sell=can_sell)])
 
@@ -324,7 +324,7 @@ def test_an_order_into_a_session_that_is_not_open_is_refused_and_not_sent(fm: Sc
         fm.post(MP, _session("CLOSED"))
         _await("the session to land", lambda: desk.session() is not None)
 
-        with pytest.raises(OrderRefusedLocallyError, match="session 30 is CLOSED") as refused:
+        with pytest.raises(OrderRefusedLocallyError, match="session 1 is CLOSED") as refused:
             desk.submit_limit(ALPHA, "BUY", 1, 1000)
         assert refused.value.reason == "SESSION_CLOSED"
         assert isinstance(refused.value, InvalidArgumentError), "caught where the server's 400 is"
@@ -368,7 +368,7 @@ def test_a_session_read_that_fails_refuses_on_what_the_desk_holds(fm: Scripted) 
             raise ConnectionFailedError("down")
         fm.session = unreachable  # type: ignore[method-assign]
 
-        with pytest.raises(OrderRefusedLocallyError, match="session 30 is CLOSED"):
+        with pytest.raises(OrderRefusedLocallyError, match="session 1 is CLOSED"):
             desk.submit_limit(ALPHA, "BUY", 1, 1000)
         assert fm.submitted == []
 
@@ -393,7 +393,7 @@ def test_what_the_desk_does_not_know_goes_to_the_server(fm: Scripted) -> None:
     with fm.desk(MP) as desk:
         desk.submit_limit(ALPHA, "SELL", 1, 1000)
         fm.post(MP, _session("OPEN"))
-        fm.post(MP, Holding(marketplace_id=MP, session_id=30, owner_id=7))
+        fm.post(MP, Holding(marketplace_id=MP, session_id=1, owner_id=7))
         _await("the holding to land", lambda: desk.holding() is not None)
         desk.submit_limit(ALPHA, "SELL", 1, 1000)
         assert len(fm.submitted) == 2

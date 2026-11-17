@@ -467,8 +467,8 @@ def test_session_and_holding_updates_reach_the_desk_and_its_handlers():
         desk.on_session_change(sessions.append)
         desk.on_holding_change(holdings.append)
 
-        fake.post(Session(marketplace_id=MP, id=30, original=30, state="PAUSED"))
-        fake.post(Holding(marketplace_id=MP, session_id=30, cash=1500))
+        fake.post(Session(marketplace_id=MP, id=1, original=1, state="PAUSED"))
+        fake.post(Holding(marketplace_id=MP, session_id=1, cash=1500))
 
         _await("both handlers", lambda: sessions and holdings)
         assert desk.session().state == "PAUSED"
@@ -493,8 +493,8 @@ def test_a_handler_that_raises_does_not_stop_the_desk():
         desk.on_holding_change(explode)
         desk.on_book_change(alpha.id, explode)
 
-        fake.post(Session(marketplace_id=MP, id=30, original=30, state="OPEN"))
-        fake.post(Holding(marketplace_id=MP, session_id=30, cash=1500))
+        fake.post(Session(marketplace_id=MP, id=1, original=1, state="OPEN"))
+        fake.post(Holding(marketplace_id=MP, session_id=1, cash=1500))
         fake.post(OrdersUpdate(orders=[_limit(alpha, 101, "BUY", 5, 1000)], seq=2))
         fake.post(OrdersUpdate(orders=[_limit(alpha, 102, "BUY", 3, 1100)], seq=3))
 
@@ -564,8 +564,8 @@ def test_a_handler_for_a_market_the_desk_does_not_keep_never_fires():
 
 
 @pytest.mark.parametrize("register, event", [
-    (lambda d, h: d.on_session_change(h), Session(marketplace_id=MP, id=30, original=30, state="OPEN")),
-    (lambda d, h: d.on_holding_change(h), Holding(marketplace_id=MP, session_id=30, cash=1500)),
+    (lambda d, h: d.on_session_change(h), Session(marketplace_id=MP, id=1, original=1, state="OPEN")),
+    (lambda d, h: d.on_holding_change(h), Holding(marketplace_id=MP, session_id=1, cash=1500)),
     (lambda d, h: d.on_book_change(1, h), OrdersUpdate(orders=[], seq=2)),
     (lambda d, h: d.on_trade(1, h), None),
     (lambda d, h: d.on_gap(h), OrdersUpdate(orders=[], seq=50)),
