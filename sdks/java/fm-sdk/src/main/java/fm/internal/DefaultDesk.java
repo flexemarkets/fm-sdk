@@ -107,6 +107,17 @@ public class DefaultDesk implements Desk {
     static final long SESSION_RECHECK_NANOS = TimeUnit.SECONDS.toNanos(1);
     private final AtomicReference<Holding> _holding = new AtomicReference<>();
 
+    /**
+     * The session -- by its original id -- whose orders the books hold, and
+     * whether it has closed. A close leaves its resting orders where they are,
+     * still listed as active, and nothing on the stream removes them: a book
+     * holds the current session's orders while it is OPEN or PAUSED. Null
+     * until the first session or order says which. Dispatcher only, and the
+     * constructor's seed before the dispatcher starts.
+     */
+    private Long _run;
+    private boolean _runClosed;
+
     // CopyOnWriteArrayList because handler arrays are read once per
     // dispatch (hot path) and mutated rarely (register / unregister
     // happens on robot startup / shutdown).
@@ -244,10 +255,15 @@ public class DefaultDesk implements Desk {
         // update() entrypoint.
         try {
             if (!orders.body().isEmpty()) {
-                this._books.update(orders.body().toArray(new Order[0]));
+                // A closed session's snapshot still lists its resting orders
+                // as active; while it is closed they stay out of the books.
+                Order[] admitted = _admit(orders.body().toArray(new Order[0]));
+                if (!_runClosed) {
+                    this._books.update(admitted);
+                }
             }
             if (!legs.isEmpty()) {
-                this._trades.update(legs.toArray(new Order[0]));
+                this._trades.update(_admit(legs.toArray(new Order[0])));
             }
         } catch (RuntimeException e) {
             throw new ApiException("The snapshot could not be applied: " + e, e);
@@ -465,7 +481,11 @@ public class DefaultDesk implements Desk {
                 if (event instanceof OrdersUpdate update) {
                     _processOrdersUpdate(update);
                 } else if (event instanceof Session s) {
+                    if (_run != null && s.original() != 0 && s.original() < _run) {
+                        continue; // an update of a session the desk has moved past
+                    }
                     _session.set(s);
+                    _sessionChanged(s);
                     for (var h : _sessionHandlers) _notify(h, s);
                 } else if (event instanceof Holding h) {
                     _holding.set(h);
@@ -628,11 +648,13 @@ public class DefaultDesk implements Desk {
             return;
         }
 
-        Order[] orders = update.orders();
+        Order[] orders = _admit(update.orders());
         var touched = _marketIdsTouched(orders);
         Map<Long, List<Trade>> traded;
         try {
-            _books.update(orders);
+            if (!_runClosed) {
+                _books.update(orders);
+            }
             traded = _trades.update(orders);
         } catch (RuntimeException e) {
             // Nothing else on this thread would catch it, and it ending is a
@@ -667,6 +689,83 @@ public class DefaultDesk implements Desk {
         }
         if (update.seq() != Snapshot.NO_SEQ) {
             _lastAppliedSeq = update.seq();
+        }
+    }
+
+    /**
+     * Empty the books at a close, and books and tapes at a new session.
+     *
+     * <p>The closed session's orders stay its record on the server, so nothing
+     * removes them here but the desk. Its trades stay on the tape until the
+     * next session, as fm-ui shows them.
+     */
+    private void _sessionChanged(Session session) {
+        boolean cleared = false;
+        // An update with no original id (0, as a missing one reads) says
+        // nothing of which session it is: it is taken as the one the desk holds.
+        if (session.original() != 0) {
+            if (_run != null && session.original() != _run) {
+                _newRun();
+                cleared = true;
+            }
+            _run = session.original();
+        }
+        boolean closed = Session.STATE_CLOSED.equalsIgnoreCase(session.state());
+        if (closed && !_runClosed) {
+            _books.clear();
+            cleared = true;
+        }
+        _runClosed = closed;
+        if (cleared) {
+            _notifyBooks();
+        }
+    }
+
+    /**
+     * The orders of the session the desk holds, out of {@code orders}; the
+     * array itself when that is all of them.
+     *
+     * <p>An order of a later session is that session starting, though its
+     * SESSION-UPDATE may not have arrived yet; one of an earlier session is
+     * one the desk has already moved past. An order with no session (0) is
+     * kept.
+     */
+    private Order[] _admit(Order[] orders) {
+        long latest = 0;
+        for (var o : orders) latest = Math.max(latest, o.sessionId());
+        if (latest != 0 && (_run == null || latest > _run)) {
+            if (_run != null) {
+                _newRun();
+                _notifyBooks();
+            }
+            _run = latest;
+        }
+        int kept = 0;
+        for (var o : orders) {
+            if (o.sessionId() == 0 || o.sessionId() == _run) kept++;
+        }
+        if (kept == orders.length) {
+            return orders;
+        }
+        Order[] admitted = new Order[kept];
+        int n = 0;
+        for (var o : orders) {
+            if (o.sessionId() == 0 || o.sessionId() == _run) admitted[n++] = o;
+        }
+        return admitted;
+    }
+
+    private void _newRun() {
+        _books.clear();
+        _trades.clear();
+        _runClosed = false;
+    }
+
+    private void _notifyBooks() {
+        for (var book : _books.collection()) {
+            for (var h : _bookHandlers) {
+                if (h.marketId == book.marketId()) _notify(h.handler, book);
+            }
         }
     }
 
