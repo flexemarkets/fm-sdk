@@ -107,6 +107,12 @@ class Desk:
         self._trades = TapeIndex(self.markets, TAPE_CAPACITY)
 
         self._session: Optional[Session] = None
+        # The session -- by its original id -- whose orders the books hold, and
+        # whether it has closed. A close leaves its resting orders where they
+        # are, still listed as active, and nothing on the stream removes them:
+        # a book holds the current session's orders while it is OPEN or PAUSED.
+        self._run: Optional[int] = None
+        self._run_closed = False
         # (monotonic time, was it OPEN) of the last re-read before a refusal.
         self._session_rechecked: Optional[tuple[float, bool]] = None
         self._holding: Optional[Holding] = None
@@ -175,9 +181,11 @@ class Desk:
 
         try:
             if orders.body:
-                self._books.update(orders.body)
+                admitted = self._admit(orders.body)
+                if not self._run_closed:
+                    self._books.update(admitted)
             if legs:
-                self._trades.update(legs)
+                self._trades.update(self._admit(legs))
         except Exception as e:
             raise ApiError(f"The snapshot could not be applied: {e!r}") from e
 
@@ -480,7 +488,10 @@ class Desk:
                 continue
 
             if isinstance(event, Session):
+                if self._run is not None and event.original < self._run:
+                    continue  # an update of a session the desk has moved past
                 self._session = event
+                self._session_changed(event)
                 for h in self._session_handlers:
                     self._notify(h, event)
                 continue
@@ -584,10 +595,11 @@ class Desk:
         ):
             return
 
-        orders = event.orders
+        orders = self._admit(event.orders)
         touched = _market_ids_touched(orders)
         try:
-            self._books.update(orders)
+            if not self._run_closed:
+                self._books.update(orders)
             traded = self._trades.update(orders)
         except Exception as e:
             # Nothing else on this thread would catch it, and it ending is a
@@ -618,6 +630,52 @@ class Desk:
                     self._notify(book_handler, book)
         if event.seq != NO_SEQ:
             self._last_applied_seq = event.seq
+
+    def _session_changed(self, session: Session) -> None:
+        """Empty the books at a close, and books and tapes at a new session.
+
+        The closed session's orders stay its record on the server, so nothing
+        removes them here but the desk. Its trades stay on the tape until the
+        next session, as fm-ui shows them.
+        """
+        cleared = False
+        if self._run is not None and session.original != self._run:
+            self._new_run(session.original)
+            cleared = True
+        self._run = session.original
+        closed = str(session.state).upper() == Session.STATE_CLOSED
+        if closed and not self._run_closed:
+            self._books.clear()
+            cleared = True
+        self._run_closed = closed
+        if cleared:
+            self._notify_books()
+
+    def _admit(self, orders: list[Order]) -> list[Order]:
+        """The orders of the session the desk holds, out of *orders*.
+
+        An order of a later session is that session starting, though its
+        SESSION-UPDATE may not have arrived yet; one of an earlier session is
+        one the desk has already moved past.
+        """
+        latest = max((o.session_id for o in orders if o.session_id), default=None)
+        if latest is not None and (self._run is None or latest > self._run):
+            if self._run is not None:
+                self._new_run(latest)
+                self._notify_books()
+            self._run = latest
+        return [o for o in orders if not o.session_id or o.session_id == self._run]
+
+    def _new_run(self, original: int) -> None:
+        self._books.clear()
+        self._trades.clear()
+        self._run_closed = False
+
+    def _notify_books(self) -> None:
+        for book in self._books.collection():
+            for entry_id, book_handler in self._book_handlers:
+                if entry_id == book.market_id:
+                    self._notify(book_handler, book)
 
     def _reseed_after_gap(self) -> bool:
         """Whether the desk reseeded. If not it is left stale and the dispatcher
