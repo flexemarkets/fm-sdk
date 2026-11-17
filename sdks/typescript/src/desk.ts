@@ -196,6 +196,14 @@ export class DefaultDesk implements Desk {
   private readonly _trades: TapeIndex;
   private _events: EventListener | null = null;
   private _session: Session | null = null;
+  /**
+   * The session -- by its original id -- whose orders the books hold, and
+   * whether it has closed. A close leaves its resting orders where they are,
+   * still listed as active, and nothing on the stream removes them: a book
+   * holds the current session's orders while it is OPEN or PAUSED.
+   */
+  private _run: number | null = null;
+  private _runClosed = false;
   private _holding: Holding | null = null;
 
   private readonly _sessionHandlers: Array<(s: Session) => void> = [];
@@ -285,8 +293,11 @@ export class DefaultDesk implements Desk {
     this._trades.clear();
 
     try {
-      if (orders.body.length > 0) this._books.update(orders.body);
-      if (legs.length > 0) this._trades.update(legs);
+      if (orders.body.length > 0) {
+        const admitted = this._admit(orders.body);
+        if (!this._runClosed) this._books.update(admitted);
+      }
+      if (legs.length > 0) this._trades.update(this._admit(legs));
     } catch (e) {
       throw new ApiError(`The snapshot could not be applied: ${String(e)}`, { cause: e });
     }
@@ -534,7 +545,9 @@ export class DefaultDesk implements Desk {
       return;
     }
     if (_isSession(event)) {
+      if (this._run !== null && event.original && event.original < this._run) return; // an update of a session the desk has moved past
       this._session = event;
+      this._sessionChanged(event);
       for (const h of this._sessionHandlers) this._notify(h, event);
       return;
     }
@@ -660,11 +673,11 @@ export class DefaultDesk implements Desk {
     ) {
       return;
     }
-    const orders = update.orders;
+    const orders = this._admit(update.orders);
     const touched = _marketIdsTouched(orders);
     let traded: ReturnType<typeof this._trades.update>;
     try {
-      this._books.update(orders);
+      if (!this._runClosed) this._books.update(orders);
       traded = this._trades.update(orders);
     } catch (e) {
       // Thrown from here it leaves the socket's message listener, which ends the
@@ -694,6 +707,67 @@ export class DefaultDesk implements Desk {
       }
     }
     if (update.seq !== NO_SEQ) this._lastAppliedSeq = update.seq;
+  }
+
+  /**
+   * Empty the books at a close, and books and tapes at a new session.
+   *
+   * The closed session's orders stay its record on the server, so nothing
+   * removes them here but the desk. Its trades stay on the tape until the
+   * next session, as fm-ui shows them.
+   */
+  private _sessionChanged(session: Session): void {
+    let cleared = false;
+    // An update with no original id says nothing of which session it is: it is
+    // taken as the one the desk holds.
+    if (session.original) {
+      if (this._run !== null && session.original !== this._run) {
+        this._newRun();
+        cleared = true;
+      }
+      this._run = session.original;
+    }
+    const closed = String(session.state).toUpperCase() === "CLOSED";
+    if (closed && !this._runClosed) {
+      this._books.clear();
+      cleared = true;
+    }
+    this._runClosed = closed;
+    if (cleared) this._notifyBooks();
+  }
+
+  /**
+   * The orders of the session the desk holds, out of `orders`.
+   *
+   * An order of a later session is that session starting, though its
+   * SESSION-UPDATE may not have arrived yet; one of an earlier session is one
+   * the desk has already moved past. An order with no session passes.
+   */
+  private _admit(orders: Order[]): Order[] {
+    let latest: number | null = null;
+    for (const o of orders) if (o.sessionId && (latest === null || o.sessionId > latest)) latest = o.sessionId;
+    if (latest !== null && (this._run === null || latest > this._run)) {
+      if (this._run !== null) {
+        this._newRun();
+        this._notifyBooks();
+      }
+      this._run = latest;
+    }
+    return orders.filter((o) => !o.sessionId || o.sessionId === this._run);
+  }
+
+  private _newRun(): void {
+    this._books.clear();
+    this._trades.clear();
+    this._runClosed = false;
+  }
+
+  private _notifyBooks(): void {
+    for (const book of this._books.collection()) {
+      for (const h of this._bookHandlers) {
+        if (h.marketId === book.marketId) this._notify(h.handler, book);
+      }
+    }
   }
 
   private _ensureOpen(): void {
