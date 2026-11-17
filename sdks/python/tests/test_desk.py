@@ -1060,3 +1060,25 @@ def test_a_late_update_of_an_earlier_session_leaves_the_book_alone():
         assert desk.book(alpha.id).best_sell_price() == 600, "an old session's close emptied this one's book"
     finally:
         desk.close()
+
+
+def test_a_session_update_with_no_original_is_the_session_the_desk_holds():
+    """An update that doesn't say which session it is neither starts one nor is dropped as an earlier one."""
+    alpha = _market(1, "ALPHA")
+    fake = FakeClient([alpha],
+                      Snapshot(body=[_resting(alpha, 101, "BUY", 5, 577, session=1)], as_of_seq=4),
+                      Snapshot(body=_trade(alpha, 201, 202, 570), as_of_seq=4))
+    desk = _desk(fake, [alpha])
+    try:
+        fake.post(_session(1, "OPEN"))
+        unnamed = Session(marketplace_id=MP, id=2, original=0, state="PAUSED")
+        fake.post(unnamed)
+        _await("the unnamed update", lambda: desk.session() is unnamed)
+        assert desk.book(alpha.id).best_buy_price() == 577, "an update with no original started a new session"
+
+        fake.post(Session(marketplace_id=MP, id=3, original=0, state="CLOSED"))
+        _await("the close", lambda: desk.session().state == "CLOSED")
+        _await("the book to empty", lambda: _empty(desk.book(alpha.id)))
+        assert desk.tape(alpha.id).most_recent_prices() == [570], "a close emptied the tape"
+    finally:
+        desk.close()

@@ -488,7 +488,7 @@ class Desk:
                 continue
 
             if isinstance(event, Session):
-                if self._run is not None and event.original < self._run:
+                if self._run is not None and event.original and event.original < self._run:
                     continue  # an update of a session the desk has moved past
                 self._session = event
                 self._session_changed(event)
@@ -639,10 +639,13 @@ class Desk:
         next session, as fm-ui shows them.
         """
         cleared = False
-        if self._run is not None and session.original != self._run:
-            self._new_run(session.original)
-            cleared = True
-        self._run = session.original
+        # An update with no original id says nothing of which session it is:
+        # it is taken as the one the desk holds.
+        if session.original:
+            if self._run is not None and session.original != self._run:
+                self._new_run(session.original)
+                cleared = True
+            self._run = session.original
         closed = str(session.state).upper() == Session.STATE_CLOSED
         if closed and not self._run_closed:
             self._books.clear()
