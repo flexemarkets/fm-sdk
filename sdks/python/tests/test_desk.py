@@ -823,3 +823,240 @@ def test_a_stream_dropped_handler_that_raises_does_not_stop_the_desk_or_the_next
         assert len(heard) == 1
     finally:
         desk.close()
+
+
+# -- a session's close and the next session's open ---------------------------
+#
+# A close leaves the closed session's resting orders where they are: they are
+# its final record, and the server still lists them. Nothing on the stream
+# removes them. A desk that kept them quoted against orders nobody could take,
+# into the next session (Tyler-Morton/student-bots, 2026-11-16). A book holds
+# the held session's orders, and only while that session is OPEN or PAUSED.
+
+def _resting(market: Market, order_id: int, side: str, units: int, price: int, session: int) -> Order:
+    return replace(_limit(market, order_id, side, units, price), session_id=session)
+
+
+def _session(original: int, state: str, version: int | None = None) -> Session:
+    return Session(marketplace_id=MP, id=version or original, original=original, state=state)
+
+
+def _empty(book: Book) -> bool:
+    return not book.buy_levels() and not book.sell_levels()
+
+
+def test_a_close_empties_the_books_and_tells_their_handlers():
+    alpha = _market(1, "ALPHA")
+    fake = FakeClient([alpha],
+                      Snapshot(body=[_resting(alpha, 101, "BUY", 5, 577, session=1)], as_of_seq=4),
+                      Snapshot(body=[], as_of_seq=4))
+    desk = _desk(fake, [alpha])
+    try:
+        heard: list[Book] = []
+        desk.on_book_change(alpha.id, heard.append)
+        fake.post(_session(1, "OPEN"))
+        fake.post(_session(1, "CLOSED", version=2))
+
+        _await("the book handler to hear the close", lambda: heard and _empty(heard[-1]))
+        assert _empty(desk.book(alpha.id)), "the closed session's bid is still in the book"
+    finally:
+        desk.close()
+
+
+def test_the_closed_sessions_orders_do_not_refill_the_books():
+    """Subscribing to a closed session sends its SESSION-UPDATE and then its
+    history; clearing once at the close leaves the history to put it all back."""
+    alpha = _market(1, "ALPHA")
+    fake = FakeClient([alpha], Snapshot(body=[], as_of_seq=4), Snapshot(body=[], as_of_seq=4))
+    desk = _desk(fake, [alpha])
+    try:
+        fake.post(_session(1, "CLOSED"))
+        fake.post(OrdersUpdate(orders=[_resting(alpha, 101, "BUY", 5, 577, session=1)], seq=5))
+        marker = _session(1, "CLOSED", version=3)
+        fake.post(marker)
+        _await("the marker", lambda: desk.session() is marker)
+
+        assert _empty(desk.book(alpha.id)), "the closed session's history went into the book"
+    finally:
+        desk.close()
+
+
+def test_a_desk_opened_on_a_closed_session_has_empty_books():
+    """The snapshot of a closed session still lists its resting orders as active."""
+    alpha = _market(1, "ALPHA")
+    fake = FakeClient([alpha],
+                      Snapshot(body=[_resting(alpha, 101, "SELL", 2, 577, session=1)], as_of_seq=4),
+                      Snapshot(body=[], as_of_seq=4))
+    desk = _desk(fake, [alpha])
+    try:
+        fake.post(_session(1, "CLOSED"))
+        _await("the session", lambda: desk.session() is not None)
+        _await("the book to empty", lambda: _empty(desk.book(alpha.id)))
+    finally:
+        desk.close()
+
+
+def test_a_reseed_while_closed_leaves_the_books_empty():
+    """A reconnect while the session is closed reads the closed session's
+    resting orders back from the snapshot."""
+    alpha = _market(1, "ALPHA")
+    closed_book = Snapshot(body=[_resting(alpha, 101, "BUY", 5, 577, session=1)], as_of_seq=6)
+    fake = FakeClient([alpha], Snapshot(body=[], as_of_seq=4), Snapshot(body=[], as_of_seq=4))
+    desk = _desk(fake, [alpha])
+    try:
+        recoveries: list[DeskRecovery] = []
+        desk.on_recovery(recoveries.append)
+        fake.post(_session(1, "CLOSED"))
+        _await("the session", lambda: desk.session() is not None)
+        fake.next_active_orders(closed_book)
+        fake.post(StreamReconnected(marketplace_id=MP))
+        _await("the reseed", lambda: recoveries)
+
+        assert fake.active_reads == 2
+        assert _empty(desk.book(alpha.id)), "the reseed put the closed session's bid back"
+    finally:
+        desk.close()
+
+
+def test_a_new_session_starts_with_an_empty_book_and_takes_its_own_orders():
+    alpha = _market(1, "ALPHA")
+    fake = FakeClient([alpha],
+                      Snapshot(body=[_resting(alpha, 101, "BUY", 5, 577, session=1)], as_of_seq=4),
+                      Snapshot(body=[], as_of_seq=4))
+    desk = _desk(fake, [alpha])
+    try:
+        fake.post(_session(1, "OPEN"))
+        fake.post(_session(1, "CLOSED", version=2))
+        fake.post(_session(7, "OPEN"))
+        fake.post(OrdersUpdate(orders=[_resting(alpha, 201, "SELL", 3, 600, session=7)], seq=5))
+        _await("the new session's ask", lambda: desk.book(alpha.id).has_value("SELL"))
+
+        assert not desk.book(alpha.id).has_value("BUY"), "the last session's bid came into the new one"
+        assert desk.book(alpha.id).best_sell_price() == 600
+    finally:
+        desk.close()
+
+
+def test_a_new_session_empties_the_book_though_the_close_was_missed():
+    """A close can go unheard -- in a drop, or between two updates of a busy
+    stream -- and the next session's open is then the first the desk sees of it."""
+    alpha = _market(1, "ALPHA")
+    fake = FakeClient([alpha],
+                      Snapshot(body=[_resting(alpha, 101, "BUY", 5, 577, session=1)], as_of_seq=4),
+                      Snapshot(body=[], as_of_seq=4))
+    desk = _desk(fake, [alpha])
+    try:
+        fake.post(_session(1, "OPEN"))
+        fake.post(_session(7, "OPEN"))
+        _await("the new session", lambda: desk.session() is not None and desk.session().original == 7)
+        _await("the book to empty", lambda: _empty(desk.book(alpha.id)))
+    finally:
+        desk.close()
+
+
+def test_an_order_of_another_session_is_left_out_of_the_book():
+    alpha = _market(1, "ALPHA")
+    fake = FakeClient([alpha], Snapshot(body=[], as_of_seq=4), Snapshot(body=[], as_of_seq=4))
+    desk = _desk(fake, [alpha])
+    try:
+        fake.post(_session(7, "OPEN"))
+        fake.post(OrdersUpdate(orders=[_resting(alpha, 101, "BUY", 5, 577, session=1),
+                                       _resting(alpha, 201, "SELL", 3, 600, session=7)], seq=5))
+        _await("the new session's ask", lambda: desk.book(alpha.id).has_value("SELL"))
+
+        assert not desk.book(alpha.id).has_value("BUY"), "an order of session 1 is in session 7's book"
+    finally:
+        desk.close()
+
+
+def test_a_pause_keeps_the_book():
+    """A paused session resumes with its book: its orders are still in play."""
+    alpha = _market(1, "ALPHA")
+    fake = FakeClient([alpha],
+                      Snapshot(body=[_resting(alpha, 101, "BUY", 5, 577, session=1)], as_of_seq=4),
+                      Snapshot(body=[], as_of_seq=4))
+    desk = _desk(fake, [alpha])
+    try:
+        fake.post(_session(1, "OPEN"))
+        marker = _session(1, "PAUSED", version=2)
+        fake.post(marker)
+        _await("the pause", lambda: desk.session() is marker)
+
+        assert desk.book(alpha.id).best_buy_price() == 577
+    finally:
+        desk.close()
+
+
+def test_a_close_keeps_the_tape():
+    """A closed session's trades happened; what a close empties is the book (as fm-ui#858)."""
+    alpha = _market(1, "ALPHA")
+    fake = FakeClient([alpha], Snapshot(body=[], as_of_seq=4),
+                      Snapshot(body=_trade(alpha, 101, 102, 577), as_of_seq=4))
+    desk = _desk(fake, [alpha])
+    try:
+        fake.post(_session(1, "OPEN"))
+        marker = _session(1, "CLOSED", version=2)
+        fake.post(marker)
+        _await("the close", lambda: desk.session() is marker)
+
+        assert desk.tape(alpha.id).most_recent_prices() == [577]
+    finally:
+        desk.close()
+
+
+def test_a_new_session_starts_with_an_empty_tape():
+    """The last session's trades are not this one's (as fm-ui#762)."""
+    alpha = _market(1, "ALPHA")
+    fake = FakeClient([alpha], Snapshot(body=[], as_of_seq=4),
+                      Snapshot(body=_trade(alpha, 101, 102, 577), as_of_seq=4))
+    desk = _desk(fake, [alpha])
+    try:
+        fake.post(_session(1, "OPEN"))
+        fake.post(_session(1, "CLOSED", version=2))
+        fake.post(_session(7, "OPEN"))
+        _await("the new session", lambda: desk.session() is not None and desk.session().original == 7)
+        _await("the tape to empty", lambda: desk.tape(alpha.id).size() == 0)
+    finally:
+        desk.close()
+
+
+def test_a_later_sessions_order_starts_it_though_its_update_has_not_come():
+    """At a reopen the new session's first orders can arrive before its
+    SESSION-UPDATE; dropping them as another session's loses them for good."""
+    alpha = _market(1, "ALPHA")
+    fake = FakeClient([alpha],
+                      Snapshot(body=[_resting(alpha, 101, "BUY", 5, 577, session=1)], as_of_seq=4),
+                      Snapshot(body=[], as_of_seq=4))
+    desk = _desk(fake, [alpha])
+    try:
+        heard: list[Book] = []
+        desk.on_book_change(alpha.id, heard.append)
+        fake.post(_session(1, "CLOSED"))
+        fake.post(OrdersUpdate(orders=[_resting(alpha, 201, "SELL", 3, 600, session=7)], seq=5))
+        _await("the new session's ask", lambda: desk.book(alpha.id).has_value("SELL"))
+
+        assert not desk.book(alpha.id).has_value("BUY")
+        assert desk.book(alpha.id).best_sell_price() == 600
+    finally:
+        desk.close()
+
+
+def test_a_late_update_of_an_earlier_session_leaves_the_book_alone():
+    """Nor is it the session the desk holds: it would refuse orders into the open one."""
+    alpha = _market(1, "ALPHA")
+    fake = FakeClient([alpha], Snapshot(body=[], as_of_seq=4), Snapshot(body=[], as_of_seq=4))
+    desk = _desk(fake, [alpha])
+    try:
+        heard: list[Session] = []
+        desk.on_session_change(heard.append)
+        fake.post(_session(7, "OPEN"))
+        fake.post(OrdersUpdate(orders=[_resting(alpha, 201, "SELL", 3, 600, session=7)], seq=5))
+        fake.post(_session(1, "CLOSED", version=2))
+        marker = _session(7, "OPEN", version=8)
+        fake.post(marker)
+        _await("the marker", lambda: desk.session() is marker)
+        assert [s.original for s in heard] == [7, 7], "the earlier session's update was passed on"
+
+        assert desk.book(alpha.id).best_sell_price() == 600, "an old session's close emptied this one's book"
+    finally:
+        desk.close()
