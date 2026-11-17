@@ -295,7 +295,7 @@ test("a session update is the desk's session", async () => {
     const seen: (string | null)[] = [];
     desk.onSessionChange((s) => seen.push(s.state));
 
-    fake.post(parseSession({ id: 3, marketplaceId: MP, state: "OPEN" }));
+    fake.post(parseSession({ id: 1, original: 1, marketplaceId: MP, state: "OPEN" }));
 
     assert.equal(desk.session()?.state, "OPEN");
     assert.deepEqual(seen, ["OPEN"]);
@@ -337,7 +337,7 @@ test("a handler that has unsubscribed hears nothing more", async () => {
       unsubscribe();   // idempotent
     }
 
-    fake.post(parseSession({ id: 3, marketplaceId: MP, state: "OPEN" }));
+    fake.post(parseSession({ id: 1, original: 1, marketplaceId: MP, state: "OPEN" }));
     fake.post(parseHolding({ marketplaceId: MP, cash: 1, securities: [] }));
     fake.post(update(trade(alpha, 101, 102, 500), 2));
     assert.equal(desk.tape(alpha.id)!.size(), 1, "the trade did arrive");
