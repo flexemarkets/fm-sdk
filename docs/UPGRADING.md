@@ -6,6 +6,7 @@ moving to, oldest first: from the bottom up.
 
 | Version | Covers |
 |---------|--------|
+| [0.24](#024-from-023x) | no signature changes; a desk's books hold only the current session's orders, empty while it is closed, and a new session starts with empty books and tapes |
 | [0.23](#023-from-022x) | Java: Jackson 3.1.7 closes seven CVEs in 0.22's 3.1.5; additive: a call market's rationing (fm-server 4.31), and each call's rule and seed; required fields on TypeScript's `Market` and `MarketCall`; Java record patterns over `Market` and `MarketCall` break |
 | [0.22](#022-from-021x) | time-in-force on limit orders (fm-server 4.30); `submitMarket` is one IOC order capped at the book and refuses an empty side; `Order` gains four fields, required in TypeScript; a live short floor counts manager adjustments, and holdings say what adjustments moved; Java record patterns over `Order`, `Security` and `Holding` break |
 | [0.21](#021-from-020x) | no signature changes; an endpoint that names no marketplace is a configuration error when its marketplace is asked for, not a number-parsing failure (or `NaN` in TypeScript) |
@@ -29,6 +30,33 @@ moving to, oldest first: from the bottom up.
 | [0.3](#03-from-02x) | which is additive, and says so |
 | [0.2](#02-from-01x) | the package moves, the renames, and the five changes that are not renames |
 | [0.1](#01-from-00x) | Migrating a codebase from 0.0.x to 0.1.x, in all three languages |
+
+---
+
+## 0.24: from 0.23.x
+
+No signature changes, but a desk's books and tapes now follow the session.
+
+A close leaves the closed session's resting orders where they were: they are
+its record. Nothing on the stream removes them, and up to 0.23 a desk kept
+them. A robot then quoted against orders nobody could take, into the next
+session, until a reconnect reseeded it. The desk now does what fm-ui does:
+
+- **While the session is CLOSED, every book is empty**, and the book handlers
+  hear it at the close. Neither the closed session's history nor a reseed's
+  snapshot fills them again. The tape keeps the closed session's trades.
+- **A new session** (a new `original`) empties every book and tape. So does an
+  order of a later session, which can arrive before that session's update.
+- **An order or update of an earlier session** is left out. A session update
+  with no `original` is taken as the session the desk holds.
+- **A pause** keeps the books: a paused session's orders are still in play.
+
+What to do: nothing, if your robot reads the book to decide what to trade. If
+it kept its own copy of its resting orders across a close, drop it at the
+close: the server refuses a participant's cancel with `SESSION_CLOSED` once
+the session isn't open, and a closed session's orders can't trade in the next
+one. To see a closed session's final book, read that session's orders rather
+than the desk.
 
 ---
 
