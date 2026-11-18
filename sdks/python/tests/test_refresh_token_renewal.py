@@ -116,6 +116,18 @@ def _default_credential(text: str) -> None:
     (fm_dir / "credential").write_text(text)
 
 
+def test_a_credential_file_named_from_the_home_directory_is_read(server):
+    """``~/`` is the shell's, and a path passed in a program is never expanded: the README's own example was refused."""
+    from pathlib import Path
+    fm_dir = Path.home() / ".fm"
+    fm_dir.mkdir(exist_ok=True)
+    (fm_dir / "robot").write_text("refresh-token=rt-2\n")
+    client = Flexemarkets.connect("~/.fm/robot", f"{server.base}/marketplaces/1", "refresh-test")
+    client.close()
+
+    assert server.renewals == ["rt-2"]
+
+
 def test_a_refresh_token_passed_is_used_over_the_one_in_the_default_credential(server):
     _default_credential("refresh-token=rt-2\n")
     client = Flexemarkets.connect("refresh:rt-1", f"{server.base}/marketplaces/1", "refresh-test")
