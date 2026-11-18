@@ -779,6 +779,17 @@ export function loadPropertiesFile(path: string): Record<string, string> {
   return props;
 }
 
+/**
+ * `path`, with a leading `~/` read as the home directory.
+ *
+ * `~` is the shell's: a path a program passes is taken as written, so
+ * `connect("~/.fm/credential")` looked for a directory named `~` and refused
+ * the credential. Only `~/` is read; `~user` is left alone.
+ */
+function fromHome(path: string): string {
+  return path.startsWith("~/") ? join(homedir(), path.slice(2)) : path;
+}
+
 export function loadConfig(): Record<string, string> {
   const config: Record<string, string> = {};
 
@@ -1056,8 +1067,8 @@ export class Flexemarkets {
       }
       if (credential.startsWith(REFRESH_TOKEN_PREFIX) && credential.slice(REFRESH_TOKEN_PREFIX.length).trim()) {
         config[REFRESH_TOKEN_PROPERTY] = credential.slice(REFRESH_TOKEN_PREFIX.length);
-      } else if (existsSync(credential)) {
-        Object.assign(config, loadPropertiesFile(credential));
+      } else if (existsSync(fromHome(credential))) {
+        Object.assign(config, loadPropertiesFile(fromHome(credential)));
       } else if (isValidToken(credential)) {
         config.token = credential;
       } else {
