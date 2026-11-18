@@ -2535,7 +2535,7 @@ public class HttpFlexemarkets implements Flexemarkets {
         var properties = setDefaultProperties(env, home);
 
         if (credential != null) {
-            _loadCredential(properties, credential);
+            _loadCredential(properties, home, credential);
         }
 
         if (endpoint != null) {
@@ -2594,8 +2594,8 @@ public class HttpFlexemarkets implements Flexemarkets {
         return properties;
     }
 
-    private static void _loadCredential(Properties properties, String credential) {
-        var credentialPath = Path.of(credential);
+    private static void _loadCredential(Properties properties, Path home, String credential) {
+        var credentialPath = _fromHome(home, credential);
 
         // A credential the caller names replaces the one ~/.fm/credential holds,
         // whole: a refresh token left over from it would be the one the client
@@ -2615,6 +2615,18 @@ public class HttpFlexemarkets implements Flexemarkets {
         } else {
             throw new IllegalArgumentException("Invalid credential: '%s' is not a file or token.".formatted(credential));
         }
+    }
+
+    /**
+     * {@code path}, with a leading {@code ~/} read as the home directory.
+     *
+     * <p>{@code ~} is the shell's: a path a program passes is taken as
+     * written, so {@code connect("~/.fm/credential")} looked for a directory
+     * named {@code ~} and refused the credential. Only {@code ~/} is read;
+     * {@code ~user} is left alone.
+     */
+    private static Path _fromHome(Path home, String path) {
+        return path.startsWith("~/") ? home.resolve(path.substring(2)) : Path.of(path);
     }
 
     private static void _loadEndpoint(Properties properties, String endpoint, Function<String, String> env) {
