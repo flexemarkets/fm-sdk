@@ -681,6 +681,16 @@ def _ids_param(ids: list[int]) -> str:
     return ",".join(str(i) for i in ids)
 
 
+def _from_home(path: str) -> Path:
+    """*path*, with a leading ``~/`` read as the home directory.
+
+    ``~`` is the shell's: a path a program passes is taken as written, so
+    ``connect("~/.fm/credential")`` looked for a directory named ``~`` and
+    refused the credential. Only ``~/`` is read; ``~user`` is left alone.
+    """
+    return Path.home() / path[2:] if path.startswith("~/") else Path(path)
+
+
 def _is_file(candidate: str | Path) -> bool:
     """Whether *candidate* names an existing file, for a string of any shape.
 
@@ -948,8 +958,8 @@ class Flexemarkets:
         if credential is not None:
             if credential.startswith(_REFRESH_TOKEN_PREFIX) and credential[len(_REFRESH_TOKEN_PREFIX):].strip():
                 config[_REFRESH_TOKEN_PROPERTY] = credential[len(_REFRESH_TOKEN_PREFIX):]
-            elif _is_file(credential):
-                config.update(_load_properties_file(Path(credential)))
+            elif _is_file(_from_home(credential)):
+                config.update(_load_properties_file(_from_home(credential)))
             elif _is_valid_token(credential):
                 config["token"] = credential
             else:
