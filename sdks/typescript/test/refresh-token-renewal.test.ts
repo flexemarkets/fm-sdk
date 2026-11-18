@@ -101,6 +101,19 @@ test("a credential file carries the refresh token too", async () => {
   });
 });
 
+// `~/` is the shell's, and a path passed in a program is never expanded: the
+// README's own example was refused.
+test("a credential file named from the home directory is read", async () => {
+  await withServer(async (base, state) => {
+    const dir = join(homedir(), ".fm");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "robot"), "refresh-token=rt-2\n");
+    const fm = await Flexemarkets.connect("~/.fm/robot", `${base}/marketplaces/1`, "refresh-test");
+    await fm.close();
+    assert.deepEqual(state.renewals, ["rt-2"]);
+  });
+});
+
 function defaultCredential(text: string) {
   const dir = join(homedir(), ".fm");
   mkdirSync(dir, { recursive: true });
