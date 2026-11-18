@@ -165,6 +165,17 @@ class RefreshTokenRenewalTest {
         assertThat(properties.getProperty("token")).isEqualTo(OLD);
     }
 
+    /** {@code ~/} is the shell's, and a path passed in a program is never expanded: the README's own example was refused. */
+    @Test
+    void aCredentialFileNamedFromTheHomeDirectoryIsRead(@TempDir Path home) throws Exception {
+        Files.createDirectories(home.resolve(".fm"));
+        Files.writeString(home.resolve(".fm/robot"), "refresh-token=rt-2\n");
+
+        var properties = HttpFlexemarkets.loadProperties(name -> null, home, "~/.fm/robot", _endpoint(), "refresh-test");
+
+        assertThat(properties.getProperty(HttpFlexemarkets.REFRESH_TOKEN_PROPERTY)).isEqualTo("rt-2");
+    }
+
     @Test
     void aTokenPassedDoesNotSignInWithTheDefaultCredentialsRefreshToken(@TempDir Path home) throws Exception {
         _defaultCredential(home, "refresh-token=rt-1\ntoken=" + NEW + "\n");
