@@ -393,6 +393,40 @@ run's orders.
 | `DELETE allocations` | manager | drop the staged allocation |
 | `DELETE participants/{userId}/allotments` | manager | remove one participant's allotments |
 | `GET state` · `PUT state` (`text/csv`) | manager | the staged per-participant private state |
+| `POST adjustments` | manager | give or take cash or one market's units, or change a participant's rights in a market, in the session under way (below) |
+| `GET adjustments[?sessionId=]` | manager | the adjustments of one run, or of every run |
+
+**Adjustments** change a holding while a session is open or paused, between
+two orders, on the marketplace's order queue. The body names the participant
+and one change; amounts are signed decimal text at the marketplace's places:
+
+```json
+{"ownerId": 42, "cash": "5.00", "reason": "late arrival"}
+{"ownerId": 42, "marketId": 7, "units": "-2"}
+{"ownerId": 42, "marketId": 7, "canSell": false}
+{"ownerId": 42, "marketId": 7, "shortUnits": "3"}
+```
+
+The answer is the adjustment as recorded: `id` (from the order id sequence),
+`kind` (`GRANT`, `JOIN` or `RIGHTS`), `marketplaceId`, `sessionId`,
+`originalSessionId`, `ownerId`, `marketId`, `cash`, `units`, `shortUnits`
+(whole counts at the marketplace's cash and the market's unit places, as a
+holding's are), `canBuy`, `canSell`, `reason`, `actingManagerId`,
+`createdDate`. Refused (400) with no session
+under way, for someone with no allotment in it, for cash and units together
+or neither, for zero, for more places than the marketplace keeps, for taking
+more than is available (resting orders' reservations included), for taking
+away a side with resting orders on it, and for lowering a short allowance
+below what is used. The participant is sent a `HOLDING-UPDATE`.
+
+A holding's `cash` and `units` include adjustments; `adjustedCash`, and each
+position's `adjustedUnits` and `adjustedShortUnits`, are their net since the
+open, so trading's change is `cash - initialCash - adjustedCash`. `canBuy` and
+`canSell` are the current rights, and the short allowance is
+`initialShortUnits + adjustedShortUnits`. The holdings export adds
+`cash__adjusted` and each market's `<SYMBOL>_<id>__adjusted` with
+`?adjusted=true`. Adjustments end with the run; a study carries the close,
+adjustments included.
 
 An upload or allocation **stages** the next allocation. It lands when a
 **closed** session is opened. CSV column formats are documented in the in-app
@@ -656,7 +690,7 @@ Subscribe to all three when entering a marketplace:
 | Destination | Carries |
 |-------------|---------|
 | `/user/queue/marketplaces/{id}` | everything addressed to *you* — the subscribe seed, `ORDERS-UPDATE`, `HOLDING-UPDATE`, `SESSION-LIST` |
-| `/topic/marketplaces/{id}` | marketplace-wide broadcasts — `SESSION-UPDATE` |
+| `/topic/marketplaces/{id}` | marketplace-wide broadcasts — `SESSION-UPDATE`, `PARTICIPANTS-UPDATE`, `CALL-UPDATE`, `CALL-INDICATIVE`, `SERIES-UPDATE` |
 | `/app/marketplaces/{id}` *or* `/app/v1/marketplaces/{id}` | the trigger that makes the server send the seed |
 
 The `/app` subscription is what selects the **wire version**:
@@ -742,7 +776,8 @@ Every frame carries a `message-type` header naming the payload:
 |----------------|---------|
 | `VERSION` | wire version, currently `3` — sent first on subscribe |
 | `SESSION-UPDATE` | the session and its state (`OPEN` / `PAUSED` / `CLOSED`) |
-| `HOLDING-UPDATE` | the recipient's holding after a fill or allocation |
+| `HOLDING-UPDATE` | the recipient's holding after a fill, an allocation, or a manager's adjustment to it (user queue; a manager is not sent other people's) |
+| `PARTICIPANTS-UPDATE` | `{"sessionId": <run>, "joined": <how many>}` after people join a session under way, such as a load's robot participants (topic). It never says who: read the participants again |
 | `ORDERS-UPDATE` | an array of order events — the book delta |
 | `SESSION-LIST` | the marketplace's sessions |
 | `PANELS-UPDATE` | the recipient's evaluated `score` panels, values only (user queue) |
