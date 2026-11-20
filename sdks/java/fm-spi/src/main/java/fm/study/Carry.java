@@ -21,13 +21,18 @@ package fm.study;
  * Bubble, liquidated when the claims outrun the pool -- ends sooner, and the
  * periods the plan had left are not run. Contract 0.2.
  *
+ * <p>{@code event} is the line the manager and the room are told when the
+ * period closes: "Period 3 paid 0.28 a unit". Null when the study says
+ * nothing (contract 0.6); {@link #withEvent} adds one to any carry.
+ *
  * @param holdings the holdings CSV to stage for the next period; null when
  *                 {@code next} is {@link Next#SETTLE}
  * @param state    the private-state CSV to stage, or null when there is none
  * @param carried  the study's state after this period, or null for none
  * @param next     what follows the period this carry stages
+ * @param event    what the room is told of the period just closed, or null
  */
-public record Carry(String holdings, String state, String carried, Next next) {
+public record Carry(String holdings, String state, String carried, Next next, String event) {
 
     /** What comes after a carry. */
     public enum Next {
@@ -42,6 +47,7 @@ public record Carry(String holdings, String state, String carried, Next next) {
     /** A period to stage has to be staged with something; a run that is over stages nothing. */
     public Carry {
         next = next == null ? Next.PERIOD : next;
+        event = event == null || event.isBlank() ? null : event;
         if (next == Next.SETTLE) {
             if (holdings != null || state != null) {
                 throw new IllegalArgumentException("a carry that settles stages nothing");
@@ -49,6 +55,18 @@ public record Carry(String holdings, String state, String carried, Next next) {
         } else if (holdings == null || holdings.isBlank()) {
             throw new IllegalArgumentException("a carry needs the next period's holdings");
         }
+    }
+
+    /**
+     * A carry that tells the room nothing: contract 0.2's.
+     *
+     * @param holdings the holdings CSV to stage for the next period
+     * @param state    the private-state CSV to stage, or null when there is none
+     * @param carried  the study's state after this period, or null for none
+     * @param next     what follows the period this carry stages
+     */
+    public Carry(String holdings, String state, String carried, Next next) {
+        this(holdings, state, carried, next, null);
     }
 
     /**
@@ -86,5 +104,15 @@ public record Carry(String holdings, String state, String carried, Next next) {
      */
     public static Carry settle(String carried) {
         return new Carry(null, null, carried, Next.SETTLE);
+    }
+
+    /**
+     * This carry, telling the room what the period just closed did.
+     *
+     * @param line "Period 3 paid 0.28 a unit", or null for nothing
+     * @return the same carry with {@code line} as its event
+     */
+    public Carry withEvent(String line) {
+        return new Carry(holdings, state, carried, next, line);
     }
 }
