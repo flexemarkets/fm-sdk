@@ -1345,6 +1345,12 @@ export class Flexemarkets {
    * The owner's credentials go out as `ownerEmail`/`ownerPassword`. Sending
    * `email`/`password` instead creates an account with an owner the server
    * cannot sign in as.
+   *
+   * `accepted` names the legal documents the owner accepts, document to
+   * version, as the server's legal pages show them: `{ terms: "1.0",
+   * privacy: "1.1" }`. A server that publishes Terms of Service refuses a
+   * sign-up without them. Nothing fills it in for the owner: an acceptance
+   * sent without the person's say is not one.
    */
   async signup(
     accountName: string,
@@ -1352,6 +1358,7 @@ export class Flexemarkets {
     password: string,
     firstName?: string | null,
     lastName?: string | null,
+    accepted?: Readonly<Record<string, string>> | null,
   ): Promise<Token> {
     const url = this._v1("/accounts");
     try {
@@ -1361,6 +1368,7 @@ export class Flexemarkets {
         ownerPassword: password,
         firstName: firstName ?? null,
         lastName: lastName ?? null,
+        accepted: accepted ? { ...accepted } : null,
       });
       return parseToken(data);
     } catch (e) {
