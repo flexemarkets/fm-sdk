@@ -15,7 +15,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Optional, TypeVar
 
 from .decimals import Decimals
@@ -1353,7 +1353,16 @@ class Flexemarkets:
         password: str,
         first_name: str | None = None,
         last_name: str | None = None,
+        accepted: Mapping[str, str] | None = None,
     ) -> Token:
+        """Register a new account and its owner, returning the owner's token.
+
+        *accepted* names the legal documents the owner accepts, document to
+        version, as the server's legal pages show them:
+        ``{"terms": "1.0", "privacy": "1.1"}``. A server that publishes Terms
+        of Service refuses a sign-up without them. Nothing fills it in for the
+        owner: an acceptance sent without the person's say is not one.
+        """
         url = _v1(self._endpoint, "/accounts")
         body: dict[str, Any] = {
             "accountName": account_name,
@@ -1364,6 +1373,8 @@ class Flexemarkets:
             body["firstName"] = first_name
         if last_name is not None:
             body["lastName"] = last_name
+        if accepted is not None:
+            body["accepted"] = dict(accepted)
 
         resp = self._send("POST", url, json=body, headers={"Accept": "application/json"})
         _check_conflict_account(resp, account_name)

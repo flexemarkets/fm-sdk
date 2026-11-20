@@ -162,6 +162,16 @@ def test_signing_up_sends_the_owners_names_when_given(base: str) -> None:
     ]
 
 
+def test_signing_up_sends_the_documents_the_owner_accepts(base: str) -> None:
+    with Flexemarkets(token=TOKEN, endpoint=f"{base}/marketplaces/12") as fm:
+        fm.signup("acme", "owner@acme", "pw", accepted={"terms": "1.0"})
+
+    assert bodies == [
+        {"accountName": "acme", "ownerEmail": "owner@acme", "ownerPassword": "pw",
+         "accepted": {"terms": "1.0"}},
+    ]
+
+
 def test_a_taken_account_name_carries_the_servers_suggestion(base: str) -> None:
     answers["/api/v1/accounts"] = (409, {"status": "CONFLICT", "suggestedName": "acme-2"})
 
