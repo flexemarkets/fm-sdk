@@ -60,6 +60,7 @@ public record StudyFacts(Map<String, Owner> owned, boolean marketsFixed, boolean
     public static final StudyFacts NONE =
             new StudyFacts(Map.of(), false, true, false, LateJoiners.NEXT_ROTATION, false, true);
 
+    /** Owned keys name a setting, and a study says who may join late. */
     public StudyFacts {
         owned = owned == null ? Map.of() : Map.copyOf(new LinkedHashMap<>(owned));
         if (lateJoiners == null) {
@@ -72,22 +73,44 @@ public record StudyFacts(Map<String, Owner> owned, boolean marketsFixed, boolean
         }
     }
 
-    /** A marketplace configuration key the study writes, such as its session length. */
+    /**
+     * A marketplace configuration key the study writes, such as its session length.
+     *
+     * @param key the configuration key, {@code fm.marketplace.session.duration}
+     * @return its key in {@link #owned}
+     */
     public static String config(String key) {
         return "config:" + key;
     }
 
-    /** One field of one of the study's markets, by its symbol; {@code *} for every field. */
+    /**
+     * One field of one of the study's markets, by its symbol.
+     *
+     * @param symbol the market's symbol
+     * @param field  the field, {@code priceTick}; {@code *} for every field
+     * @return its key in {@link #owned}
+     */
     public static String market(String symbol, String field) {
         return "market:" + symbol + ":" + field;
     }
 
-    /** One parameter of one of the study's robots, by the robot's id. */
+    /**
+     * One parameter of one of the study's robots, by the robot's id.
+     *
+     * @param robotId   the robot's id, {@code local:fm-maker}
+     * @param parameter the parameter's name
+     * @return its key in {@link #owned}
+     */
     public static String robot(String robotId, String parameter) {
         return "robot:" + robotId + ":" + parameter;
     }
 
-    /** Who owns a setting, or null when it is the manager's. */
+    /**
+     * Who owns a setting.
+     *
+     * @param key a key from {@link #config}, {@link #market} or {@link #robot}
+     * @return its owner, or null when it is the manager's
+     */
     public Owner owner(String key) {
         return owned.get(key);
     }
@@ -97,6 +120,8 @@ public record StudyFacts(Map<String, Owner> owned, boolean marketsFixed, boolean
      * marketplaces {@link Owner#LOCKED} unless named in {@link Builder#study},
      * each market's fields the study's ({@link Owner#STUDY}) and the set of
      * markets fixed, and each parameter its robots fix {@link Owner#LOCKED}.
+     *
+     * @return a builder that starts from {@link #NONE}
      */
     public static Builder builder() {
         return new Builder();
@@ -116,7 +141,12 @@ public record StudyFacts(Map<String, Owner> owned, boolean marketsFixed, boolean
         private Builder() {
         }
 
-        /** The study's marketplaces: their configuration and markets, as {@link #builder()} says. */
+        /**
+         * The study's marketplaces: their configuration and markets, as {@link #builder()} says.
+         *
+         * @param marketplaces the marketplaces the study writes
+         * @return this builder
+         */
         public Builder marketplaces(List<MarketplaceSpec> marketplaces) {
             for (MarketplaceSpec marketplace : marketplaces) {
                 for (String key : marketplace.configuration().keySet()) {
@@ -130,7 +160,12 @@ public record StudyFacts(Map<String, Owner> owned, boolean marketsFixed, boolean
             return this;
         }
 
-        /** The study's robots: each parameter one fixes is locked. */
+        /**
+         * The study's robots: each parameter one fixes is locked.
+         *
+         * @param robots the robots the study writes
+         * @return this builder
+         */
         public Builder robots(List<RobotSpec> robots) {
             for (RobotSpec robot : robots) {
                 for (String parameter : robot.parameters().keySet()) {
@@ -140,7 +175,12 @@ public record StudyFacts(Map<String, Owner> owned, boolean marketsFixed, boolean
             return this;
         }
 
-        /** Configuration keys that are the study's but safe for a manager to change, such as the session length. */
+        /**
+         * Configuration keys that are the study's but safe for a manager to change, such as the session length.
+         *
+         * @param configurationKeys the keys, without the {@code config:} prefix
+         * @return this builder
+         */
         public Builder study(String... configurationKeys) {
             for (String key : configurationKeys) {
                 studyKeys.add(key);
@@ -149,31 +189,64 @@ public record StudyFacts(Map<String, Owner> owned, boolean marketsFixed, boolean
             return this;
         }
 
+        /**
+         * Whether a manager may add robots of their own beside the study's.
+         *
+         * @param open true by default
+         * @return this builder
+         */
         public Builder robotsOpen(boolean open) {
             this.robotsOpen = open;
             return this;
         }
 
+        /**
+         * Participants never see how many periods there are.
+         *
+         * @return this builder
+         */
         public Builder hidesTotal() {
             this.hidesTotal = true;
             return this;
         }
 
+        /**
+         * Who may join a run once it has started.
+         *
+         * @param who {@link LateJoiners#NEXT_ROTATION} by default
+         * @return this builder
+         */
         public Builder lateJoiners(LateJoiners who) {
             this.lateJoiners = who;
             return this;
         }
 
+        /**
+         * The manager is allotted, and so may not also take part.
+         *
+         * @return this builder
+         */
         public Builder managerHolds() {
             this.managerHolds = true;
             return this;
         }
 
+        /**
+         * Whether a participant's result card ranks them by default.
+         *
+         * @param ranks true by default
+         * @return this builder
+         */
         public Builder showsRank(boolean ranks) {
             this.showsRank = ranks;
             return this;
         }
 
+        /**
+         * The facts, with every key named in {@link #study} the study's.
+         *
+         * @return the facts
+         */
         public StudyFacts build() {
             for (String key : studyKeys) {
                 owned.put(config(key), Owner.STUDY);
