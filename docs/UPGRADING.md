@@ -6,6 +6,7 @@ moving to, oldest first: from the bottom up.
 
 | Version | Covers |
 |---------|--------|
+| [0.25](#025-from-024x) | no change for a robot or a client; for a study, fm-spi 0.0.20 (contract 0.6) adds `StudyProvider.facts`, with a default: who owns the settings a study writes, and how a run of it is shown and joined |
 | [0.24](#024-from-023x) | no signature changes; a desk's books hold only the current session's orders, empty while it is closed, and a new session starts with empty books and tapes |
 | [0.23](#023-from-022x) | Java: Jackson 3.1.7 closes seven CVEs in 0.22's 3.1.5; additive: a call market's rationing (fm-server 4.31), and each call's rule and seed; required fields on TypeScript's `Market` and `MarketCall`; Java record patterns over `Market` and `MarketCall` break |
 | [0.22](#022-from-021x) | time-in-force on limit orders (fm-server 4.30); `submitMarket` is one IOC order capped at the book and refuses an empty side; `Order` gains four fields, required in TypeScript; a live short floor counts manager adjustments, and holdings say what adjustments moved; Java record patterns over `Order`, `Security` and `Holding` break |
@@ -30,6 +31,30 @@ moving to, oldest first: from the bottom up.
 | [0.3](#03-from-02x) | which is additive, and says so |
 | [0.2](#02-from-01x) | the package moves, the renames, and the five changes that are not renames |
 | [0.1](#01-from-00x) | Migrating a codebase from 0.0.x to 0.1.x, in all three languages |
+
+---
+
+## 0.25: from 0.24.x
+
+Nothing changes for a robot or a client.
+
+A study changes only if it wants to. fm-spi 0.0.20 is study contract 0.6,
+which adds `StudyProvider.facts(parameters)`: what a host's pages need beyond
+the plan (fm-ui docs/EDITOR-AND-STUDY-REDESIGN.md §7.1–7.3).
+
+- **Ownership.** Each setting the study writes that is not the manager's,
+  named with `StudyFacts.config(key)`, `market(symbol, field)` or
+  `robot(id, parameter)`: `LOCKED`, which the editor shows read-only, or
+  `STUDY`, the study's value, which a manager may change. Plus whether the
+  markets are fixed and whether other robots may be added.
+- **Run facts.** `hidesTotal` (never show "of N"), `lateJoiners` (`NONE` or
+  `NEXT_ROTATION`) and `managerHolds` (the manager is allotted).
+- **Rank.** `showsRank`, the result card's default.
+
+A study that does not override it answers `StudyFacts.NONE`: every setting the
+manager's, as before 0.6. **Hosts:** a host refuses a provider whose contract
+minor is newer than its own, so fm-server speaking 0.6 must be deployed before
+a study built on fm-spi 0.0.20.
 
 ---
 

@@ -110,7 +110,7 @@ class StudyProviderMarketplacesTest {
     }
 
     @Test
-    void theContractIsFive() {
-        assertThat(new Planned().studySpiVersion()).isEqualTo("0.5");
+    void theContractIsAtLeastFive() {
+        assertThat(new Planned().studySpiVersion()).isEqualTo(StudyProvider.STUDY_SPI_VERSION).isGreaterThanOrEqualTo("0.5");
     }
 }

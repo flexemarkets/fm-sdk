@@ -49,10 +49,16 @@ import fm.manifest.ParameterSpec;
  * <p>A host may create a run's marketplaces before anyone takes part
  * ({@link #marketplaces}), and plan its people once the manager has added
  * them, as they add anyone to a marketplace. Contract 0.5.
+ *
+ * <p>A study says what a host's pages need beyond its plan ({@link #facts}):
+ * which settings it owns, whether its markets are fixed, whether the number
+ * of periods is hidden, who may join late, whether the manager holds, and
+ * whether results rank. A study that says nothing answers
+ * {@link StudyFacts#NONE}. Contract 0.6.
  */
 public interface StudyProvider {
     /** The contract's major.minor; a host rejects a provider whose major differs from its own. */
-    String STUDY_SPI_VERSION = "0.5";
+    String STUDY_SPI_VERSION = "0.6";
 
     /**
      * The study's id, as its page and its command line name it.
@@ -322,6 +328,19 @@ public interface StudyProvider {
      */
     default Carry carry(Map<String, String> parameters, Rotation rotation, Close close, String carried) {
         return carry(parameters, rotation, close.holdings(), carried);
+    }
+
+    /**
+     * What a host's pages need to know about a run of this study with these
+     * answers: who owns each setting it writes, and how the run is shown and
+     * joined (contract 0.6). The answers matter where they decide a setting,
+     * a period count the study hides, say, or a market the answers add.
+     *
+     * @param parameters the answers, as {@link #setup} takes them
+     * @return the study's facts; {@link StudyFacts#NONE} unless overridden
+     */
+    default StudyFacts facts(Map<String, String> parameters) {
+        return StudyFacts.NONE;
     }
 
     /**

@@ -56,7 +56,7 @@ class StudyProviderPeriodsTest {
     }
 
     @Test
-    void theContractIsZeroPointFive() {
-        assertThat(new Planned().studySpiVersion()).isEqualTo("0.5");
+    void theContractIsAtLeastZeroPointFive() {
+        assertThat(new Planned().studySpiVersion()).isEqualTo(StudyProvider.STUDY_SPI_VERSION).isGreaterThanOrEqualTo("0.5");
     }
 }
