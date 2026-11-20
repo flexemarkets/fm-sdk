@@ -10,6 +10,7 @@ import fm.model.TickGrid;
 import fm.model.Token;
 import fm.error.ConflictException;
 import java.util.List;
+import java.util.Map;
 
 
 /**
@@ -60,6 +61,34 @@ public interface Administration {
      */
     Token signup(String accountName, String email, String password,
                  String firstName, String lastName);
+
+    /**
+     * Sign up, naming the owner and the legal documents the owner accepts.
+     *
+     * <p>A server that publishes Terms of Service refuses a sign-up that does
+     * not accept them, and records the versions an account's owner accepted.
+     * Pass what the owner was shown and agreed to, read from the server's
+     * legal pages (for example {@code /legal/terms}), as document to version:
+     * {@code Map.of("terms", "1.0", "privacy", "1.1")}. Nothing here fills it
+     * in for them: an acceptance sent without the person's say is not one.
+     *
+     * <p>The other two {@code signup} methods accept nothing, and such a
+     * server refuses them.
+     *
+     * @param accountName the account to create; must not already exist
+     * @param email       the owner's email, which is also their sign-in name
+     * @param password    the owner's password
+     * @param firstName   the owner's given name, or null
+     * @param lastName    the owner's family name, or null
+     * @param accepted    each document the owner accepts, by its key
+     *                    ({@code terms}, {@code privacy}), to the version accepted
+     * @return a token for the new account's owner, already signed in
+     * @throws UnsupportedOperationException from a client that cannot sign up
+     */
+    default Token signup(String accountName, String email, String password,
+                         String firstName, String lastName, Map<String, String> accepted) {
+        throw new UnsupportedOperationException(getClass().getSimpleName() + " cannot sign up with accepted documents");
+    }
 
     /**
      * Approve an account by name, returning it as it now stands.

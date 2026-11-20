@@ -499,6 +499,18 @@ test("signup names the owner's credentials the way the server reads them", async
   assert.ok(!body.includes('"email":"owner@new"'));
 });
 
+test("signup sends the documents the owner accepts, and the shorter forms accept nothing", async () => {
+  const fm = await connect();
+  try {
+    await fm.signup("acme", "owner@new", "s3cret", "Ada", "Lovelace", { terms: "1.0" });
+    assert.ok(bodies.get("POST /api/v1/accounts")!.includes('"accepted":{"terms":"1.0"}'));
+    await fm.signup("acme", "owner@new", "s3cret");
+    assert.ok(bodies.get("POST /api/v1/accounts")!.includes('"accepted":null'));
+  } finally {
+    fm.close();
+  }
+});
+
 test("accounts are listed and approved", async () => {
   const fm = await connect();
   try {

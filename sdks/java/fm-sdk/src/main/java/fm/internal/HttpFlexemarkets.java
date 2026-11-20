@@ -709,13 +709,20 @@ public class HttpFlexemarkets implements Flexemarkets {
         return signup(accountName, email, password, null, null);
     }
 
-    /** A name clash arrives as 409 and becomes a ConflictException carrying the server's suggestion. */
     @Override
     public Token signup(String accountName, String email, String password,
                         String firstName, String lastName) {
+        return signup(accountName, email, password, firstName, lastName, null);
+    }
+
+    /** A name clash arrives as 409 and becomes a ConflictException carrying the server's suggestion. */
+    @Override
+    public Token signup(String accountName, String email, String password,
+                        String firstName, String lastName, Map<String, String> accepted) {
         try {
             return _post(_v1("/accounts"),
-                        new SignUp(accountName, email, password, firstName, lastName),
+                        new SignUp(accountName, email, password, firstName, lastName,
+                                accepted == null ? null : Map.copyOf(accepted)),
                         TOKEN_TYPE);
         } catch (ConflictException e) {
             // A taken name, with the server's proposed alternative. Raised as
@@ -852,7 +859,7 @@ public class HttpFlexemarkets implements Flexemarkets {
      * the JSON -- the shape of the grants/securities bug.
      */
     private record SignUp(String accountName, String ownerEmail, String ownerPassword,
-                          String firstName, String lastName) {}
+                          String firstName, String lastName, Map<String, String> accepted) {}
 
     private record ApproveAccount(Boolean approve) {}
 
