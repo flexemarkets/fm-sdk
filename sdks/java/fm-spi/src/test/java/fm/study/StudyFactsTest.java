@@ -77,4 +77,33 @@ class StudyFactsTest {
         assertThat(StudyProvider.STUDY_SPI_VERSION).isEqualTo("0.6");
         assertThat(new Quiet().studySpiVersion()).isEqualTo("0.6");
     }
+
+    @Test
+    void builtFromWhatTheStudyWrites_configurationLockedUnlessSaidOtherwise_marketsTheStudys_robotsLocked() {
+        MarketplaceSpec marketplace = new MarketplaceSpec("main", "Main", null, List.of(MarketSpec.of("STK", "Stock")),
+                Map.of("fm.view", "{}", "fm.marketplace.session.duration", "300"));
+        RobotSpec robot = new RobotSpec("good", "local:fm-venture", "main", RobotSpec.Mode.OWN,
+                Map.of("failureRate", "10"), java.util.Set.of());
+
+        StudyFacts facts = StudyFacts.builder()
+                .study("fm.marketplace.session.duration")
+                .marketplaces(List.of(marketplace))
+                .robots(List.of(robot))
+                .robotsOpen(false).lateJoiners(LateJoiners.NONE).hidesTotal().managerHolds().showsRank(false)
+                .build();
+
+        assertThat(facts.owner(StudyFacts.config("fm.view"))).isEqualTo(Owner.LOCKED);
+        assertThat(facts.owner(StudyFacts.config("fm.marketplace.session.duration")))
+                .as("named as the study's, whichever was given first").isEqualTo(Owner.STUDY);
+        assertThat(facts.owner(StudyFacts.market("STK", "*"))).isEqualTo(Owner.STUDY);
+        assertThat(facts.owner(StudyFacts.robot("local:fm-venture", "failureRate"))).isEqualTo(Owner.LOCKED);
+        assertThat(facts.marketsFixed()).isTrue();
+        assertThat(facts).extracting(StudyFacts::robotsOpen, StudyFacts::hidesTotal, StudyFacts::lateJoiners,
+                StudyFacts::managerHolds, StudyFacts::showsRank).containsExactly(false, true, LateJoiners.NONE, true, false);
+    }
+
+    @Test
+    void aBuilderGivenNothingBuildsWhatNoneSays() {
+        assertThat(StudyFacts.builder().build()).isEqualTo(StudyFacts.NONE);
+    }
 }

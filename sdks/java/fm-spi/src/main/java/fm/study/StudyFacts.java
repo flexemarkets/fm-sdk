@@ -1,7 +1,10 @@
 package fm.study;
 
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * What a host's pages need to know about a study beyond its plan: who owns
@@ -87,5 +90,95 @@ public record StudyFacts(Map<String, Owner> owned, boolean marketsFixed, boolean
     /** Who owns a setting, or null when it is the manager's. */
     public Owner owner(String key) {
         return owned.get(key);
+    }
+
+    /**
+     * Facts built from what the study writes: each configuration key of its
+     * marketplaces {@link Owner#LOCKED} unless named in {@link Builder#study},
+     * each market's fields the study's ({@link Owner#STUDY}) and the set of
+     * markets fixed, and each parameter its robots fix {@link Owner#LOCKED}.
+     */
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    /** See {@link #builder()}. Starts from {@link #NONE}. */
+    public static final class Builder {
+        private final Map<String, Owner> owned = new LinkedHashMap<>();
+        private final Set<String> studyKeys = new HashSet<>();
+        private boolean marketsFixed;
+        private boolean robotsOpen = true;
+        private boolean hidesTotal;
+        private LateJoiners lateJoiners = LateJoiners.NEXT_ROTATION;
+        private boolean managerHolds;
+        private boolean showsRank = true;
+
+        private Builder() {
+        }
+
+        /** The study's marketplaces: their configuration and markets, as {@link #builder()} says. */
+        public Builder marketplaces(List<MarketplaceSpec> marketplaces) {
+            for (MarketplaceSpec marketplace : marketplaces) {
+                for (String key : marketplace.configuration().keySet()) {
+                    owned.putIfAbsent(config(key), Owner.LOCKED);
+                }
+                for (MarketSpec market : marketplace.markets()) {
+                    owned.put(market(market.symbol(), "*"), Owner.STUDY);
+                }
+                marketsFixed = true;
+            }
+            return this;
+        }
+
+        /** The study's robots: each parameter one fixes is locked. */
+        public Builder robots(List<RobotSpec> robots) {
+            for (RobotSpec robot : robots) {
+                for (String parameter : robot.parameters().keySet()) {
+                    owned.put(robot(robot.robotId(), parameter), Owner.LOCKED);
+                }
+            }
+            return this;
+        }
+
+        /** Configuration keys that are the study's but safe for a manager to change, such as the session length. */
+        public Builder study(String... configurationKeys) {
+            for (String key : configurationKeys) {
+                studyKeys.add(key);
+                owned.put(config(key), Owner.STUDY);
+            }
+            return this;
+        }
+
+        public Builder robotsOpen(boolean open) {
+            this.robotsOpen = open;
+            return this;
+        }
+
+        public Builder hidesTotal() {
+            this.hidesTotal = true;
+            return this;
+        }
+
+        public Builder lateJoiners(LateJoiners who) {
+            this.lateJoiners = who;
+            return this;
+        }
+
+        public Builder managerHolds() {
+            this.managerHolds = true;
+            return this;
+        }
+
+        public Builder showsRank(boolean ranks) {
+            this.showsRank = ranks;
+            return this;
+        }
+
+        public StudyFacts build() {
+            for (String key : studyKeys) {
+                owned.put(config(key), Owner.STUDY);
+            }
+            return new StudyFacts(owned, marketsFixed, robotsOpen, hidesTotal, lateJoiners, managerHolds, showsRank);
+        }
     }
 }
