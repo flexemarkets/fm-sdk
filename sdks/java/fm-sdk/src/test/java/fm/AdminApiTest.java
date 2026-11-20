@@ -238,6 +238,29 @@ class AdminApiTest {
         assertThat(body).doesNotContain("\"email\":");
     }
 
+    /** What the owner accepted goes out as the server reads it, document to version. */
+    @Test
+    void signupSendsTheDocumentsTheOwnerAccepts() throws Exception {
+        try (Flexemarkets fm = _connect()) {
+            fm.signup("acme", "owner@new", "s3cret", "Ada", "Lovelace",
+                    java.util.Map.of("terms", "1.0"));
+        }
+
+        var body = _bodyOf("POST /api/v1/accounts");
+        assertThat(body).contains("\"accepted\":{\"terms\":\"1.0\"}");
+        assertThat(body).contains("\"ownerEmail\":\"owner@new\"");
+    }
+
+    /** The forms without it accept nothing, for the server to refuse where it requires the terms. */
+    @Test
+    void theOlderSignupsAcceptNothing() throws Exception {
+        try (Flexemarkets fm = _connect()) {
+            fm.signup("acme", "owner@new", "s3cret", "Ada", "Lovelace");
+        }
+
+        assertThat(_bodyOf("POST /api/v1/accounts")).contains("\"accepted\":null");
+    }
+
     /** The short form is the long one with no name, not a different request. */
     @Test
     void theShortSignupSendsTheSameShape() throws Exception {
