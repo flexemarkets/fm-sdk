@@ -54,7 +54,12 @@ import fm.manifest.ParameterSpec;
  * which settings it owns, whether its markets are fixed, whether the number
  * of periods is hidden, who may join late, whether the manager holds, and
  * whether results rank. A study that says nothing answers
- * {@link StudyFacts#NONE}. Contract 0.6.
+ * {@link StudyFacts#NONE}. In the same contract a settlement may explain each
+ * payoff ({@link Payoff#lines}) and reveal what was hidden
+ * ({@link Settlement#reveal}); a carry may tell the room what its period did
+ * ({@link Carry#event}); a study draws from the run's seed ({@link Draws}), so
+ * a draw is made once and kept; and a study may ask the manager to confirm
+ * values when a rotation settles ({@link #atSettle}). Contract 0.6.
  */
 public interface StudyProvider {
     /** The contract's major.minor; a host rejects a provider whose major differs from its own. */
@@ -341,6 +346,21 @@ public interface StudyProvider {
      */
     default StudyFacts facts(Map<String, String> parameters) {
         return StudyFacts.NONE;
+    }
+
+    /**
+     * The values the manager confirms or enters when a rotation is settled
+     * (contract 0.6): Simple Dividend's dividends, each defaulting to the
+     * answer. The host passes each confirmed value to {@link #settle} in its
+     * parameters, under the value's {@link SettleValue#key}; a study reads it
+     * there and falls back to its answers when it is absent.
+     *
+     * @param parameters the answers the run was set up with
+     * @return the values to confirm, in the order the settle page asks them;
+     *         none unless overridden
+     */
+    default List<SettleValue> atSettle(Map<String, String> parameters) {
+        return List.of();
     }
 
     /**

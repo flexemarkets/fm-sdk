@@ -6,7 +6,7 @@ moving to, oldest first: from the bottom up.
 
 | Version | Covers |
 |---------|--------|
-| [0.25](#025-from-024x) | no change for a robot or a client; for a study, fm-spi 0.0.20 (contract 0.6) adds `StudyProvider.facts`, with a default: who owns the settings a study writes, and how a run of it is shown and joined |
+| [0.25](#025-from-024x) | no change for a robot or a client; for a study, fm-spi 0.0.20 (contract 0.6) adds `StudyProvider.facts` and `atSettle`, with defaults, result lines, a reveal and a carry event, and draws from the run's seed; Java record patterns over `Payoff`, `Settlement` and `Carry` break |
 | [0.24](#024-from-023x) | no signature changes; a desk's books hold only the current session's orders, empty while it is closed, and a new session starts with empty books and tapes |
 | [0.23](#023-from-022x) | Java: Jackson 3.1.7 closes seven CVEs in 0.22's 3.1.5; additive: a call market's rationing (fm-server 4.31), and each call's rule and seed; required fields on TypeScript's `Market` and `MarketCall`; Java record patterns over `Market` and `MarketCall` break |
 | [0.22](#022-from-021x) | time-in-force on limit orders (fm-server 4.30); `submitMarket` is one IOC order capped at the book and refuses an empty side; `Order` gains four fields, required in TypeScript; a live short floor counts manager adjustments, and holdings say what adjustments moved; Java record patterns over `Order`, `Security` and `Holding` break |
@@ -52,7 +52,29 @@ the plan (fm-ui docs/EDITOR-AND-STUDY-REDESIGN.md §7.1–7.3).
 - **Rank.** `showsRank`, the result card's default.
 
 A study that does not override it answers `StudyFacts.NONE`: every setting the
-manager's, as before 0.6. **Hosts:** a host refuses a provider whose contract
+manager's, as before 0.6.
+
+The same contract adds what a run tells its people (§7.4–7.6), each with a
+default that leaves a study as it was:
+
+- **Result lines.** `Payoff.lines`, how a payoff was reached ("Cash at close",
+  "STK · 4 units × 3.00"), each a `Payoff.Line(label, cash)`;
+  `Settlement.reveal`, what the room may now be told; `Carry.event` (or
+  `carry.withEvent(line)`), what a period did: "Period 3 paid 0.28 a unit".
+  The old constructors remain and give none.
+- **Draws made once.** A host puts the run's seed in every call's parameters
+  under `Draws.SEED`. A study that draws calls
+  `Draws.of(parameters, purpose, rotationIndex)` in place of its own
+  `Random`: the same seed gives the same draw, so a previewed settle pays what
+  it showed. Without a seed it draws afresh, as on the command line.
+- **Values confirmed at settle.** `StudyProvider.atSettle(parameters)` names
+  values the manager confirms or enters (Simple Dividend's dividends), each a
+  `SettleValue` with its default; the host passes them to `settle` in its
+  parameters, under each value's key.
+
+**Record patterns** over `Payoff`, `Settlement` and `Carry` break: each gained
+a component (`lines`, `reveal`, `event`). Constructors and accessors are
+unchanged. **Hosts:** a host refuses a provider whose contract
 minor is newer than its own, so fm-server speaking 0.6 must be deployed before
 a study built on fm-spi 0.0.20.
 
