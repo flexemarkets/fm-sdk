@@ -6,6 +6,7 @@ moving to, oldest first: from the bottom up.
 
 | Version | Covers |
 |---------|--------|
+| [0.26](#026-from-025x) | additive: `signup` can name the legal documents the owner accepts; a server that publishes Terms of Service (fm-server 4.37) refuses a sign-up that accepts none, so code that signs up must pass them; Java implementers of `Administration` inherit a default that refuses |
 | [0.25](#025-from-024x) | no change for a robot or a client; for a study, fm-spi 0.0.20 (contract 0.6) adds `StudyProvider.facts` and `atSettle`, with defaults, result lines, a reveal and a carry event, and draws from the run's seed; Java record patterns over `Payoff`, `Settlement` and `Carry` break |
 | [0.24](#024-from-023x) | no signature changes; a desk's books hold only the current session's orders, empty while it is closed, and a new session starts with empty books and tapes |
 | [0.23](#023-from-022x) | Java: Jackson 3.1.7 closes seven CVEs in 0.22's 3.1.5; additive: a call market's rationing (fm-server 4.31), and each call's rule and seed; required fields on TypeScript's `Market` and `MarketCall`; Java record patterns over `Market` and `MarketCall` break |
@@ -33,6 +34,34 @@ moving to, oldest first: from the bottom up.
 | [0.1](#01-from-00x) | Migrating a codebase from 0.0.x to 0.1.x, in all three languages |
 
 ---
+
+## 0.26: from 0.25.x
+
+Nothing changes for a robot or a client that does not sign up.
+
+Code that creates accounts must now say what the owner accepted. A server
+that publishes Terms of Service (fm-server 4.37 and later) refuses a sign-up
+that does not accept them, and records the versions an owner accepted. Each
+language gains a form of `signup` that passes them, document to version, as
+the owner was shown them on the server's legal pages (`/legal/terms`):
+
+- **Java.** `signup(accountName, email, password, firstName, lastName,
+  Map.of("terms", "1.0", "privacy", "1.1"))`. An `Administration`
+  implementation of your own inherits a default that throws
+  `UnsupportedOperationException`, so it still compiles.
+- **TypeScript.** `fm.signup(accountName, email, password, firstName,
+  lastName, { terms: "1.0", privacy: "1.1" })`.
+- **Python.** `fm.signup(account_name, email, password,
+  accepted={"terms": "1.0", "privacy": "1.1"})`.
+
+The shorter forms still exist and accept nothing, so against such a server
+they are refused: `400` with "Please accept the Terms of Service to create an
+account." Nothing in the SDK fills the documents in for you: an acceptance
+sent without the person's say is not one.
+
+When the Terms change later, nothing in the API asks again and nothing is
+refused: the account's owner and managers are told by email and asked in the
+browser.
 
 ## 0.25: from 0.24.x
 
